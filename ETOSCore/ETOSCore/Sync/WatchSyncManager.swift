@@ -90,6 +90,10 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     @Published public private(set) var lastSummary: SyncMergeSummary = .empty
     @Published public private(set) var lastUpdatedAt: Date?
     @Published public private(set) var isCompanionAvailable: Bool = false
+
+    public var isCompanionReachable: Bool {
+        session?.isReachable == true
+    }
     
     /// 自动同步开关的配置键
     public static let autoSyncEnabledKey = "sync.autoSyncEnabled"
@@ -412,10 +416,6 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         }
     }
     
-    /// 从用户设置构建同步选项
-    private func buildSyncOptionsFromSettings() -> SyncOptions {
-        watchConnectivitySyncOptions()
-    }
 
     private func sendReachableMessage(_ message: [String: Any]) async throws -> [String: Any] {
         guard let session else {
@@ -1406,6 +1406,9 @@ extension WatchSyncManager: WCSessionDelegate {
         _ session: WCSession,
         didReceive file: WCSessionFile
     ) {
+        if VideoFrameExtractionRelay.handleIncomingFile(file, session: session) {
+            return
+        }
         let transferKind = file.metadata?["kind"] as? String
         let isResponse = (file.metadata?["response"] as? Bool) ?? false
         let requestID = file.metadata?["requestID"] as? String
@@ -1489,6 +1492,12 @@ extension WatchSyncManager: WCSessionDelegate {
         error: Error?
     ) {
         Task { @MainActor in
+            if await VideoFrameExtractionRelay.shared.handleFinishedTransfer(
+                fileTransfer,
+                error: error
+            ) {
+                return
+            }
             let identifier = ObjectIdentifier(fileTransfer)
             let transferContext = pendingTransfers[identifier]
             defer { pendingTransfers.removeValue(forKey: identifier) }
@@ -1531,6 +1540,9 @@ extension WatchSyncManager: WCSessionDelegate {
                 return
             }
             #endif
+            if BrowserAgentCompanionRelay.handleIncomingMessage(message, replyHandler: replyHandler) {
+                return
+            }
             // 保留消息处理以兼容旧版本
             replyHandler([:])
         }

@@ -32,13 +32,13 @@ struct ChatBubbleOpenMoreGestureModifier: ViewModifier {
     func body(content: Content) -> some View {
         if isSelectionMode {
             content
-                .contentShape(Rectangle())
-                .highPriorityGesture(
-                    TapGesture()
-                        .onEnded { _ in
-                            onToggleSelection()
-                        }
-                )
+                // 工具、媒体控件会优先消费触摸；多选时由整行蒙层统一接管。
+                .allowsHitTesting(false)
+                .overlay {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture(perform: onToggleSelection)
+                }
         } else if let onOpenMore {
             content
                 .contentShape(Rectangle())

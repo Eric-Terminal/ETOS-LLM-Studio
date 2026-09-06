@@ -10,7 +10,7 @@ This page covers two things that **easily get conflated**:
 - How **Worldbook** decides "what extra rules or settings to inject"
 - How **Tool Center** decides "whether this session can actually call a given tool"
 
-They look like independent feature lines, but **interact through "isolated send"**. Understanding that link is key to using ETOS well.
+They are independent feature lines. Per-session context switches trim memory, tools, or the global system prompt before a request is sent.
 
 ::: tip Read First
 Get familiar with [Memory & Worldbook](/en/modules/memory-worldbook) and [Tools & MCP](/en/modules/tools-and-mcp) usage first.
@@ -99,27 +99,17 @@ After worldbook evaluation, ETOS does **budget trimming**, at minimum:
 
 Without this, large worldbooks easily **eat the entire context window**.
 
-## II. What Worldbook Isolation Means
+## II. Per-Session Context Blocking
 
-This is one of ETOS's **most distinctive designs**.
+Roleplay sessions can block memory, tools, and the global system prompt independently. No worldbook binding is required.
 
-When a session has a worldbook bound and **"isolate memory and tools on binding"** enabled, the session enters a **purer context mode**.
+| Switch | Removed | Still retained |
+| --- | --- | --- |
+| Block Memory | Long-term memory, cross-session summaries, user profile, and memory write/retrieval tools | Other tools, global and session prompts, character cards, lorebooks |
+| Block Tools | App, MCP, Agent Skills, and Shortcut tools plus historical tool-call messages | Memory context, global and session prompts, character cards, lorebooks |
+| Block Global System Prompt | Global system prompt | Session, topic, and enhancement prompts, character cards, personas, lorebooks |
 
-### Sent During Isolation
-
-- Global prompt
-- Topic prompt
-- Enhancement prompt
-- Worldbook content
-
-### Not Sent During Isolation
-
-- Long-term memory
-- Cross-session summary
-- User profile
-- MCP tools
-- Shortcut tools
-- Other external tool context
+The switches can be combined freely. For example, an image-prompt roleplay session can block memory and the global system prompt while keeping intentionally enabled image tools.
 
 ### Why
 
@@ -135,7 +125,7 @@ ETOS's Tool Center is closer to a **capability governance layer**. It cares not 
 
 - Is it **actually available in this session**
 - Does it need **approval**
-- Is it **blocked by worldbook isolation**
+- Is it **blocked by the session's tool policy**
 - Is the server **selected for chat**
 - Is the **individual tool disabled**
 - Is the approval policy **"Always Deny"**
@@ -155,11 +145,11 @@ The two **frequently disagree** — usually **not a bug**, it's a deliberate **e
 
 | Scenario | Behavior |
 | --- | --- |
-| Memory write on, but session has **worldbook isolation** | Configured on, session unavailable |
+| Memory write on, but the session has **Block Memory** or **Block Tools** enabled | Configured on, session unavailable |
 | MCP server online, but **not selected for chat** | Configured on, session unavailable |
 | Tool on, but approval policy is **Always Deny** | Configured on, model never sees it |
 
-Tool Center **explicitly shows the reason** — e.g., "This session has worldbook isolation enabled; this tool will not actually be active."
+Tool Center **explicitly shows the reason** — e.g., "The relevant context is blocked for this chat, so this tool is not actually available."
 
 ### Built-in Tool Governance Dependencies
 
@@ -176,7 +166,7 @@ ETOS treats some capabilities as **built-in tools**, e.g.:
 - Write allowed
 - Active retrieval enabled
 - **`Top K > 0`**
-- **Session not under worldbook isolation**
+- **Session does not block memory or tools**
 
 Any failed condition makes the tool effectively unavailable.
 

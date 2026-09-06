@@ -13,9 +13,12 @@ struct ContentView: View {
     @Environment(\.scenePhase) var scenePhase
 
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.accessibilityReduceMotion) var accessibilityReduceMotion
     @EnvironmentObject var launchStateMachine: AppLaunchStateMachine
     @StateObject var viewModel = ChatViewModel()
+    @StateObject var guideController = GuideConversationController(historyStore: .contextualHelp)
     @StateObject var announcementManager = AnnouncementManager.shared
+    @StateObject var surveyManager = SurveyManager.shared
     @StateObject var legacyJSONMigrationManager = LegacyJSONMigrationManager.shared
     @ObservedObject var notificationCenter = AppLocalNotificationCenter.shared
     @ObservedObject var appConfig = AppConfigStore.shared
@@ -46,16 +49,35 @@ struct ContentView: View {
     @State var bottomAnchorVisibilityWorkItem: DispatchWorkItem?
     @State var shouldRestorePendingJumpOnAppear = false
     @State var pendingJumpRequest: MessageJumpRequest?
+    @State var pendingAutomaticHistoryLoadRequest: WatchAutomaticHistoryLoadRequest?
+    @State var automaticHistoryAnchorTask: Task<Void, Never>?
+    @State var isAutomaticHistoryLoadInFlight = false
+    @State var lastAutomaticHistoryLoadAnchorID: UUID?
+    @State var automaticHistoryBoundaryBlockedAnchorID: UUID?
+    @State var deferredAutomaticHistoryBoundaryRequest: WatchAutomaticHistoryLoadRequest?
     @State var launchRecoveryNoticeMessage: String?
     @State var launchRecoveryRequest: Persistence.LaunchRecoveryRequest?
     @State var launchRecoveryErrorMessage: String?
     @State var rootBodyFont: Font = .body
     @State var legacyMigrationErrorMessage: String?
+    @State var didEnterBackgroundSinceLastActivation = false
     @State var isRequestControlsPresented = false
     @State var isAttachmentImportPresented = false
     @State var attachmentSourceText: String = ""
     @State var importSourceHistory: [String] = []
     @State var presentedAskUserInputRequest: AppToolAskUserInputRequest?
+    @State var continuationContext: ConversationContinuationContext?
+    @State var outgoingContinuationContextsByMessageID: [UUID: [ConversationContinuationContext]] = [:]
+    @State var unanchoredOutgoingContinuationContexts: [ConversationContinuationContext] = []
+    @State var continuationSessionNamesByID: [UUID: String] = [:]
+    @State var isContextCompressionPresented = false
+    @State var watchInputQuickActionDestination: WatchInputQuickAction?
+    @State var contextCompressionReminderSourceSession: ChatSession?
+    @State var contextCompressionReminderNotificationKeys: Set<WatchContextCompressionReminderNotificationKey> = []
+    @State var chatTransientNotice: WatchChatTransientNotice?
+    @State var chatTransientNoticeDismissTask: Task<Void, Never>?
+    @State var watchChatPage: WatchChatPage = .chat
+    @State var activeUserTerminalJobIDs: [UUID] = []
 
     var effectiveFontScale: CGFloat {
         CGFloat(FontLibrary.effectiveFontScale(appConfig.fontCustomScale, isCustomFontEnabled: appConfig.fontUseCustomFonts))
@@ -70,6 +92,7 @@ struct ContentView: View {
     let bottomAnchorID = "inputBubble"
     let watchBottomPinnedDistanceThreshold: CGFloat = 24
     let watchScrollToBottomButtonRevealDistance: CGFloat = 48
+    let watchAutomaticHistoryLoadTriggerDistance: CGFloat = 32
 
     var isLiquidGlassEnabled: Bool {
         if #available(watchOS 26.0, *) {
@@ -87,6 +110,7 @@ struct ContentView: View {
             NavigationStack {
                 legacyChatRootView
             }
+            .environmentObject(guideController)
             .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
                 openDailyPulse()
             }
@@ -95,6 +119,9 @@ struct ContentView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .requestOpenChatSession)) { _ in
                 openChatSessionFromNotification()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .requestContextCompression)) { _ in
+                openContextCompressionFromNotification()
             }
             .onReceive(NotificationCenter.default.publisher(for: .requestOpenAchievementJournal)) { _ in
                 openAchievementJournalFromNotification()
@@ -124,6 +151,18 @@ struct ContentView: View {
                 .zIndex(20)
             }
 
+            if let notice = chatTransientNotice {
+                VStack {
+                    Spacer()
+                    chatTransientNoticeBanner(notice)
+                        .padding(.horizontal, 8)
+                        .padding(.bottom, inputControlHeight + 16)
+                }
+                .allowsHitTesting(false)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(24)
+            }
+
             VStack {
                 Spacer()
                 TTSFloatingController()
@@ -140,6 +179,9 @@ struct ContentView: View {
                 }
                 .zIndex(2_000)
             }
+        }
+        .copyCompletionNoticeAction {
+            showChatTransientNotice(.copyCompleted, duration: .seconds(1.4))
         }
         .environment(\.font, rootBodyFont)
         .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage))
@@ -159,6 +201,10 @@ struct ContentView: View {
             FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             refreshRootBodyFont()
         }
+        .localLinuxDiagnosticFeedback(blocked: watchToolPermissionAutoPresentationBlocked || toolPermissionCenter.activeRequest != nil)
+        .onChange(of: appConfig.fontFallbackScope) { _, _ in
+            refreshRootBodyFont()
+        }
         .onChange(of: appConfig.fontCustomScale) { _, newValue in
             let normalizedValue = FontLibrary.normalizedFontScale(newValue)
             if normalizedValue != newValue {
@@ -175,6 +221,22 @@ struct ContentView: View {
         .onChange(of: appConfig.watchAttachmentLastSource) { _, _ in
             refreshAttachmentSourceHistory()
         }
+        .task(id: conversationContinuationRelationshipRefreshKey) {
+            await reloadConversationContinuationRelationships()
+        }
+        .task(id: contextCompressionReminderRefreshKey) {
+            await refreshContextCompressionReminderEstimate()
+        }
+        .onChange(of: viewModel.chatSessions) { _, _ in
+            Task { @MainActor in
+                await reloadConversationContinuationRelationships()
+            }
+            if notificationCenter.pendingContextCompressionSessionID != nil {
+                Task { @MainActor in
+                    openContextCompressionFromNotification()
+                }
+            }
+        }
         .onDisappear {
             pendingHistoryResetWorkItem?.cancel()
             pendingHistoryResetWorkItem = nil
@@ -182,8 +244,11 @@ struct ContentView: View {
             pendingBottomSnapTask = nil
             watchInputLayoutSettleTask?.cancel()
             watchInputLayoutSettleTask = nil
+            cancelAutomaticHistoryNavigation()
             bottomAnchorVisibilityWorkItem?.cancel()
             bottomAnchorVisibilityWorkItem = nil
+            chatTransientNoticeDismissTask?.cancel()
+            chatTransientNoticeDismissTask = nil
         }
         .sheet(isPresented: $legacyJSONMigrationManager.isMigrationPromptPresented) {
             NavigationStack {
@@ -235,10 +300,24 @@ struct ContentView: View {
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
             case .active:
+                TTSManager.shared.setApplicationIsInBackground(false)
                 appLockManager.handleSceneDidBecomeActive()
+                if didEnterBackgroundSinceLastActivation {
+                    ChatService.shared.openNewSessionIfRestoreWindowExpired()
+                    didEnterBackgroundSinceLastActivation = false
+                }
             case .background:
-                appLockManager.handleSceneDidEnterBackground()
                 Task {
+                    await guideController.persistHistory()
+                }
+                TTSManager.shared.setApplicationIsInBackground(true)
+                appLockManager.handleSceneDidEnterBackground()
+                ChatService.recordAppDidEnterBackground()
+                didEnterBackgroundSinceLastActivation = true
+                Task {
+                    // watchOS 不提供 iOS 的通用后台收尾窗口；进入后台后立即把
+                    // 活跃 guest 任务标记为系统挂起，避免下次启动误认为仍在运行。
+                    await LocalLinuxJobScheduler.shared.interruptForSystemSuspension()
                     await AppConfigStore.shared.flushPendingWrites()
                 }
             default:
@@ -250,6 +329,7 @@ struct ContentView: View {
             appLockManager.refreshState()
         }
         .animation(.easeInOut(duration: 0.2), value: viewModel.memoryRetryStoppedNoticeMessage)
+        .animation(.easeInOut(duration: 0.18), value: chatTransientNotice?.message)
     }
 
     private func handleDatabaseUnlocked() {
@@ -258,4 +338,14 @@ struct ContentView: View {
         viewModel.reloadPersistedDataAfterLegacyJSONMigration()
         launchStateMachine.continueAfterDatabaseUnlock()
     }
+}
+
+enum WatchAutomaticHistoryDirection: Equatable {
+    case earlier
+    case later
+}
+
+struct WatchAutomaticHistoryLoadRequest: Equatable {
+    let direction: WatchAutomaticHistoryDirection
+    let anchorMessageID: UUID
 }

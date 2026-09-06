@@ -77,12 +77,230 @@ struct MCPIntegrationView: View {
                 }
             }
         }
-        .sheet(isPresented: $isPresentingEditor, onDismiss: { serverToEdit = nil }) {
-            NavigationStack {
-                MCPServerEditor(existingServer: serverToEdit) { server in
-                    manager.save(server: server)
-                }
+        .navigationDestination(isPresented: $isPresentingEditor) {
+            MCPServerEditor(existingServer: serverToEdit) { server in
+                manager.save(server: server)
             }
+        }
+        .onChange(of: isPresentingEditor) { _, isPresented in
+            if !isPresented { serverToEdit = nil }
+        }
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: "mcp-toolbox",
+                title: NSLocalizedString("MCP 工具箱", comment: "MCP 向导上下文标题"),
+                documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
+                tools: [
+                    GuidePageTool(definition: GuideToolCatalog.updateMCPPreferences, access: .proposeChange),
+                    GuidePageTool(definition: GuideToolCatalog.createMCPServer, access: .proposeChange)
+                ]
+            ),
+            snapshot: mcpGuideSnapshot,
+            buildProposal: buildMCPGuideProposal,
+            execute: executeMCPGuideProposal
+        )
+    }
+
+    private func mcpGuideSnapshot() async -> GuidePageSnapshot {
+        GuidePageSnapshot(fields: [
+            "selected_tab": GuideSnapshotField(
+                label: NSLocalizedString("当前标签页", comment: "MCP 向导快照字段"),
+                value: .string(selectedTab.rawValue),
+                access: .readOnly
+            ),
+            "chat_tools_enabled": GuideSnapshotField(
+                label: NSLocalizedString("向模型暴露 MCP 工具", comment: "MCP 向导快照字段"),
+                value: .bool(manager.chatToolsEnabled)
+            ),
+            "tool_call_title_enabled": GuideSnapshotField(
+                label: NSLocalizedString("让 AI 描述 MCP 任务", comment: "MCP 向导快照字段"),
+                value: .bool(manager.toolCallTitleEnabled)
+            ),
+            "server_order": GuideSnapshotField(
+                label: NSLocalizedString("服务器顺序", comment: "MCP 向导快照字段"),
+                value: GuideOrderedSettingsSupport.identifierOrderValue(
+                    manager.servers.map { $0.id.uuidString.lowercased() }
+                )
+            ),
+            "servers": GuideSnapshotField(
+                label: NSLocalizedString("已配置服务器", comment: "MCP 向导快照字段"),
+                value: .array(manager.servers.map { server in
+                    let status = manager.status(for: server)
+                    return .dictionary([
+                        "id": .string(server.id.uuidString.lowercased()),
+                        "name": .string(server.displayName),
+                        "transport": .string(mcpGuideTransportName(server.transport)),
+                        "endpoint": .string(server.humanReadableEndpoint),
+                        "selected_for_chat": .bool(server.isSelectedForChat),
+                        "connection_state": .string(mcpGuideConnectionState(status.connectionState)),
+                        "tool_count": .int(status.tools.count),
+                        "resource_count": .int(status.resources.count)
+                    ])
+                }),
+                access: .readOnly
+            ),
+            "published_tools": GuideSnapshotField(
+                label: NSLocalizedString("已公布工具", comment: "MCP 向导快照字段"),
+                value: .array(manager.tools.map { available in
+                    .dictionary([
+                        "server_id": .string(available.server.id.uuidString.lowercased()),
+                        "server_name": .string(available.server.displayName),
+                        "tool_id": .string(available.tool.toolId),
+                        "description": .string(available.tool.description ?? ""),
+                        "enabled": .bool(manager.isToolEnabled(
+                            serverID: available.server.id,
+                            toolId: available.tool.toolId
+                        )),
+                        "approval_policy": .string(manager.approvalPolicy(
+                            serverID: available.server.id,
+                            toolId: available.tool.toolId
+                        ).rawValue)
+                    ])
+                }),
+                access: .readOnly
+            ),
+            "server_count": GuideSnapshotField(
+                label: NSLocalizedString("服务器数量", comment: "MCP 向导快照字段"),
+                value: .int(manager.servers.count),
+                access: .readOnly
+            ),
+            "published_tool_count": GuideSnapshotField(
+                label: NSLocalizedString("可用工具数量", comment: "MCP 向导快照字段"),
+                value: .int(manager.tools.count),
+                access: .readOnly
+            )
+        ])
+    }
+
+    private func buildMCPGuideProposal(
+        call: InternalToolCall,
+        snapshot: GuidePageSnapshot
+    ) throws -> GuideActionProposal {
+        if call.toolName == GuideToolCatalog.createMCPServer.name {
+            return try GuideMCPServerProposalSupport.buildProposal(call: call, pageID: "mcp-toolbox")
+        }
+        guard call.toolName == GuideToolCatalog.updateMCPPreferences.name else {
+            throw GuideError.unsupportedTool(call.toolName)
+        }
+        let arguments = try GuideToolArguments.decode(call.arguments)
+        var normalizedArguments = arguments
+        let labels: [String: String] = [
+            "chat_tools_enabled": NSLocalizedString("向模型暴露 MCP 工具", comment: "MCP 向导修改字段"),
+            "tool_call_title_enabled": NSLocalizedString("让 AI 描述 MCP 任务", comment: "MCP 向导修改字段")
+        ]
+        try GuideToolArguments.requireOnlyKeys(Set(labels.keys).union(["server_order"]), in: arguments)
+        var mutations = try labels.compactMap { key, label -> GuideSettingMutation? in
+            guard let value = try GuideToolArguments.optionalBool(key, in: arguments) else { return nil }
+            let newValue = JSONValue.bool(value)
+            guard snapshot.fields[key]?.value != newValue else { return nil }
+            return GuideSettingMutation(
+                path: key,
+                label: label,
+                oldValue: snapshot.fields[key]?.value,
+                newValue: newValue
+            )
+        }
+        if let orderValue = arguments["server_order"] {
+            let normalized = try GuideOrderedSettingsSupport.normalizeIdentifierOrder(
+                orderValue,
+                currentIdentifiers: manager.servers.map { $0.id.uuidString.lowercased() }
+            )
+            normalizedArguments["server_order"] = normalized
+            if snapshot.fields["server_order"]?.value != normalized {
+                mutations.append(GuideSettingMutation(
+                    path: "server_order",
+                    label: NSLocalizedString("服务器顺序", comment: "MCP 向导修改字段"),
+                    oldValue: snapshot.fields["server_order"]?.value,
+                    newValue: normalized
+                ))
+            }
+        }
+        guard !mutations.isEmpty else { throw GuideError.invalidToolArguments }
+        return GuideActionProposal(
+            pageID: "mcp-toolbox",
+            toolCallID: call.id,
+            toolName: call.toolName,
+            summary: NSLocalizedString("修改 MCP 工具箱偏好", comment: "MCP 向导提案摘要"),
+            mutations: mutations,
+            arguments: normalizedArguments
+        )
+    }
+
+    private func executeMCPGuideProposal(_ proposal: GuideActionProposal) async throws -> GuideActionExecution {
+        if proposal.toolName == GuideToolCatalog.createMCPServer.name {
+            let decoded = try GuideMCPServerProposalSupport.decode(proposal.arguments)
+            manager.save(server: decoded.server)
+            guard manager.servers.contains(where: { $0.id == decoded.server.id }) else {
+                throw NSError(
+                    domain: "GuideMCPServerCreation",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: manager.lastOperationError ?? NSLocalizedString("无法保存 MCP 服务器配置。", comment: "MCP 向导创建失败")]
+                )
+            }
+            manager.connectSelectedServersIfNeeded()
+            return GuideActionExecution(
+                message: String(
+                    format: NSLocalizedString("已创建 MCP 服务器“%@”。", comment: "MCP 向导创建执行结果"),
+                    decoded.server.displayName
+                )
+            )
+        }
+        guard proposal.toolName == GuideToolCatalog.updateMCPPreferences.name else {
+            throw GuideError.unsupportedTool(proposal.toolName)
+        }
+        var oldArguments: [String: JSONValue] = [:]
+        if let value = try GuideToolArguments.optionalBool("chat_tools_enabled", in: proposal.arguments) {
+            oldArguments["chat_tools_enabled"] = .bool(manager.chatToolsEnabled)
+            manager.setChatToolsEnabled(value)
+        }
+        if let value = try GuideToolArguments.optionalBool("tool_call_title_enabled", in: proposal.arguments) {
+            oldArguments["tool_call_title_enabled"] = .bool(manager.toolCallTitleEnabled)
+            manager.setToolCallTitleEnabled(value)
+        }
+        if let orderValue = proposal.arguments["server_order"] {
+            let oldIdentifiers = manager.servers.map { $0.id.uuidString.lowercased() }
+            oldArguments["server_order"] = GuideOrderedSettingsSupport.identifierOrderValue(oldIdentifiers)
+            let identifiers = try GuideOrderedSettingsSupport.identifierOrder(
+                from: orderValue,
+                currentIdentifiers: oldIdentifiers
+            )
+            manager.setServerOrder(try identifiers.map { identifier in
+                guard let id = UUID(uuidString: identifier) else { throw GuideError.invalidToolArguments }
+                return id
+            })
+        }
+        let undoSnapshot = await mcpGuideSnapshot()
+        let undoCall = InternalToolCall(
+            id: UUID().uuidString,
+            toolName: proposal.toolName,
+            arguments: GuideToolArguments.encodedResult(.dictionary(oldArguments))
+        )
+        return GuideActionExecution(
+            message: NSLocalizedString("已保存 MCP 工具箱偏好。", comment: "MCP 向导执行结果"),
+            undoProposal: try buildMCPGuideProposal(call: undoCall, snapshot: undoSnapshot)
+        )
+    }
+
+    private func mcpGuideTransportName(_ transport: MCPServerConfiguration.Transport) -> String {
+        switch transport {
+        case .http: return "http"
+        case .httpSSE: return "sse"
+        case .localStdio: return "stdio"
+        case .oauth: return "oauth"
+        case .builtInSearch: return "built_in_search"
+        case .builtInAppTool: return "built_in_app_tool"
+        case .builtInPersonalData: return "built_in_personal_data"
+        }
+    }
+
+    private func mcpGuideConnectionState(_ state: MCPManager.ConnectionState) -> String {
+        switch state {
+        case .idle: return "idle"
+        case .connecting: return "connecting"
+        case .reconnecting: return "reconnecting"
+        case .ready: return "ready"
+        case .failed: return "failed"
+        @unknown default: return "unknown"
         }
     }
 
@@ -92,7 +310,7 @@ struct MCPIntegrationView: View {
                 settingsIntroCard(
                     title: NSLocalizedString("MCP 工具箱", comment: "MCP toolbox intro title"),
                     summary: NSLocalizedString("统一管理 MCP Server 的连接、聊天暴露与能力调试。", comment: "MCP toolbox intro summary"),
-                    details: NSLocalizedString("MCP 工具箱说明正文", comment: "MCP toolbox intro details"),
+                    details: "\(NSLocalizedString("MCP 工具箱说明正文", comment: "MCP toolbox intro details"))\n\n\(NSLocalizedString("开启后，模型会为每次 MCP 工具调用生成简短标题，并显示在聊天缩略图中。标题只供 ETOS 显示，不会发送给 MCP Server；关闭后继续使用原有的参数与结果预览。", comment: "工具调用标题详细说明"))",
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -126,6 +344,22 @@ struct MCPIntegrationView: View {
     private var publishedToolsList: some View {
         List {
             publishedToolsSection
+
+            Section {
+                Toggle(
+                    NSLocalizedString("让 AI 描述 MCP 任务", comment: "MCP tool call title setting"),
+                    isOn: Binding(
+                        get: { manager.toolCallTitleEnabled },
+                        set: { manager.setToolCallTitleEnabled($0) }
+                    )
+                )
+            } header: {
+                Text(NSLocalizedString("工具调用标题", comment: "MCP tool call title section"))
+            } footer: {
+                Text(NSLocalizedString("在聊天中用简短标题说明工具正在做什么。", comment: "工具标题简短提示"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }

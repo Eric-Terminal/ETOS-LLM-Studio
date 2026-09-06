@@ -176,6 +176,7 @@ struct SessionRow: View {
     let session: ChatSession
     let isCurrent: Bool
     let isRunning: Bool
+    let runtimeState: ConversationRuntimeSessionState?
     let isEditing: Bool
     @Binding var draftName: String
     let currentFolderID: UUID?
@@ -188,6 +189,7 @@ struct SessionRow: View {
     let onSelect: () -> Void
     let onRename: () -> Void
     let onBranch: (Bool) -> Void
+    let onCompress: () -> Void
     let onMoveToFolder: (UUID?) -> Void
     let onDeleteLastMessage: () -> Void
     let onDelete: () -> Void
@@ -195,6 +197,8 @@ struct SessionRow: View {
     let onInfo: () -> Void
     let onEditTags: () -> Void
     let onSendToCompanion: () -> Void
+    let onStopRuntime: () -> Void
+    let onContinueRuntime: () -> Void
 
     @FocusState private var focused: Bool
 
@@ -218,7 +222,8 @@ struct SessionRow: View {
             footnote: secondarySubtitle,
             tags: tags,
             isCurrent: isCurrent,
-            isRunning: isRunning
+            isRunning: isRunning,
+            runtimeStatus: runtimeState?.runStatus
         )
         .contentShape(Rectangle())
         .onTapGesture {
@@ -296,6 +301,16 @@ struct SessionRow: View {
         }
 
         Button {
+            onCompress()
+        } label: {
+            Label(
+                NSLocalizedString("压缩为续聊", comment: "Context compression session action"),
+                systemImage: "rectangle.compress.vertical"
+            )
+        }
+        .disabled(session.isTemporary)
+
+        Button {
             onDeleteLastMessage()
         } label: {
             Label(NSLocalizedString("删除最后一条消息", comment: ""), systemImage: "delete.backward")
@@ -313,6 +328,20 @@ struct SessionRow: View {
             Label(NSLocalizedString("发送到 Apple Watch", comment: ""), systemImage: "applewatch")
         }
         .disabled(session.isTemporary)
+
+        if runtimeState?.runStatus == .pausedByBudget {
+            Button {
+                onContinueRuntime()
+            } label: {
+                Label(NSLocalizedString("继续运行", comment: "Continue conversation runtime"), systemImage: "play.circle")
+            }
+        } else if let status = runtimeState?.runStatus, !status.isTerminal {
+            Button(role: .destructive) {
+                onStopRuntime()
+            } label: {
+                Label(NSLocalizedString("停止运行", comment: "Stop conversation runtime"), systemImage: "stop.circle")
+            }
+        }
 
         Divider()
 
@@ -348,6 +377,9 @@ struct SessionRow: View {
     }
 
     private var secondarySubtitle: String? {
+        if let runtimeSummary {
+            return runtimeSummary
+        }
         guard searchSummary == nil || searchSummary?.isEmpty == true else {
             return locationSummary
         }
@@ -355,6 +387,40 @@ struct SessionRow: View {
             return locationSummary
         }
         return nil
+    }
+
+    private var runtimeSummary: String? {
+        guard let runtimeState else { return nil }
+        var parts: [String] = []
+        if let origin = runtimeState.origin {
+            parts.append(String(
+                format: NSLocalizedString("由“%@”创建", comment: "Conversation origin summary"),
+                origin.parentSessionNameSnapshot
+            ))
+        }
+        if let status = runtimeState.runStatus,
+           let label = Self.sessionListStatusLabel(for: status) {
+            parts.append(label)
+        }
+        if runtimeState.pendingEventCount > 0 {
+            parts.append(String(
+                format: NSLocalizedString("%d 条待处理", comment: "Pending conversation event count"),
+                runtimeState.pendingEventCount
+            ))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// 会话列表只承担进行中活动的总览；终态详情保留在对应消息与运行记录中。
+    static func sessionListStatusLabel(for status: ConversationRunStatus) -> String? {
+        switch status {
+        case .queued: return NSLocalizedString("排队中", comment: "Conversation run queued")
+        case .running, .waitingTool: return NSLocalizedString("生成中", comment: "Conversation run running")
+        case .waitingConversation: return NSLocalizedString("等待会话", comment: "Conversation run waiting for conversation")
+        case .waitingUser: return NSLocalizedString("等待用户", comment: "Conversation run waiting for user")
+        case .pausedByBudget: return NSLocalizedString("已暂停", comment: "Conversation run paused by budget")
+        case .completed, .failed, .cancelled, .interrupted: return nil
+        }
     }
 }
 
@@ -368,6 +434,25 @@ struct SessionListRowContentBody: View {
     let tags: [SessionTag]
     let isCurrent: Bool
     let isRunning: Bool
+    let runtimeStatus: ConversationRunStatus?
+
+    init(
+        title: String,
+        subtitle: String?,
+        footnote: String?,
+        tags: [SessionTag],
+        isCurrent: Bool,
+        isRunning: Bool,
+        runtimeStatus: ConversationRunStatus? = nil
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.footnote = footnote
+        self.tags = tags
+        self.isCurrent = isCurrent
+        self.isRunning = isRunning
+        self.runtimeStatus = runtimeStatus
+    }
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -402,7 +487,7 @@ struct SessionListRowContentBody: View {
 
     @ViewBuilder
     private var trailingStatus: some View {
-        if isRunning {
+        if isRunning || runtimeStatus == .running || runtimeStatus == .waitingTool {
             HStack(spacing: 4) {
                 Circle()
                     .fill(Color.green)
@@ -411,34 +496,18 @@ struct SessionListRowContentBody: View {
                     .etFont(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(.green)
             }
+        } else if let runtimeStatus,
+                  runtimeStatus == .queued
+                    || runtimeStatus == .waitingConversation
+                    || runtimeStatus == .waitingUser
+                    || runtimeStatus == .pausedByBudget {
+            Image(systemName: runtimeStatus == .queued ? "clock" : "pause.circle.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(runtimeStatus == .pausedByBudget ? Color.orange : Color.secondary)
         } else if isCurrent {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
-        }
-    }
-}
-
-/// 兼容性外壳：保持旧的调用入口（搜索结果行依然使用此组件）。
-/// 自带头像 + 卡片背景，调用方仅需关心文本字段。
-struct SessionListRowContent: View {
-    let title: String
-    let subtitle: String?
-    let footnote: String?
-    let tags: [SessionTag]
-    let isCurrent: Bool
-    let isRunning: Bool
-
-    var body: some View {
-        SessionRowCard(isCurrent: isCurrent) {
-            SessionListRowContentBody(
-                title: title,
-                subtitle: subtitle,
-                footnote: footnote,
-                tags: tags,
-                isCurrent: isCurrent,
-                isRunning: isRunning
-            )
         }
     }
 }
@@ -519,18 +588,38 @@ struct SessionInfoPayload: Identifiable {
     let session: ChatSession
     let messageCount: Int
     let isCurrent: Bool
+    let onOpenSession: (UUID) -> Void
+}
+
+private struct SessionRelationshipDetails: Sendable {
+    struct Child: Identifiable, Sendable {
+        let id: UUID
+        let name: String
+    }
+
+    let origin: ConversationOrigin?
+    let children: [Child]
+    let contacts: [LinkedConversationContact]
 }
 
 struct SessionInfoSheet: View {
     let payload: SessionInfoPayload
     @Environment(\.dismiss) private var dismiss
+    @State private var sessionDraft: ChatSession
+    @State private var relationshipDetails: SessionRelationshipDetails?
+    @State private var revokingContactID: UUID?
+
+    init(payload: SessionInfoPayload) {
+        self.payload = payload
+        _sessionDraft = State(initialValue: payload.session)
+    }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section(NSLocalizedString("会话概览", comment: "")) {
                     LabeledContent(NSLocalizedString("名称", comment: "")) {
-                        Text(payload.session.name)
+                        TextField(NSLocalizedString("会话名称", comment: ""), text: $sessionDraft.name)
                     }
                     LabeledContent(NSLocalizedString("状态", comment: "")) {
                         Text(payload.isCurrent ? NSLocalizedString("当前会话", comment: "") : NSLocalizedString("历史会话", comment: ""))
@@ -541,19 +630,104 @@ struct SessionInfoSheet: View {
                     }
                 }
 
-                if let topic = payload.session.topicPrompt, !topic.isEmpty {
-                    Section(NSLocalizedString("主题提示", comment: "")) {
-                        Text(topic)
-                            .etFont(.callout)
+                Section {
+                    VStack(alignment: .leading) {
+                        Text(NSLocalizedString("会话系统提示词", comment: "Conversation system prompt"))
+                            .font(.caption)
                             .foregroundStyle(.secondary)
+                        TextEditor(text: optionalTextBinding(\.systemPrompt))
+                            .frame(minHeight: 72)
+                    }
+                    VStack(alignment: .leading) {
+                        Text(NSLocalizedString("主题提示", comment: ""))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextEditor(text: optionalTextBinding(\.topicPrompt))
+                            .frame(minHeight: 72)
+                    }
+                    VStack(alignment: .leading) {
+                        Text(NSLocalizedString("增强提示词", comment: ""))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextEditor(text: optionalTextBinding(\.enhancedPrompt))
+                            .frame(minHeight: 72)
+                    }
+                } header: {
+                    Text(NSLocalizedString("会话提示词", comment: "Conversation-specific prompts"))
+                } footer: {
+                    Text(NSLocalizedString("这些提示词只对当前会话生效，App 的工具协议与运行约束不会被替换。", comment: "Conversation prompt editor footer"))
+                }
+
+                PromptMacroHelpSection()
+
+                Section(NSLocalizedString("首选模型", comment: "Preferred conversation model")) {
+                    Picker(NSLocalizedString("首选模型", comment: "Preferred conversation model"), selection: preferredModelBinding) {
+                        Text(NSLocalizedString("跟随全局模型", comment: "Follow global model"))
+                            .tag("")
+                        ForEach(ChatService.shared.activatedConversationModels, id: \.id) { model in
+                            Text(model.model.displayName).tag(model.id)
+                        }
                     }
                 }
 
-                if let enhanced = payload.session.enhancedPrompt, !enhanced.isEmpty {
-                    Section(NSLocalizedString("增强提示词", comment: "")) {
-                        Text(enhanced)
-                            .etFont(.callout)
-                            .foregroundStyle(.secondary)
+                if let relationshipDetails {
+                    if let origin = relationshipDetails.origin {
+                        Section(NSLocalizedString("创建来源", comment: "Conversation creation origin")) {
+                            Button {
+                                if let parentSessionID = origin.parentSessionID {
+                                    payload.onOpenSession(parentSessionID)
+                                    dismiss()
+                                }
+                            } label: {
+                                LabeledContent(NSLocalizedString("来源会话", comment: "Source conversation")) {
+                                    Text(origin.parentSessionNameSnapshot)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(origin.parentSessionID == nil)
+                        }
+                    }
+
+                    if !relationshipDetails.children.isEmpty {
+                        Section(NSLocalizedString("直接创建的会话", comment: "Directly created conversations")) {
+                            ForEach(relationshipDetails.children) { child in
+                                Button {
+                                    payload.onOpenSession(child.id)
+                                    dismiss()
+                                } label: {
+                                    Label(child.name, systemImage: "arrow.turn.down.right")
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+
+                    if !relationshipDetails.contacts.isEmpty {
+                        Section {
+                            ForEach(relationshipDetails.contacts) { contact in
+                                VStack(alignment: .leading) {
+                                    Text(contact.title)
+                                    Text(permissionSummary(for: contact))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Button(role: .destructive) {
+                                    revoke(contact)
+                                } label: {
+                                    Label(
+                                        NSLocalizedString("撤销授权", comment: "Revoke conversation capability"),
+                                        systemImage: "person.crop.circle.badge.minus"
+                                    )
+                                }
+                                .disabled(revokingContactID != nil)
+                            }
+                        } header: {
+                            Text(NSLocalizedString("联系授权", comment: "Linked conversation capabilities"))
+                        } footer: {
+                            Text(NSLocalizedString("撤销后，当前会话中的模型不能再读取、发送、触发或停止该会话；用户仍可正常打开和聊天。", comment: "Conversation capability management footer"))
+                        }
                     }
                 }
 
@@ -566,9 +740,91 @@ struct SessionInfoSheet: View {
             .navigationTitle(NSLocalizedString("会话信息", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(NSLocalizedString("完成", comment: "")) { dismiss() }
+                    Button(NSLocalizedString("取消", comment: "")) { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(NSLocalizedString("保存", comment: "")) {
+                        ChatService.shared.updateSession(sessionDraft)
+                        dismiss()
+                    }
+                    .disabled(sessionDraft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
+        .task(id: payload.session.id) {
+            await reloadRelationshipDetails()
+        }
+    }
+
+    private var preferredModelBinding: Binding<String> {
+        Binding(
+            get: { sessionDraft.preferredModelIdentifier ?? "" },
+            set: { sessionDraft.preferredModelIdentifier = $0.isEmpty ? nil : $0 }
+        )
+    }
+
+    private func optionalTextBinding(_ keyPath: WritableKeyPath<ChatSession, String?>) -> Binding<String> {
+        Binding(
+            get: { sessionDraft[keyPath: keyPath] ?? "" },
+            set: { value in
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                sessionDraft[keyPath: keyPath] = trimmed.isEmpty ? nil : value
+            }
+        )
+    }
+
+    private func reloadRelationshipDetails() async {
+        let sessionID = payload.session.id
+        relationshipDetails = await Task.detached(priority: .userInitiated) {
+            let origins = Persistence.loadChildConversationOrigins(parentSessionID: sessionID)
+            let namesByID = Dictionary(
+                uniqueKeysWithValues: Persistence.loadChatSessions().map { ($0.id, $0.name) }
+            )
+            let children = origins.map { origin in
+                SessionRelationshipDetails.Child(
+                    id: origin.childSessionID,
+                    name: namesByID[origin.childSessionID]
+                        ?? NSLocalizedString("未知会话", comment: "Unknown conversation")
+                )
+            }
+            return SessionRelationshipDetails(
+                origin: Persistence.loadConversationOrigin(childSessionID: sessionID),
+                children: children,
+                contacts: Persistence.loadLinkedConversationContacts(sourceSessionID: sessionID)
+            )
+        }.value
+    }
+
+    private func revoke(_ contact: LinkedConversationContact) {
+        revokingContactID = contact.id
+        let sourceSessionID = payload.session.id
+        let targetSessionID = contact.sessionID
+        Task {
+            _ = await Task.detached(priority: .userInitiated) {
+                Persistence.revokeConversationCapability(
+                    sourceSessionID: sourceSessionID,
+                    targetSessionID: targetSessionID
+                )
+            }.value
+            revokingContactID = nil
+            await reloadRelationshipDetails()
+        }
+    }
+
+    private func permissionSummary(for contact: LinkedConversationContact) -> String {
+        var permissions: [String] = []
+        if contact.canRead {
+            permissions.append(NSLocalizedString("读取", comment: "Conversation permission: read"))
+        }
+        if contact.canSend {
+            permissions.append(NSLocalizedString("发送", comment: "Conversation permission: send"))
+        }
+        if contact.canTriggerReply {
+            permissions.append(NSLocalizedString("触发回复", comment: "Conversation permission: trigger reply"))
+        }
+        if contact.canInterrupt {
+            permissions.append(NSLocalizedString("停止运行", comment: "Conversation permission: interrupt"))
+        }
+        return permissions.joined(separator: NSLocalizedString("、", comment: "Localized list separator"))
     }
 }

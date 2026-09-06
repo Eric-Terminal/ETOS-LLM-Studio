@@ -66,6 +66,64 @@ llama_model_shared_handle cached_model;
 std::string cached_model_path;
 int32_t cached_model_gpu_layers = std::numeric_limits<int32_t>::min();
 
+struct text_kv_cache_state {
+    std::string cache_key;
+    std::string model_path;
+    std::string lora_path;
+    float lora_scale = 1.0f;
+    int32_t gpu_layers = std::numeric_limits<int32_t>::min();
+    uint32_t context_size = 0;
+    uint32_t batch_size = 0;
+    uint32_t ubatch_size = 0;
+    bool kv_offload = true;
+    llama_flash_attn_type flash_attention = LLAMA_FLASH_ATTN_TYPE_AUTO;
+    llama_model_shared_handle model;
+    llama_adapter_lora_handle lora_adapter;
+    llama_context_handle context;
+    std::vector<llama_token> decoded_tokens;
+};
+
+// llama_context 不能并发访问；这里只驻留最近一个普通文本对话的上下文。
+std::mutex text_kv_cache_mutex;
+text_kv_cache_state text_kv_cache;
+
+void reset_text_kv_cache() {
+    text_kv_cache.context.reset();
+    text_kv_cache.lora_adapter.reset();
+    text_kv_cache.model.reset();
+    text_kv_cache.decoded_tokens.clear();
+    text_kv_cache.cache_key.clear();
+    text_kv_cache.model_path.clear();
+    text_kv_cache.lora_path.clear();
+    text_kv_cache.lora_scale = 1.0f;
+    text_kv_cache.gpu_layers = std::numeric_limits<int32_t>::min();
+    text_kv_cache.context_size = 0;
+    text_kv_cache.batch_size = 0;
+    text_kv_cache.ubatch_size = 0;
+}
+
+bool text_kv_cache_matches(
+    const std::string & cache_key,
+    const std::string & model_path,
+    const std::string & lora_path,
+    float lora_scale,
+    int32_t gpu_layers,
+    const llama_context_params & context_params
+) {
+    return text_kv_cache.context
+        && text_kv_cache.cache_key == cache_key
+        && text_kv_cache.model_path == model_path
+        && text_kv_cache.lora_path == lora_path
+        && text_kv_cache.lora_scale == lora_scale
+        && (lora_path.empty() || text_kv_cache.lora_adapter)
+        && text_kv_cache.gpu_layers == gpu_layers
+        && text_kv_cache.context_size == context_params.n_ctx
+        && text_kv_cache.batch_size == context_params.n_batch
+        && text_kv_cache.ubatch_size == context_params.n_ubatch
+        && text_kv_cache.kv_offload == context_params.offload_kqv
+        && text_kv_cache.flash_attention == context_params.flash_attn_type;
+}
+
 char * copy_string(const std::string & value) {
     char * result = static_cast<char *>(std::malloc(value.size() + 1));
     if (!result) {
@@ -105,10 +163,16 @@ llama_model_shared_handle make_model_handle(llama_model * model) {
 llama_model_shared_handle load_model(
     const char * model_path,
     const llama_model_params & model_params,
-    bool use_model_cache
+    bool use_model_cache,
+    std::string * diagnostic_log
 ) {
     if (!use_model_cache) {
-        return make_model_handle(llama_model_load_from_file(model_path, model_params));
+        native_log_capture capture;
+        llama_model_shared_handle loaded_model = make_model_handle(llama_model_load_from_file(model_path, model_params));
+        if (!loaded_model && diagnostic_log) {
+            *diagnostic_log = capture.text();
+        }
+        return loaded_model;
     }
 
     std::lock_guard<std::mutex> lock(model_cache_mutex);
@@ -118,11 +182,14 @@ llama_model_shared_handle load_model(
         return cached_model;
     }
 
+    native_log_capture capture;
     llama_model_shared_handle loaded_model = make_model_handle(llama_model_load_from_file(model_path, model_params));
     if (loaded_model) {
         cached_model = loaded_model;
         cached_model_path = model_path;
         cached_model_gpu_layers = model_params.n_gpu_layers;
+    } else if (diagnostic_log) {
+        *diagnostic_log = capture.text();
     }
     return loaded_model;
 }
@@ -132,6 +199,15 @@ void clear_model_cache() {
     cached_model.reset();
     cached_model_path.clear();
     cached_model_gpu_layers = std::numeric_limits<int32_t>::min();
+}
+
+void clear_kv_cache(const char * expected_cache_key) {
+    std::lock_guard<std::mutex> lock(text_kv_cache_mutex);
+    if (expected_cache_key
+        && text_kv_cache.cache_key != expected_cache_key) {
+        return;
+    }
+    reset_text_kv_cache();
 }
 
 std::string decode_failure_message(
@@ -185,10 +261,7 @@ int32_t generate(
         return cancelled(error_message);
     }
 
-    std::call_once(backend_init_once, [] {
-        llama_backend_init();
-        ggml_backend_load_all();
-    });
+    initialize_backend();
 
     llama_model_params model_params = llama_model_default_params();
 #if TARGET_OS_WATCH || TARGET_OS_SIMULATOR
@@ -197,13 +270,24 @@ int32_t generate(
     model_params.n_gpu_layers = generation_params.gpu_layers < 0 ? 999 : generation_params.gpu_layers;
 #endif
 
-    llama_model_shared_handle model = load_model(model_path, model_params, generation_params.use_model_cache);
+    std::string model_load_log;
+    llama_model_shared_handle model = load_model(
+        model_path,
+        model_params,
+        generation_params.use_model_cache,
+        &model_load_log
+    );
     if (!model) {
-        return fail("无法加载本地模型权重。", error_message);
+        return fail(
+            diagnostic_message("无法加载本地模型权重。", model_load_log),
+            error_message
+        );
     }
     if (should_cancel(cancel_callback, user_data)) {
         return cancelled(error_message);
     }
+
+    native_log_capture runtime_log_capture;
 
     const llama_vocab * vocab = llama_model_get_vocab(model.get());
     const int32_t requested_context = std::max<int32_t>(1, generation_params.context_size);
@@ -267,7 +351,10 @@ int32_t generate(
         mtmd_params.image_max_tokens = generation_params.image_max_tokens;
         mtmd_ctx.reset(mtmd_init_from_file(generation_params.mmproj_path.c_str(), model.get(), mtmd_params));
         if (!mtmd_ctx) {
-            return fail("无法加载本地模型的 mmproj 多模态投影器。", error_message);
+            return fail(diagnostic_message(
+                "无法加载本地模型的 mmproj 多模态投影器。",
+                runtime_log_capture.text()
+            ), error_message);
         }
 
         std::map<std::string, local_generation_params::media_attachment> media_by_id;
@@ -339,12 +426,17 @@ int32_t generate(
     llama_context_params ctx_params = llama_context_default_params();
     ctx_params.n_ctx = requested_context;
     const int32_t prompt_token_count_int = static_cast<int32_t>(prompt_token_count);
-    const int32_t decode_batch_size = generation_params.batch_size > 0
-        ? std::min<int32_t>(requested_context, generation_params.batch_size)
+    const bool wants_text_kv_cache = generation_params.reuse_kv_cache
+        && !generation_params.kv_cache_key.empty();
+    const int32_t automatic_batch_size = wants_text_kv_cache
+        ? std::min<int32_t>(requested_context, default_prompt_batch_size)
         : std::min<int32_t>(
             prompt_token_count_int,
             std::min<int32_t>(requested_context, default_prompt_batch_size)
         );
+    const int32_t decode_batch_size = generation_params.batch_size > 0
+        ? std::min<int32_t>(requested_context, generation_params.batch_size)
+        : automatic_batch_size;
     ctx_params.n_batch = static_cast<uint32_t>(std::max<int32_t>(1, decode_batch_size));
     if (generation_params.ubatch_size > 0) {
         ctx_params.n_ubatch = static_cast<uint32_t>(std::min<int32_t>(
@@ -358,12 +450,95 @@ int32_t generate(
     ctx_params.offload_kqv = generation_params.kv_offload;
     ctx_params.flash_attn_type = static_cast<llama_flash_attn_type>(generation_params.flash_attention);
 
-    llama_context_handle ctx(llama_init_from_model(model.get(), ctx_params));
+    const bool can_reuse_text_kv_cache = wants_text_kv_cache && !uses_multimodal_prompt;
+    std::unique_lock<std::mutex> text_kv_cache_lock;
+    llama_adapter_lora_handle lora_adapter;
+    llama_context_handle ctx;
+    std::vector<llama_token> decoded_text_tokens;
+    size_t reusable_prompt_tokens = 0;
+
+    if (wants_text_kv_cache) {
+        text_kv_cache_lock = std::unique_lock<std::mutex>(text_kv_cache_mutex);
+        if (can_reuse_text_kv_cache
+            && text_kv_cache_matches(
+                generation_params.kv_cache_key,
+                model_path,
+                generation_params.lora_path,
+                generation_params.lora_scale,
+                model_params.n_gpu_layers,
+                ctx_params
+            )) {
+            ctx = std::move(text_kv_cache.context);
+            model = text_kv_cache.model;
+            lora_adapter = std::move(text_kv_cache.lora_adapter);
+            decoded_text_tokens = std::move(text_kv_cache.decoded_tokens);
+            vocab = llama_model_get_vocab(model.get());
+        }
+        reset_text_kv_cache();
+
+        if (!can_reuse_text_kv_cache) {
+            text_kv_cache_lock.unlock();
+        } else if (ctx) {
+            const size_t comparable_count = std::min(
+                decoded_text_tokens.size(),
+                prompt_tokens.size()
+            );
+            while (reusable_prompt_tokens < comparable_count
+                && decoded_text_tokens[reusable_prompt_tokens]
+                    == prompt_tokens[reusable_prompt_tokens]) {
+                ++reusable_prompt_tokens;
+            }
+
+            // 至少重放一个 token，确保当前请求的采样 logits 与裁剪后的 KV 对齐。
+            if (reusable_prompt_tokens == prompt_tokens.size()
+                && reusable_prompt_tokens > 0) {
+                --reusable_prompt_tokens;
+            }
+            if (decoded_text_tokens.size() > reusable_prompt_tokens) {
+                if (!llama_memory_seq_rm(
+                        llama_get_memory(ctx.get()),
+                        -1,
+                        static_cast<llama_pos>(reusable_prompt_tokens),
+                        -1
+                    )) {
+                    llama_memory_clear(llama_get_memory(ctx.get()), true);
+                    reusable_prompt_tokens = 0;
+                }
+                decoded_text_tokens.resize(reusable_prompt_tokens);
+            }
+        }
+    }
+
+    if (!ctx && !generation_params.lora_path.empty()) {
+        lora_adapter.reset(llama_adapter_lora_init(model.get(), generation_params.lora_path.c_str()));
+        if (!lora_adapter) {
+            return fail(diagnostic_message(
+                "无法加载或匹配 LoRA Adapter。",
+                runtime_log_capture.text()
+            ), error_message);
+        }
+    }
     if (!ctx) {
-        return fail(context_creation_failure_message(ctx_params, generation_params), error_message);
+        ctx.reset(llama_init_from_model(model.get(), ctx_params));
+    }
+    if (!ctx) {
+        return fail(diagnostic_message(
+            context_creation_failure_message(ctx_params, generation_params),
+            runtime_log_capture.text()
+        ), error_message);
     }
     if (should_cancel(cancel_callback, user_data)) {
         return cancelled(error_message);
+    }
+    if (lora_adapter) {
+        llama_adapter_lora * adapters[] = {lora_adapter.get()};
+        float scales[] = {generation_params.lora_scale};
+        if (llama_set_adapters_lora(ctx.get(), adapters, 1, scales) != 0) {
+            return fail(diagnostic_message(
+                "无法将 LoRA Adapter 应用到本地模型上下文。",
+                runtime_log_capture.text()
+            ), error_message);
+        }
     }
 
     llama_sampler_handle sampler = create_sampler(model.get(), vocab, generation_params);
@@ -378,7 +553,7 @@ int32_t generate(
     std::string pending_text;
     const size_t retained_stop_suffix = longest_stop_length(generation_params.additional_stops);
     const int32_t prompt_chunk_size = static_cast<int32_t>(ctx_params.n_batch);
-    llama_pos n_past = 0;
+    llama_pos n_past = static_cast<llama_pos>(reusable_prompt_tokens);
 
     if (uses_multimodal_prompt) {
         if (should_cancel(cancel_callback, user_data)) {
@@ -396,11 +571,16 @@ int32_t generate(
             &new_n_past
         );
         if (status != 0) {
-            return fail(decode_failure_message(status, "提示词", generated_tokens, ctx_params, generation_params), error_message);
+            return fail(diagnostic_message(
+                decode_failure_message(status, "提示词", generated_tokens, ctx_params, generation_params),
+                runtime_log_capture.text()
+            ), error_message);
         }
         n_past = new_n_past;
     } else {
-        for (size_t offset = 0; offset < prompt_tokens.size(); offset += static_cast<size_t>(prompt_chunk_size)) {
+        for (size_t offset = reusable_prompt_tokens;
+             offset < prompt_tokens.size();
+             offset += static_cast<size_t>(prompt_chunk_size)) {
             if (should_cancel(cancel_callback, user_data)) {
                 return cancelled(error_message);
             }
@@ -411,8 +591,16 @@ int32_t generate(
             llama_batch prompt_batch = llama_batch_get_one(prompt_tokens.data() + offset, chunk_size);
             const int status = llama_decode(ctx.get(), prompt_batch);
             if (status != 0) {
-                return fail(decode_failure_message(status, "提示词", generated_tokens, ctx_params, generation_params), error_message);
+                return fail(diagnostic_message(
+                    decode_failure_message(status, "提示词", generated_tokens, ctx_params, generation_params),
+                    runtime_log_capture.text()
+                ), error_message);
             }
+            decoded_text_tokens.insert(
+                decoded_text_tokens.end(),
+                prompt_tokens.begin() + static_cast<std::ptrdiff_t>(offset),
+                prompt_tokens.begin() + static_cast<std::ptrdiff_t>(offset + chunk_size)
+            );
         }
         n_past = static_cast<llama_pos>(prompt_token_count);
     }
@@ -429,7 +617,13 @@ int32_t generate(
                 ? decode_token_with_position(ctx.get(), pending_decode_token, n_past++)
                 : llama_decode(ctx.get(), llama_batch_get_one(&pending_decode_token, 1));
             if (status != 0) {
-                return fail(decode_failure_message(status, "生成", generated_tokens, ctx_params, generation_params), error_message);
+                return fail(diagnostic_message(
+                    decode_failure_message(status, "生成", generated_tokens, ctx_params, generation_params),
+                    runtime_log_capture.text()
+                ), error_message);
+            }
+            if (!uses_multimodal_prompt) {
+                decoded_text_tokens.push_back(pending_decode_token);
             }
             has_pending_decode = false;
         }
@@ -511,6 +705,22 @@ int32_t generate(
         }
     } else if (output_message_json && output_text) {
         *output_message_json = fallback_chat_message_json(*output_text);
+    }
+    if (can_reuse_text_kv_cache) {
+        text_kv_cache.cache_key = generation_params.kv_cache_key;
+        text_kv_cache.model_path = model_path;
+        text_kv_cache.lora_path = generation_params.lora_path;
+        text_kv_cache.lora_scale = generation_params.lora_scale;
+        text_kv_cache.gpu_layers = model_params.n_gpu_layers;
+        text_kv_cache.context_size = ctx_params.n_ctx;
+        text_kv_cache.batch_size = ctx_params.n_batch;
+        text_kv_cache.ubatch_size = ctx_params.n_ubatch;
+        text_kv_cache.kv_offload = ctx_params.offload_kqv;
+        text_kv_cache.flash_attention = ctx_params.flash_attn_type;
+        text_kv_cache.model = model;
+        text_kv_cache.lora_adapter = std::move(lora_adapter);
+        text_kv_cache.context = std::move(ctx);
+        text_kv_cache.decoded_tokens = std::move(decoded_text_tokens);
     }
     return 0;
 }

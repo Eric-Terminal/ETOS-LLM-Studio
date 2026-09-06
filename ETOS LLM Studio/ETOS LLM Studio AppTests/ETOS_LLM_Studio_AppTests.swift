@@ -7,37 +7,200 @@
 // ============================================================================
 
 import Foundation
+import SwiftUI
 import Testing
+import UIKit
 import ETOSCore
 @testable import ETOS_LLM_Studio_App
 
 struct ETOS_LLM_Studio_AppTests {
 
-    @Test("弹性滚动不会拉开同轮相连气泡")
-    func testChatScrollTransitionKeepsConnectedBubblesTogether() {
-        let standaloneOffset = ChatView.chatScrollTransitionOffset(
-            phaseValue: 0.5,
-            configuredOffset: 32,
-            isEnabled: true,
-            isConnectedToAdjacentBubble: false
+    @Test("相邻气泡的局部重测量身份不会冲突")
+    func testChatBubbleLayoutIdentityIncludesMessageID() {
+        let firstMessageID = UUID()
+        let secondMessageID = UUID()
+        let first = ChatBubbleLayoutIdentity(
+            messageID: firstMessageID,
+            structuralRevision: 0,
+            isStreaming: false,
+            hasPreparedMarkdown: false,
+            hasPreparedReasoningMarkdown: false
         )
-        #expect(standaloneOffset == 16)
+        let second = ChatBubbleLayoutIdentity(
+            messageID: secondMessageID,
+            structuralRevision: 0,
+            isStreaming: false,
+            hasPreparedMarkdown: false,
+            hasPreparedReasoningMarkdown: false
+        )
 
-        let connectedOffset = ChatView.chatScrollTransitionOffset(
-            phaseValue: 0.5,
-            configuredOffset: 32,
-            isEnabled: true,
-            isConnectedToAdjacentBubble: true
-        )
-        #expect(connectedOffset == 0)
+        #expect(first != second)
+        #expect(first == ChatBubbleLayoutIdentity(
+            messageID: firstMessageID,
+            structuralRevision: 0,
+            isStreaming: false,
+            hasPreparedMarkdown: false,
+            hasPreparedReasoningMarkdown: false
+        ))
+    }
 
-        let disabledOffset = ChatView.chatScrollTransitionOffset(
-            phaseValue: 0.5,
-            configuredOffset: 32,
-            isEnabled: false,
-            isConnectedToAdjacentBubble: false
+    @Test("静态 Markdown 就绪前保持流式视图身份")
+    func testChatBubbleLayoutIdentityRemainsStableDuringMarkdownHandoff() {
+        let messageID = UUID()
+        let streaming = ChatBubbleLayoutIdentity(
+            messageID: messageID,
+            structuralRevision: 7,
+            isStreaming: true,
+            hasPreparedMarkdown: false,
+            hasPreparedReasoningMarkdown: false
         )
-        #expect(disabledOffset == 0)
+        let handingOff = ChatBubbleLayoutIdentity(
+            messageID: messageID,
+            structuralRevision: 8,
+            isStreaming: false,
+            isStaticMarkdownHandoffInProgress: true,
+            hasPreparedMarkdown: true,
+            hasPreparedReasoningMarkdown: false
+        )
+        let staticMarkdown = ChatBubbleLayoutIdentity(
+            messageID: messageID,
+            structuralRevision: 8,
+            isStreaming: false,
+            hasPreparedMarkdown: true,
+            hasPreparedReasoningMarkdown: true
+        )
+
+        #expect(streaming == handingOff)
+        #expect(handingOff != staticMarkdown)
+    }
+
+    @Test("助手开始流式输出后锁定气泡宽度")
+    func testStreamingAssistantBubbleUsesStableWidth() {
+        #expect(ChatBubble.shouldForceBubbleWidth(
+            usesNoBubbleStyle: false,
+            isOutgoing: false,
+            isAssistant: true,
+            hasAudio: false,
+            locksStreamingAssistantWidth: true,
+            mergesWithAdjacentBubble: false,
+            rendersReasoningToolTimeline: false
+        ))
+        #expect(!ChatBubble.shouldForceBubbleWidth(
+            usesNoBubbleStyle: false,
+            isOutgoing: false,
+            isAssistant: true,
+            hasAudio: false,
+            locksStreamingAssistantWidth: false,
+            mergesWithAdjacentBubble: false,
+            rendersReasoningToolTimeline: false
+        ))
+        #expect(!ChatBubble.shouldForceBubbleWidth(
+            usesNoBubbleStyle: false,
+            isOutgoing: true,
+            isAssistant: false,
+            hasAudio: false,
+            locksStreamingAssistantWidth: true,
+            mergesWithAdjacentBubble: false,
+            rendersReasoningToolTimeline: false
+        ))
+        #expect(!ChatBubble.shouldForceBubbleWidth(
+            usesNoBubbleStyle: false,
+            isOutgoing: false,
+            isAssistant: false,
+            hasAudio: false,
+            locksStreamingAssistantWidth: true,
+            mergesWithAdjacentBubble: false,
+            rendersReasoningToolTimeline: false
+        ))
+    }
+
+
+    @Test("跨会话消息跳转会等待目标历史和选择器就绪")
+    func testPendingMessageJumpWaitsForTargetSessionHistory() {
+        let oldSessionID = UUID()
+        let targetSessionID = UUID()
+
+        #expect(!ChatView.isPendingMessageJumpReady(
+            targetSessionID: targetSessionID,
+            currentSessionID: targetSessionID,
+            loadedHistorySessionID: oldSessionID,
+            hasMessages: true,
+            isChatVisible: true,
+            awaitsPickerDismissal: false
+        ))
+        #expect(!ChatView.isPendingMessageJumpReady(
+            targetSessionID: targetSessionID,
+            currentSessionID: targetSessionID,
+            loadedHistorySessionID: targetSessionID,
+            hasMessages: true,
+            isChatVisible: true,
+            awaitsPickerDismissal: true
+        ))
+        #expect(ChatView.isPendingMessageJumpReady(
+            targetSessionID: targetSessionID,
+            currentSessionID: targetSessionID,
+            loadedHistorySessionID: targetSessionID,
+            hasMessages: true,
+            isChatVisible: true,
+            awaitsPickerDismissal: false
+        ))
+    }
+
+    @Test("发送气泡落位前只延后同轮回复")
+    func testSendFlightDefersOnlyCurrentReplyGroup() {
+        let startedAt = Date()
+        let previousUserID = UUID()
+        let currentUserID = UUID()
+        let currentAssistant = ChatMessage(
+            role: .assistant,
+            content: "正在回复",
+            requestedAt: startedAt,
+            responseGroupID: currentUserID
+        )
+        let previousAssistant = ChatMessage(
+            role: .assistant,
+            content: "历史回复",
+            requestedAt: startedAt,
+            responseGroupID: previousUserID
+        )
+
+        #expect(ChatView.shouldDeferReplyDuringSendFlight(
+            currentAssistant,
+            targetMessageID: nil,
+            baselineUserMessageID: previousUserID,
+            flightStartedAt: startedAt
+        ))
+        #expect(ChatView.shouldDeferReplyDuringSendFlight(
+            currentAssistant,
+            targetMessageID: currentUserID,
+            baselineUserMessageID: previousUserID,
+            flightStartedAt: startedAt
+        ))
+        #expect(!ChatView.shouldDeferReplyDuringSendFlight(
+            previousAssistant,
+            targetMessageID: nil,
+            baselineUserMessageID: previousUserID,
+            flightStartedAt: startedAt
+        ))
+        #expect(!ChatView.shouldDeferReplyDuringSendFlight(
+            previousAssistant,
+            targetMessageID: currentUserID,
+            baselineUserMessageID: previousUserID,
+            flightStartedAt: startedAt
+        ))
+
+        let currentUser = ChatMessage(
+            id: currentUserID,
+            role: .user,
+            content: "问题",
+            requestedAt: startedAt
+        )
+        #expect(!ChatView.shouldDeferReplyDuringSendFlight(
+            currentUser,
+            targetMessageID: currentUserID,
+            baselineUserMessageID: previousUserID,
+            flightStartedAt: startedAt
+        ))
     }
 
     @Test("自动朗读触发条件判断")
@@ -235,6 +398,7 @@ struct ETOS_LLM_Studio_AppTests {
         #expect(subset.map(\.id) == [error.id])
     }
 
+    @MainActor
     @Test("Markdown 围栏闭合容错：重复语言标签闭合会被规范为标准围栏")
     func testMarkdownFenceNormalizationForRepeatedLanguageClosing() async {
         let source = """
@@ -251,6 +415,7 @@ struct ETOS_LLM_Studio_AppTests {
         #expect(prepared.normalizedText == expected)
     }
 
+    @MainActor
     @Test("Markdown 围栏闭合容错会补齐未闭合代码块")
     func testMarkdownFenceNormalizationClosesOpenFence() async {
         let source = """
@@ -266,6 +431,7 @@ let value = 42
         #expect(prepared.normalizedText == expected)
     }
 
+    @MainActor
     @Test("Markdown 围栏闭合容错不影响标准写法")
     func testMarkdownFenceNormalizationKeepsValidFence() async {
         let source = """
@@ -286,6 +452,65 @@ let value = 42
 """
 
         #expect(ETPreparedMarkdownRenderPayload.extractThinkingTitle(from: source) == "定位展开状态")
+    }
+
+    @MainActor
+    @Test("iOS 会为裸 TeX 准备原生内联公式")
+    func testBareTeXPreparesNativeInlineMath() async {
+        let source = #"答案是 \frac{1}{2}。"#
+
+        let prepared = await ETPreparedMarkdownRenderPayload.build(from: source)
+
+        #expect(prepared.containsMathContent)
+        #expect(prepared.mathSegments == [
+            .text("答案是 "),
+            .inlineMath(#"\frac{1}{2}"#),
+            .text("。")
+        ])
+        #expect(prepared.mathRenderText == #"答案是 \(\frac{1}{2}\)。"#)
+    }
+
+    @MainActor
+    @Test("iOS 官方社群入口使用指定账号与 App 深链")
+    func testOfficialCommunityLinks() {
+        #expect(OfficialCommunity.qq.account == "974605250")
+        #expect(
+            OfficialCommunity.qq.appURL.absoluteString
+                == "mqqapi://card/show_pslcard?src_type=internal&version=1&uin=974605250&card_type=group&source=qrcode"
+        )
+
+        #expect(OfficialCommunity.telegram.account == "@ETOSLLMStudio")
+        #expect(
+            OfficialCommunity.telegram.appURL.absoluteString
+                == "tg://resolve?domain=ETOSLLMStudio"
+        )
+        #expect(
+            OfficialCommunity.telegram.fallbackURL?.absoluteString
+                == "https://t.me/ETOSLLMStudio"
+        )
+
+        #expect(OfficialCommunity.testFlight.account == nil)
+        #expect(
+            OfficialCommunity.testFlight.appURL.absoluteString
+                == "https://testflight.apple.com/join/d4PgF4CK"
+        )
+        #expect(
+            OfficialCommunity.visibleCommunities(for: .appStore)
+                == [.qq, .telegram, .testFlight]
+        )
+        #expect(
+            OfficialCommunity.visibleCommunities(for: .testFlight)
+                == [.qq, .telegram]
+        )
+    }
+
+    @Test("iOS 工具执行失败使用红色失败状态")
+    func testFailedToolCallStatusPresentation() {
+        let status = ChatBubble.ToolCallBubbleStatus.failed
+
+        #expect(status.title == NSLocalizedString("执行失败", comment: "Tool execution failed status"))
+        #expect(status.iconName == "xmark.circle.fill")
+        #expect(status.accentColor == .red)
     }
 
 }

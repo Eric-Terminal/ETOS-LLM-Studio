@@ -144,6 +144,10 @@ struct MCPServerPayloadRecord: Codable, FetchableRecord, MutablePersistableRecor
             self.apiKey = apiKey
             additionalHeadersJSON = headers.isEmpty ? nil : MCPServerStoreCodec.encodeJSONTextIfPresent(headers)
             oauthPayloadJSON = nil
+        case .localStdio:
+            self.apiKey = nil
+            additionalHeadersJSON = nil
+            oauthPayloadJSON = nil
         case .builtInSearch:
             self.apiKey = nil
             additionalHeadersJSON = nil
@@ -211,29 +215,6 @@ struct MCPServerPayloadRecord: Codable, FetchableRecord, MutablePersistableRecor
     }
 }
 
-struct MCPToolHeaderRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
-    static let databaseTableName = MCPServerStore.relationalToolTable
-
-    enum CodingKeys: String, CodingKey {
-        case serverID = "server_id"
-        case toolName = "tool_name"
-        case description
-        case sortIndex = "sort_index"
-        case updatedAt = "updated_at"
-    }
-
-    enum Columns {
-        static let serverID = Column(CodingKeys.serverID.rawValue)
-        static let toolName = Column(CodingKeys.toolName.rawValue)
-        static let sortIndex = Column(CodingKeys.sortIndex.rawValue)
-    }
-
-    var serverID: String
-    var toolName: String
-    var description: String?
-    var sortIndex: Int
-    var updatedAt: Double
-}
 
 struct MCPToolPayloadRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
     static let databaseTableName = MCPServerStore.relationalToolTable

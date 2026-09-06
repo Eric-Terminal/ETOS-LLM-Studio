@@ -468,6 +468,163 @@ struct RequestBodyControlTests {
         #expect(compiled["effort"] == .string("medium"))
     }
 
+    @Test("多结构滑块会原子切换完整预设")
+    func testMultiStructureSliderUsesAtomicDiscreteOptions() throws {
+        let control = ModelRequestBodyControl(
+            id: "thinking-preset",
+            title: "思考预设",
+            kind: .optionGroup,
+            defaultOptionID: "low",
+            isSliderEnabled: true,
+            options: [
+                ModelRequestBodyControlOption(
+                    id: "low",
+                    title: "低",
+                    payload: [
+                        "thinking": .dictionary(["budget_tokens": .int(1_000)]),
+                        "output_config": .dictionary(["mode": .string("adaptive")])
+                    ]
+                ),
+                ModelRequestBodyControlOption(
+                    id: "high",
+                    title: "高",
+                    payload: [
+                        "thinking": .dictionary(["budget_tokens": .int(9_000)]),
+                        "output_config": .dictionary(["mode": .string("adaptive")])
+                    ]
+                )
+            ]
+        )
+        let descriptor = try #require(ModelRequestBodyControlSliderDescriptor(control: control))
+        let state = ModelRequestBodyControlState(sliderPositionsByControlID: [control.id: 0.75])
+        let compiled = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+            base: [:],
+            controls: [control],
+            state: state
+        )
+
+        #expect(descriptor.mode == .discrete)
+        #expect(descriptor.displayValue(at: 0.75) == "高")
+        #expect(compiled["thinking"] == .dictionary(["budget_tokens": .int(9_000)]))
+        #expect(compiled["output_config"] == .dictionary(["mode": .string("adaptive")]))
+    }
+
+    @Test("多层嵌套控制可按所有叶子路径线性拆分并重新合并")
+    func testNestedControlSplitsEveryLeafPathAndReconstructsPayload() throws {
+        let lowPayload: [String: JSONValue] = [
+            "metadata": .dictionary([
+                "trace": .dictionary(["enabled": .bool(false)])
+            ]),
+            "reasoning": .dictionary([
+                "effort": .string("low"),
+                "summary": .dictionary([
+                    "details": .dictionary(["verbosity": .string("low")]),
+                    "style": .string("brief")
+                ])
+            ]),
+            "temperature": .double(0.2)
+        ]
+        let highPayload: [String: JSONValue] = [
+            "metadata": .dictionary([
+                "trace": .dictionary(["enabled": .bool(true)])
+            ]),
+            "reasoning": .dictionary([
+                "effort": .string("high"),
+                "summary": .dictionary([
+                    "details": .dictionary(["verbosity": .string("high")]),
+                    "style": .string("detailed")
+                ])
+            ]),
+            "temperature": .double(0.8)
+        ]
+        let control = ModelRequestBodyControl(
+            id: "combined-control",
+            title: "组合控制",
+            kind: .optionGroup,
+            defaultOptionID: "high",
+            isSliderEnabled: true,
+            options: [
+                ModelRequestBodyControlOption(id: "low", title: "低", payload: lowPayload),
+                ModelRequestBodyControlOption(id: "high", title: "高", payload: highPayload)
+            ]
+        )
+
+        #expect(ModelRequestBodyControlSplitter.canSplit(control))
+        let splitControls = try #require(ModelRequestBodyControlSplitter.split(control))
+        let compiled = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+            base: [:],
+            controls: splitControls,
+            state: .init()
+        )
+
+        #expect(splitControls.count == 5)
+        #expect(Set(splitControls.map(\.id)).count == 5)
+        #expect(splitControls.allSatisfy { $0.title == control.title })
+        #expect(splitControls.allSatisfy { $0.options.map(\.title) == ["低", "高"] })
+        #expect(splitControls.allSatisfy { !ModelRequestBodyControlSplitter.canSplit($0) })
+        #expect(compiled == highPayload)
+    }
+
+    @Test("拆分会保留缺少部分路径的档位")
+    func testNestedControlSplitPreservesOptionsWithoutEveryPath() throws {
+        let control = ModelRequestBodyControl(
+            title: "思考预算",
+            kind: .optionGroup,
+            defaultOptionID: "off",
+            options: [
+                ModelRequestBodyControlOption(
+                    id: "off",
+                    title: "关闭",
+                    payload: ["thinking": .dictionary(["type": .string("disabled")])]
+                ),
+                ModelRequestBodyControlOption(
+                    id: "high",
+                    title: "高",
+                    payload: [
+                        "thinking": .dictionary(["type": .string("adaptive")]),
+                        "output_config": .dictionary(["effort": .string("high")])
+                    ]
+                )
+            ]
+        )
+
+        let splitControls = try #require(ModelRequestBodyControlSplitter.split(control))
+        let compiled = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+            base: [:],
+            controls: splitControls,
+            state: .init()
+        )
+
+        #expect(splitControls.count == 2)
+        #expect(splitControls.allSatisfy { $0.options.count == 2 })
+        #expect(compiled == ["thinking": .dictionary(["type": .string("disabled")])])
+    }
+
+    @Test("多字段开关也可拆分并保持默认状态")
+    func testToggleControlSplitsAndPreservesDefaultState() throws {
+        let payload: [String: JSONValue] = [
+            "reasoning": .dictionary(["summary": .string("auto")]),
+            "text": .dictionary(["verbosity": .string("high")])
+        ]
+        let control = ModelRequestBodyControl(
+            title: "回复增强",
+            kind: .toggle,
+            defaultIsActive: true,
+            payload: payload
+        )
+
+        let splitControls = try #require(ModelRequestBodyControlSplitter.split(control))
+        let compiled = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+            base: [:],
+            controls: splitControls,
+            state: .init()
+        )
+
+        #expect(splitControls.count == 2)
+        #expect(splitControls.allSatisfy { $0.kind == .toggle && $0.defaultIsActive })
+        #expect(compiled == payload)
+    }
+
     @Test("滑块文字差异会保留未变化字符的位置身份")
     func testSliderTextDiffKeepsMatchingCharacters() {
         #expect(
@@ -744,34 +901,58 @@ struct RequestBodyControlTests {
         let gemini = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "gemini")
         let anthropic = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "anthropic")
 
+        #expect(openAI.isSliderEnabled)
         #expect(openAI.defaultOptionID == "medium")
+        #expect(!openAI.options.contains(where: { $0.id == "auto" }))
+        #expect(openAI.options.allSatisfy { !$0.payload.isEmpty })
         #expect(openAI.options.first(where: { $0.id == "high" })?.payload["reasoning_effort"] == .string("high"))
+        #expect(openAI.options.last?.id == "max")
+        #expect(openAI.options.last?.payload["reasoning_effort"] == .string("max"))
+        #expect(openAIResponses.isSliderEnabled)
         #expect(openAIResponses.defaultOptionID == "medium")
-        #expect(openAIResponses.options.first(where: { $0.id == "high" })?.payload["reasoning_effort"] == .string("high"))
+        #expect(!openAIResponses.options.contains(where: { $0.id == "auto" }))
+        #expect(openAIResponses.options.allSatisfy { !$0.payload.isEmpty })
+        #expect(openAIResponses.options.first(where: { $0.id == "high" })?.payload["reasoning"] == .dictionary([
+            "effort": .string("high")
+        ]))
+        #expect(openAIResponses.options.first(where: { $0.id == "high" })?.payload["reasoning_effort"] == nil)
+        #expect(openAIResponses.options.last?.id == "max")
+        #expect(openAIResponses.options.last?.payload["reasoning"] == .dictionary([
+            "effort": .string("max")
+        ]))
 
+        #expect(gemini.isSliderEnabled)
         #expect(gemini.defaultOptionID == "medium")
         let geminiHighPayload = gemini.options.first(where: { $0.id == "high" })?.payload["generationConfig"]
         if case let .dictionary(generationConfig)? = geminiHighPayload,
            case let .dictionary(thinkingConfig)? = generationConfig["thinkingConfig"] {
-            #expect(thinkingConfig["thinkingLevel"] == .string("HIGH"))
+            #expect(thinkingConfig["thinkingLevel"] == .string("high"))
+            #expect(thinkingConfig["includeThoughts"] == .bool(true))
+            #expect(thinkingConfig["thinkingBudget"] == nil)
         } else {
             Issue.record("Gemini 高思考档位没有使用原生 generationConfig.thinkingConfig。")
         }
-
-        let geminiAutoPayload = gemini.options.first(where: { $0.id == "auto" })?.payload["generationConfig"]
-        if case let .dictionary(generationConfig)? = geminiAutoPayload,
-           case let .dictionary(thinkingConfig)? = generationConfig["thinkingConfig"] {
-            #expect(thinkingConfig["thinkingBudget"] == .int(-1))
-        } else {
-            Issue.record("Gemini 自动思考档位没有使用原生 generationConfig.thinkingConfig。")
+        for option in gemini.options {
+            if case let .dictionary(generationConfig)? = option.payload["generationConfig"],
+               case let .dictionary(thinkingConfig)? = generationConfig["thinkingConfig"] {
+                #expect(thinkingConfig["thinkingBudget"] == nil)
+            } else {
+                Issue.record("Gemini 档位 \(option.id) 缺少原生 thinkingConfig。")
+            }
         }
 
+        #expect(anthropic.isSliderEnabled)
         #expect(anthropic.defaultOptionID == "medium")
-        #expect(anthropic.options.first(where: { $0.id == "high" })?.payload["effort"] == .string("high"))
-        #expect(anthropic.options.first(where: { $0.id == "budget-2048" })?.payload["thinking"] == .dictionary([
-            "type": .string("enabled"),
-            "budget_tokens": .int(2048)
+        #expect(anthropic.options.first(where: { $0.id == "auto" })?.payload["thinking"] == .dictionary([
+            "type": .string("adaptive")
         ]))
+        #expect(anthropic.options.first(where: { $0.id == "high" })?.payload["thinking"] == .dictionary([
+            "type": .string("adaptive")
+        ]))
+        #expect(anthropic.options.first(where: { $0.id == "high" })?.payload["output_config"] == .dictionary([
+            "effort": .string("high")
+        ]))
+        #expect(anthropic.options.first(where: { $0.id == "high" })?.payload["effort"] == nil)
     }
 
     @Test("重复新增开关会改为空白模板")
@@ -795,6 +976,138 @@ struct RequestBodyControlTests {
         #expect(control.title.isEmpty)
         #expect(control.defaultOptionID == nil)
         #expect(control.options.isEmpty)
+    }
+
+    @Test("推理能力会按提供商格式补充一次思考预算控制")
+    func testEnsureThinkingControlUsesProviderFormatWithoutDuplicates() {
+        var model = Model(modelName: "reasoning-model", requestBodyControls: [])
+
+        model.ensureThinkingRequestBodyControl(apiFormat: "gemini")
+        model.ensureThinkingRequestBodyControl(apiFormat: "gemini")
+
+        #expect(model.requestBodyControls.count == 1)
+        let control = model.requestBodyControls[0]
+        #expect(ModelRequestBodyControlDefaults.isThinkingControl(control))
+        let highPayload = control.options.first(where: { $0.id == "high" })?.payload["generationConfig"]
+        if case let .dictionary(generationConfig)? = highPayload,
+           case let .dictionary(thinkingConfig)? = generationConfig["thinkingConfig"] {
+            #expect(thinkingConfig["thinkingLevel"] == .string("high"))
+        } else {
+            Issue.record("自动添加的 Gemini 思考预算没有使用原生参数结构。")
+        }
+    }
+
+    @Test("Anthropic 自动缓存档位默认关闭并生成显式 TTL")
+    func testAutomaticPromptCachingOptionsCompileExpectedPayloads() throws {
+        let control = ModelRequestBodyControlDefaults.automaticPromptCachingOptionGroup()
+
+        #expect(control.kind == .optionGroup)
+        #expect(control.defaultOptionID == "off")
+        #expect(control.options.map(\.id) == ["off", "5m", "1h"])
+        #expect(control.options[0].payload.isEmpty)
+        #expect(ModelRequestBodyControlDefaults.isAutomaticPromptCachingControl(control))
+
+        let defaultPayload = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+            base: [:],
+            controls: [control],
+            state: ModelRequestBodyControlState()
+        )
+        #expect(defaultPayload["cache_control"] == nil)
+
+        for ttl in ["5m", "1h"] {
+            let payload = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+                base: [:],
+                controls: [control],
+                state: ModelRequestBodyControlState(
+                    selectedOptionIDsByControlID: [control.id: ttl]
+                )
+            )
+            #expect(payload["cache_control"] == .dictionary([
+                "type": .string("ephemeral"),
+                "ttl": .string(ttl)
+            ]))
+        }
+    }
+
+    @Test("自动缓存档位拆分后仍保留关闭和 TTL 语义")
+    func testAutomaticPromptCachingOptionsPreserveSemanticsWhenSplit() throws {
+        let control = ModelRequestBodyControlDefaults.automaticPromptCachingOptionGroup()
+        let splitControls = try #require(ModelRequestBodyControlSplitter.split(control))
+
+        #expect(splitControls.count == 2)
+        #expect(splitControls.allSatisfy { $0.options[0].payload.isEmpty })
+
+        let offState = ModelRequestBodyControlState(
+            selectedOptionIDsByControlID: Dictionary(
+                uniqueKeysWithValues: splitControls.map { ($0.id, $0.options[0].id) }
+            )
+        )
+        let offPayload = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+            base: [:],
+            controls: splitControls,
+            state: offState
+        )
+        #expect(offPayload["cache_control"] == nil)
+
+        let oneHourState = ModelRequestBodyControlState(
+            selectedOptionIDsByControlID: Dictionary(
+                uniqueKeysWithValues: splitControls.map { ($0.id, $0.options[2].id) }
+            )
+        )
+        let oneHourPayload = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+            base: [:],
+            controls: splitControls,
+            state: oneHourState
+        )
+        #expect(oneHourPayload["cache_control"] == .dictionary([
+            "type": .string("ephemeral"),
+            "ttl": .string("1h")
+        ]))
+    }
+
+    @Test("提示缓存能力只为 Anthropic 补充一次自动缓存控制")
+    func testEnsureAutomaticPromptCachingControlOnlyAddsForAnthropic() {
+        var anthropicModel = Model(modelName: "claude")
+        anthropicModel.ensureAutomaticPromptCachingRequestBodyControl(apiFormat: "anthropic")
+        anthropicModel.ensureAutomaticPromptCachingRequestBodyControl(apiFormat: "anthropic")
+
+        #expect(anthropicModel.requestBodyControls.count == 1)
+        #expect(ModelRequestBodyControlDefaults.isAutomaticPromptCachingControl(
+            anthropicModel.requestBodyControls[0]
+        ))
+
+        var openAIModel = Model(modelName: "openai")
+        openAIModel.ensureAutomaticPromptCachingRequestBodyControl(apiFormat: "openai-compatible")
+        #expect(openAIModel.requestBodyControls.isEmpty)
+
+        var geminiModel = Model(modelName: "gemini-2.5-pro")
+        geminiModel.ensureAutomaticPromptCachingRequestBodyControl(apiFormat: "gemini")
+        #expect(geminiModel.requestBodyControls.isEmpty)
+    }
+
+    @Test("已有自定义推理控制时不会重复添加思考预算")
+    func testEnsureThinkingControlPreservesExistingControl() {
+        let existingControl = ModelRequestBodyControl(
+            id: "custom-reasoning",
+            title: "自定义推理",
+            kind: .optionGroup,
+            defaultOptionID: "high",
+            options: [
+                ModelRequestBodyControlOption(
+                    id: "high",
+                    title: "high",
+                    payload: ["reasoning_effort": .string("high")]
+                )
+            ]
+        )
+        var model = Model(
+            modelName: "reasoning-model",
+            requestBodyControls: [existingControl]
+        )
+
+        model.ensureThinkingRequestBodyControl(apiFormat: "openai-compatible")
+
+        #expect(model.requestBodyControls == [existingControl])
     }
 
     @Test("新增开关默认是温度控制")

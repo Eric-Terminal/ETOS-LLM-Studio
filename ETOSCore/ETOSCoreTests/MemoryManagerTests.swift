@@ -88,6 +88,37 @@ struct MemoryManagerTests {
         }
     }
 
+    actor MultimodalEmbeddingGenerator: MemoryEmbeddingGenerating {
+        private var latestImageCount = 0
+
+        func generateEmbeddings(
+            for texts: [String],
+            preferredModelID: String?
+        ) async throws -> [[Float]] {
+            texts.map(Self.textEmbedding)
+        }
+
+        func generateEmbeddings(
+            for inputs: [MemoryEmbeddingInput],
+            preferredModelID: String?
+        ) async throws -> [[Float]] {
+            latestImageCount = inputs.reduce(0) { $0 + $1.imageAttachments.count }
+            return inputs.map { input in
+                input.imageAttachments.isEmpty
+                    ? Self.textEmbedding(input.text)
+                    : [1, 0, 0, 0]
+            }
+        }
+
+        func observedImageCount() -> Int {
+            latestImageCount
+        }
+
+        private static func textEmbedding(_ text: String) -> [Float] {
+            text.contains("咖啡") ? [1, 0, 0, 0] : [0, 1, 0, 0]
+        }
+    }
+
     actor ProgressEventRecorder {
         private var events: [MemoryEmbeddingProgress] = []
 
@@ -511,6 +542,37 @@ struct MemoryManagerTests {
         let results = await memoryManager.searchMemoriesByKeyword(query: "抹茶 拿铁", topK: 2)
         #expect(!results.isEmpty)
         #expect(results.first?.content.contains("抹茶") == true)
+
+        await cleanup(memoryManager: memoryManager)
+    }
+
+    @Test("图片查询会通过多模态嵌入召回文本记忆")
+    func multimodalImageQueryRetrievesTextMemory() async throws {
+        let generator = MultimodalEmbeddingGenerator()
+        let memoryManager = MemoryManager(
+            embeddingGenerator: generator,
+            chunkSize: 50
+        )
+        await memoryManager.waitForInitialization()
+        await cleanup(memoryManager: memoryManager)
+
+        await memoryManager.addMemory(content: "用户喜欢手冲咖啡。")
+        await memoryManager.addMemory(content: "用户最喜欢的编辑器是 Xcode。")
+
+        let image = ImageAttachment(
+            data: Data([0x89, 0x50, 0x4E, 0x47]),
+            mimeType: "image/png",
+            fileName: "query.png"
+        )
+        let results = await memoryManager.searchMemoriesHybrid(
+            query: "",
+            imageAttachments: [image],
+            topK: 1
+        )
+
+        #expect(results.first?.content.contains("咖啡") == true)
+        let observedImageCount = await generator.observedImageCount()
+        #expect(observedImageCount == 1)
 
         await cleanup(memoryManager: memoryManager)
     }

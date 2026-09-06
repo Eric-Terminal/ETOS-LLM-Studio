@@ -121,6 +121,8 @@ extension PersistenceAuxiliaryGRDBStore {
                         provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
                         model_name TEXT NOT NULL,
                         display_name TEXT NOT NULL,
+                        picker_group_name TEXT,
+                        api_format_override TEXT,
                         is_activated INTEGER NOT NULL,
                         kind TEXT,
                         input_modalities_json TEXT,
@@ -862,6 +864,90 @@ extension PersistenceAuxiliaryGRDBStore {
                     try db.execute(sql: "ALTER TABLE providers ADD COLUMN chat_endpoint_path TEXT NOT NULL DEFAULT '/chat/completions'")
                 }
             }
+
+            migrator.registerMigration("v14_add_provider_model_picker_group") { db in
+                let tableExists = (try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'provider_models'"
+                ) ?? 0) > 0
+                guard tableExists else { return }
+
+                let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(provider_models)")
+                let hasPickerGroupName = columns.contains { row in
+                    let name: String = row["name"]
+                    return name == "picker_group_name"
+                }
+                if !hasPickerGroupName {
+                    try db.execute(sql: "ALTER TABLE provider_models ADD COLUMN picker_group_name TEXT")
+                }
+            }
+
+            migrator.registerMigration("v15_remove_speech_to_text_model_marker") { db in
+                let providerModelsExist = (try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'provider_models'"
+                ) ?? 0) > 0
+                if providerModelsExist {
+                    try db.execute(
+                        sql: "UPDATE provider_models SET kind = 'chat' WHERE kind = 'speechToText'"
+                    )
+                }
+
+                let capabilitiesExist = (try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'provider_model_capabilities'"
+                ) ?? 0) > 0
+                if capabilitiesExist {
+                    try db.execute(
+                        sql: "DELETE FROM provider_model_capabilities WHERE capability = 'speechToText'"
+                    )
+                }
+            }
+
+            migrator.registerMigration("v16_add_provider_model_api_format_override") { db in
+                let providerModelsExist = (try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'provider_models'"
+                ) ?? 0) > 0
+                guard providerModelsExist else { return }
+
+                let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(provider_models)")
+                let hasAPIFormatOverride = columns.contains { row in
+                    let name: String = row["name"]
+                    return name == "api_format_override"
+                }
+                if !hasAPIFormatOverride {
+                    try db.execute(sql: "ALTER TABLE provider_models ADD COLUMN api_format_override TEXT")
+                }
+            }
+
+            migrator.registerMigration("v17_create_official_data_action_state") { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS official_data_action_state (
+                        action_id TEXT PRIMARY KEY NOT NULL,
+                        revision INTEGER NOT NULL,
+                        payload_sha256 TEXT NOT NULL,
+                        provider_id TEXT NOT NULL,
+                        official_snapshot_json TEXT NOT NULL,
+                        applied_at REAL NOT NULL
+                    )
+                """)
+                try db.execute(
+                    sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_official_data_action_provider ON official_data_action_state(provider_id)"
+                )
+            }
+
+            migrator.registerMigration("v18_create_local_linux_configuration") { db in
+                try Self.createLocalLinuxConfigurationTables(db)
+            }
+
+            migrator.registerMigration("v19_add_mcp_local_stdio_transport") { db in
+                try Self.migrateMCPServerLocalStdioTransport(db)
+            }
+
+            migrator.registerMigration("v20_add_local_linux_command_rule_suffix") { db in
+                try Self.migrateLocalLinuxCommandRuleSuffix(db)
+            }
         }
 
         if supportsMemoryRelationalSchema {
@@ -933,8 +1019,54 @@ extension PersistenceAuxiliaryGRDBStore {
                     try db.execute(sql: "ALTER TABLE conversation_user_profile ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1")
                 }
             }
+
+            migrator.registerMigration("v6_add_memory_governance") { db in
+                try Self.createMemoryGovernanceTables(db)
+            }
         }
         try migrator.migrate(self.dbPool)
         self.logger.info("辅助存储已启用，数据库路径: \(self.databaseURL.path)")
+    }
+
+    private static func createMemoryGovernanceTables(_ db: Database) throws {
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS memory_mutation_history (
+                id TEXT PRIMARY KEY NOT NULL,
+                memory_id TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                origin TEXT NOT NULL,
+                source_session_id TEXT,
+                source_message_id TEXT,
+                source_tool_name TEXT,
+                source_shortcut_name TEXT,
+                transfer_receipt_id TEXT,
+                before_digest TEXT,
+                after_digest TEXT,
+                before_snapshot_json BLOB,
+                after_snapshot_json BLOB,
+                created_at REAL NOT NULL
+            )
+        """)
+        try db.execute(sql: """
+            CREATE INDEX IF NOT EXISTS idx_memory_mutation_history_memory
+            ON memory_mutation_history(memory_id, created_at DESC)
+        """)
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS memory_transfer_receipts (
+                id TEXT PRIMARY KEY NOT NULL,
+                kind TEXT NOT NULL,
+                file_name TEXT NOT NULL,
+                payload_sha256 TEXT NOT NULL,
+                added_count INTEGER NOT NULL,
+                updated_count INTEGER NOT NULL,
+                conflict_count INTEGER NOT NULL,
+                archived_count INTEGER NOT NULL,
+                created_at REAL NOT NULL
+            )
+        """)
+        try db.execute(sql: """
+            CREATE INDEX IF NOT EXISTS idx_memory_transfer_receipts_created
+            ON memory_transfer_receipts(created_at DESC)
+        """)
     }
 }

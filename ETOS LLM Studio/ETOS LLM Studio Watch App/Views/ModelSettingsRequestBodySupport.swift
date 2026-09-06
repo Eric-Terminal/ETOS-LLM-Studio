@@ -93,6 +93,8 @@ extension ModelSettingsView {
     }
 
     func saveEditorState() {
+        model.pickerGroupName = Model.normalizedPickerGroupName(model.pickerGroupName)
+        model.apiFormatOverride = Model.normalizedAPIFormatOverride(model.apiFormatOverride)
         model.requestBodyOverrideMode = requestBodyMode
         model.rawRequestBodyJSON = rawJSONInput
 
@@ -155,7 +157,7 @@ extension ModelSettingsView {
             state: model.defaultRequestBodyControlState
         )
         let payload = buildRequestPreviewPayload(
-            apiFormat: provider.apiFormat,
+            apiFormat: model.effectiveAPIFormat(providerAPIFormat: provider.apiFormat),
             model: model,
             overrides: effectiveOverrides
         )
@@ -308,7 +310,10 @@ extension ModelSettingsView {
                     NavigationLink {
                         RequestBodyControlDetailView(
                             control: $control,
-                            payloadDisplayMode: requestBodyMode
+                            payloadDisplayMode: requestBodyMode,
+                            onSplit: { splitControls in
+                                replaceRequestBodyControl(withID: controlID, with: splitControls)
+                            }
                         )
                     } label: {
                         RequestBodyControlRow(control: control)
@@ -375,7 +380,7 @@ extension ModelSettingsView {
         model.requestBodyControls.append(
             ModelRequestBodyControlDefaults.initialOptionGroupControl(
                 existingControls: model.requestBodyControls,
-                apiFormat: provider.apiFormat
+                apiFormat: model.effectiveAPIFormat(providerAPIFormat: provider.apiFormat)
             )
         )
     }
@@ -383,6 +388,14 @@ extension ModelSettingsView {
     private func deleteRequestBodyControl(withID controlID: String) {
         guard let index = model.requestBodyControls.firstIndex(where: { $0.id == controlID }) else { return }
         model.requestBodyControls.remove(at: index)
+    }
+
+    private func replaceRequestBodyControl(
+        withID controlID: String,
+        with splitControls: [ModelRequestBodyControl]
+    ) {
+        guard let index = model.requestBodyControls.firstIndex(where: { $0.id == controlID }) else { return }
+        model.requestBodyControls.replaceSubrange(index...index, with: splitControls)
     }
 
     private func buildRequestPreviewPayload(
@@ -403,26 +416,7 @@ extension ModelSettingsView {
                     ]
                 ]
             ]
-
-            var generationConfig: [String: Any] = [:]
-            if let temperature = overridesAny["temperature"] { generationConfig["temperature"] = temperature }
-            if let topP = overridesAny["top_p"] { generationConfig["topP"] = topP }
-            if let topK = overridesAny["top_k"] { generationConfig["topK"] = topK }
-            if let maxTokens = overridesAny["max_tokens"] { generationConfig["maxOutputTokens"] = maxTokens }
-            var thinkingConfig: [String: Any] = [:]
-            if let thinkingLevel = overridesAny["thinking_level"] {
-                thinkingConfig["thinkingLevel"] = thinkingLevel
-            }
-            if let thinkingBudget = overridesAny["thinkingBudget"] ?? overridesAny["thinking_budget"] {
-                thinkingConfig["thinkingBudget"] = thinkingBudget
-            }
-            if !thinkingConfig.isEmpty {
-                generationConfig["thinkingConfig"] = thinkingConfig
-            }
-            if !generationConfig.isEmpty {
-                payload["generationConfig"] = generationConfig
-            }
-            return payload
+            return mergedPreviewRequestPayload(payload, with: overridesAny)
 
         case .anthropic:
             var payload: [String: Any] = [:]
@@ -450,7 +444,7 @@ extension ModelSettingsView {
             if let effort = overridesAny["effort"] {
                 payload["effort"] = effort
             }
-            return payload
+            return mergedPreviewRequestPayload(payload, with: passthroughAnthropicPreviewOverrides(overridesAny))
 
         case .openAIResponses:
             var payload = sanitizedResponsesPreviewOverrides(overridesAny)
@@ -506,6 +500,26 @@ extension ModelSettingsView {
                 return payload
             }
         }
+    }
+
+    private func mergedPreviewRequestPayload(_ base: [String: Any], with overlay: [String: Any]) -> [String: Any] {
+        var result = base
+        for (key, overlayValue) in overlay {
+            if let baseDictionary = result[key] as? [String: Any],
+               let overlayDictionary = overlayValue as? [String: Any] {
+                result[key] = mergedPreviewRequestPayload(baseDictionary, with: overlayDictionary)
+            } else if let baseArray = result[key] as? [Any],
+                      let overlayArray = overlayValue as? [Any] {
+                result[key] = baseArray + overlayArray
+            } else {
+                result[key] = overlayValue
+            }
+        }
+        return result
+    }
+
+    private func passthroughAnthropicPreviewOverrides(_ overrides: [String: Any]) -> [String: Any] {
+        overrides.filter { $0.key != "thinking_budget" }
     }
 
     private enum OpenAIPreviewMode {

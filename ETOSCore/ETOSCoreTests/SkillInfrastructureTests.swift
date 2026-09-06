@@ -123,7 +123,7 @@ when_to_use: 用户需要整理导入资料时使用。
         #expect(description.contains("<compatibility>需要完整技能目录</compatibility>"))
         #expect(description.contains("<allowed_tools>read_file, search_web</allowed_tools>"))
         #expect(description.contains("图片资源会尝试 OCR"))
-        #expect(description.contains("allowed-tools 仅作为技能作者说明"))
+        #expect(description.contains("allowed-tools 只是不超过当前会话已启用工具的权限上限"))
     }
 
     @Test("SkillPaths 阻止路径穿越")
@@ -312,6 +312,8 @@ description: "demo"
         #expect(SkillManager.SkillToolAction.resolveToolArgument("list-resources") == .listResources)
         #expect(SkillManager.SkillToolAction.resolveToolArgument("read resource") == .readResource)
         #expect(SkillManager.SkillToolAction.resolveToolArgument("read-resource") == .readResource)
+        #expect(SkillManager.SkillToolAction.resolveToolArgument("execute_script") == .executeScript)
+        #expect(SkillManager.SkillToolAction.resolveToolArgument("execute script") == .executeScript)
         #expect(SkillManager.SkillToolAction.resolveToolArgument("run_script") == nil)
     }
 
@@ -482,7 +484,7 @@ description: "demo"
         #expect(listResult.contains("scripts/check.py"))
         #expect(listResult.contains("assets/blank.png"))
         #expect(listResult.contains("assets/blob.png"))
-        #expect(listResult.contains("不会执行"))
+        #expect(listResult.contains("execute_script"))
         #expect(listResult.contains("图片资源会尝试 OCR"))
         let listedFiles = manager.listFiles(skillName: skillName)
         #expect(listedFiles.first(where: { $0.relativePath == "references/FORM" })?.isReadableText == true)

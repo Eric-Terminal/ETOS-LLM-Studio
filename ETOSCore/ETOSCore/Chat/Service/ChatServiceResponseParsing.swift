@@ -10,9 +10,9 @@ import Foundation
 import os.log
 
 extension ChatService {
-    struct InlineImageExtractionResult {
-        let cleanedContent: String
-        let imageFileNames: [String]
+    public struct InlineImageExtractionResult: Sendable {
+        public let cleanedContent: String
+        public let imageFileNames: [String]
     }
 
     private struct InlineImagePayload {
@@ -25,22 +25,15 @@ extension ChatService {
         let mimeType: String
     }
 
-    func extractInlineImagesFromMarkdown(_ content: String) async -> InlineImageExtractionResult {
+    public func extractInlineImagesFromMarkdown(_ content: String) async -> InlineImageExtractionResult {
         guard !content.isEmpty else {
             return InlineImageExtractionResult(cleanedContent: content, imageFileNames: [])
         }
 
-        let regex: NSRegularExpression
-        do {
-            regex = try NSRegularExpression(pattern: "!\\[[^\\]]*\\]\\(([^)]+)\\)", options: [])
-        } catch {
-            logger.error("解析 markdown 图片正则失败: \(error.localizedDescription)")
-            return InlineImageExtractionResult(cleanedContent: content, imageFileNames: [])
-        }
-
-        let nsRange = NSRange(content.startIndex..<content.endIndex, in: content)
-        let matches = regex.matches(in: content, options: [], range: nsRange)
-        guard !matches.isEmpty else {
+        let references = await Task.detached(priority: .userInitiated) {
+            MarkdownImageReferenceSupport.downloadableReferences(in: content)
+        }.value
+        guard !references.isEmpty else {
             return InlineImageExtractionResult(cleanedContent: content, imageFileNames: [])
         }
 
@@ -48,26 +41,20 @@ extension ChatService {
         var savedFileNamesInReverse: [String] = []
         var extractedCount = 0
 
-        for match in matches.reversed() {
-            guard let fullRange = Range(match.range(at: 0), in: content),
-                  let sourceRange = Range(match.range(at: 1), in: content) else { continue }
-
-            let rawSource = String(content[sourceRange])
-            guard let normalizedSource = normalizeMarkdownImageSource(rawSource) else { continue }
-            guard let payload = await resolveInlineImagePayload(from: normalizedSource) else { continue }
+        for reference in references.reversed() {
+            guard let replaceRange = Range(reference.sourceUTF16Range, in: workingContent) else {
+                // 范围来自原始 Markdown；逆序替换可保证前方范围始终有效。
+                logger.warning("图片标记替换失败，已保留原文。")
+                continue
+            }
+            guard let payload = await resolveInlineImagePayload(from: reference.source) else { continue }
             guard let savedFileName = saveExtractedImage(
                 data: payload.data,
                 mimeType: payload.mimeType,
                 source: "markdown"
             ) else { continue }
 
-            if let replaceRange = Range(match.range(at: 0), in: workingContent) {
-                workingContent.replaceSubrange(replaceRange, with: "")
-            } else {
-                // 退化处理：范围映射失败时保持原文，避免误删
-                logger.warning("图片标记替换失败，已跳过该标记: \(String(content[fullRange]))")
-            }
-
+            workingContent.replaceSubrange(replaceRange, with: "")
             savedFileNamesInReverse.append(savedFileName)
             extractedCount += 1
         }
@@ -80,26 +67,6 @@ extension ChatService {
             cleanedContent: normalizeContentAfterImageExtraction(workingContent),
             imageFileNames: savedFileNamesInReverse.reversed()
         )
-    }
-
-    private func normalizeMarkdownImageSource(_ rawSource: String) -> String? {
-        var source = rawSource.trimmingCharacters(in: .whitespacesAndNewlines)
-        if source.hasPrefix("<"), source.hasSuffix(">"), source.count >= 2 {
-            source.removeFirst()
-            source.removeLast()
-        }
-        if let firstWhitespace = source.firstIndex(where: { $0.isWhitespace }) {
-            source = String(source[..<firstWhitespace])
-        }
-        if source.hasPrefix("\""), source.hasSuffix("\""), source.count >= 2 {
-            source.removeFirst()
-            source.removeLast()
-        }
-        if source.hasPrefix("'"), source.hasSuffix("'"), source.count >= 2 {
-            source.removeFirst()
-            source.removeLast()
-        }
-        return source.isEmpty ? nil : source
     }
 
     private func resolveInlineImagePayload(from source: String) async -> InlineImagePayload? {
@@ -170,6 +137,56 @@ extension ChatService {
         }
         let rawItems = outputItems.map { $0.toAny() }
         return saveEmbeddedImages(from: rawItems, source: "provider_metadata")
+    }
+
+    /// 图片结果落盘后只保留 Responses 多轮续接所需的调用 ID，
+    /// 避免把大段 base64 永久写入会话历史。
+    func compactResponsesImageGenerationMetadata(
+        _ metadata: [String: JSONValue]?
+    ) -> [String: JSONValue]? {
+        guard var metadata,
+              case let .array(outputItems)? = metadata[OpenAIAdapter.responsesOutputItemsKey] else {
+            return metadata
+        }
+
+        let compactedItems = outputItems.map { item -> JSONValue in
+            guard case let .dictionary(dictionary) = item,
+                  dictionary["type"] == .string("image_generation_call") else {
+                return item
+            }
+
+            var compacted = dictionary
+            for key in [
+                "result",
+                "b64_json",
+                "image",
+                "image_base64",
+                "base64",
+                "partial_image_b64",
+                "data"
+            ] {
+                compacted.removeValue(forKey: key)
+            }
+            return .dictionary(compacted)
+        }
+        metadata[OpenAIAdapter.responsesOutputItemsKey] = .array(compactedItems)
+        return metadata.isEmpty ? nil : metadata
+    }
+
+    func finalizeResponsesGeneratedImages(in message: inout ChatMessage) {
+        let generatedImageFileNames = extractGeneratedImagesFromProviderResponseMetadata(
+            message.providerResponseMetadata
+        )
+        if !generatedImageFileNames.isEmpty {
+            var imageFileNames = message.imageFileNames ?? []
+            for fileName in generatedImageFileNames where !imageFileNames.contains(fileName) {
+                imageFileNames.append(fileName)
+            }
+            message.imageFileNames = imageFileNames
+        }
+        message.providerResponseMetadata = compactResponsesImageGenerationMetadata(
+            message.providerResponseMetadata
+        )
     }
 
     private func saveEmbeddedImages(from object: Any, source: String) -> [String] {

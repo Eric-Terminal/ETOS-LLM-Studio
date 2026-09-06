@@ -92,7 +92,67 @@ struct RoleplayDataSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("宏与变量", comment: "Roleplay macros and variables title"))
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "settings-roleplay-data-\(sessionID.uuidString.lowercased())"),
+            title: NSLocalizedString("宏与变量", comment: "角色扮演宏与变量向导上下文标题"),
+            documents: [GuideDocumentReference(id: "roleplay", title: "Roleplay")],
+            settings: roleplayDataGuideSettings
+        )
+        .watchGuideEntry()
         .task { await load() }
+    }
+
+    private var roleplayDataGuideSettings: [GuidePageSetting] {
+        [
+            .readOnly("session_id", label: NSLocalizedString("会话 ID", comment: "角色扮演数据向导字段"), value: { .string(sessionID.uuidString.lowercased()) }),
+            .json(
+                "custom_macros",
+                label: NSLocalizedString("自定义宏", comment: "角色扮演数据向导字段"),
+                schema: GuideRoleplayDataSettingsSupport.macrosSchema,
+                get: { guideMacrosValue },
+                normalize: GuideRoleplayDataSettingsSupport.normalizeMacros,
+                set: { value in
+                    let macros = try GuideRoleplayDataSettingsSupport.macros(from: value)
+                    macroDrafts = macros.sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }
+                        .map { WatchRoleplayMacroDraft(name: $0.key, value: $0.value) }
+                }
+            ),
+            .string(
+                "variable_scope",
+                label: NSLocalizedString("变量作用域", comment: "角色扮演数据向导字段"),
+                allowedValues: RoleplayVariableScope.allCases.map(\.rawValue),
+                get: { selectedScope.rawValue },
+                set: { rawValue in
+                    if let scope = RoleplayVariableScope(rawValue: rawValue) {
+                        selectedScope = scope
+                        refreshVariablesJSON()
+                    }
+                }
+            ),
+            .json(
+                "variables",
+                label: NSLocalizedString("分层变量", comment: "角色扮演数据向导字段"),
+                schema: GuideRoleplayDataSettingsSupport.variablesSchema,
+                get: { guideVariablesValue },
+                normalize: GuideRoleplayDataSettingsSupport.normalizeVariables,
+                set: { variablesJSON = Self.jsonString(try GuideRoleplayDataSettingsSupport.variables(from: $0)) }
+            ),
+            .readOnly("message_scope_available", label: NSLocalizedString("消息版本变量可用", comment: "角色扮演数据向导字段"), value: { .bool(latestMessageID != nil) }),
+            .readOnly("requires_save", label: NSLocalizedString("应用方式", comment: "向导设置字段"), value: { .string(NSLocalizedString("宏与变量需要分别点击页面上的保存按钮", comment: "角色扮演数据草稿应用方式")) })
+        ]
+    }
+
+    private var guideMacrosValue: JSONValue {
+        var object: [String: JSONValue] = [:]
+        for draft in macroDrafts { object[draft.name] = .string(draft.value) }
+        return .dictionary(object)
+    }
+
+    private var guideVariablesValue: JSONValue {
+        guard let data = variablesJSON.data(using: .utf8),
+              let value = try? JSONDecoder().decode(JSONValue.self, from: data),
+              case .dictionary = value else { return .dictionary([:]) }
+        return value
     }
 
     private var variableFooter: String {

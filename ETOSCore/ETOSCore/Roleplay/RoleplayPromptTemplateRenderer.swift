@@ -1081,9 +1081,14 @@ private enum RoleplayPromptTemplateJavaScript {
 
         var errorDescription: String? {
             switch self {
-            case .unavailable: return "当前平台没有可用的提示词模板 JavaScript 运行时。"
+            case .unavailable:
+                return NSLocalizedString(
+                    "当前平台没有可用的提示词模板 JavaScript 运行时。",
+                    comment: "Prompt template JavaScript runtime unavailable"
+                )
             case .failed(let message): return message
-            case .timedOut: return "提示词模板执行超时。"
+            case .timedOut:
+                return NSLocalizedString("提示词模板执行超时。", comment: "Prompt template execution timed out")
             }
         }
     }

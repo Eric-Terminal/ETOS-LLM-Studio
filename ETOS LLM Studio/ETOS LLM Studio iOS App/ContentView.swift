@@ -17,15 +17,24 @@ import UIKit
 import CoreText
 #endif
 
+enum GuideOverlayPresentationPolicy {
+    static func shouldPresent(isEnabled: Bool, activeMode: GuideMode?) -> Bool {
+        isEnabled && activeMode == .contextualHelp
+    }
+}
+
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var viewModel: ChatViewModel
     @StateObject private var announcementManager = AnnouncementManager.shared
+    @StateObject private var surveyManager = SurveyManager.shared
     @StateObject private var legacyJSONMigrationManager = LegacyJSONMigrationManager.shared
     @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
     @ObservedObject private var appConfig = AppConfigStore.shared
     @ObservedObject private var appLockManager = AppLockManager.shared
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
+    @ObservedObject private var guideCoordinator = GuideContextCoordinator.shared
+    @StateObject private var guideController = GuideConversationController(historyStore: .contextualHelp)
     @State private var settingsDestination: SettingsNavigationDestination?
     @State private var dailyPulsePreparationTask: Task<Void, Never>?
     @State private var launchRecoveryNoticeMessage: String?
@@ -36,32 +45,68 @@ struct ContentView: View {
     @State private var isLegacyMigrationErrorPresented: Bool = false
     @State private var isNativeSettingsPresented: Bool = false
     @State private var incomingSnapshotRestorePayload: IncomingSnapshotRestorePayload?
+    @State private var systemEntryInboxPayload: SystemEntryInboxPayload?
+    @State private var systemEntryRoute: SystemEntryRoute?
     @State private var newAPIProviderImportNoticeMessage: String?
     @State private var newAPIProviderImportErrorMessage: String?
+    @State private var didEnterBackgroundSinceLastActivation = false
+    @State private var settingsGuideContextToken: GuideContextCoordinator.RegistrationToken?
     
     var body: some View {
         contentWithMigrationOverlays
+            .localLinuxDiagnosticFeedback(
+                blocked: rootToolPermissionAutoPresentationBlocked
+                    || toolPermissionCenter.activeRequest != nil
+                    || toolPermissionCenter.hasAutoPresentationBlockers(excluding: ["ios.root.presentation"])
+            )
             // 启动时检查公告
             .task {
                 await handleLaunchTasks()
             }
             .onAppear {
                 refreshRootToolPermissionAutoPresentationBlocker()
+                updateSettingsGuideContext(isPresented: isNativeSettingsPresented)
             }
             .onDisappear {
                 setRootToolPermissionAutoPresentationBlocked(false)
+                updateSettingsGuideContext(isPresented: false)
             }
             .onChange(of: rootToolPermissionAutoPresentationBlocked) { _, _ in
                 refreshRootToolPermissionAutoPresentationBlocker()
             }
+            .onChange(of: isNativeSettingsPresented) { _, isPresented in
+                updateSettingsGuideContext(isPresented: isPresented)
+            }
+            .onChange(of: announcementManager.shouldShowAlert) { _, isPresented in
+                guard !isPresented else { return }
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 350_000_000)
+                    guard !announcementManager.shouldShowAlert else { return }
+                    surveyManager.presentPendingSurveyIfPossible()
+                }
+            }
             .onChange(of: scenePhase) { _, newPhase in
                 switch newPhase {
                 case .active:
+                    LocalLinuxBackgroundTaskManager.shared.sceneDidBecomeActive()
+                    TTSManager.shared.setApplicationIsInBackground(false)
                     appLockManager.handleSceneDidBecomeActive()
                     ChatAppearanceProfileManager.shared.handleAppBecameActive()
+                    if didEnterBackgroundSinceLastActivation {
+                        ChatService.shared.openNewSessionIfRestoreWindowExpired()
+                        didEnterBackgroundSinceLastActivation = false
+                    }
                     scheduleDailyPulsePreparation(after: 1_500_000_000)
                 case .background:
+                    Task {
+                        await guideController.persistHistory()
+                        await GuideConversationController.modelSetup.persistHistory()
+                    }
+                    LocalLinuxBackgroundTaskManager.shared.sceneDidEnterBackground()
+                    TTSManager.shared.setApplicationIsInBackground(true)
                     appLockManager.handleSceneDidEnterBackground()
+                    ChatService.recordAppDidEnterBackground()
+                    didEnterBackgroundSinceLastActivation = true
                     Task {
                         await AppConfigStore.shared.flushPendingWrites()
                     }
@@ -73,61 +118,7 @@ struct ContentView: View {
     }
 
     private var baseContent: some View {
-        appNavigationContent
-        .environment(\.font, rootBodyFont)
-        .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage))
-        .onAppear {
-            AppLanguageRuntime.apply(rawValue: appConfig.appLanguage)
-            refreshRootBodyFont()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .requestSwitchToChatTab)) { _ in
-            pushNativeChatIfNeeded()
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(for: .syncFontsUpdated)
-                .receive(on: DispatchQueue.main)
-        ) { _ in
-            refreshRootBodyFont()
-        }
-        .onChange(of: appConfig.fontUseCustomFonts) { _, isEnabled in
-            _ = isEnabled
-            FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
-            refreshRootBodyFont()
-        }
-        .onChange(of: appConfig.fontCustomScale) { _, newValue in
-            let normalizedValue = FontLibrary.normalizedFontScale(newValue)
-            if normalizedValue != newValue {
-                appConfig.fontCustomScale = normalizedValue
-            }
-            refreshRootBodyFont()
-        }
-        .onChange(of: appConfig.appLanguage) { _, newValue in
-            AppLanguageRuntime.apply(rawValue: newValue)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
-            openDailyPulse()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .requestOpenFeedback)) { _ in
-            openFeedbackFromNotification()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .requestOpenChatSession)) { _ in
-            openChatSessionFromNotification()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .requestOpenAchievementJournal)) { _ in
-            openAchievementJournalFromNotification()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .requestOpenUpdateTimeline)) { _ in
-            openUpdateTimelineFromNotification()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .requestIncomingSnapshotRestore)) { notification in
-            guard let fileURL = notification.object as? URL else { return }
-            incomingSnapshotRestorePayload = IncomingSnapshotRestorePayload(fileURL: fileURL)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .requestContinueDailyPulseChat)) { _ in
-            Task { @MainActor in
-                openDailyPulseContinuationIfNeeded()
-            }
-        }
+        notificationAwareContent
         .alert(NSLocalizedString("记忆系统需要更新", comment: ""), isPresented: $viewModel.showDimensionMismatchAlert) {
             Button(NSLocalizedString("确定", comment: ""), role: .cancel) {}
         } message: {
@@ -174,6 +165,11 @@ struct ContentView: View {
                 )
             }
         }
+        .sheet(isPresented: surveyPresentationBinding) {
+            if let survey = surveyManager.currentSurvey {
+                SurveyResponseSheet(survey: survey, manager: surveyManager)
+            }
+        }
         .sheet(item: $incomingSnapshotRestorePayload) { payload in
             NavigationStack {
                 IncomingSnapshotRestoreView(fileURL: payload.fileURL) {
@@ -181,6 +177,111 @@ struct ContentView: View {
                 }
             }
         }
+        .sheet(item: $systemEntryInboxPayload) { payload in
+            SystemEntryInboxPreviewView(payload: payload) { sessionID in
+                systemEntryInboxPayload = nil
+                if let sessionID { openChatSession(sessionID: sessionID) }
+            }
+        }
+        .sheet(item: $systemEntryRoute) { route in
+            NavigationStack {
+                switch route {
+                case .browser:
+                    BrowserAgentFeatureView(sessionID: viewModel.currentSession?.id)
+                case .terminal:
+                    LocalLinuxFeatureView(sessionID: viewModel.currentSession?.id)
+                case .memory(let memory):
+                    if let memory {
+                        MemoryEditView(memory: memory)
+                            .environmentObject(viewModel)
+                    } else {
+                        LongTermMemoryFeatureView()
+                    }
+                }
+            }
+        }
+    }
+
+    private var notificationAwareContent: some View {
+        fontAndLanguageAwareContent
+        .onReceive(NotificationCenter.default.publisher(for: .requestSwitchToChatTab)) { _ in
+            pushNativeChatIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
+            openDailyPulse()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestOpenFeedback)) { _ in
+            openFeedbackFromNotification()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestOpenChatSession)) { _ in
+            openChatSessionFromNotification()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestContextCompression)) { _ in
+            openContextCompressionFromNotification()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestOpenAchievementJournal)) { _ in
+            openAchievementJournalFromNotification()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestOpenUpdateTimeline)) { _ in
+            openUpdateTimelineFromNotification()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestGuideModelManagement)) { _ in
+            pushNativeSettings(destination: .modelManagement)
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: .requestIncomingSnapshotRestore),
+            perform: handleIncomingSnapshotRestore
+        )
+        .onReceive(NotificationCenter.default.publisher(for: .requestSystemEntryInboxPreview)) { notification in
+            systemEntryInboxPayload = notification.object as? SystemEntryInboxPayload
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestSystemEntryRoute)) { notification in
+            systemEntryRoute = notification.object as? SystemEntryRoute
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestContinueDailyPulseChat)) { _ in
+            Task { @MainActor in
+                openDailyPulseContinuationIfNeeded()
+            }
+        }
+    }
+
+    private var fontAndLanguageAwareContent: some View {
+        appNavigationContent
+            .environment(\.font, rootBodyFont)
+            .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage))
+            .onAppear {
+                AppLanguageRuntime.apply(rawValue: appConfig.appLanguage)
+                refreshRootBodyFont()
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(for: .syncFontsUpdated)
+                    .receive(on: DispatchQueue.main)
+            ) { _ in
+                refreshRootBodyFont()
+            }
+            .onChange(of: appConfig.fontUseCustomFonts) { _, isEnabled in
+                _ = isEnabled
+                FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
+                refreshRootBodyFont()
+            }
+            .onChange(of: appConfig.fontFallbackScope) { _, _ in
+                refreshRootBodyFont()
+            }
+            .onChange(of: appConfig.fontCustomScale) { _, newValue in
+                let normalizedValue = FontLibrary.normalizedFontScale(newValue)
+                if normalizedValue != newValue {
+                    appConfig.fontCustomScale = normalizedValue
+                }
+                refreshRootBodyFont()
+            }
+            .onChange(of: appConfig.appLanguage) { _, newValue in
+                AppLanguageRuntime.apply(rawValue: newValue)
+            }
+    }
+
+    private func handleIncomingSnapshotRestore(_ notification: Notification) {
+        guard let fileURL = notification.object as? URL else { return }
+        incomingSnapshotRestorePayload = IncomingSnapshotRestorePayload(fileURL: fileURL)
     }
 
     private var appNavigationContent: some View {
@@ -190,13 +291,23 @@ struct ContentView: View {
                     SettingsView(requestedDestination: $settingsDestination)
                 }
         }
+        .overlay {
+            if GuideOverlayPresentationPolicy.shouldPresent(
+                isEnabled: appConfig.guideOverlayEnabled,
+                activeMode: guideCoordinator.activePage?.mode
+            ) {
+                GuideFloatingOverlay(controller: guideController)
+                    .environmentObject(viewModel)
+                    .zIndex(100)
+            }
+        }
     }
 
     private var contentWithNewAPIImportAlerts: some View {
         baseContent
             .sheet(item: globalToolPermissionRequestBinding) { request in
                 GlobalToolPermissionSheet(request: request) { decision in
-                    toolPermissionCenter.resolveActiveRequest(with: decision)
+                    toolPermissionCenter.resolveRequest(withID: request.id, decision: decision)
                 }
                 .interactiveDismissDisabled(true)
             }
@@ -287,6 +398,7 @@ struct ContentView: View {
     private var rootToolPermissionAutoPresentationBlocked: Bool {
         isNativeSettingsPresented
             || announcementManager.shouldShowAlert
+            || surveyManager.shouldShowSurvey
             || incomingSnapshotRestorePayload != nil
             || viewModel.showDimensionMismatchAlert
             || viewModel.externalDocumentImportErrorMessage != nil
@@ -310,8 +422,29 @@ struct ContentView: View {
         setRootToolPermissionAutoPresentationBlocked(rootToolPermissionAutoPresentationBlocked)
     }
 
+    private var surveyPresentationBinding: Binding<Bool> {
+        Binding(
+            get: { surveyManager.shouldShowSurvey },
+            set: { isPresented in
+                if !isPresented {
+                    surveyManager.dismissCurrentSurvey()
+                }
+            }
+        )
+    }
+
     private func openDailyPulse() {
-        pushNativeSettings(destination: .dailyPulse)
+        _ = notificationCenter.consumePendingRoute()
+        if let selection = notificationCenter.consumePendingDailyPulseSelection() {
+            pushNativeSettings(
+                destination: .dailyPulseCard(
+                    runID: selection.runID,
+                    cardID: selection.cardID
+                )
+            )
+        } else {
+            pushNativeSettings(destination: .dailyPulse)
+        }
     }
 
     private var launchRecoveryNoticePresented: Binding<Bool> {
@@ -398,6 +531,12 @@ struct ContentView: View {
         openChatSession(sessionID: sessionID)
     }
 
+    private func openContextCompressionFromNotification() {
+        _ = notificationCenter.consumePendingRoute()
+        guard let sessionID = notificationCenter.pendingContextCompressionSessionID else { return }
+        openChatSession(sessionID: sessionID)
+    }
+
     private func openAchievementJournalFromNotification() {
         _ = notificationCenter.consumePendingRoute()
         openAchievementJournal()
@@ -437,6 +576,7 @@ struct ContentView: View {
         launchRecoveryNoticeMessage = Persistence.consumeLaunchRecoveryNotice()
         legacyJSONMigrationManager.refreshStatus()
         await announcementManager.checkAnnouncement()
+        await surveyManager.checkSurveys(canPresent: !announcementManager.shouldShowAlert)
         scheduleDailyPulsePreparation(after: 1_500_000_000)
         if openDailyPulseContinuationIfNeeded() {
             return
@@ -449,6 +589,10 @@ struct ContentView: View {
                 openFeedback(issueNumber: notificationCenter.consumePendingFeedbackIssueNumber())
             case .chatSession:
                 if let sessionID = notificationCenter.consumePendingChatSessionID() {
+                    openChatSession(sessionID: sessionID)
+                }
+            case .contextCompression:
+                if let sessionID = notificationCenter.pendingContextCompressionSessionID {
                     openChatSession(sessionID: sessionID)
                 }
             case .achievementJournal:
@@ -501,6 +645,43 @@ struct ContentView: View {
 
     private func pushNativeChatIfNeeded() {
         isNativeSettingsPresented = false
+    }
+
+    private func updateSettingsGuideContext(isPresented: Bool) {
+        guard isPresented else {
+            if let settingsGuideContextToken {
+                guideCoordinator.unregister(settingsGuideContextToken)
+                self.settingsGuideContextToken = nil
+            }
+            return
+        }
+        guard settingsGuideContextToken == nil else { return }
+
+        let settingsViewModel = viewModel
+        settingsGuideContextToken = guideCoordinator.register(
+            descriptor: GuidePageDescriptor(
+                id: "settings-navigation",
+                title: NSLocalizedString("设置", comment: "设置导航向导后备上下文标题"),
+                documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")]
+            ),
+            isFallback: true,
+            snapshot: {
+                GuidePageSnapshot(fields: [
+                    "provider_count": GuideSnapshotField(
+                        label: NSLocalizedString("提供商数量", comment: "设置导航向导后备快照字段"),
+                        value: .int(settingsViewModel.providers.count),
+                        access: .readOnly
+                    ),
+                    "selected_model": GuideSnapshotField(
+                        label: NSLocalizedString("当前模型", comment: "设置导航向导后备快照字段"),
+                        value: .string(settingsViewModel.selectedModel?.model.displayName ?? ""),
+                        access: .readOnly
+                    )
+                ])
+            },
+            buildProposal: { _, _ in throw GuideError.invalidToolArguments },
+            execute: { _ in throw GuideError.invalidToolArguments }
+        )
     }
 
     private func scheduleDailyPulsePreparation(after delayNanoseconds: UInt64) {

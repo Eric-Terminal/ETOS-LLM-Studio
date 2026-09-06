@@ -12,10 +12,6 @@ struct JSONRPCRequestEnvelope: Decodable {
     let id: JSONRPCID
 }
 
-struct JSONRPCRequestMethodEnvelope: Decodable {
-    let id: JSONRPCID?
-    let method: String
-}
 
 struct JSONRPCDispatchEnvelope: Decodable {
     let id: JSONRPCID?
@@ -38,10 +34,6 @@ struct MCPServerElicitationRequest: Codable {
     let params: MCPElicitationRequest
 }
 
-struct JSONRPCResponseWrapper: Codable {
-    let jsonrpc: String
-    let id: JSONRPCID?
-}
 
 struct JSONRPCSamplingResponse: Encodable {
     let jsonrpc: String

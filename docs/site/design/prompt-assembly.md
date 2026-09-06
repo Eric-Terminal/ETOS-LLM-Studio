@@ -35,12 +35,82 @@ description: 一条消息从你按发送到真正出站之前，ETOS 给模型�
   → 组装最终 system prompt（拼接八个上下文块）
   → 截断聊天历史
   → 按需插入时间地标 + 按深度世界书
-  → 追加增强提示词作为独立 system 消息
+  → 追加增强提示词到尾部（按协议选择 system / user）
   → 决定本轮可暴露的工具
   → 发送给选中的模型
 ```
 
-下面把八个上下文块逐个讲清楚——**什么时候出现 / 什么时候缺席 / 适合放什么内容**。
+## 提示词宏
+
+全局系统提示词、会话系统提示词、话题提示词、增强提示词和聊天输入框都支持宏。提示词编辑页下方的「提示词宏」介绍卡说明展开规则，展开「查看可用宏」可查看完整列表。
+
+双括号 `{{model_name}}` 动态展开，单括号 `{model_name}` 也支持展开；名称不区分大小写，括号内可留空格。三括号用于字面量：`{{{battery_level}}}` 发送为 `{{battery_level}}`，不会读取电量，也不会在后续角色模板处理中再次展开。以电量为 90% 为例：
+
+| 输入 | 发送给模型的内容 |
+| --- | --- |
+| `电量：{{battery_level}}%` | `电量：90%` |
+| `解释 {{{battery_level}}} 的用途` | `解释 {{battery_level}} 的用途` |
+
+每次请求确定实际使用的模型后，系统采集一次环境快照，供这四类提示词和本轮发送的用户消息共同使用。保存的配置、消息和聊天界面中的原文保持不变；历史用户消息中的动态宏在后续请求中也会按当轮环境重新展开，不固定为首次发送时的值。助手回复与工具结果不参与此环境宏展开。未知宏保持原文，宏的替换结果不在这一层递归展开；角色宏和高级模板继续由各自的处理链路负责。
+
+| 类别 | 可用宏名称 |
+| --- | --- |
+| 日期与时间 | `cur_date`、`cur_time`、`cur_datetime`、`utc_datetime`、`weekday`、`timestamp`、`timezone`、`timezone_offset` |
+| 模型与供应商 | `model_id`、`model_name`、`provider_id`、`provider_name`、`api_format` |
+| 称呼与会话 | `nickname`、`user`、`char`、`assistant_name`、`chat_id`、`chat_name`、`message_count` |
+| 语言与应用 | `locale`、`language`、`system_locale`、`app_name`、`app_version`、`app_build` |
+| 设备信息 | `platform`、`system_version`、`device_info`、`device_model`、`device_name` |
+| 电量与运行状态 | `battery_level`、`battery_state`、`is_charging`、`low_power_mode`、`thermal_state`、`system_uptime` |
+| 音量与音频 | `volume_level`、`audio_output_type`、`audio_output_name`、`audio_input_type`、`audio_input_name`、`other_audio_playing` |
+| 屏幕信息 | `screen_brightness`、`screen_width`、`screen_height`、`screen_scale` |
+| 存储与硬件资源 | `storage_free_bytes`、`storage_total_bytes`、`storage_free_gb`、`storage_total_gb`、`storage_free_percent`、`physical_memory_bytes`、`physical_memory_gb`、`processor_count`、`active_processor_count` |
+
+当前共支持 **56 个通用宏名称，包含别名**。
+
+`nickname` 和 `user` 是同一个用户称呼，使用当前绑定或默认 Persona（用户身份）的名称；未设置时使用当前语言中的“用户”。`char` 和 `assistant_name` 是同一个助手称呼，使用第一个绑定角色的名称，未绑定角色时使用本轮模型的显示名称。它们读取的是 App 中配置的用户身份和角色。
+
+例如，用户身份叫 Eric、角色叫“小晖”时，`你是 {{char}}，请称呼我为 {{user}}。` 会发送为 `你是 小晖，请称呼我为 Eric。`。`message_count` 统计本轮准备的用户与助手消息，不包含工具和系统消息。
+
+`cur_date` 使用公历 `yyyy-MM-dd`，`cur_time` 使用 `HH:mm:ss`，`cur_datetime` 合并两者；`utc_datetime` 使用 ISO 8601。`timestamp` 和 `system_uptime` 的单位都是秒。`locale` 跟随 App 内的语言设置，`system_locale` 表示系统的语言区域。
+
+设备宏来自**实际发送请求的设备**，手表不会读取 iPhone 的电量。`battery_level` 是不带 `%` 的 0–100 整数；`battery_state` 为 `unplugged`、`charging`、`full` 或 `unknown`；`is_charging` 为 `true`、`false` 或 `unknown`，已充满时为 `false`。`low_power_mode` 为 `true` 或 `false`；`thermal_state` 为 `nominal`、`fair`、`serious`、`critical` 或 `unknown`。电池监测仅在引用电池宏时短暂开启，读取后恢复原来的监测状态，不进行后台轮询。系统不提供的数据返回 `unknown`。
+
+### 音量、屏幕与容量
+
+| 宏 | 数值与单位 |
+| --- | --- |
+| `volume_level` | 系统报告的输出音量，0–100 整数，不带 `%` |
+| `audio_output_type` / `audio_input_type` | 当前输出／输入路由类型；常见值为 `speaker`、`receiver`、`headphones`、`microphone`、`headset_microphone`、`bluetooth`、`airplay`、`usb`、`hdmi`、`line_in`、`line_out`、`car_audio`；其他类型保留系统原始标识 |
+| `audio_output_name` / `audio_input_name` | 当前路由设备名称；系统未提供名称时为 `unknown` |
+| `other_audio_playing` | 系统是否报告其他 App 正在播放音频，`true` 或 `false` |
+| `screen_brightness` | 屏幕亮度，0–100 整数，不带 `%`；仅 iOS，watchOS 返回 `unknown` |
+| `screen_width` / `screen_height` | 屏幕宽高，单位为点 |
+| `screen_scale` | 每点对应的像素数，例如 `2.0`、`3.0` |
+| `storage_free_bytes` / `storage_total_bytes` | App 文档目录所在卷的可用／总容量，单位为字节 |
+| `storage_free_gb` / `storage_total_gb` | 同一卷的可用／总容量，十进制 GB，保留两位小数 |
+| `storage_free_percent` | 剩余容量百分比，0–100 整数，不带 `%` |
+| `physical_memory_bytes` / `physical_memory_gb` | 设备总物理内存，单位为字节或十进制 GB；不表示当前剩余 RAM |
+| `processor_count` / `active_processor_count` | 逻辑处理器数量／当前活跃数量 |
+
+音频宏读取系统当前报告的快照。没有报告路由时，类型和名称均返回 `none`；多端口按顺序以逗号分隔。蓝牙类型只表示蓝牙音频路由，不能据此判断一定连接了耳机。输出音量、铃声音量和静音模式分别表示不同信息，音量为零不等于开启静音模式。宏采集不会切换音频类别、激活音频会话、播放声音或请求录音权限；前后台切换、输出设备切换之后，系统读数可能延迟更新。
+
+iOS 的屏幕值来自 App 关联的场景，无可用场景时返回 `unknown`；watchOS 读取手表屏幕的尺寸和缩放倍率。存储、音频、屏幕及硬件信息都按引用分组采集，磁盘读取在后台完成。GB 使用 `1,000,000,000` 字节，小数固定使用 `.`。
+
+### 动态信息与缓存
+
+时间、电量等动态信息可以写在任何支持宏的位置。例如：
+
+```text
+当前时间：{{cur_datetime}}（{{timezone}}）
+电量（%）：{{battery_level}}
+音量（%）：{{volume_level}}
+音频输出：{{audio_output_type}}（{{audio_output_name}}）
+可用空间：{{storage_free_gb}} GB / {{storage_total_gb}} GB
+```
+
+宏沿用所在内容的位置。增强提示词位于尾部，保持原有的协议角色设置，不会被合并进前面的全局或话题提示词。系统、话题提示词与历史用户消息中的动态值变化，可能减少从对应位置起的前缀缓存复用。使用位置由用户自行选择，实际缓存支持及命中范围由供应商和 API 格式决定。
+
+「发送系统时间」可以选择开头或末尾，时间宏则可插入任意支持宏的位置；两者独立生效，同时使用会分别附加时间。
 
 ## 八个上下文块
 
@@ -143,7 +213,7 @@ ETOS 异步把一段会话压缩成"跨会话可复用摘要"，在后续对话�
 
 ### 8. 增强提示词 `<enhanced_prompt>`
 
-**特别注意：增强提示词不并入前面的总 system prompt**，而是在消息序列**最后追加为一条独立 system 消息**。
+**增强提示词不并入前面的总 system prompt**，而是放在尾部上下文中。OpenAI 适配器按「使用 System 角色发送」选择 `system` 或 `user`，本地模型使用 `system`；Anthropic 和 Gemini 使用 `user`，避免适配器将其提升到系统前缀。需要时会与用户消息合并。
 
 设计原因：
 
@@ -168,27 +238,17 @@ ETOS 异步把一段会话压缩成"跨会话可复用摘要"，在后续对话�
 - **地标 / 深度插入**是为了补结构，不是补长度
 :::
 
-## 世界书隔离会改变整条链路
+## 会话开关可以独立裁剪上下文
 
-如果当前会话绑定了世界书且启用了**隔离发送**，ETOS 切换到**更严格**的上下文模型。
+角色扮演会话可以分别开启**屏蔽记忆**、**屏蔽工具**和**屏蔽全局系统提示词**，不需要绑定世界书。
 
-**会送的**：
+| 开关 | 对发送链路的影响 |
+| --- | --- |
+| 屏蔽记忆 | 跳过长期记忆、跨会话摘要、用户画像与记忆工具 |
+| 屏蔽工具 | 跳过所有工具定义，并从聊天历史移除工具调用与结果 |
+| 屏蔽全局系统提示词 | 不拼入全局系统提示词，继续保留会话提示词、角色卡与世界书 |
 
-- 全局提示词
-- 话题提示词
-- 增强提示词
-- 世界书
-
-**不会送的**：
-
-- 长期记忆
-- 跨会话摘要
-- 用户画像
-- MCP 工具
-- 快捷指令工具
-- 其他外部工具上下文
-
-这就是为什么工具中心里会出现「**配置已启用，但当前会话不可用**」的状态——因为这个会话开了世界书隔离。
+这就是为什么工具中心里会出现「**配置已启用，但当前会话不可用**」的状态：当前会话可能屏蔽了工具，记忆工具也可能因为屏蔽记忆而不可用。
 
 详细机制见 [世界书与工具治理](/design/worldbook-and-tools)。
 

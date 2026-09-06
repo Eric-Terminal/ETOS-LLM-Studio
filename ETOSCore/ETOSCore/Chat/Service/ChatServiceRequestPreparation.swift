@@ -20,6 +20,8 @@ extension ChatService {
         let enableMemory: Bool
         let enableMemoryWrite: Bool
         let enableMemoryActiveRetrieval: Bool
+        let includeMemoryTools: Bool
+        let includeMemoryManagementTools: Bool
         let includeBuiltInAppTools: Bool
         let includeMCPTools: Bool
         let includeShortcutTools: Bool
@@ -32,28 +34,29 @@ extension ChatService {
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool
     ) -> AuxiliaryContextPolicy {
-        let isolationActive = session?.isWorldbookContextIsolationActive ?? false
-        guard isolationActive else {
-            return AuxiliaryContextPolicy(
-                enableMemory: enableMemory,
-                enableMemoryWrite: enableMemoryWrite,
-                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
-                includeBuiltInAppTools: true,
-                includeMCPTools: true,
-                includeShortcutTools: true,
-                includeSkills: true
-            )
-        }
+        let memoryIsolationActive = session?.isMemoryContextIsolationActive ?? false
+        let toolIsolationActive = session?.isToolContextIsolationActive ?? false
+        let temporaryMemoryIsolationActive = isTemporaryChatMemoryIsolated(for: session?.id)
+        let shouldIsolateMemory = memoryIsolationActive || temporaryMemoryIsolationActive
 
-        logger.info("当前会话已启用记忆与工具隔离，将屏蔽长期记忆与工具上下文。")
+        if memoryIsolationActive {
+            logger.info("当前会话已屏蔽记忆，将跳过长期记忆上下文与记忆工具。")
+        } else if temporaryMemoryIsolationActive {
+            logger.info("当前临时对话已启用记忆隔离，将屏蔽长期记忆上下文与记忆工具。")
+        }
+        if toolIsolationActive {
+            logger.info("当前会话已屏蔽工具，将跳过工具定义与历史工具调用。")
+        }
         return AuxiliaryContextPolicy(
-            enableMemory: false,
-            enableMemoryWrite: false,
-            enableMemoryActiveRetrieval: false,
-            includeBuiltInAppTools: false,
-            includeMCPTools: false,
-            includeShortcutTools: false,
-            includeSkills: false
+            enableMemory: enableMemory && !shouldIsolateMemory,
+            enableMemoryWrite: enableMemoryWrite && !shouldIsolateMemory,
+            enableMemoryActiveRetrieval: enableMemoryActiveRetrieval && !shouldIsolateMemory,
+            includeMemoryTools: !toolIsolationActive,
+            includeMemoryManagementTools: !shouldIsolateMemory,
+            includeBuiltInAppTools: !toolIsolationActive,
+            includeMCPTools: !toolIsolationActive,
+            includeShortcutTools: !toolIsolationActive,
+            includeSkills: !toolIsolationActive
         )
     }
 
@@ -61,7 +64,10 @@ extension ChatService {
         for session: ChatSession?,
         enableMemory: Bool,
         enableMemoryWrite: Bool,
-        enableMemoryActiveRetrieval: Bool
+        enableMemoryActiveRetrieval: Bool,
+        localAgentContext: AgentRuntimeContext? = nil,
+        agentCapabilities: AgentToolCapabilityPolicy? = nil,
+        selectedAgentMCPServerIDs: Set<UUID>? = nil
     ) async -> (tools: [InternalToolDefinition]?, policy: AuxiliaryContextPolicy) {
         let policy = auxiliaryContextPolicy(
             for: session,
@@ -71,10 +77,21 @@ extension ChatService {
         )
 
         var resolvedTools: [InternalToolDefinition] = []
-        if policy.enableMemory && policy.enableMemoryWrite {
+        let includeAgentTools = agentCapabilities?.preparesAgentRun
+            ?? (localAgentContext?.mode == .agent && session?.isToolContextIsolationActive != true)
+        let includeConversationTools = agentCapabilities?.includesConversationTools ?? includeAgentTools
+        let includeBrowserTools = agentCapabilities?.includesBrowserTools ?? includeAgentTools
+        let includeLocalLinuxTools = agentCapabilities?.includesLocalLinuxTools
+            ?? includeAgentTools
+        // 只有 Linux Agent Run 需要冻结本次可见的 MCP 集合；普通 Chat 继续使用
+        // MCP 管理页的实时选择，否则空的 Agent 快照会误伤远程 MCP 与内建工具。
+        let selectedServerIDs = includeLocalLinuxTools
+            ? (selectedAgentMCPServerIDs ?? localAgentContext.map { Set($0.selectedMCPServerIDs) })
+            : nil
+        if policy.includeMemoryTools && policy.enableMemory && policy.enableMemoryWrite {
             resolvedTools.append(saveMemoryTool)
         }
-        if policy.enableMemory && policy.enableMemoryActiveRetrieval && resolvedMemoryTopK() > 0 {
+        if policy.includeMemoryTools && policy.enableMemory && policy.enableMemoryActiveRetrieval && resolvedMemoryTopK() > 0 {
             resolvedTools.append(searchMemoryTool)
         }
         if policy.includeBuiltInAppTools {
@@ -82,8 +99,18 @@ extension ChatService {
             resolvedTools.append(contentsOf: builtInAppTools)
         }
         if policy.includeMCPTools {
-            let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }
-            resolvedTools.append(contentsOf: mcpTools)
+            let mcpTools = await MainActor.run {
+                MCPManager.shared.chatToolsForLLM(
+                    includeConversationAgentTools: includeConversationTools,
+                    includeLocalLinuxTools: includeLocalLinuxTools,
+                    includeBrowserAgentTools: includeBrowserTools,
+                    selectedServerIDs: selectedServerIDs
+                )
+            }
+            resolvedTools.append(contentsOf: mcpTools.filter { tool in
+                policy.includeMemoryManagementTools
+                    || MCPBuiltInAppToolServer.category(for: tool.name) != .memory
+            })
         }
         if policy.includeShortcutTools {
             let shortcutTools = await MainActor.run { ShortcutToolManager.shared.chatToolsForLLM() }
@@ -93,7 +120,92 @@ extension ChatService {
             let skillTools = await MainActor.run { SkillManager.shared.chatToolsForLLM() }
             resolvedTools.append(contentsOf: skillTools)
         }
+        if let runID = localAgentContext?.runID {
+            resolvedTools = await SkillAllowedToolRuntime.shared.filteredTools(
+                resolvedTools,
+                runID: runID
+            )
+        }
         return (resolvedTools.isEmpty ? nil : resolvedTools, policy)
+    }
+
+    func toolsUsingNativeResponsesShellIfNeeded(
+        _ tools: [InternalToolDefinition]?,
+        runnableModel: RunnableModel,
+        sessionID: UUID
+    ) async throws -> [InternalToolDefinition]? {
+        guard runnableModel.model.supportsToolCalling,
+              var resolved = tools,
+              let runID = conversationRunIDs(for: sessionID)?.runID else {
+            return tools
+        }
+        let usesNativeResponsesShell: Bool
+        if runnableModel.effectiveAPIFormat == "openai-responses" {
+            usesNativeResponsesShell = true
+        } else if runnableModel.effectiveAPIFormat == "openai-compatible" {
+            let overrides = runnableModel.effectiveOverrideParameters.mapValues { $0.toAny() }
+            switch OpenAIAdapter().resolvedConversationAPI(for: overrides) {
+            case .responses:
+                usesNativeResponsesShell = true
+            case .chatCompletions:
+                usesNativeResponsesShell = false
+            }
+        } else {
+            usesNativeResponsesShell = false
+        }
+        resolved = await SkillAllowedToolRuntime.shared.filteredTools(
+            resolved,
+            runID: runID,
+            exemptToolNames: usesNativeResponsesShell
+                ? Set([SkillManager.chatToolName, OpenAIResponsesLocalShellProtocol.toolName])
+                : Set([SkillManager.chatToolName])
+        )
+        guard usesNativeResponsesShell,
+              let context = Persistence.loadLocalAgentRun(id: runID)?.context else {
+            return resolved.isEmpty ? nil : resolved
+        }
+        let hasNativeShell = resolved.contains {
+            $0.kind == .openAIResponsesLocalShell
+                || LocalLinuxToolDefinitions.isCommandExecutionToolExposedName($0.name)
+        }
+        guard hasNativeShell else {
+            return resolved
+        }
+
+        let nativeShell = try await OpenAIResponsesLocalShellRuntime.shared.toolDefinition(for: context)
+        resolved.removeAll {
+            $0.kind == .openAIResponsesLocalShell
+                || LocalLinuxToolDefinitions.isCommandExecutionToolExposedName($0.name)
+                || $0.name == SkillManager.chatToolName
+        }
+        resolved.append(nativeShell)
+        return resolved.isEmpty ? nil : resolved
+    }
+
+    /// Linux 操作说明必须与模型实际可调用的 Linux 工具同时出现，避免 Chat
+    /// 或不支持工具调用的模型承担无用上下文和错误的能力暗示。
+    func shouldIncludeLocalLinuxInstructions(
+        tools: [InternalToolDefinition]?,
+        modelSupportsToolCalling: Bool,
+        localLinuxToolsEnabled: Bool
+    ) -> Bool {
+        guard modelSupportsToolCalling, localLinuxToolsEnabled else { return false }
+        return tools?.contains {
+            $0.kind == .openAIResponsesLocalShell
+                || LocalLinuxToolDefinitions.containsExposedName($0.name)
+        } == true
+    }
+
+    func activeRequestIncludesLocalLinuxTools(sessionID: UUID) -> Bool {
+        guard let runID = conversationRunIDs(for: sessionID)?.runID,
+              let run = Persistence.loadConversationRun(id: runID) else {
+            return false
+        }
+        if let localLinuxToolsEnabled = run.requestConfiguration.localLinuxToolsEnabled {
+            return localLinuxToolsEnabled
+        }
+        // 旧版本的持久化 Run 没有能力快照时，只接受真实 Agent 上下文作为兼容依据。
+        return Persistence.loadLocalAgentRun(id: runID)?.context.mode == .agent
     }
 
     func preparedMessagesForRequest(
@@ -105,9 +217,11 @@ extension ChatService {
         let baseMessages = visibleMessages.filter { $0.role != .error && $0.id != loadingMessageID }
         let normalizedMessages = normalizedMessagesForToolCallChain(baseMessages)
         let messageRegexRules = MessageRegexRuleStore.currentRules()
-        let isWorldbookIsolationActive = session?.isWorldbookContextIsolationActive == true
+        let isToolIsolationActive = session?.isToolContextIsolationActive == true
+        let isMemoryIsolationActive = session?.isMemoryContextIsolationActive == true
+            || isTemporaryChatMemoryIsolated(for: session?.id)
 
-        if !isWorldbookIsolationActive {
+        if !isToolIsolationActive && !isMemoryIsolationActive {
             guard !messageRegexRules.isEmpty else {
                 return normalizedMessages
             }
@@ -115,13 +229,30 @@ extension ChatService {
         }
 
         return normalizedMessages.compactMap { message in
-            guard message.role != .tool else { return nil }
+            if message.role == .tool {
+                if isToolIsolationActive {
+                    return nil
+                }
+                if message.toolCalls?.contains(where: { isMemoryToolName($0.toolName) }) == true {
+                    return nil
+                }
+            }
+
             var sanitized = message
-            sanitized.toolCalls = nil
-            sanitized.toolCallsPlacement = nil
+            if isToolIsolationActive {
+                sanitized.toolCalls = nil
+                sanitized.toolCallsPlacement = nil
+            } else if let toolCalls = sanitized.toolCalls {
+                let retainedToolCalls = toolCalls.filter { !isMemoryToolName($0.toolName) }
+                sanitized.toolCalls = retainedToolCalls.isEmpty ? nil : retainedToolCalls
+                if retainedToolCalls.isEmpty {
+                    sanitized.toolCallsPlacement = nil
+                }
+            }
 
             if sanitized.role == .assistant,
-               sanitized.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+               sanitized.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               sanitized.toolCalls?.isEmpty != false {
                 return nil
             }
             if messageRegexRules.isEmpty {
@@ -131,15 +262,32 @@ extension ChatService {
         }
     }
 
+    private func isMemoryToolName(_ name: String) -> Bool {
+        name == "save_memory"
+            || name == "search_memory"
+            || MCPBuiltInAppToolServer.category(for: name) == .memory
+    }
+
     func limitedChatHistory(_ messages: [ChatMessage], maxMessages: Int) -> [ChatMessage] {
         guard maxMessages > 0, messages.count > maxMessages else { return messages }
 
-        let suffix = Array(messages.suffix(maxMessages))
-        guard let firstUserIndex = suffix.firstIndex(where: { $0.role == .user }) else {
-            return suffix
-        }
+        let turns = ChatConversationTurnSupport.turns(in: messages)
+        guard !turns.isEmpty else { return Array(messages.suffix(maxMessages)) }
 
-        return Array(suffix[firstUserIndex...])
+        var retainedCount = 0
+        var retainedStart = messages.endIndex
+        for turn in turns.reversed() {
+            let turnCount = turn.range.count
+            if retainedCount > 0, retainedCount + turnCount > maxMessages {
+                break
+            }
+            retainedStart = turn.range.lowerBound
+            retainedCount += turnCount
+            if retainedCount >= maxMessages {
+                break
+            }
+        }
+        return Array(messages[retainedStart...])
     }
 
     func responseAttemptMetadata(from message: ChatMessage) -> ResponseAttemptMetadata? {
@@ -191,106 +339,6 @@ extension ChatService {
 
         updatedMessages.insert(contentsOf: additions, at: insertionIndex)
         return updatedMessages
-    }
-
-    func responseRoundEndIndex(in messages: [ChatMessage], anchorUserIndex: Int) -> Int {
-        guard anchorUserIndex + 1 < messages.count else { return messages.count }
-        return messages[(anchorUserIndex + 1)...].firstIndex(where: { $0.role == .user }) ?? messages.count
-    }
-
-    func prepareRetryAttemptMetadata(
-        in messages: inout [ChatMessage],
-        anchorUserIndex: Int
-    ) -> ResponseAttemptMetadata {
-        let groupID = messages[anchorUserIndex].id
-        let roundEndIndex = responseRoundEndIndex(in: messages, anchorUserIndex: anchorUserIndex)
-        let roundRange = messages.index(after: anchorUserIndex)..<roundEndIndex
-        let existingAttemptIDs = ChatResponseAttemptSupport.orderedAttemptIDs(for: groupID, in: messages)
-
-        if existingAttemptIDs.isEmpty, !roundRange.isEmpty {
-            let legacyAttemptID = UUID()
-            for index in roundRange where messages[index].role != .user {
-                messages[index].responseGroupID = groupID
-                messages[index].responseAttemptID = legacyAttemptID
-                messages[index].responseAttemptIndex = 0
-            }
-            messages[anchorUserIndex].selectedResponseAttemptID = legacyAttemptID
-        } else if messages[anchorUserIndex].selectedResponseAttemptID == nil {
-            messages[anchorUserIndex].selectedResponseAttemptID = existingAttemptIDs.last
-        }
-
-        let nextAttemptIndex = messages[roundRange]
-            .compactMap(\.responseAttemptIndex)
-            .max()
-            .map { $0 + 1 } ?? (existingAttemptIDs.isEmpty ? 0 : existingAttemptIDs.count)
-        let newAttempt = ResponseAttemptMetadata(
-            groupID: groupID,
-            attemptID: UUID(),
-            attemptIndex: nextAttemptIndex
-        )
-        messages[anchorUserIndex].selectedResponseAttemptID = newAttempt.attemptID
-        return newAttempt
-    }
-
-    func isTailContinuationRetryTarget(_ message: ChatMessage, in messages: [ChatMessage]) -> Bool {
-        guard message.role == .error else { return false }
-        let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: messages)
-        guard let visibleIndex = visibleMessages.firstIndex(where: { $0.id == message.id }) else { return false }
-        let precedingMessages = visibleMessages[..<visibleIndex]
-        guard precedingMessages.last(where: { $0.role != .system })?.role == .tool else {
-            return false
-        }
-        let trailingMessages = visibleMessages[visibleMessages.index(after: visibleIndex)...]
-        return !trailingMessages.contains { trailingMessage in
-            switch trailingMessage.role {
-            case .user, .assistant, .tool, .error:
-                return true
-            case .system:
-                return false
-            }
-        }
-    }
-
-    func continuationAttemptMetadata(
-        for message: ChatMessage,
-        in messages: [ChatMessage],
-        anchorUserIndex: Int,
-        targetIndex: Int
-    ) -> ResponseAttemptMetadata? {
-        if let metadata = responseAttemptMetadata(from: message) {
-            return metadata
-        }
-
-        let anchorUser = messages[anchorUserIndex]
-        if let selectedAttemptID = anchorUser.selectedResponseAttemptID {
-            let attemptIndex = messages
-                .filter { $0.responseGroupID == anchorUser.id && $0.responseAttemptID == selectedAttemptID }
-                .compactMap(\.responseAttemptIndex)
-                .min() ?? 0
-            return ResponseAttemptMetadata(
-                groupID: anchorUser.id,
-                attemptID: selectedAttemptID,
-                attemptIndex: attemptIndex
-            )
-        }
-
-        guard targetIndex > anchorUserIndex else { return nil }
-        return messages[anchorUserIndex...targetIndex]
-            .reversed()
-            .compactMap { responseAttemptMetadata(from: $0) }
-            .first
-    }
-
-    func continuationInsertionIndex(
-        in messages: [ChatMessage],
-        referenceIndex: Int,
-        metadata: ResponseAttemptMetadata?
-    ) -> Int {
-        if let attemptID = metadata?.attemptID,
-           let lastAttemptIndex = messages.lastIndex(where: { $0.responseAttemptID == attemptID }) {
-            return messages.index(after: lastAttemptIndex)
-        }
-        return messages.index(after: referenceIndex)
     }
 
     func normalizedMessagesForToolCallChain(_ source: [ChatMessage]) -> [ChatMessage] {

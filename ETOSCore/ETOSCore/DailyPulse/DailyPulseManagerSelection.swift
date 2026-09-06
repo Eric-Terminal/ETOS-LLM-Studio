@@ -47,11 +47,12 @@ extension DailyPulseManager {
         )
     }
 
-    static func makeCards(
+    internal nonisolated static func makeCards(
         from cards: [DailyPulseModelCard],
         fallbackFocus: String,
         profile: DailyPulsePreferenceProfile,
-        limit: Int
+        limit: Int,
+        excluding existingCards: [DailyPulseCard] = []
     ) -> [DailyPulseCard] {
         var normalizedCandidates: [DailyPulseCard] = []
         normalizedCandidates.reserveCapacity(min(cards.count, max(1, limit * 3)))
@@ -74,8 +75,12 @@ extension DailyPulseManager {
             ))
         }
 
+        let distinctCandidates = normalizedCandidates.filter { candidate in
+            !containsSimilarCard(candidate, in: existingCards)
+        }
+
         return selectCards(
-            from: normalizedCandidates,
+            from: distinctCandidates,
             profile: profile,
             focusText: fallbackFocus,
             limit: limit
@@ -137,19 +142,34 @@ extension DailyPulseManager {
 
     nonisolated static func makeUserPrompt(
         from input: DailyPulseGenerationInput,
-        cardsPerRun: Int,
-        candidateCardsPerRun: Int
+        sessionExcerpts: [DailyPulseSessionExcerpt]? = nil,
+        cardsPerDelivery: Int,
+        candidateCardsPerDelivery: Int,
+        scheduledDeliveryDate: Date,
+        excludedTopics: [String] = []
     ) -> String {
+        let assignedSessionExcerpts = sessionExcerpts ?? input.sessionExcerpts
         let sessionBlock: String = {
-            guard !input.sessionExcerpts.isEmpty else { return NSLocalizedString("（无）", comment: "Daily Pulse prompt empty placeholder") }
-            return input.sessionExcerpts.enumerated().map { index, excerpt in
+            guard !assignedSessionExcerpts.isEmpty else { return NSLocalizedString("（无）", comment: "Daily Pulse prompt empty placeholder") }
+            return assignedSessionExcerpts.enumerated().map { index, excerpt in
                 let lines = excerpt.lines.joined(separator: "\n")
                 let title = String(
                     format: NSLocalizedString("### 会话 %d：%@", comment: "Daily Pulse prompt session section title"),
                     index + 1,
                     excerpt.name
                 )
-                return "\(title)\n\(lines)"
+                let activityContext: String
+                if let lastActivityAt = excerpt.lastActivityAt {
+                    let distance = max(0, scheduledDeliveryDate.timeIntervalSince(lastActivityAt))
+                    activityContext = String(
+                        format: NSLocalizedString("最近活动：%@（距计划送达约 %@）", comment: "Daily Pulse prompt session time context"),
+                        Self.userFacingDateString(from: lastActivityAt),
+                        Self.relativeIntervalString(distance)
+                    )
+                } else {
+                    activityContext = NSLocalizedString("最近活动时间：未知", comment: "Daily Pulse prompt unknown session time")
+                }
+                return "\(title)\n\(activityContext)\n\(lines)"
             }.joined(separator: "\n\n")
         }()
 
@@ -169,12 +189,23 @@ extension DailyPulseManager {
             }.joined(separator: "\n")
         }()
 
+        let timeZone = TimeZone.autoupdatingCurrent
+        let timeContext = String(
+            format: NSLocalizedString("%@（时区：%@；精确时间：%@）", comment: "Daily Pulse planned delivery time context"),
+            Self.userFacingDateString(from: scheduledDeliveryDate),
+            timeZone.identifier,
+            Self.promptTimestampString(from: scheduledDeliveryDate)
+        )
+        let excludedTopicBlock = excludedTopics.isEmpty
+            ? NSLocalizedString("（无）", comment: "Daily Pulse prompt empty placeholder")
+            : excludedTopics.map { "- \($0)" }.joined(separator: "\n")
+
         return BuiltInPromptStore.render(
             .dailyPulseUser,
             variables: [
-                "time": Self.userFacingDateString(from: Date()),
-                "cards_per_run": "\(cardsPerRun)",
-                "candidate_cards_per_run": "\(candidateCardsPerRun)",
+                "time": timeContext,
+                "cards_per_run": "\(cardsPerDelivery)",
+                "candidate_cards_per_run": "\(candidateCardsPerDelivery)",
                 "focus": focus,
                 "curation": curation,
                 "global_prompt": globalSystemPrompt,
@@ -183,7 +214,8 @@ extension DailyPulseManager {
                 "request_logs": logSummary,
                 "tasks": taskBlock,
                 "preference_profile": input.preferenceProfile.summaryText,
-                "external_context": input.externalContext.summaryText
+                "external_context": input.externalContext.summaryText,
+                "excluded_topics": excludedTopicBlock
             ]
         )
     }

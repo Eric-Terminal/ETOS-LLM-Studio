@@ -44,6 +44,7 @@ extension SessionFolderBrowserView {
                     tags: tags,
                     currentSession: $currentSession,
                     runningSessionIDs: runningSessionIDs,
+                    conversationRuntimeStates: conversationRuntimeStates,
                     deleteSessionAction: deleteSessionAction,
                     branchAction: branchAction,
                     deleteLastMessageAction: deleteLastMessageAction,
@@ -83,6 +84,7 @@ extension SessionFolderBrowserView {
             SessionRowView(
                 session: session,
                 isRunning: runningSessionIDs.contains(session.id),
+                runtimeState: conversationRuntimeStates[session.id],
                 currentSession: $currentSession,
                 folders: $folders,
                 tags: tags,
@@ -95,6 +97,11 @@ extension SessionFolderBrowserView {
                 onSessionSelected: { selectedSession, messageOrdinal in
                     unlockConversationArchaeologistIfNeeded(for: selectedSession)
                     onSessionSelected(selectedSession, messageOrdinal)
+                },
+                openSessionAction: { targetSessionID in
+                    guard let target = sessions.first(where: { $0.id == targetSessionID }) else { return }
+                    unlockConversationArchaeologistIfNeeded(for: target)
+                    onSessionSelected(target, nil)
                 },
                 deleteLastMessageAction: deleteLastMessageAction,
                 sendSessionToCompanionAction: sendSessionToCompanionAction,

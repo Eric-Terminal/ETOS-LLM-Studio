@@ -70,7 +70,7 @@ extension AppToolKind {
             )
         case .submitFeedbackTicket:
             return NSLocalizedString(
-                "向反馈助手提交一条问题或建议工单。title 和 detail 必填；category 可选 bug 或 suggestion（默认 bug）；可附带复现步骤、预期行为、实际行为、补充信息。",
+                "向反馈助手提交一条问题或建议工单。title 和 detail 必填；category 可选 bug 或 suggestion（默认 bug）；可附带复现步骤、预期行为、实际行为、补充信息，或引用本机 Linux 诊断编号。",
                 comment: "Submit feedback ticket tool description sent to model"
             )
         case .listSandboxDirectory:
@@ -155,7 +155,7 @@ extension AppToolKind {
             )
         case .deleteSandboxItem:
             return NSLocalizedString(
-                "删除应用沙盒 Documents 目录中的文件或子目录。只能访问沙盒内部路径，不能删除 Documents 根目录。",
+                "删除文件或子目录。相对路径和 app:// 访问 Documents；Agent 模式还可访问 linux:// 与 mount:// 后端。Documents 与挂载根本身保持为文件空间边界；linux:/// 会递归清空 guest 根目录。",
                 comment: "Delete sandbox item description sent to model"
             )
         }

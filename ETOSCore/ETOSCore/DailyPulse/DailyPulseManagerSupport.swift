@@ -58,6 +58,149 @@ extension DailyPulseManager {
             .sorted(by: { $0.generatedAt > $1.generatedAt })
     }
 
+    internal nonisolated static func retainedRuns(from runs: [DailyPulseRun], referenceDate: Date) -> [DailyPulseRun] {
+        let todayKey = dayKey(for: referenceDate)
+        let tomorrowKey = nextDayKey(from: referenceDate)
+        return runs
+            .filter { $0.dayKey == todayKey || $0.dayKey == tomorrowKey }
+            .sorted(by: { $0.generatedAt > $1.generatedAt })
+    }
+
+    internal nonisolated static func normalizedGenerationRuntimeState(
+        _ state: DailyPulseGenerationRuntimeState,
+        referenceDate: Date
+    ) -> DailyPulseGenerationRuntimeState {
+        let retainedDayKeys = Set([
+            dayKey(for: referenceDate),
+            nextDayKey(from: referenceDate)
+        ])
+        return DailyPulseGenerationRuntimeState(
+            checkpoints: state.checkpoints
+                .filter { retainedDayKeys.contains($0.dayKey) }
+                .sorted(by: { $0.updatedAt > $1.updatedAt }),
+            attempts: state.attempts
+                .filter { retainedDayKeys.contains($0.dayKey) }
+                .sorted(by: { $0.lastAttemptAt > $1.lastAttemptAt })
+        )
+    }
+
+    internal nonisolated static func generationScheduleSignature(
+        deliveryTimes: [DailyPulseDeliveryTime],
+        modelIdentifier: String
+    ) -> String {
+        let schedule = DailyPulseDeliveryCoordinator
+            .groupedCardDeliveryTimes(deliveryTimes)
+            .flatMap { $0 }
+            .map { "\($0.id.uuidString)@\($0.totalMinutes)" }
+            .joined(separator: "|")
+        return "\(modelIdentifier)|\(schedule)"
+    }
+
+    internal nonisolated static func resumableCheckpoint(
+        from checkpoints: [DailyPulseGenerationCheckpoint],
+        dayKey: String,
+        scheduleSignature: String
+    ) -> DailyPulseGenerationCheckpoint? {
+        checkpoints.first {
+            $0.dayKey == dayKey && $0.scheduleSignature == scheduleSignature
+        }
+    }
+
+    internal nonisolated static func retryDelay(consecutiveFailureCount: Int) -> TimeInterval {
+        let exponent = min(max(consecutiveFailureCount - 1, 0), 5)
+        let baseDelay: TimeInterval = 15 * 60
+        let maximumDelay: TimeInterval = 6 * 60 * 60
+        return min(baseDelay * pow(2, Double(exponent)), maximumDelay)
+    }
+
+    internal nonisolated static func failedGenerationAttempt(
+        dayKey: String,
+        previousAttempt: DailyPulseGenerationAttempt?,
+        referenceDate: Date
+    ) -> DailyPulseGenerationAttempt {
+        let failureCount = max(0, previousAttempt?.consecutiveFailureCount ?? 0) + 1
+        return DailyPulseGenerationAttempt(
+            dayKey: dayKey,
+            lastAttemptAt: referenceDate,
+            retryAfter: referenceDate.addingTimeInterval(retryDelay(consecutiveFailureCount: failureCount)),
+            consecutiveFailureCount: failureCount
+        )
+    }
+
+    internal nonisolated static func shouldAttemptGeneration(
+        trigger: DailyPulseTrigger,
+        attempt: DailyPulseGenerationAttempt?,
+        referenceDate: Date
+    ) -> Bool {
+        guard trigger != .manual else { return true }
+        guard let attempt else { return true }
+        return referenceDate >= attempt.retryAfter
+    }
+
+    internal nonisolated static func shouldGenerateOnCurrentDevice(
+        trigger: DailyPulseTrigger,
+        isWatchOS: Bool,
+        syncEnabled: Bool,
+        companionReachable: Bool
+    ) -> Bool {
+        guard trigger != .manual else { return true }
+        return !(isWatchOS && syncEnabled && companionReachable)
+    }
+
+    internal nonisolated static func partitionedSessionExcerpts(
+        _ excerpts: [DailyPulseSessionExcerpt],
+        cardCounts: [Int],
+        scheduledDeliveryDates: [Date] = []
+    ) -> [[DailyPulseSessionExcerpt]] {
+        var unusedExcerpts = excerpts
+        return cardCounts.enumerated().map { index, count in
+            let scheduledAt = scheduledDeliveryDates.indices.contains(index)
+                ? scheduledDeliveryDates[index]
+                : .distantFuture
+            var batch: [DailyPulseSessionExcerpt] = []
+            var remaining: [DailyPulseSessionExcerpt] = []
+
+            for excerpt in unusedExcerpts {
+                let isAvailableAtDelivery = excerpt.lastActivityAt.map { $0 <= scheduledAt } ?? true
+                if batch.count < max(1, count), isAvailableAtDelivery {
+                    batch.append(excerpt)
+                } else {
+                    remaining.append(excerpt)
+                }
+            }
+            unusedExcerpts = remaining
+            return batch
+        }
+    }
+
+    internal nonisolated static func messageActivityDate(_ message: ChatMessage) -> Date? {
+        [
+            message.requestedAt,
+            message.responseMetrics?.requestStartedAt,
+            message.responseMetrics?.responseCompletedAt
+        ]
+        .compactMap { $0 }
+        .max()
+    }
+
+    internal nonisolated static func promptTimestampString(from date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: date)
+    }
+
+    internal nonisolated static func relativeIntervalString(_ interval: TimeInterval) -> String {
+        guard interval >= 60 else {
+            return NSLocalizedString("不到 1 分钟", comment: "Daily Pulse prompt short relative interval")
+        }
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.day, .hour, .minute]
+        formatter.maximumUnitCount = 2
+        formatter.unitsStyle = .full
+        return formatter.string(from: interval)
+            ?? NSLocalizedString("不到 1 分钟", comment: "Daily Pulse prompt short relative interval")
+    }
+
     internal nonisolated static func hasUnviewedRun(todayRunDayKey: String?, lastViewedDayKey: String?) -> Bool {
         guard let todayRunDayKey, !todayRunDayKey.isEmpty else { return false }
         return todayRunDayKey != lastViewedDayKey
@@ -104,18 +247,18 @@ extension DailyPulseManager {
 
     internal nonisolated static func shouldProcessScheduledDelivery(
         reminderEnabled: Bool,
-        reminderHour: Int,
-        reminderMinute: Int,
+        deliveryTimes: [DailyPulseDeliveryTime],
         referenceDate: Date,
         lastDeliveryAttemptDayKey: String?
     ) -> Bool {
         guard reminderEnabled else { return false }
+        guard let firstTime = deliveryTimes.min(by: { $0.totalMinutes < $1.totalMinutes }) else { return false }
         let todayKey = dayKey(for: referenceDate)
         guard lastDeliveryAttemptDayKey != todayKey else { return false }
         return DailyPulseDeliveryCoordinator.hasReachedReminderTime(
             referenceDate: referenceDate,
-            hour: reminderHour,
-            minute: reminderMinute
+            hour: firstTime.hour,
+            minute: firstTime.minute
         )
     }
 

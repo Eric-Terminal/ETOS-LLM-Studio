@@ -13,23 +13,86 @@ import Foundation
 import GRDB
 import os.log
 
+public extension Notification.Name {
+    /// 官方数据写入完成后通知运行中的服务刷新对应配置。
+    static let officialDataDidUpdate = Notification.Name("com.ETOS.LLM.Studio.officialDataDidUpdate")
+}
+
+public struct OfficialDataSyncResult: Sendable {
+    public let downloadedCount: Int
+    public let totalCount: Int
+    public let isComplete: Bool
+    public let isAlreadyRunning: Bool
+    public let actionSummary: OfficialDataActionSummary
+    public let failureMessages: [String]
+
+    public init(
+        downloadedCount: Int,
+        totalCount: Int,
+        isComplete: Bool,
+        isAlreadyRunning: Bool,
+        actionSummary: OfficialDataActionSummary = .empty,
+        failureMessages: [String] = []
+    ) {
+        self.downloadedCount = downloadedCount
+        self.totalCount = totalCount
+        self.isComplete = isComplete
+        self.isAlreadyRunning = isAlreadyRunning
+        self.actionSummary = actionSummary
+        self.failureMessages = failureMessages
+    }
+
+    public var didWriteFiles: Bool {
+        downloadedCount > 0
+    }
+
+    public var didChangeData: Bool {
+        didWriteFiles || actionSummary.changedCount > 0
+    }
+}
+
 public struct ConfigLoader {
     static let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ConfigLoader")
     
     // MARK: - 目录管理
     
-    struct DownloadOnceFetchResult {
-        let didWriteFiles: Bool
-        let isComplete: Bool
-    }
-
-    struct DownloadOnceEntry: Decodable {
+    struct OfficialDataEntry: Decodable, Sendable {
+        let name: String?
         let path: String
         let url: String
+        let fileName: String
+        let sha256: String
+        let size: Int64
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case path
+            case url
+            case fileName = "file_name"
+            case sha256
+            case size
+        }
     }
     
-    struct DownloadOnceEnvelope: Decodable {
-        let downloads: [DownloadOnceEntry]
+    struct OfficialDataManifest: Decodable, Sendable {
+        let version: Int
+        let downloads: [OfficialDataEntry]
+        let actions: [OfficialDataActionEntry]
+
+        enum CodingKeys: String, CodingKey {
+            case version, downloads, actions
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            version = try container.decode(Int.self, forKey: .version)
+            downloads = try container.decodeIfPresent([OfficialDataEntry].self, forKey: .downloads) ?? []
+            let actionEnvelopes = try container.decodeIfPresent(
+                [OfficialDataActionEnvelope].self,
+                forKey: .actions
+            ) ?? []
+            actions = actionEnvelopes.compactMap(\.action)
+        }
     }
 
     enum DownloadFileResult {
@@ -38,8 +101,8 @@ public struct ConfigLoader {
         case failed
     }
 
-    static let downloadOnceURLString = "https://notify.els.ericterminal.com/download_once.json"
-    static let downloadOnceTimeout: TimeInterval = 8
+    static let officialDataManifestURLString = "https://feedback.els.ericterminal.com/v1/distribution/manifest"
+    static let officialDataTimeout: TimeInterval = 30
     static let downloadOnceCompletedFlagKey = "com.ETOS.LLM.Studio.download_once.completed"
     static let toolCapabilityMigrationFlagKey = "com.ETOS.LLM.Studio.modelCapability.toolCalling.migrated"
     static let legacyToolCapabilityMigrationFlagKey = "com.ETOS.LLM.Studio.modelCapability.toolCalling.migrated.v1"
@@ -67,7 +130,7 @@ public struct ConfigLoader {
 
     /// 获取用户专属的根目录 URL
     static var documentsDirectory: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        StorageUtility.documentsDirectory
     }
     
     /// 获取存放提供商配置的目录 URL

@@ -18,7 +18,7 @@ extension ContentView {
             isSending: viewModel.isSendingMessage
         )
         return List {
-            if viewModel.messages.isEmpty {
+            if viewModel.messages.isEmpty && continuationContext == nil {
                 Spacer().frame(height: emptyStateSpacerHeight).listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
             }
 
@@ -34,7 +34,7 @@ extension ContentView {
                     HStack(spacing: 5) {
                         Image(systemName: "arrow.up.circle")
                             .etFont(.system(size: 13, weight: .semibold))
-                        Text(String(format: NSLocalizedString("向上加载 %d 条记录", comment: ""), chunk))
+                        Text(String(format: NSLocalizedString("向上加载 %d 条记录", comment: "手动加载更早消息"), chunk))
                             .etFont(.caption)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
@@ -55,6 +55,54 @@ extension ContentView {
                 .frame(maxWidth: .infinity)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 8, trailing: 8))
+            }
+
+            if let continuationContext,
+               !continuationContext.isSourceSessionLinkHidden {
+                WatchConversationContinuationLinkRow(
+                    kind: .sourceSession,
+                    linkedSessionName: continuationSourceSessionName(for: continuationContext),
+                    linkedSessionAvailable: continuationSessionNamesByID[
+                        continuationContext.sourceSessionID
+                    ] != nil,
+                    onOpen: {
+                        _ = viewModel.setCurrentSessionIfExists(
+                            sessionID: continuationContext.sourceSessionID
+                        )
+                    },
+                    onDelete: {
+                        hideConversationContinuationLink(
+                            in: continuationContext,
+                            kind: .sourceSession
+                        )
+                    }
+                )
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
+            }
+
+            if let continuationContext {
+                NavigationLink {
+                    WatchConversationContinuationDetailView(
+                        context: continuationContext,
+                        enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
+                        onInsertText: { text in
+                            viewModel.applyToolInputDraftRequest(
+                                AppToolInputDraftRequest(text: text, mode: .append)
+                            )
+                        }
+                    )
+                } label: {
+                    WatchConversationContinuationCard(
+                        context: continuationContext,
+                        enableBackground: viewModel.enableBackground,
+                        enableLiquidGlass: isLiquidGlassEnabled,
+                        enableNoBubbleUI: viewModel.enableNoBubbleUI
+                    )
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 6, trailing: 8))
             }
 
             ForEach(Array(displayedMessages.enumerated()), id: \.element.id) { index, state in
@@ -87,12 +135,32 @@ extension ContentView {
                     }
                 )
                 .onAppear {
-                    loadMoreAutomaticHistoryIfNeeded(
+                    guard Self.shouldLoadAutomaticHistoryFromRowAppearance(
+                        supportsScrollGeometry: Self.usesScrollGeometryForAutomaticHistoryLoading
+                    ) else { return }
+                    loadAutomaticHistoryAtVisibleBoundary(
                         proxy: proxy,
                         anchorMessageID: state.id,
-                        isFirstDisplayedMessage: index == 0
+                        isFirstDisplayedMessage: index == 0,
+                        isLastDisplayedMessage: index == displayedMessages.count - 1
                     )
                 }
+                .onDisappear {
+                    guard Self.shouldLoadAutomaticHistoryFromRowAppearance(
+                        supportsScrollGeometry: Self.usesScrollGeometryForAutomaticHistoryLoading
+                    ) else { return }
+                    releaseAutomaticHistoryBoundaryBlockIfNeeded(for: state.id)
+                }
+
+                if let contexts = outgoingContinuationContextsByMessageID[message.id] {
+                    ForEach(contexts) { context in
+                        outgoingContinuationLinkRow(context)
+                    }
+                }
+            }
+
+            ForEach(unanchoredOutgoingContinuationContexts) { context in
+                outgoingContinuationLinkRow(context)
             }
 
             if let progress = viewModel.attachmentImportProgress {
@@ -120,12 +188,18 @@ extension ContentView {
             }
 
             if let audio = viewModel.pendingAudioAttachment {
-                WatchPendingAttachmentRowView(
-                    systemImage: "waveform",
-                    title: NSLocalizedString("语音文件", comment: ""),
-                    fileName: audio.fileName,
-                    tint: .blue
-                )
+                NavigationLink {
+                    WatchAudioAttachmentPreviewView(attachment: audio, viewModel: viewModel)
+                        .id(audio.id)
+                } label: {
+                    WatchPendingAttachmentRowView(
+                        systemImage: "play.circle",
+                        title: NSLocalizedString("试听语音", value: "Preview Audio", comment: "手表草稿音频试听入口"),
+                        fileName: audio.fileName,
+                        tint: .blue
+                    )
+                }
+                .buttonStyle(.plain)
                 .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
                 .listRowBackground(Color.clear)
                 .swipeActions(edge: .leading, allowsFullSwipe: true) {
@@ -138,9 +212,10 @@ extension ContentView {
             }
 
             ForEach(viewModel.pendingFileAttachments) { attachment in
+                let isVideo = VideoAttachmentSupport.isVideo(attachment)
                 WatchPendingAttachmentRowView(
-                    systemImage: "doc",
-                    title: NSLocalizedString("文件", comment: ""),
+                    systemImage: isVideo ? "video" : "doc",
+                    title: NSLocalizedString(isVideo ? "视频" : "文件", comment: ""),
                     fileName: attachment.fileName,
                     tint: .cyan
                 )
@@ -164,11 +239,16 @@ extension ContentView {
                     inputStrokeColor: inputStrokeColor,
                     inputPlaceholderText: NSLocalizedString("输入...", comment: "Default input placeholder on watch"),
                     inputBubbleVerticalPadding: inputBubbleVerticalPadding,
-                    onOpenSessionHistory: {
-                        viewModel.activeSheet = nil
-                        isSettingsPresented = false
-                        settingsDestination = nil
-                        isSessionListPresented = true
+                    isContextCompressionAvailable: viewModel.currentSession?.isTemporary == false
+                        && (!viewModel.allMessagesForSession.isEmpty || continuationContext != nil),
+                    isTemporaryChatActivationAvailable: viewModel.allMessagesForSession.isEmpty
+                        && continuationContext == nil,
+                    onPerformQuickAction: { action in
+                        performWatchInputQuickAction(action)
+                    },
+                    onPerformSlashCommand: performWatchSlashCommand,
+                    onShowTransientNotice: { notice in
+                        showChatTransientNotice(notice)
                     },
                     onHandleInputAction: { state in
                         switch state {
@@ -218,10 +298,6 @@ extension ContentView {
                         isAtBottom = true
                         shouldKeepBottomPinned = true
                         showScrollToBottomButton = false
-                        if !isWatchInputLayoutSettling,
-                           viewModel.resetAutomaticHistoryWindowIfNeeded() {
-                            scheduleDeferredBottomSnap(proxy: proxy)
-                        }
                     }
                     .onDisappear {
                         bottomAnchorVisibilityWorkItem?.cancel()
@@ -245,8 +321,13 @@ extension ContentView {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Color.clear)
-        .modifier(WatchChatScrollStateObserverModifier { distanceToBottom, isUserInteracting in
-            updateWatchScrollState(distanceToBottom: distanceToBottom, isUserInteracting: isUserInteracting)
+        .modifier(WatchChatScrollStateObserverModifier { distanceToTop, distanceToBottom, isUserInteracting in
+            updateWatchScrollState(
+                distanceToTop: distanceToTop,
+                distanceToBottom: distanceToBottom,
+                isUserInteracting: isUserInteracting,
+                proxy: proxy
+            )
         })
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -323,7 +404,12 @@ extension ContentView {
         }
         .onChange(of: viewModel.streamingScrollAnchorVersion) { _, _ in
             guard viewModel.isSendingMessage, shouldKeepBottomPinned else { return }
-            scrollToBottom(proxy: proxy, animated: false)
+            let mode = ChatStreamingDisplayMode.normalized(appConfig.chatStreamingDisplayMode)
+            scrollToBottom(
+                proxy: proxy,
+                animated: !accessibilityReduceMotion,
+                animation: .easeOut(duration: mode.viewportFollowDuration)
+            )
         }
         .onChange(of: toolPermissionCenter.activeRequest?.id) { _, newValue in
             guard newValue != nil, isAtBottom, shouldKeepBottomPinned else { return }
@@ -331,16 +417,21 @@ extension ContentView {
         }
         .onChange(of: pendingJumpRequest) { _, request in
             guard let request else { return }
-            withAnimation {
-                proxy.scrollTo(request.messageID, anchor: .center)
-            }
+            scheduleWatchMessageJump(request, proxy: proxy)
         }
         .onChange(of: viewModel.pendingSearchJumpTarget) { _, _ in
             resolvePendingSearchJumpIfNeeded()
         }
+        .onChange(of: viewModel.automaticHistoryLoadingEnabled) { _, _ in
+            cancelAutomaticHistoryNavigation()
+        }
+        .onChange(of: viewModel.lazyLoadMessageCount) { _, _ in
+            cancelAutomaticHistoryNavigation()
+        }
         .onChange(of: viewModel.currentSession?.id) { _, _ in
             pendingHistoryResetWorkItem?.cancel()
             pendingHistoryResetWorkItem = nil
+            cancelAutomaticHistoryNavigation()
             shouldRestorePendingJumpOnAppear = false
             shouldKeepBottomPinned = true
             needsImmediateBottomSnap = true
@@ -358,12 +449,8 @@ extension ContentView {
             if shouldRestorePendingJumpOnAppear {
                 shouldRestorePendingJumpOnAppear = false
                 resolvePendingSearchJumpIfNeeded()
-                DispatchQueue.main.async {
-                    if let request = pendingJumpRequest {
-                        withAnimation {
-                            proxy.scrollTo(request.messageID, anchor: .center)
-                        }
-                    }
+                if let request = pendingJumpRequest {
+                    scheduleWatchMessageJump(request, proxy: proxy)
                 }
                 return
             }
@@ -379,6 +466,7 @@ extension ContentView {
         let scrollAction = {
             pendingHistoryResetWorkItem?.cancel()
             pendingHistoryResetWorkItem = nil
+            cancelAutomaticHistoryNavigation()
             shouldRestorePendingJumpOnAppear = false
             shouldKeepBottomPinned = true
             showScrollToBottomButton = false
@@ -390,21 +478,22 @@ extension ContentView {
                 return
             }
 
+            pendingBottomSnapTask?.cancel()
+            pendingBottomSnapTask = nil
+            watchInputLayoutSettleTask?.cancel()
+            watchInputLayoutSettleTask = nil
+            isWatchInputLayoutSettling = false
             let workItem = DispatchWorkItem {
-                pendingBottomSnapTask?.cancel()
-                pendingBottomSnapTask = nil
-                watchInputLayoutSettleTask?.cancel()
-                watchInputLayoutSettleTask = nil
-                isWatchInputLayoutSettling = false
-                var transaction = Transaction()
-                transaction.animation = nil
-                withTransaction(transaction) {
-                    viewModel.resetLazyLoadState()
-                }
                 pendingHistoryResetWorkItem = nil
                 scheduleDeferredBottomSnap(proxy: proxy)
             }
+            // 先标记显式回底，防止重置后的新首行在同一布局周期立即反向扩窗。
             pendingHistoryResetWorkItem = workItem
+            var transaction = Transaction()
+            transaction.animation = nil
+            withTransaction(transaction) {
+                viewModel.resetLazyLoadState()
+            }
             DispatchQueue.main.async(execute: workItem)
         }
 
@@ -440,7 +529,10 @@ extension ContentView {
         if shouldMergeTurnMessages(message, with: nextMessage) {
             return true
         }
-        return message.role == .user && nextMessage.role == .user
+        return message.role == .user
+            && nextMessage.role == .user
+            && message.authorKind == nextMessage.authorKind
+            && message.sourceSessionID == nextMessage.sourceSessionID
     }
 
     func shouldConnectTimeline(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
@@ -468,33 +560,182 @@ extension ContentView {
         }
     }
 
-    func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
+    func scrollToBottom(
+        proxy: ScrollViewProxy,
+        animated: Bool,
+        animation: Animation? = nil
+    ) {
         shouldKeepBottomPinned = true
         let action = {
             proxy.scrollTo(bottomAnchorID, anchor: .bottom)
         }
         if animated {
-            withAnimation {
-                action()
+            if let animation {
+                withAnimation(animation) {
+                    action()
+                }
+            } else {
+                withAnimation {
+                    action()
+                }
             }
         } else {
             action()
         }
     }
 
-    func loadMoreAutomaticHistoryIfNeeded(
+    func performAutomaticHistoryLoad(
         proxy: ScrollViewProxy,
-        anchorMessageID: UUID,
-        isFirstDisplayedMessage: Bool
+        request: WatchAutomaticHistoryLoadRequest
     ) {
-        guard isFirstDisplayedMessage, viewModel.usesAutomaticHistoryWindow else { return }
+        guard viewModel.usesAutomaticHistoryWindow,
+              !isAutomaticHistoryLoadInFlight,
+              lastAutomaticHistoryLoadAnchorID != request.anchorMessageID else {
+            return
+        }
+        lastAutomaticHistoryLoadAnchorID = request.anchorMessageID
+        isAutomaticHistoryLoadInFlight = true
         suppressAutoScrollOnce = true
         shouldKeepBottomPinned = false
-        let didLoad = viewModel.loadMoreAutomaticHistoryIfNeeded()
-        guard didLoad else { return }
-        DispatchQueue.main.async {
-            proxy.scrollTo(anchorMessageID, anchor: .top)
+        let didLoad: Bool
+        switch request.direction {
+        case .earlier:
+            didLoad = viewModel.loadMoreAutomaticHistoryIfNeeded()
+        case .later:
+            didLoad = viewModel.loadMoreAutomaticLaterHistoryIfNeeded()
         }
+        guard didLoad else {
+            suppressAutoScrollOnce = false
+            isAutomaticHistoryLoadInFlight = false
+            if automaticHistoryBoundaryBlockedAnchorID == request.anchorMessageID {
+                automaticHistoryBoundaryBlockedAnchorID = nil
+            }
+            return
+        }
+
+        automaticHistoryAnchorTask?.cancel()
+        automaticHistoryAnchorTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            proxy.scrollTo(
+                request.anchorMessageID,
+                anchor: request.direction == .earlier ? .top : .bottom
+            )
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            guard !Task.isCancelled else { return }
+            isAutomaticHistoryLoadInFlight = false
+            automaticHistoryAnchorTask = nil
+        }
+    }
+
+    /// watchOS 11 起由真实滚动阶段决定扩窗，行重建不能冒充用户抵达边界。
+    nonisolated static var usesScrollGeometryForAutomaticHistoryLoading: Bool {
+        if #available(watchOS 11.0, *) {
+            return true
+        }
+        return false
+    }
+
+    nonisolated static func shouldLoadAutomaticHistoryFromRowAppearance(
+        supportsScrollGeometry: Bool
+    ) -> Bool {
+        !supportsScrollGeometry
+    }
+
+    func loadAutomaticHistoryAtVisibleBoundary(
+        proxy: ScrollViewProxy,
+        anchorMessageID: UUID,
+        isFirstDisplayedMessage: Bool,
+        isLastDisplayedMessage: Bool
+    ) {
+        guard !shouldRestorePendingJumpOnAppear, pendingJumpRequest == nil else { return }
+        guard let direction = Self.automaticHistoryDirectionForVisibleBoundary(
+            usesAutomaticHistoryWindow: viewModel.usesAutomaticHistoryWindow,
+            isLoadInFlight: isAutomaticHistoryLoadInFlight,
+            isFirstDisplayedMessage: isFirstDisplayedMessage,
+            isLastDisplayedMessage: isLastDisplayedMessage,
+            isEarlierHistoryFullyLoaded: viewModel.isHistoryFullyLoaded,
+            isLaterHistoryFullyLoaded: viewModel.isLaterHistoryFullyLoaded
+        ) else { return }
+
+        let request = WatchAutomaticHistoryLoadRequest(
+            direction: direction,
+            anchorMessageID: anchorMessageID
+        )
+        let isNavigationBlocked = Self.isAutomaticHistoryBoundaryNavigationBlocked(
+            hasPendingHistoryReset: pendingHistoryResetWorkItem != nil,
+            hasPendingBottomSnap: pendingBottomSnapTask != nil,
+            needsImmediateBottomSnap: needsImmediateBottomSnap,
+            isInputLayoutSettling: isWatchInputLayoutSettling,
+            hasBlockedBoundaryAnchor: automaticHistoryBoundaryBlockedAnchorID != nil
+        )
+        guard !isNavigationBlocked else {
+            if needsImmediateBottomSnap {
+                deferredAutomaticHistoryBoundaryRequest = request
+            }
+            return
+        }
+        performLegacyAutomaticHistoryLoad(proxy: proxy, request: request)
+    }
+
+    private func performLegacyAutomaticHistoryLoad(
+        proxy: ScrollViewProxy,
+        request: WatchAutomaticHistoryLoadRequest
+    ) {
+        automaticHistoryBoundaryBlockedAnchorID = request.anchorMessageID
+        performAutomaticHistoryLoad(proxy: proxy, request: request)
+    }
+
+    nonisolated static func isAutomaticHistoryBoundaryNavigationBlocked(
+        hasPendingHistoryReset: Bool,
+        hasPendingBottomSnap: Bool,
+        needsImmediateBottomSnap: Bool,
+        isInputLayoutSettling: Bool,
+        hasBlockedBoundaryAnchor: Bool
+    ) -> Bool {
+        hasPendingHistoryReset
+            || hasPendingBottomSnap
+            || needsImmediateBottomSnap
+            || isInputLayoutSettling
+            || hasBlockedBoundaryAnchor
+    }
+
+    func releaseAutomaticHistoryBoundaryBlockIfNeeded(for messageID: UUID) {
+        guard automaticHistoryBoundaryBlockedAnchorID == messageID else { return }
+        // onDisappear 与新边界的 onAppear 可能同批到达，延后解锁避免布局周期内连续扩窗。
+        DispatchQueue.main.async {
+            guard automaticHistoryBoundaryBlockedAnchorID == messageID else { return }
+            automaticHistoryBoundaryBlockedAnchorID = nil
+        }
+    }
+
+    nonisolated static func automaticHistoryDirectionForVisibleBoundary(
+        usesAutomaticHistoryWindow: Bool,
+        isLoadInFlight: Bool,
+        isFirstDisplayedMessage: Bool,
+        isLastDisplayedMessage: Bool,
+        isEarlierHistoryFullyLoaded: Bool,
+        isLaterHistoryFullyLoaded: Bool
+    ) -> WatchAutomaticHistoryDirection? {
+        guard usesAutomaticHistoryWindow, !isLoadInFlight else { return nil }
+        if isFirstDisplayedMessage, !isEarlierHistoryFullyLoaded {
+            return .earlier
+        }
+        if isLastDisplayedMessage, !isLaterHistoryFullyLoaded {
+            return .later
+        }
+        return nil
+    }
+
+    func cancelAutomaticHistoryNavigation() {
+        automaticHistoryAnchorTask?.cancel()
+        automaticHistoryAnchorTask = nil
+        pendingAutomaticHistoryLoadRequest = nil
+        isAutomaticHistoryLoadInFlight = false
+        lastAutomaticHistoryLoadAnchorID = nil
+        automaticHistoryBoundaryBlockedAnchorID = nil
+        deferredAutomaticHistoryBoundaryRequest = nil
+        suppressAutoScrollOnce = false
     }
 
     func jumpToMessage(displayIndex: Int) -> Bool {
@@ -503,18 +744,38 @@ extension ContentView {
             return false
         }
 
-        prepareForMessageJump()
-
-        let targetMessageID = viewModel.allMessagesForSession[targetZeroBasedIndex].id
-        let isVisible = viewModel.displayMessages.contains(where: { $0.id == targetMessageID })
-        if !isVisible {
-            viewModel.loadEntireHistory()
+        guard let targetMessageID = ChatJumpTargetSupport.messageID(
+            at: targetZeroBasedIndex,
+            in: viewModel.allMessagesForSession,
+            hiddenToolCallResultIDs: viewModel.toolCallResultIDs
+        ) else {
+            return false
         }
 
+        prepareForMessageJump()
+        guard viewModel.prepareHistoryWindow(containing: targetMessageID) else { return false }
         DispatchQueue.main.async {
             pendingJumpRequest = MessageJumpRequest(messageID: targetMessageID)
         }
         return true
+    }
+
+    func scheduleWatchMessageJump(_ request: MessageJumpRequest, proxy: ScrollViewProxy) {
+        Task { @MainActor in
+            // List 需要先把新窗口提交到布局树，再接收 scrollTo。
+            await Task.yield()
+            await Task.yield()
+            guard pendingJumpRequest == request else { return }
+            if accessibilityReduceMotion {
+                proxy.scrollTo(request.messageID, anchor: .top)
+            } else {
+                withAnimation(.timingCurve(0.65, 0, 0.35, 1, duration: 0.8)) {
+                    proxy.scrollTo(request.messageID, anchor: .top)
+                }
+            }
+            pendingJumpRequest = nil
+            shouldRestorePendingJumpOnAppear = false
+        }
     }
 
     func prepareForMessageJump() {
@@ -524,6 +785,7 @@ extension ContentView {
         pendingBottomSnapTask = nil
         watchInputLayoutSettleTask?.cancel()
         watchInputLayoutSettleTask = nil
+        cancelAutomaticHistoryNavigation()
         isWatchInputLayoutSettling = false
         needsImmediateBottomSnap = false
         shouldRestorePendingJumpOnAppear = true
@@ -534,6 +796,7 @@ extension ContentView {
     func resolvePendingSearchJumpIfNeeded() {
         guard let target = viewModel.pendingSearchJumpTarget,
               viewModel.currentSession?.id == target.sessionID,
+              viewModel.historyWindowSessionID == target.sessionID,
               !viewModel.allMessagesForSession.isEmpty else {
             return
         }
@@ -574,6 +837,10 @@ extension ContentView {
             guard !Task.isCancelled else { return }
             needsImmediateBottomSnap = false
             pendingBottomSnapTask = nil
+            if let request = deferredAutomaticHistoryBoundaryRequest {
+                deferredAutomaticHistoryBoundaryRequest = nil
+                performLegacyAutomaticHistoryLoad(proxy: proxy, request: request)
+            }
         }
     }
 
@@ -614,9 +881,46 @@ extension ContentView {
         colorScheme == .dark ? Color.white.opacity(0.35) : Color.black.opacity(0.12)
     }
 
-    func updateWatchScrollState(distanceToBottom: CGFloat, isUserInteracting: Bool) {
+    func updateWatchScrollState(
+        distanceToTop: CGFloat,
+        distanceToBottom: CGFloat,
+        isUserInteracting: Bool,
+        proxy: ScrollViewProxy
+    ) {
         let normalizedDistance = max(distanceToBottom, 0)
         let isNearBottom = normalizedDistance < watchBottomPinnedDistanceThreshold
+
+        if viewModel.usesAutomaticHistoryWindow, !isAutomaticHistoryLoadInFlight {
+            let firstMessageID = viewModel.displayMessages.first?.id
+            let lastMessageID = viewModel.displayMessages.last?.id
+            if isUserInteracting,
+               distanceToTop < watchAutomaticHistoryLoadTriggerDistance,
+               !viewModel.isHistoryFullyLoaded,
+               let firstMessageID,
+               firstMessageID != lastAutomaticHistoryLoadAnchorID {
+                pendingAutomaticHistoryLoadRequest = WatchAutomaticHistoryLoadRequest(
+                    direction: .earlier,
+                    anchorMessageID: firstMessageID
+                )
+            } else if isUserInteracting,
+                      distanceToBottom < watchAutomaticHistoryLoadTriggerDistance,
+                      !viewModel.isLaterHistoryFullyLoaded,
+                      let lastMessageID,
+                      lastMessageID != lastAutomaticHistoryLoadAnchorID {
+                pendingAutomaticHistoryLoadRequest = WatchAutomaticHistoryLoadRequest(
+                    direction: .later,
+                    anchorMessageID: lastMessageID
+                )
+            } else if !isUserInteracting, let request = pendingAutomaticHistoryLoadRequest {
+                pendingAutomaticHistoryLoadRequest = nil
+                let remainsNearRequestedEdge = request.direction == .earlier
+                    ? distanceToTop < watchAutomaticHistoryLoadTriggerDistance
+                    : distanceToBottom < watchAutomaticHistoryLoadTriggerDistance
+                if remainsNearRequestedEdge {
+                    performAutomaticHistoryLoad(proxy: proxy, request: request)
+                }
+            }
+        }
 
         if isNearBottom {
             bottomAnchorVisibilityWorkItem?.cancel()
@@ -647,20 +951,28 @@ extension ContentView {
 }
 
 private struct WatchChatScrollStateObserverModifier: ViewModifier {
-    let onDistanceChange: (CGFloat, Bool) -> Void
+    let onDistanceChange: (CGFloat, CGFloat, Bool) -> Void
     @State private var isUserInteracting = false
 
     func body(content: Content) -> some View {
         if #available(watchOS 11.0, *) {
             content
                 .onScrollPhaseChange { _, newPhase, context in
-                    isUserInteracting = Self.isUserInitiatedScrollPhase(newPhase)
-                    onDistanceChange(Self.distanceToBottom(from: context.geometry), isUserInteracting)
+                    let newIsUserInteracting = Self.isUserInitiatedScrollPhase(newPhase)
+                    isUserInteracting = newIsUserInteracting
+                    onDistanceChange(
+                        Self.distanceToTop(from: context.geometry),
+                        Self.distanceToBottom(from: context.geometry),
+                        newIsUserInteracting
+                    )
                 }
-                .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                    Self.distanceToBottom(from: geometry)
-                } action: { _, newDistance in
-                    onDistanceChange(newDistance, isUserInteracting)
+                .onScrollGeometryChange(for: WatchChatScrollDistances.self) { geometry in
+                    WatchChatScrollDistances(
+                        top: Self.distanceToTop(from: geometry),
+                        bottom: Self.distanceToBottom(from: geometry)
+                    )
+                } action: { _, newDistances in
+                    onDistanceChange(newDistances.top, newDistances.bottom, isUserInteracting)
                 }
         } else {
             content
@@ -673,6 +985,11 @@ private struct WatchChatScrollStateObserverModifier: ViewModifier {
     }
 
     @available(watchOS 11.0, *)
+    private static func distanceToTop(from geometry: ScrollGeometry) -> CGFloat {
+        max(geometry.visibleRect.minY, 0)
+    }
+
+    @available(watchOS 11.0, *)
     private static func isUserInitiatedScrollPhase(_ phase: ScrollPhase) -> Bool {
         switch phase {
         case .tracking, .interacting, .decelerating:
@@ -681,4 +998,9 @@ private struct WatchChatScrollStateObserverModifier: ViewModifier {
             return false
         }
     }
+}
+
+private struct WatchChatScrollDistances: Equatable {
+    let top: CGFloat
+    let bottom: CGFloat
 }

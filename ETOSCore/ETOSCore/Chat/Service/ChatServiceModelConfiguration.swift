@@ -27,29 +27,39 @@ extension ChatService {
     }
 
     public var activatedConversationModels: [RunnableModel] {
-        activatedRunnableModels.filter { $0.model.isConversationModel }
+        activatedRunnableModels.filter { runnable in
+            guard runnable.model.isConversationModel else { return false }
+            return localModelRecord(for: runnable, requiresExistingFile: false)?.isSpeechTranscriptionModel != true
+        }
     }
 
     public var activatedChatModels: [RunnableModel] {
-        activatedRunnableModels.filter { $0.model.isChatModel }
+        activatedConversationModels.filter { $0.model.isChatModel }
     }
 
     public var activatedSpeechModels: [RunnableModel] {
-        let speechCapable = activatedRunnableModels.filter { $0.model.supportsSpeechToText }
-        var candidates = speechCapable.isEmpty ? activatedRunnableModels : speechCapable
+        // 专用模型设置决定转写用途，不要求模型携带额外能力标记。
+        var candidates = configuredRunnableModels
         if !candidates.contains(where: { $0.id == Self.systemSpeechRecognizerRunnableModel.id }) {
             candidates.insert(Self.systemSpeechRecognizerRunnableModel, at: 0)
         }
         return candidates
     }
 
-    public var activatedTTSModels: [RunnableModel] {
-        let ttsCapable = activatedRunnableModels.filter { $0.model.supportsTextToSpeech }
-        return ttsCapable
-    }
-
     public var activatedOCRModels: [RunnableModel] {
         activatedChatModels.filter { $0.model.supportsVisionInput }
+    }
+
+    public var activatedVideoAnalysisModels: [RunnableModel] {
+        activatedChatModels.filter(VideoAttachmentSupport.usesNativeInput)
+    }
+
+    func resolveSelectedVideoAnalysisModel() -> RunnableModel? {
+        let identifier = Persistence.readAppConfigText(
+            key: AppConfigKey.videoAnalysisModelIdentifier.rawValue
+        ) ?? ""
+        guard !identifier.isEmpty else { return nil }
+        return activatedVideoAnalysisModels.first { $0.id == identifier }
     }
 
     func resolveSelectedSpeechModel() -> RunnableModel? {
@@ -61,15 +71,6 @@ extension ChatService {
         return activatedSpeechModels.first
     }
 
-    public func resolveSelectedTTSModel() -> RunnableModel? {
-        let storedIdentifier = Persistence.readAppConfigText(key: AppConfigKey.ttsModelIdentifier.rawValue) ?? ""
-        if !storedIdentifier.isEmpty,
-           let match = activatedTTSModels.first(where: { $0.id == storedIdentifier }) {
-            return match
-        }
-        return activatedTTSModels.first
-    }
-
     func orderedRunnableModels(from models: [RunnableModel]) -> [RunnableModel] {
         guard !models.isEmpty else { return [] }
         let currentIDs = models.map(\.id)
@@ -78,19 +79,17 @@ extension ChatService {
             legacyUserDefaultsKey: Self.modelOrderStorageKey,
             defaultValue: []
         ) ?? []
-        let mergedIDs = ModelOrderIndex.merge(storedIDs: storedIDs, currentIDs: currentIDs)
-        let rankByID = Dictionary(uniqueKeysWithValues: mergedIDs.enumerated().map { ($1, $0) })
-
-        return models.enumerated()
-            .sorted { lhs, rhs in
-                let leftRank = rankByID[lhs.element.id] ?? Int.max
-                let rightRank = rankByID[rhs.element.id] ?? Int.max
-                if leftRank != rightRank {
-                    return leftRank < rightRank
-                }
-                return lhs.offset < rhs.offset
-            }
-            .map(\.element)
+        let providerIDByModelID = Dictionary(uniqueKeysWithValues: models.map {
+            ($0.id, $0.provider.id.uuidString)
+        })
+        let orderedIDs = ModelOrderIndex.hierarchicalOrder(
+            storedModelIDs: storedIDs,
+            currentModelIDs: currentIDs,
+            providerIDByModelID: providerIDByModelID,
+            orderedProviderIDs: providers.map { $0.id.uuidString }
+        )
+        let modelByID = Dictionary(uniqueKeysWithValues: models.map { ($0.id, $0) })
+        return orderedIDs.compactMap { modelByID[$0] }
     }
 
     func reconcileStoredModelOrder() {
@@ -107,12 +106,17 @@ extension ChatService {
         AppConfigStore.persistStringArray(mergedIDs, for: .modelOrderRunnableModels)
     }
 
-    func localModelRecord(for runnableModel: RunnableModel) -> LocalModelRecord? {
+    func localModelRecord(
+        for runnableModel: RunnableModel,
+        requiresExistingFile: Bool = true
+    ) -> LocalModelRecord? {
         guard LocalModelProviderBridge.isLocalRunnableModel(runnableModel),
               let recordID = LocalModelProviderBridge.localRecordID(from: runnableModel.id) else {
             return nil
         }
-        return localModelStore.models.first { $0.id == recordID && localModelStore.fileExists(for: $0) }
+        return localModelStore.models.first {
+            $0.id == recordID && (!requiresExistingFile || localModelStore.fileExists(for: $0))
+        }
     }
 
     func reconcileStoredProviderOrder() {
@@ -135,6 +139,77 @@ extension ChatService {
         if notifyChange {
             providersSubject.send(providers)
         }
+    }
+
+    /// 只更新指定提供商内部的模型顺序，不扰动其他提供商的相对位置。
+    public func setConfiguredModelOrder(
+        _ orderedModelIDs: [String],
+        for providerID: UUID,
+        notifyChange: Bool = true
+    ) {
+        let currentModels = configuredRunnableModels
+        let currentProviderModelIDs = currentModels
+            .filter { $0.provider.id == providerID }
+            .map(\.id)
+        guard !currentProviderModelIDs.isEmpty else { return }
+
+        let mergedProviderModelIDs = ModelOrderIndex.merge(
+            storedIDs: orderedModelIDs,
+            currentIDs: currentProviderModelIDs
+        )
+        var replacementIndex = 0
+        let mergedAllModelIDs = currentModels.map { runnable in
+            guard runnable.provider.id == providerID else { return runnable.id }
+            defer { replacementIndex += 1 }
+            return mergedProviderModelIDs[replacementIndex]
+        }
+        setConfiguredModelOrder(mergedAllModelIDs, notifyChange: notifyChange)
+    }
+
+    /// 同时保存指定提供商的根目录顺序、文件夹顺序和模型分组归属。
+    @MainActor
+    public func setModelPickerOrganization(
+        _ organization: RunnableModelPickerOrganization,
+        for providerID: UUID
+    ) {
+        guard let providerIndex = providers.firstIndex(where: { $0.id == providerID }) else {
+            return
+        }
+
+        let placements = organization.placements
+        let placementByModelID = Dictionary(
+            uniqueKeysWithValues: placements.map { ($0.modelID, $0) }
+        )
+        var updatedProvider = providers[providerIndex]
+        updatedProvider.models = updatedProvider.models.map { model in
+            var updatedModel = model
+            let runnableID = RunnableModel(provider: updatedProvider, model: model).id
+            if let placement = placementByModelID[runnableID] {
+                updatedModel.pickerGroupName = placement.pickerGroupName
+            }
+            return updatedModel
+        }
+
+        setConfiguredModelOrder(
+            placements.map(\.modelID),
+            for: providerID,
+            notifyChange: false
+        )
+        AppConfigStore.shared.setModelPickerOrganization(
+            folderPaths: organization.orderedGroupPaths,
+            itemOrderIDs: organization.orderedItemIDs,
+            for: providerID
+        )
+        if LocalModelProviderBridge.isLocalProvider(updatedProvider) {
+            persistLocalProviderModelChanges(updatedProvider)
+            updatedProvider = LocalModelProviderBridge.provider(
+                records: localModelStore.models,
+                preserving: updatedProvider,
+                preferRecordBasics: false
+            )
+        }
+        ConfigLoader.saveProvider(updatedProvider)
+        reloadProviders()
     }
 
     public func setProviderOrder(_ orderedProviderIDs: [UUID], notifyChange: Bool = true) {
@@ -234,14 +309,6 @@ extension ChatService {
         selectedModelSubject.send(model)
         persistSelectedRunnableModelID(model?.id)
         logger.info("已将模型切换为: \(model?.model.displayName ?? "无")")
-        AppLog.userOperation(
-            category: NSLocalizedString("模型", comment: "App log category"),
-            action: NSLocalizedString("切换模型", comment: "App log action"),
-            payload: [
-                "provider": model?.provider.name ?? NSLocalizedString("无", comment: "App log empty value"),
-                "model": model?.model.displayName ?? NSLocalizedString("无", comment: "App log empty value")
-            ]
-        )
     }
 
     public func saveAndReloadProviders(from providers: [Provider]) {

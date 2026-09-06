@@ -126,15 +126,20 @@ extension ChatService {
         _ messages: [ChatMessage],
         loadingMessageID: UUID,
         sessionID: UUID
-    ) -> [ChatMessage] {
-        let merged = messagesByMergingStreamingUpdate(
-            messages,
-            loadingMessageID: loadingMessageID,
-            sessionID: sessionID
-        )
-        storeRuntimeMessagesSnapshot(merged, for: sessionID)
-        persistAndPublishMessages(merged, for: sessionID, keepingSpeedSamplesFor: loadingMessageID)
-        return merged
+    ) async -> [ChatMessage] {
+        guard let updatedMessage = messages.first(where: { $0.id == loadingMessageID }) else {
+            return messagesSnapshot(for: sessionID)
+        }
+        do {
+            _ = try await upsertConversationMessage(
+                updatedMessage,
+                to: sessionID,
+                keepingSpeedSamplesFor: loadingMessageID
+            )
+        } catch {
+            logger.error("原子保存流式回复失败：\(error.localizedDescription)")
+        }
+        return messagesSnapshot(for: sessionID)
     }
 
     func persistMessages(_ messages: [ChatMessage], for sessionID: UUID) {
@@ -173,7 +178,7 @@ extension ChatService {
         do {
             let data = try await fetchData(for: request, provider: provider)
             let rawResponse = String(data: data, encoding: .utf8) ?? NSLocalizedString("<二进制数据，无法以 UTF-8 解码>", comment: "Fallback for non-UTF8 response body")
-            logger.log("[Log] 收到 AI 原始响应体:\n---\n\(rawResponse)\n---")
+            logger.log("[Log] 收到 AI 响应体，共 \(data.count) 字节。")
             logResponseBodySnapshot(
                 context: requestLogContext,
                 request: request,
@@ -182,15 +187,18 @@ extension ChatService {
 
             do {
                 var parsedMessage = try adapter.parseResponse(data: data)
+                let embeddedImageFileNames = extractGeneratedImagesFromAPIResponseBody(data)
+                if !embeddedImageFileNames.isEmpty {
+                    parsedMessage.imageFileNames = (parsedMessage.imageFileNames ?? []) + embeddedImageFileNames
+                }
+                parsedMessage.providerResponseMetadata = compactResponsesImageGenerationMetadata(
+                    parsedMessage.providerResponseMetadata
+                )
                 attachOpenAIResponsesRequestMetadata(
                     to: &parsedMessage,
                     request: request,
                     messagesBeforeResponse: messagesBeforeResponse
                 )
-                let embeddedImageFileNames = extractGeneratedImagesFromAPIResponseBody(data)
-                if !embeddedImageFileNames.isEmpty {
-                    parsedMessage.imageFileNames = (parsedMessage.imageFileNames ?? []) + embeddedImageFileNames
-                }
                 let responseCompletedAt = Date()
                 let totalDuration = max(0, responseCompletedAt.timeIntervalSince(requestStartedAt))
                 if enableResponseSpeedMetrics {

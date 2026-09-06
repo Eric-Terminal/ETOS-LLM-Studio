@@ -21,7 +21,9 @@ struct ETMathWebMarkdownView: View {
     let customCodeTextHex: String?
     let prefersDarkPalette: Bool
     let fontScale: Double
+    let lineSpacingEm: Double
 
+    @Environment(\.copyCompletionNoticeAction) private var showCopyCompletionNotice
     @State private var renderedHeight: CGFloat = 28
 
     var body: some View {
@@ -36,7 +38,9 @@ struct ETMathWebMarkdownView: View {
                 customCodeTextHex: customCodeTextHex,
                 prefersDarkPalette: prefersDarkPalette,
                 fontScale: fontScale,
+                lineSpacingEm: lineSpacingEm,
                 availableWidth: max(1, geometry.size.width),
+                onCopyCompleted: showCopyCompletionNotice,
                 renderedHeight: $renderedHeight
             )
         }
@@ -92,11 +96,16 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     let customCodeTextHex: String?
     let prefersDarkPalette: Bool
     let fontScale: Double
+    let lineSpacingEm: Double
     let availableWidth: CGFloat
+    let onCopyCompleted: () -> Void
     @Binding var renderedHeight: CGFloat
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(renderedHeight: $renderedHeight)
+        Coordinator(
+            renderedHeight: $renderedHeight,
+            onCopyCompleted: onCopyCompleted
+        )
     }
 
     func makeUIView(context: Context) -> WKWebView {
@@ -104,6 +113,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         let controller = WKUserContentController()
 
         controller.add(context.coordinator, name: Coordinator.heightMessageName)
+        controller.add(context.coordinator, name: Coordinator.copyMessageName)
         config.userContentController = controller
 
         let webView = WKWebView(frame: .zero, configuration: config)
@@ -118,6 +128,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
+        context.coordinator.onCopyCompleted = onCopyCompleted
         let stableWidth = max(1, floor(availableWidth))
         let payload = ETMathWebPayload(
             content: content,
@@ -151,7 +162,8 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             customStrongTextHex: customStrongTextHex,
             customCodeTextHex: customCodeTextHex,
             prefersDarkPalette: prefersDarkPalette,
-            fontScale: fontScale
+            fontScale: fontScale,
+            lineSpacingEm: lineSpacingEm
         )
         context.coordinator.render(
             payload,
@@ -164,6 +176,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         webView.navigationDelegate = nil
         webView.stopLoading()
         webView.configuration.userContentController.removeScriptMessageHandler(forName: Coordinator.heightMessageName)
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: Coordinator.copyMessageName)
     }
 
     private static func resolvedCSSFontFamily(
@@ -189,16 +202,22 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
 
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         static let heightMessageName = "etMathHeight"
+        static let copyMessageName = "etMathCopy"
 
         @Binding var renderedHeight: CGFloat
+        var onCopyCompleted: () -> Void
         var lastPayload: ETMathWebPayload?
         var lastShellConfiguration: ETMathWebShellConfiguration?
         var pendingPayload: ETMathWebPayload?
         var isShellLoaded = false
         var isShellLoading = false
 
-        init(renderedHeight: Binding<CGFloat>) {
+        init(
+            renderedHeight: Binding<CGFloat>,
+            onCopyCompleted: @escaping () -> Void
+        ) {
             self._renderedHeight = renderedHeight
+            self.onCopyCompleted = onCopyCompleted
         }
 
         func render(
@@ -248,6 +267,14 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             _ userContentController: WKUserContentController,
             didReceive message: WKScriptMessage
         ) {
+            if message.name == Self.copyMessageName {
+                Task { @MainActor [weak self] in
+                    AppHapticFeedback.operationSucceeded()
+                    self?.onCopyCompleted()
+                }
+                return
+            }
+
             guard message.name == Self.heightMessageName else { return }
             guard let value = message.body as? Double else { return }
 

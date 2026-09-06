@@ -19,6 +19,7 @@ import WebKit
 struct ChatBubble: View {
     @ObservedObject var messageState: ChatMessageRenderState
     let roleplaySessionID: UUID?
+    let roleplayMessages: [ChatMessage]
     let layoutWidth: CGFloat?
     let reasoningPreviewMaxHeight: CGFloat
     let preparedMarkdownPayload: ETPreparedMarkdownRenderPayload?
@@ -52,6 +53,14 @@ struct ChatBubble: View {
     let isSelected: Bool
     let onToggleSelection: () -> Void
     let onOpenMore: ((ChatMessage) -> Void)?
+    let onDownloadImageAttachment: ((String) -> Void)?
+    let onDeleteImageAttachment: ((String) -> Void)?
+    let sourceConversationName: String?
+    let onOpenSourceConversation: (() -> Void)?
+    let onOpenConversation: ((UUID) -> Void)?
+    let reportsSendFlightTarget: Bool
+    let reportsLayoutIntegrityFrame: Bool
+    let layoutRecoveryRevision: UInt
     let providers: [Provider]
     
     @StateObject var audioPlayer = AudioPlayerManager()
@@ -67,6 +76,7 @@ struct ChatBubble: View {
     init(
         messageState: ChatMessageRenderState,
         roleplaySessionID: UUID? = nil,
+        roleplayMessages: [ChatMessage] = [],
         layoutWidth: CGFloat? = nil,
         reasoningPreviewMaxHeight: CGFloat = 177,
         preparedMarkdownPayload: ETPreparedMarkdownRenderPayload? = nil,
@@ -100,10 +110,19 @@ struct ChatBubble: View {
         isSelected: Bool = false,
         onToggleSelection: @escaping () -> Void = {},
         onOpenMore: ((ChatMessage) -> Void)? = nil,
+        onDownloadImageAttachment: ((String) -> Void)? = nil,
+        onDeleteImageAttachment: ((String) -> Void)? = nil,
+        sourceConversationName: String? = nil,
+        onOpenSourceConversation: (() -> Void)? = nil,
+        onOpenConversation: ((UUID) -> Void)? = nil,
+        reportsSendFlightTarget: Bool = false,
+        reportsLayoutIntegrityFrame: Bool = false,
+        layoutRecoveryRevision: UInt = 0,
         providers: [Provider] = []
     ) {
         self.messageState = messageState
         self.roleplaySessionID = roleplaySessionID
+        self.roleplayMessages = roleplayMessages
         self.layoutWidth = layoutWidth
         self.reasoningPreviewMaxHeight = reasoningPreviewMaxHeight
         self.preparedMarkdownPayload = preparedMarkdownPayload
@@ -137,6 +156,14 @@ struct ChatBubble: View {
         self.isSelected = isSelected
         self.onToggleSelection = onToggleSelection
         self.onOpenMore = onOpenMore
+        self.onDownloadImageAttachment = onDownloadImageAttachment
+        self.onDeleteImageAttachment = onDeleteImageAttachment
+        self.sourceConversationName = sourceConversationName
+        self.onOpenSourceConversation = onOpenSourceConversation
+        self.onOpenConversation = onOpenConversation
+        self.reportsSendFlightTarget = reportsSendFlightTarget
+        self.reportsLayoutIntegrityFrame = reportsLayoutIntegrityFrame
+        self.layoutRecoveryRevision = layoutRecoveryRevision
         self.providers = providers
     }
     
@@ -151,6 +178,15 @@ struct ChatBubble: View {
         }
     }
 
+    /// 流式视图内部持有已经准备好的 Markdown Block。静态内容就绪前必须保留同一个
+    /// 视图实例，否则重建后的首帧会因 Block 缓存为空而短暂显示 Markdown 源码。
+    var isStaticMarkdownHandoffInProgress: Bool {
+        guard enableMarkdown, !showsStreamingIndicators else { return false }
+        let renderState = messageState.streamingMarkdownState
+        return renderState.isAwaitingStaticHandoff(channel: .content)
+            || renderState.isAwaitingStaticHandoff(channel: .reasoning)
+    }
+
     var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
             // 用户消息靠右；关闭助手气泡后的助手消息用左右 Spacer 居中阅读列。
@@ -159,6 +195,8 @@ struct ChatBubble: View {
             }
             
             VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
+                sourceConversationLabel
+
                 // 图片附件 - 作为气泡显示
                 if !shouldPlaceImagesAfterText,
                    let imageFileNames = message.imageFileNames,
@@ -175,10 +213,25 @@ struct ChatBubble: View {
                 if shouldShowTextBubble {
                     if shouldRenderToolCallsAsSeparateBubbles {
                         separatedToolCallBubbleStack
+                            .modifier(
+                                ChatBubbleOpenMoreGestureModifier(
+                                    isSelectionMode: false,
+                                    onToggleSelection: {},
+                                    onOpenMore: isSelectionMode ? nil : openMoreAction
+                                )
+                            )
                     } else {
                         bubbleContainer {
                             textContentStack(includeToolCalls: true)
                         }
+                        .modifier(
+                            ChatBubbleOpenMoreGestureModifier(
+                                isSelectionMode: false,
+                                onToggleSelection: {},
+                                onOpenMore: isSelectionMode ? nil : openMoreAction
+                            )
+                        )
+                        .background(sendFlightTargetReporter)
                     }
                 }
 
@@ -194,6 +247,45 @@ struct ChatBubble: View {
             }
             .frame(width: usesNoBubbleStyle ? bubbleMaxWidth : nil, alignment: .leading)
             .frame(maxWidth: usesNoBubbleStyle ? nil : bubbleMaxWidth, alignment: isOutgoing ? .trailing : .leading)
+            // 消息 UUID 保证相邻气泡绝不会共享显式身份；其余字段只重建内容列，
+            // 促使 LazyVStack 重新测量真实高度，同时保留整行手势与预览状态。
+            .id(ChatBubbleLayoutIdentity(
+                messageID: messageState.id,
+                structuralRevision: messageState.layoutRevision,
+                layoutRecoveryRevision: layoutRecoveryRevision,
+                isStreaming: showsStreamingIndicators,
+                isStaticMarkdownHandoffInProgress: isStaticMarkdownHandoffInProgress,
+                hasPreparedMarkdown: preparedMarkdownPayload != nil,
+                hasPreparedReasoningMarkdown: preparedReasoningMarkdownPayload != nil,
+                usesNoBubbleStyle: usesNoBubbleStyle,
+                contentRenderer: ChatBubbleRendererIdentity.resolved(
+                    hasContent: !message.content.isEmpty,
+                    enableMarkdown: enableMarkdown,
+                    isStreaming: showsStreamingIndicators,
+                    isAwaitingStaticHandoff: messageState.streamingMarkdownState
+                        .isAwaitingStaticHandoff(channel: .content),
+                    hasPreparedMarkdown: preparedMarkdownPayload != nil,
+                    usesWebRenderer: enableAdvancedRenderer
+                        && preparedMarkdownPayload?.containsMermaidContent == true,
+                    hasRoleplayHTML: messageState.roleplayHTML?.containsHTML == true
+                ),
+                reasoningRenderer: ChatBubbleRendererIdentity.resolved(
+                    hasContent: !(message.reasoningContent?.isEmpty ?? true),
+                    enableMarkdown: enableMarkdown,
+                    isStreaming: showsStreamingIndicators,
+                    isAwaitingStaticHandoff: messageState.streamingMarkdownState
+                        .isAwaitingStaticHandoff(channel: .reasoning),
+                    hasPreparedMarkdown: preparedReasoningMarkdownPayload != nil,
+                    usesWebRenderer: enableAdvancedRenderer
+                        && preparedReasoningMarkdownPayload?.containsMermaidContent == true
+                ),
+                layoutWidthBucket: ChatBubbleLayoutIdentity.widthBucket(for: layoutWidth)
+            ))
+            .background {
+                if reportsLayoutIntegrityFrame {
+                    ChatMessageRenderedContentFrameReporter(messageID: messageState.id)
+                }
+            }
             
             // AI 普通气泡靠左；关闭助手气泡后的助手消息保留对称右侧 Spacer。
             if !isOutgoing || usesNoBubbleStyle {
@@ -215,7 +307,7 @@ struct ChatBubble: View {
             ChatBubbleOpenMoreGestureModifier(
                 isSelectionMode: isSelectionMode,
                 onToggleSelection: onToggleSelection,
-                onOpenMore: openMoreAction
+                onOpenMore: hasOnlyImages || hasOnlyFiles ? openMoreAction : nil
             )
         )
         .fullScreenCover(item: $imagePreview, onDismiss: {
@@ -262,6 +354,49 @@ struct ChatBubble: View {
         }
         .onChange(of: toolCallAutoPresentationSignature) { _, _ in
             autoPresentPendingToolCallIfNeeded()
+        }
+        .onChange(
+            of: showsStreamingIndicators || isStaticMarkdownHandoffInProgress,
+            initial: true
+        ) { _, preservesStreamingLayout in
+            guard preservesStreamingLayout else { return }
+            messageState.retainStreamingAssistantWidth()
+        }
+    }
+
+    @ViewBuilder
+    private var sourceConversationLabel: some View {
+        if message.authorKind == .conversation,
+           let sourceSessionID = message.sourceSessionID {
+            let sourceName = sourceConversationName ?? String(sourceSessionID.uuidString.prefix(8))
+            Button {
+                onOpenSourceConversation?()
+            } label: {
+                Label(
+                    String(
+                        format: NSLocalizedString("来自“%@”", comment: "Cross-conversation message source"),
+                        sourceName
+                    ),
+                    systemImage: "bubble.left.and.bubble.right"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(onOpenSourceConversation == nil)
+        }
+    }
+
+    /// 只在本次发送目标的正文气泡上测量真实落点，避免用整行宽度反推尺寸。
+    @ViewBuilder
+    private var sendFlightTargetReporter: some View {
+        if reportsSendFlightTarget {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: FlightTargetRectKey.self,
+                    value: proxy.frame(in: .named(ChatView.flightCoordinateSpace))
+                )
+            }
         }
     }
 }

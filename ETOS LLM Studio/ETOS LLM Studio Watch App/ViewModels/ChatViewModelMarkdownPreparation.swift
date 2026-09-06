@@ -14,6 +14,7 @@ import ETOSCore
 struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
     let sourceText: String
     let normalizedText: String
+    let mathRenderText: String
     let markdownContent: MarkdownContent
     let containsMathContent: Bool
     let containsMermaidContent: Bool
@@ -24,6 +25,7 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
         return ETPreparedMarkdownRenderPayload(
             sourceText: sourceText,
             normalizedText: normalizedText,
+            mathRenderText: ETMathContentParser.normalizedMathDelimiters(in: normalizedText),
             markdownContent: MarkdownContent(normalizedText),
             containsMathContent: ETMathContentParser.containsMath(in: normalizedText),
             containsMermaidContent: containsMermaidFence(in: normalizedText),

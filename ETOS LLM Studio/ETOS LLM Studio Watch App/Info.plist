@@ -26,12 +26,20 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Scan and connect to nearby Bluetooth devices only when you explicitly invoke a Bluetooth tool.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Read authorized contacts only when you explicitly invoke a contacts tool.</string>
+	<key>NSHomeKitUsageDescription</key>
+	<string>Read and control authorized homes and accessories only when you explicitly invoke a Home tool.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>语音输入需要访问语音识别</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Read your current location when you explicitly invoke a location tool, or keep an active response running when background generation is enabled.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>AI 工具在你明确调用健康数据能力时，需要读取你授权的健康、睡眠与运动数据。</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>AI 工具在你明确调用健康记录能力时，需要写入你授权的饮水、咖啡因、营养、正念或症状记录。</string>
+	<string>AI 工具在你明确调用健康记录能力时，需要写入你授权的健康记录。</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>AI 工具在你明确调用日历能力时，需要读取你授权的日程。</string>
 	<key>NSCalendarsUsageDescription</key>
@@ -53,6 +61,11 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>location</string>
+	</array>
 	<key>ETCommitHash</key>
 	<string>LocalBuild</string>
 </dict>

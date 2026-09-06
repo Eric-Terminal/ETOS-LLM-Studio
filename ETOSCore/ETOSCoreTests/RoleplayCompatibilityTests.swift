@@ -14,7 +14,7 @@ import ZIPFoundation
 import JavaScriptCore
 #endif
 
-@Suite("角色扮演与酒馆兼容")
+@Suite("角色扮演与酒馆兼容", .serialized)
 struct RoleplayCompatibilityTests {
 
     @Test("酒馆助手可修改最终生成提示词并回写原消息")
@@ -204,7 +204,7 @@ struct RoleplayCompatibilityTests {
 
     @Test("导入 Character Card V3 的角色资料、世界书、正则和助手脚本")
     func importV3JSON() throws {
-        let json = """
+        let json = #"""
         {
           "spec": "chara_card_v3",
           "spec_version": "3.0",
@@ -239,7 +239,7 @@ struct RoleplayCompatibilityTests {
                   "id": "00000000-0000-0000-0000-000000000001",
                   "scriptName": "状态栏",
                   "findRegex": "/<status>([\\s\\S]*?)<\\/status>/gi",
-                  "replaceString": "```html\\n<div>$1</div>\\n```",
+                  "replaceString": "```html\n<div>$1</div>\n```",
                   "placement": [2],
                   "markdownOnly": true,
                   "substituteRegex": 1
@@ -260,7 +260,7 @@ struct RoleplayCompatibilityTests {
             }
           }
         }
-        """
+        """#
         let data = try #require(json.data(using: .utf8))
         let result = try RoleplayCardImportService().importCard(from: data, fileName: "星野.json")
 
@@ -664,7 +664,7 @@ struct RoleplayCompatibilityTests {
             path: "stat_data.金币[0]",
             messageID: messageID,
             versionIndex: 0
-        )?.numericValue == 15)
+        ) == .int(15))
         #expect(result.updatedSnapshot.value(
             scope: .message,
             path: "stat_data.地点[0]",
@@ -1106,6 +1106,56 @@ struct RoleplayCompatibilityTests {
         #expect(document.contains("getButtonEvent"))
     }
 
+    @Test("HTML 文档只注入源码实际使用的 CDN 依赖")
+    func injectsOnlyUsedHTMLDependencies() {
+        let document = RoleplayHTMLDocumentFactory.makeDocument(
+            source: """
+            <html><head><script type="module">
+            $('.status').text(_.get(getAllVariables(), 'stat_data.value', ''));
+            </script></head><body><div class="status"></div></body></html>
+            """,
+            variables: [:],
+            userName: "用户",
+            characterName: "角色",
+            userAvatarPath: "",
+            characterAvatarPath: ""
+        )
+
+        #expect(document.contains("jquery@3.7.1"))
+        #expect(document.contains("lodash@4.17.21"))
+        #expect(!document.contains("font-awesome/6.7.2"))
+        #expect(!document.contains("vue@3.5.13"))
+        #expect(!document.contains("yaml@2.7.0"))
+        #expect(!document.contains("cdn.tailwindcss.com"))
+    }
+
+    @Test("HTML 文档识别样式和脚本依赖")
+    func detectsHTMLStyleAndScriptDependencies() {
+        let document = RoleplayHTMLDocumentFactory.makeDocument(
+            source: """
+            <html><head><script>
+            Vue.createApp({});
+            YAML.parse('value: 1');
+            </script></head><body>
+            <i class="fa-solid fa-heart"></i>
+            <div class="p-4 dark:bg-black"></div>
+            </body></html>
+            """,
+            variables: [:],
+            userName: "用户",
+            characterName: "角色",
+            userAvatarPath: "",
+            characterAvatarPath: ""
+        )
+
+        #expect(document.contains("font-awesome/6.7.2"))
+        #expect(document.contains("vue@3.5.13"))
+        #expect(document.contains("yaml@2.7.0"))
+        #expect(document.contains("cdn.tailwindcss.com"))
+        #expect(!document.contains("jquery@3.7.1"))
+        #expect(!document.contains("lodash@4.17.21"))
+    }
+
     @Test("HTML 提取识别角色正则生成的裸前端片段")
     func extractBareRoleplayHTML() {
         let extraction = RoleplayHTMLExtractor.extract(from: """
@@ -1133,6 +1183,81 @@ struct RoleplayCompatibilityTests {
         #expect(extraction.remainingText == "叙事正文")
         #expect(extraction.documents.count == 2)
         #expect(extraction.documents[0].source.contains("变量面板"))
+        #expect(extraction.documents[1].source.contains("状态栏"))
+    }
+
+    @Test("MVU 后续回复自动补齐状态栏占位符")
+    func appendMVUStatusPlaceholderForFollowingReply() {
+        let hiddenUpdateRule = RoleplayRegexRule(
+            findRegex: #"/<UpdateVariable(?:variable)?>\s*(.*)\s*<\/UpdateVariable(?:variable)?>/gsi"#,
+            replaceString: "",
+            placements: [.aiOutput],
+            markdownOnly: true
+        )
+        let statusRule = RoleplayRegexRule(
+            findRegex: "<StatusPlaceHolderImpl/>",
+            replaceString: "```html\n<div>状态栏</div>\n```",
+            placements: [.aiOutput],
+            markdownOnly: true
+        )
+        let character = RoleplayCharacter(
+            name: "星野",
+            regexRules: [hiddenUpdateRule, statusRule]
+        )
+        let resolved = ResolvedRoleplaySession(
+            binding: SessionRoleplayBinding(sessionID: UUID(), characterIDs: [character.id]),
+            characters: [character],
+            persona: nil,
+            variables: .init(),
+            macroContext: .init(character: character)
+        )
+
+        let visualContent = RoleplayRuntime.visualContent(
+            "叙事正文\n\n<UpdateVariable><JSONPatch>[]</JSONPatch></UpdateVariable>",
+            resolved: resolved
+        )
+        let extraction = RoleplayHTMLExtractor.extract(from: visualContent)
+
+        #expect(extraction.remainingText == "叙事正文")
+        #expect(extraction.documents.count == 1)
+        #expect(extraction.documents[0].source.contains("状态栏"))
+    }
+
+    @Test("MVU 变量卡与状态栏在后续回复中分别显示")
+    func preserveBothMVUFollowingReplyDocuments() {
+        let updatePanelRule = RoleplayRegexRule(
+            findRegex: #"/<UpdateVariable(?:variable)?>\s*(.*)\s*<\/UpdateVariable(?:variable)?>/gsi"#,
+            replaceString: "<div><details>变量更新：$1</details></div>",
+            placements: [.aiOutput],
+            markdownOnly: true
+        )
+        let statusRule = RoleplayRegexRule(
+            findRegex: "<StatusPlaceHolderImpl/>",
+            replaceString: "```html\n<div>状态栏</div>\n```",
+            placements: [.aiOutput],
+            markdownOnly: true
+        )
+        let character = RoleplayCharacter(
+            name: "星野",
+            regexRules: [updatePanelRule, statusRule]
+        )
+        let resolved = ResolvedRoleplaySession(
+            binding: SessionRoleplayBinding(sessionID: UUID(), characterIDs: [character.id]),
+            characters: [character],
+            persona: nil,
+            variables: .init(),
+            macroContext: .init(character: character)
+        )
+
+        let visualContent = RoleplayRuntime.visualContent(
+            "叙事正文\n\n<UpdateVariable><JSONPatch>[]</JSONPatch></UpdateVariable>",
+            resolved: resolved
+        )
+        let extraction = RoleplayHTMLExtractor.extract(from: visualContent)
+
+        #expect(extraction.remainingText == "叙事正文")
+        #expect(extraction.documents.count == 2)
+        #expect(extraction.documents[0].source.contains("变量更新"))
         #expect(extraction.documents[1].source.contains("状态栏"))
     }
 
@@ -1270,12 +1395,14 @@ struct RoleplayCompatibilityTests {
 
         context.evaluateScript("""
         var parsedMVUValue = -1;
-        eventOn(Mvu.events.COMMAND_PARSED, (_variables, commands) => { commands[0].args[1] = 9; });
+        var commandOverride = (_variables, commands) => { commands[0].args[1] = 9; };
+        eventOn(Mvu.events.COMMAND_PARSED, commandOverride);
         Mvu.parseMessage("_.set('value', 3); // 测试; 注释", { stat_data: { value: 1 }, initialized_lorebooks: {} })
           .then(value => { parsedMVUValue = value.stat_data.value; });
         """)
         RunLoop.current.run(until: Date().addingTimeInterval(0.01))
         #expect(context.evaluateScript("parsedMVUValue")?.toInt32() == 9)
+        context.evaluateScript("eventRemoveListener(Mvu.events.COMMAND_PARSED, commandOverride)")
 
         context.evaluateScript("""
         var parsedMVUArrayLength = -1;

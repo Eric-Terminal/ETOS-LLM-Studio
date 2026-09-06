@@ -12,6 +12,120 @@ import Foundation
 
 @Suite("模型计费测试")
 struct ModelPricingTests {
+    @Test("两种缓存时长分别计费且阶梯依据不重复累计缓存")
+    func mixedCacheDurationsUseSeparatePrices() throws {
+        let usage = MessageTokenUsage(
+            promptTokens: 2_048, completionTokens: 503, totalTokens: nil,
+            cacheWriteTokens: 248, cacheWriteFiveMinuteTokens: 148, cacheWriteOneHourTokens: 100,
+            cacheReadTokens: 1_800, uncachedInputTokens: 2_048
+        )
+        let pricing = ModelPricing(
+            inputPerMillionTokens: 3, outputPerMillionTokens: 15,
+            cacheWritePerMillionTokens: 3.75, cacheWriteOneHourPerMillionTokens: 6,
+            cacheReadPerMillionTokens: 0.3
+        )
+        let estimate = try #require(ModelCostCalculator.estimateCost(usage: usage, pricing: pricing))
+        #expect(estimate.tierBasisTokens == 4_096)
+        #expect(estimate.components.first { $0.kind == .input }?.tokens == 2_048)
+        #expect(estimate.components.first { $0.kind == .cacheWriteFiveMinute }?.tokens == 148)
+        #expect(estimate.components.first { $0.kind == .cacheWriteOneHour }?.tokens == 100)
+        #expect(!estimate.components.contains { $0.kind == .cacheWrite })
+        #expect(abs(estimate.totalCost - 0.015384) < 0.000001)
+        let restored = try JSONDecoder().decode(MessageCostEstimate.self, from: JSONEncoder().encode(estimate))
+        #expect(restored == estimate)
+        let restoredUsage = try JSONDecoder().decode(MessageTokenUsage.self, from: JSONEncoder().encode(usage))
+        #expect(restoredUsage == usage)
+    }
+
+    @Test("旧配置及无时长明细的缓存总量沿用默认价格")
+    func legacyCachePricingRemainsCompatible() throws {
+        let pricing = try JSONDecoder().decode(ModelPricing.self, from: Data(#"{"cacheWritePerMillionTokens":3.75}"#.utf8))
+        #expect(pricing.cacheWriteOneHourPerMillionTokens == nil)
+        let usage = MessageTokenUsage(promptTokens: nil, completionTokens: nil, totalTokens: nil, cacheWriteTokens: 1_000)
+        let estimate = try #require(ModelCostCalculator.estimateCost(usage: usage, pricing: pricing))
+        #expect(estimate.components.count == 1)
+        #expect(estimate.components.first?.kind == .cacheWrite)
+        #expect(abs(estimate.totalCost - 0.00375) < 0.000001)
+
+        let oneHourUsage = MessageTokenUsage(
+            promptTokens: nil, completionTokens: nil, totalTokens: nil,
+            cacheWriteTokens: 1_000, cacheWriteFiveMinuteTokens: 0, cacheWriteOneHourTokens: 1_000
+        )
+        // 已知时长不能套用另一档价格；留空仍表示不参与估算，零价则显式保留费用项。
+        #expect(ModelCostCalculator.estimateCost(usage: oneHourUsage, pricing: pricing) == nil)
+        let freePricing = ModelPricing(cacheWriteOneHourPerMillionTokens: 0)
+        let free = try #require(ModelCostCalculator.estimateCost(usage: oneHourUsage, pricing: freePricing))
+        #expect(free.components.first?.kind == .cacheWriteOneHour)
+        #expect(free.totalCost == 0)
+    }
+
+    @Test("两档缓存价格分别继承阶梯和峰谷覆盖并可序列化")
+    func cacheDurationPricesInheritIndependently() throws {
+        let calendar = utcCalendar()
+        let usage = MessageTokenUsage(
+            promptTokens: 100, completionTokens: nil, totalTokens: nil,
+            cacheWriteTokens: 2_000, cacheWriteFiveMinuteTokens: 1_000, cacheWriteOneHourTokens: 1_000
+        )
+        let pricing = ModelPricing(
+            cacheWritePerMillionTokens: 3.75, cacheWriteOneHourPerMillionTokens: 6,
+            tiers: [ModelPricingTier(minimumTokens: 2_000, cacheWriteOneHourPerMillionTokens: 8)],
+            timeOverridesEnabled: true,
+            timeOverrides: [ModelPricingTimeOverride(startMinuteOfDay: 600, endMinuteOfDay: 720, cacheWritePerMillionTokens: 2)]
+        )
+        let restored = try JSONDecoder().decode(ModelPricing.self, from: JSONEncoder().encode(pricing))
+        #expect(restored == pricing)
+        let effective = restored.effectivePrices(for: usage, requestedAt: date(hour: 11, minute: 0, calendar: calendar), calendar: calendar)
+        #expect(effective.cacheWritePerMillionTokens == 2)
+        #expect(effective.cacheWriteOneHourPerMillionTokens == 8)
+        #expect(effective.tierMinimumTokens == 2_000)
+        let offPeak = restored.effectivePrices(for: usage, requestedAt: date(hour: 13, minute: 0, calendar: calendar), calendar: calendar)
+        #expect(offPeak.cacheWritePerMillionTokens == 3.75)
+        #expect(offPeak.cacheWriteOneHourPerMillionTokens == 8)
+    }
+
+    @Test("收回单档清除所有一小时价格并保留默认档和计费方式")
+    func adapterChangeCollapsesAllCachePriceLevels() {
+        let pricing = ModelPricing(
+            cacheWritePerMillionTokens: 3.75, cacheWriteOneHourPerMillionTokens: 6,
+            tiers: [
+                ModelPricingTier(minimumTokens: 100, cacheWritePerMillionTokens: 5, cacheWriteOneHourPerMillionTokens: 8),
+                ModelPricingTier(minimumTokens: 200, cacheWriteOneHourPerMillionTokens: 10)
+            ],
+            timeOverridesEnabled: true,
+            timeOverrides: [ModelPricingTimeOverride(startMinuteOfDay: 600, endMinuteOfDay: 720, cacheWritePerMillionTokens: 2, cacheWriteOneHourPerMillionTokens: 4)],
+            billingMode: .perRequest, perRequestPrice: 0.5
+        )
+        #expect(pricing.normalized(forAPIFormat: "anthropic") == pricing)
+        for format in ["openai-compatible", "openai-responses", "gemini"] {
+            let collapsed = pricing.normalized(forAPIFormat: format)
+            #expect(collapsed.cacheWritePerMillionTokens == 3.75)
+            #expect(collapsed.cacheWriteOneHourPerMillionTokens == nil)
+            #expect(collapsed.tiers.count == 1)
+            #expect(collapsed.tiers.first?.cacheWritePerMillionTokens == 5)
+            #expect(collapsed.tiers.first?.cacheWriteOneHourPerMillionTokens == nil)
+            #expect(collapsed.timeOverrides.first?.cacheWritePerMillionTokens == 2)
+            #expect(collapsed.timeOverrides.first?.cacheWriteOneHourPerMillionTokens == nil)
+            #expect(collapsed.billingMode == .perRequest)
+            #expect(collapsed.perRequestPrice == 0.5)
+            #expect(collapsed.normalized(forAPIFormat: "anthropic").cacheWriteOneHourPerMillionTokens == nil)
+        }
+    }
+
+    @Test("同步合并保留缓存时长明细且旧用量解码不要求新字段")
+    func cacheDurationUsageMergesWithLegacyUsage() throws {
+        let legacy = try JSONDecoder().decode(MessageTokenUsage.self, from: Data(#"{"promptTokens":20,"cacheWriteTokens":300}"#.utf8))
+        #expect(legacy.cacheWriteFiveMinuteTokens == nil)
+        #expect(legacy.cacheWriteOneHourTokens == nil)
+        #expect(legacy.uncachedInputTokens == nil)
+        let detailed = MessageTokenUsage(
+            promptTokens: 20, completionTokens: 8, totalTokens: nil,
+            cacheWriteTokens: 300, cacheWriteFiveMinuteTokens: 100, cacheWriteOneHourTokens: 200,
+            uncachedInputTokens: 20
+        )
+        #expect(SyncEngine.mergeTokenUsage(legacy, detailed) == detailed)
+        #expect(SyncEngine.mergeTokenUsage(detailed, legacy) == detailed)
+    }
+
     @Test("空价格不会产生费用")
     func emptyPricingProducesNoCost() {
         let usage = MessageTokenUsage(promptTokens: 1_000, completionTokens: 500, totalTokens: 1_500)
@@ -237,6 +351,61 @@ struct ModelPricingTests {
         #expect(abs(estimate.totalCost - 0.0025) < 0.000001)
     }
 
+    @Test("峰谷定价支持周末全天重复")
+    func peakValleyPricingSupportsAllDayWeekends() throws {
+        let calendar = utcCalendar()
+        let timeOverrideID = UUID(uuidString: "00000000-0000-0000-0000-000000000096")!
+        let pricing = ModelPricing(
+            inputPerMillionTokens: 1,
+            timeOverridesEnabled: true,
+            timeOverrides: [
+                ModelPricingTimeOverride(
+                    id: timeOverrideID,
+                    startMinuteOfDay: 0,
+                    endMinuteOfDay: 0,
+                    weekdays: ModelPricingWeekday.weekend,
+                    inputPerMillionTokens: 0.25
+                )
+            ]
+        )
+
+        #expect(
+            pricing.matchingTimeOverride(
+                requestedAt: date(day: 4, hour: 15, minute: 0, calendar: calendar),
+                calendar: calendar
+            )?.id == timeOverrideID
+        )
+        #expect(
+            pricing.matchingTimeOverride(
+                requestedAt: date(day: 5, hour: 23, minute: 59, calendar: calendar),
+                calendar: calendar
+            )?.id == timeOverrideID
+        )
+        #expect(
+            pricing.matchingTimeOverride(
+                requestedAt: date(day: 6, hour: 15, minute: 0, calendar: calendar),
+                calendar: calendar
+            ) == nil
+        )
+        #expect(ModelPricingTimeRangeText.text(startMinuteOfDay: 0, endMinuteOfDay: 0) == NSLocalizedString("全天", comment: ""))
+    }
+
+    @Test("跨午夜时段按开始日重复")
+    func crossMidnightPricingUsesStartingWeekday() {
+        let calendar = utcCalendar()
+        let timeOverride = ModelPricingTimeOverride(
+            startMinuteOfDay: 23 * 60,
+            endMinuteOfDay: 2 * 60,
+            weekdays: [.monday],
+            inputPerMillionTokens: 0.25
+        )
+
+        #expect(timeOverride.contains(date(day: 6, hour: 23, minute: 30, calendar: calendar), calendar: calendar))
+        #expect(timeOverride.contains(date(day: 7, hour: 1, minute: 30, calendar: calendar), calendar: calendar))
+        #expect(!timeOverride.contains(date(day: 6, hour: 1, minute: 30, calendar: calendar), calendar: calendar))
+        #expect(!timeOverride.contains(date(day: 7, hour: 23, minute: 30, calendar: calendar), calendar: calendar))
+    }
+
     @Test("阶梯范围文本使用紧凑 token 边界")
     func tierRangeTextUsesCompactBoundaries() {
         #expect(ModelPricingTierRangeText.text(minimumTokens: 0, nextMinimumTokens: 200_001).contains("200K"))
@@ -271,6 +440,18 @@ struct ModelPricingTests {
         #expect(pricing.inputPerMillionTokens == 1)
         #expect(!pricing.timeOverridesEnabled)
         #expect(pricing.timeOverrides.isEmpty)
+    }
+
+    @Test("旧峰谷时段解码时默认每天重复")
+    func legacyTimeOverrideDecodesWithEveryDaySchedule() throws {
+        let data = try #require(
+            #"{"id":"00000000-0000-0000-0000-000000000097","startMinuteOfDay":600,"endMinuteOfDay":720,"inputPerMillionTokens":0.5}"#
+                .data(using: .utf8)
+        )
+
+        let timeOverride = try JSONDecoder().decode(ModelPricingTimeOverride.self, from: data)
+
+        #expect(timeOverride.weekdays == ModelPricingWeekday.everyDay)
     }
 
     @Test("只有每次请求价格的配置会按按次模式解码")
@@ -308,6 +489,7 @@ struct ModelPricingTests {
                         id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!,
                         startMinuteOfDay: 10 * 60,
                         endMinuteOfDay: 12 * 60,
+                        weekdays: ModelPricingWeekday.weekend,
                         outputPerMillionTokens: 1.5
                     )
                 ]
@@ -323,6 +505,7 @@ struct ModelPricingTests {
         #expect(decoded.pricing?.tiers.first?.inputPerMillionTokens == 0.4)
         #expect(decoded.pricing?.timeOverridesEnabled == true)
         #expect(decoded.pricing?.timeOverrides.first?.startMinuteOfDay == 10 * 60)
+        #expect(decoded.pricing?.timeOverrides.first?.weekdays == ModelPricingWeekday.weekend)
         #expect(decoded.pricing?.timeOverrides.first?.outputPerMillionTokens == 1.5)
     }
 
@@ -487,7 +670,7 @@ struct ModelPricingTests {
         return calendar
     }
 
-    private func date(hour: Int, minute: Int, calendar: Calendar) -> Date {
-        calendar.date(from: DateComponents(year: 2026, month: 7, day: 1, hour: hour, minute: minute))!
+    private func date(day: Int = 1, hour: Int, minute: Int, calendar: Calendar) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: 7, day: day, hour: hour, minute: minute))!
     }
 }

@@ -170,6 +170,9 @@ struct ChatExportFormatsView: View {
             let exportService = ChatTranscriptExportService()
             let providers = ConfigLoader.loadProviders()
             let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: messages)
+            let continuationContext = try? session.flatMap {
+                try Persistence.loadConversationContinuationContext(for: $0.id)
+            }
 
             for format in ChatTranscriptExportFormat.allCases {
                 guard format != .png else { continue }
@@ -181,6 +184,7 @@ struct ChatExportFormatsView: View {
                         format: format,
                         includeReasoning: includeReasoning,
                         includeSystemPrompt: includeSystemPrompt,
+                        continuationContext: continuationContext,
                         upToMessageID: upToMessageID,
                         selectedMessageIDs: selectedMessageIDs
                     )
@@ -201,6 +205,7 @@ struct ChatExportFormatsView: View {
                     session: session,
                     messages: messages,
                     includeReasoning: includeReasoning,
+                    continuationContext: continuationContext,
                     upToMessageID: upToMessageID,
                     selectedMessageIDs: selectedMessageIDs
                 )

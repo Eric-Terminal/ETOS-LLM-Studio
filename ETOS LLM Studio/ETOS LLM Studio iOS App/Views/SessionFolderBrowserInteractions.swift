@@ -195,6 +195,22 @@ extension SessionFolderBrowserView {
             .sheet(item: $sessionInfo) { info in
                 SessionInfoSheet(payload: info)
             }
+            .sheet(item: $contextCompressionSourceSession) { session in
+                ContextCompressionOptionsView(
+                    session: session,
+                    models: viewModel.activatedChatModels,
+                    selectedModelID: viewModel.selectedModel?.id,
+                    onCompress: { options, progress in
+                        try await viewModel.createCompressedContinuation(
+                            from: session.id,
+                            options: options,
+                            progress: progress
+                        )
+                    }
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
             .sheet(isPresented: $isShowingTagManager) {
                 SessionTagManagementView(
                     tags: viewModel.sessionTags,
@@ -498,6 +514,7 @@ extension SessionFolderBrowserView {
                 session: session,
                 isCurrent: session.id == viewModel.currentSession?.id,
                 isRunning: viewModel.runningSessionIDs.contains(session.id),
+                runtimeState: viewModel.conversationRuntimeStates[session.id],
                 isEditing: editingSessionID == session.id,
                 draftName: editingSessionID == session.id ? $draftSessionName : .constant(session.name),
                 currentFolderID: normalizedFolderID(of: session),
@@ -521,6 +538,9 @@ extension SessionFolderBrowserView {
                     viewModel.setCurrentSession(newSession)
                     focusOnLatest()
                 },
+                onCompress: {
+                    contextCompressionSourceSession = session
+                },
                 onMoveToFolder: { targetFolderID in
                     viewModel.moveSession(session, toFolderID: targetFolderID)
                 },
@@ -535,17 +555,34 @@ extension SessionFolderBrowserView {
                     draftSessionName = session.name
                 },
                 onInfo: {
-                    sessionInfo = SessionInfoPayload(
-                        session: session,
-                        messageCount: viewModel.messageCount(for: session),
-                        isCurrent: session.id == viewModel.currentSession?.id
-                    )
+                    Task { @MainActor in
+                        let messageCount = await viewModel.messageCount(for: session)
+                        guard !Task.isCancelled else { return }
+                        sessionInfo = SessionInfoPayload(
+                            session: session,
+                            messageCount: messageCount,
+                            isCurrent: session.id == viewModel.currentSession?.id,
+                            onOpenSession: { sessionID in
+                                _ = viewModel.setCurrentSessionIfExists(sessionID: sessionID)
+                            }
+                        )
+                    }
                 },
                 onEditTags: {
                     sessionForTagEditing = session
                 },
                 onSendToCompanion: {
                     syncManager.sendSessionToCompanion(sessionID: session.id)
+                },
+                onStopRuntime: {
+                    Task {
+                        await ChatService.shared.stopConversationRuntime(for: session.id)
+                    }
+                },
+                onContinueRuntime: {
+                    Task {
+                        _ = await ChatService.shared.continueConversationRuntime(for: session.id)
+                    }
                 }
             )
         }

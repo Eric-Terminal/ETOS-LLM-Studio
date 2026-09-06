@@ -271,13 +271,15 @@ func TestApplySessionsUsesInfoColumn(t *testing.T) {
 	model.applySessions(map[string]any{
 		"sessions": []any{
 			map[string]any{
-				"id":                               "session-1",
-				"name":                             "会话一",
-				"topicPrompt":                      "主题提示",
-				"enhancedPrompt":                   "增强提示",
-				"lorebookIDs":                      []any{"lorebook-1", "lorebook-2"},
-				"tagIDs":                           []any{"tag-1"},
-				"worldbookContextIsolationEnabled": true,
+				"id":                                 "session-1",
+				"name":                               "会话一",
+				"topicPrompt":                        "主题提示",
+				"enhancedPrompt":                     "增强提示",
+				"lorebookIDs":                        []any{"lorebook-1", "lorebook-2"},
+				"tagIDs":                             []any{"tag-1"},
+				"memoryContextIsolationEnabled":      true,
+				"toolContextIsolationEnabled":        false,
+				"globalSystemPromptIsolationEnabled": true,
 			},
 			map[string]any{"id": "session-2", "name": "会话二"},
 		},
@@ -287,7 +289,7 @@ func TestApplySessionsUsesInfoColumn(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("会话行数 = %d, want 2", len(rows))
 	}
-	if rows[0][2] != "主题 / 增强 / 世界书2 / 标签1 / 隔离" {
+	if rows[0][2] != "主题 / 增强 / 世界书2 / 标签1 / 屏蔽记忆…" {
 		t.Fatalf("信息列 = %q, want 元数据摘要", rows[0][2])
 	}
 	if rows[1][2] != "" {

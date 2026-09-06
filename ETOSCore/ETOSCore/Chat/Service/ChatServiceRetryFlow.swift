@@ -12,8 +12,7 @@ import os.log
 
 extension ChatService {
     /// 重试指定消息，支持任意位置的消息重试
-    /// - 对于 user 消息：保留下游对话，在该 user 对应回复位置插入新版本，重新发送该 user。
-    /// - 对于 assistant/error 消息：回溯到上一个 user 重新生成回复，并保留后续对话。
+    /// 普通气泡从选中位置分叉整轮回复；轮尾工具链中断则在当前版本原地续接。
     public func retryMessage(
         _ message: ChatMessage,
         aiTemperature: Double,
@@ -34,140 +33,72 @@ extension ChatService {
         guard let currentSession = currentSessionSubject.value else { return }
 
         // 先获取当前消息列表，避免取消请求时状态变化
-        let messages = messagesForSessionSubject.value
+        let messagesBeforeCancellation = messagesForSessionSubject.value
 
-        guard let messageIndex = messages.firstIndex(where: { $0.id == message.id }) else {
+        guard let selectedMessage = ChatResponseAttemptSupport.visibleMessages(from: messagesBeforeCancellation)
+            .first(where: { $0.id == message.id }) else {
             logger.warning("未找到要重试的消息")
             return
         }
 
-        logger.info("重试消息: \(String(describing: message.role)) - 索引 \(messageIndex)")
-
-        // 决定重试时要重发的 user 消息，以及保留下来的前缀/后缀
-        // 核心逻辑：无论重试什么消息，都找到对应的 user 消息重新发送
-        let anchorUserIndex: Int
-        var messageToSend: ChatMessage
-
-        switch message.role {
-        case .user:
-            // user 重试：直接重试该 user 消息
-            anchorUserIndex = messageIndex
-            messageToSend = message
-        case .assistant, .error:
-            // assistant/error 重试：回到上一个 user，本质等同于重试那个 user
-            guard let previousUserIndex = messages[..<messageIndex].lastIndex(where: { $0.role == .user }) else {
-                logger.warning("未找到该 \(message.role.rawValue) 消息之前的 user 消息，无法重试")
-                return
-            }
-            anchorUserIndex = previousUserIndex
-            messageToSend = messages[previousUserIndex]
-        default:
-            logger.warning("不支持重试 \(String(describing: message.role)) 类型的消息")
-            return
-        }
-        registerRetryAchievementAttempt(sessionID: currentSession.id, content: messageToSend.content)
-        let shouldContinueFromTail = isTailContinuationRetryTarget(message, in: messages)
-        let shouldRetryAsImageGeneration = shouldRetryMessageAsImageGeneration(
-            message,
-            anchorUserIndex: anchorUserIndex,
-            in: messages
-        )
+        logger.info("重试消息: \(String(describing: selectedMessage.role)) - \(selectedMessage.id.uuidString)")
+        let shouldRetryAsImageGeneration = shouldRetryMessageAsImageGeneration()
 
         // 【重要】必须先取消旧请求，再创建新的会话级请求上下文
         // 否则取消流程会把刚创建的请求上下文提前清理
         await cancelOngoingRequest()
 
+        let messages = messagesForSessionSubject.value
+        let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: messages)
+        let currentMessage = visibleMessages.first(where: { $0.id == selectedMessage.id })
+            ?? (selectedMessage.role == .assistant ? visibleMessages.last : nil)
+        guard let currentMessage else {
+            logger.warning("取消旧请求后已无可重试的消息。")
+            return
+        }
+
+        guard let preparedRetry = prepareMessageRetry(
+            targetMessage: currentMessage,
+            in: messages
+        ) else {
+            logger.warning("无法为目标消息建立轮次级重试计划。")
+            return
+        }
+        registerRetryAchievementAttempt(
+            sessionID: currentSession.id,
+            content: preparedRetry.representativeUserMessage?.content ?? currentMessage.content
+        )
+        persistAndPublishMessages(preparedRetry.storedMessages, for: currentSession.id)
+
         if shouldRetryAsImageGeneration {
             await retryImageGenerationMessage(
-                messages: messages,
-                anchorUserIndex: anchorUserIndex,
+                preparedRetry: preparedRetry,
                 currentSession: currentSession
             )
             return
         }
 
-        var updatedMessages = messages
-        let retryRequestedAt = Date()
-        let loadingMessage: ChatMessage
-        let insertionIndex: Int
-        if shouldContinueFromTail {
-            let metadata = continuationAttemptMetadata(
-                for: message,
-                in: updatedMessages,
-                anchorUserIndex: anchorUserIndex,
-                targetIndex: messageIndex
-            )
-            if message.role == .error {
-                updatedMessages.remove(at: messageIndex)
+        let retryInputMessages = currentTurnUserMessages(
+            containing: preparedRetry.representativeUserMessage?.id,
+            in: preparedRetry.requestMessages
+        )
+        let imageAttachments = retryInputMessages.flatMap { requestMessage in
+            requestMessage.modelVisibleImageFileNames.compactMap { fileName in
+                loadImageAttachmentFromStorage(fileName: fileName)
             }
-            let referenceIndex = min(message.role == .error ? messageIndex - 1 : messageIndex, updatedMessages.index(before: updatedMessages.endIndex))
-            var continuationLoadingMessage = ChatMessage(
-                role: .assistant,
-                content: "",
-                requestedAt: retryRequestedAt
-            )
-            applyResponseAttemptMetadata(metadata, to: &continuationLoadingMessage)
-            if let metadata,
-               let anchorIndex = updatedMessages.firstIndex(where: { $0.id == metadata.groupID && $0.role == .user }) {
-                updatedMessages[anchorIndex].selectedResponseAttemptID = metadata.attemptID
-            }
-            loadingMessage = continuationLoadingMessage
-            insertionIndex = continuationInsertionIndex(
-                in: updatedMessages,
-                referenceIndex: max(anchorUserIndex, referenceIndex),
-                metadata: metadata
-            )
-        } else {
-            let responseAttempt = prepareRetryAttemptMetadata(
-                in: &updatedMessages,
-                anchorUserIndex: anchorUserIndex
-            )
-            loadingMessage = ChatMessage(
-                role: .assistant,
-                content: "",
-                requestedAt: retryRequestedAt,
-                responseGroupID: responseAttempt.groupID,
-                responseAttemptID: responseAttempt.attemptID,
-                responseAttemptIndex: responseAttempt.attemptIndex,
-                selectedResponseAttemptID: responseAttempt.attemptID
-            )
-            insertionIndex = responseRoundEndIndex(in: updatedMessages, anchorUserIndex: anchorUserIndex)
         }
-        updatedMessages.insert(loadingMessage, at: insertionIndex)
-        messageToSend = updatedMessages[anchorUserIndex]
-        retryTargetMessageID = nil
-        retryTargetOriginalAssistantMessage = nil
-
-        persistAndPublishMessages(updatedMessages, for: currentSession.id)
-        let actualLoadingMessageID = loadingMessage.id
-        // 保留尾部只用于本地消息列表，请求上下文截止到新占位回复。
-        let requestMessages = Array(updatedMessages.prefix(through: insertionIndex))
-
-        // 恢复原消息的音频附件（如果有）
-        var audioAttachment: AudioAttachment? = nil
-        if let audioFileName = messageToSend.audioFileName,
-           let restoredAudioAttachment = loadAudioAttachmentFromStorage(fileName: audioFileName) {
-            audioAttachment = restoredAudioAttachment
-            logger.info("重试时恢复音频附件: \(audioFileName)")
-        }
-
-        // 恢复原消息的文件附件（如果有）
-        var fileAttachments: [FileAttachment] = []
-        if let fileFileNames = messageToSend.fileFileNames {
-            for fileName in fileFileNames {
-                if let attachment = loadFileAttachmentFromStorage(fileName: fileName) {
-                    fileAttachments.append(attachment)
-                    logger.info("重试时恢复文件附件: \(fileName)")
-                }
+        let fileAttachments = retryInputMessages.flatMap { requestMessage in
+            (requestMessage.fileFileNames ?? []).compactMap { fileName in
+                loadFileAttachmentFromStorage(fileName: fileName)
             }
         }
 
-        // 使用原消息内容和附件发起请求，尾部对话已在本地保留但不参与本次请求。
+        // 请求只使用当前选中分支中截止到占位回复的内容；其他轮次和旧版本继续留在本地。
         await startRequestWithPresetMessages(
-            messages: requestMessages,
-            loadingMessageID: actualLoadingMessageID,  // 使用局部变量，避免强制解包可能导致的崩溃
+            messages: preparedRetry.requestMessages,
+            loadingMessageID: preparedRetry.loadingMessage.id,
             currentSession: currentSession,
-            userMessage: messageToSend,
+            userMessage: preparedRetry.representativeUserMessage,
             aiTemperature: aiTemperature,
             aiTopP: aiTopP,
             systemPrompt: systemPrompt,
@@ -182,8 +113,10 @@ extension ChatService {
             enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
             periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
             enableResponseSpeedMetrics: enableResponseSpeedMetrics,
-            currentAudioAttachment: audioAttachment,
-            currentFileAttachments: fileAttachments
+            currentAudioAttachment: nil,
+            currentImageAttachments: imageAttachments,
+            currentFileAttachments: fileAttachments,
+            pendingToolCallMessageID: preparedRetry.pendingToolCallMessageID
         )
     }
 
@@ -208,9 +141,62 @@ extension ChatService {
         periodicTimeLandmarkIntervalMinutes: Int,
         enableResponseSpeedMetrics: Bool,
         currentAudioAttachment: AudioAttachment?,
-        currentFileAttachments: [FileAttachment]
+        currentImageAttachments: [ImageAttachment],
+        currentFileAttachments: [FileAttachment],
+        pendingToolCallMessageID: UUID? = nil
     ) async {
         emitSessionRequestStatus(.started, sessionID: currentSession.id)
+
+        let agentCapabilities = AgentToolCapabilityPolicy.resolve(
+            mode: Persistence.localAgentMode(sessionID: currentSession.id),
+            isToolContextIsolated: currentSession.isToolContextIsolationActive,
+            localLinuxEnabled: AppConfigStore.boolValue(for: .localLinuxEnabled)
+        )
+        let shouldPrepareAgentRun = agentCapabilities.preparesAgentRun
+        let includeLocalLinuxCapability = agentCapabilities.includesLocalLinuxTools
+        let selectedMCPServerIDs = shouldPrepareAgentRun
+            ? MCPServerStore.loadServers().filter(\.isSelectedForChat).map(\.id)
+            : []
+        let requestConfiguration = ConversationRunRequestConfiguration(
+            modelIdentifier: selectedModelSubject.value?.id,
+            temperature: aiTemperature,
+            topP: aiTopP,
+            systemPrompt: systemPrompt,
+            maxChatHistory: maxChatHistory,
+            enableStreaming: enableStreaming,
+            enhancedPrompt: currentSession.enhancedPrompt ?? enhancedPrompt,
+            enableMemory: enableMemory,
+            enableMemoryWrite: enableMemoryWrite,
+            enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+            includeSystemTime: includeSystemTime,
+            systemTimeInjectionPosition: systemTimeInjectionPosition,
+            enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+            periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
+            enableResponseSpeedMetrics: enableResponseSpeedMetrics,
+            browserDataProfile: Persistence.browserAgentDataProfile(sessionID: currentSession.id),
+            agentToolsEnabled: shouldPrepareAgentRun,
+            localLinuxToolsEnabled: includeLocalLinuxCapability,
+            selectedAgentMCPServerIDs: selectedMCPServerIDs
+        )
+        var runtimeRun = ConversationRun(
+            sessionID: currentSession.id,
+            requestConfiguration: requestConfiguration
+        )
+        runtimeRun.status = .running
+        runtimeRun.startedAt = Date()
+        runtimeRun.loadingMessageID = loadingMessageID
+        _ = Persistence.saveConversationRun(runtimeRun)
+        _ = Persistence.saveConversationExecutionBudget(
+            ConversationExecutionBudget(
+                rootRunID: runtimeRun.rootRunID,
+                maximumExecutions: ConversationExecutionBudgetPolicy.configuredMaximumExecutions(),
+                usedExecutions: 1
+            )
+        )
+
+        let runtimeRunID = runtimeRun.id
+        let rootRuntimeRunID = runtimeRun.rootRunID
+        let parentRuntimeRunID = runtimeRun.parentRunID
 
         let requestToken = UUID()
         setRequestContext(
@@ -218,22 +204,80 @@ extension ChatService {
                 token: requestToken,
                 task: nil,
                 loadingMessageID: loadingMessageID,
-                imageGenerationContext: nil
+                imageGenerationContext: nil,
+                conversationRunID: runtimeRunID,
+                rootConversationRunID: rootRuntimeRunID
             ),
             for: currentSession.id
         )
 
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
+            var localAgentContext: AgentRuntimeContext?
+            if includeLocalLinuxCapability {
+                do {
+                    let prepared = try await LocalAgentRuntimeContextManager.shared.beginRun(
+                        sessionID: currentSession.id,
+                        triggeringMessageID: userMessage?.id,
+                        runID: runtimeRunID,
+                        rootRunID: rootRuntimeRunID,
+                        parentRunID: parentRuntimeRunID,
+                        selectedMCPServerIDs: selectedMCPServerIDs,
+                        browserSessionID: currentSession.id
+                    )
+                    localAgentContext = prepared.context
+                    _ = try await LocalLinuxRuntimeController.shared.ensureReady(trigger: .agentRequest)
+                    try Task.checkCancellation()
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    await LocalAgentRuntimeContextManager.shared.finishRun(id: runtimeRunID, state: .failed)
+                    _ = Persistence.updateConversationRunStatus(
+                        id: runtimeRunID,
+                        status: .failed,
+                        errorMessage: error.localizedDescription
+                    )
+                    self.addErrorMessage(
+                        String(
+                            format: NSLocalizedString("错误: 无法准备 Agent Run：%@", comment: "Prepare local Agent run failure"),
+                            error.localizedDescription
+                        ),
+                        sessionID: currentSession.id
+                    )
+                    self.emitSessionRequestStatus(.error, sessionID: currentSession.id)
+                    return
+                }
+            }
             let requestTooling = await self.resolveRequestTooling(
                 for: currentSession,
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
-                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+                localAgentContext: localAgentContext,
+                agentCapabilities: agentCapabilities,
+                selectedAgentMCPServerIDs: Set(selectedMCPServerIDs)
             )
+            let resumedRequest: ResumedToolCallRequest
+            if let pendingToolCallMessageID {
+                resumedRequest = await self.resumePendingToolCalls(
+                    sourceMessageID: pendingToolCallMessageID,
+                    loadingMessageID: loadingMessageID,
+                    sessionID: currentSession.id,
+                    agentRunID: runtimeRunID
+                )
+                guard resumedRequest.shouldContinueRequest else {
+                    await self.finishSessionRequestAndCleanupFileHistory(sessionID: currentSession.id)
+                    return
+                }
+            } else {
+                resumedRequest = ResumedToolCallRequest(
+                    messages: messages,
+                    shouldContinueRequest: true
+                )
+            }
 
             await self.executeMessageRequest(
-                messages: messages,
+                messages: resumedRequest.messages,
                 loadingMessageID: loadingMessageID,
                 currentSessionID: currentSession.id,
                 userMessage: userMessage,
@@ -245,6 +289,7 @@ extension ChatService {
                 enableStreaming: enableStreaming,
                 enhancedPrompt: enhancedPrompt,
                 tools: requestTooling.tools,
+                localAgentPrompt: localAgentContext?.promptContent,
                 enableMemory: requestTooling.policy.enableMemory,
                 enableMemoryWrite: requestTooling.policy.enableMemoryWrite,
                 enableMemoryActiveRetrieval: requestTooling.policy.enableMemoryActiveRetrieval,
@@ -254,6 +299,7 @@ extension ChatService {
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 currentAudioAttachment: currentAudioAttachment,
+                currentImageAttachments: currentImageAttachments,
                 currentFileAttachments: currentFileAttachments
             )
         }
@@ -277,31 +323,13 @@ extension ChatService {
         }
     }
 
-    private func shouldRetryMessageAsImageGeneration(
-        _ message: ChatMessage,
-        anchorUserIndex: Int,
-        in messages: [ChatMessage]
-    ) -> Bool {
-        if let runnableModel = selectedModelSubject.value,
-           shouldRouteMessageToImageGeneration(using: runnableModel) {
-            return true
-        }
-
-        if message.role != .user,
-           message.imageFileNames?.isEmpty == false {
-            return true
-        }
-
-        let roundEndIndex = responseRoundEndIndex(in: messages, anchorUserIndex: anchorUserIndex)
-        guard anchorUserIndex < roundEndIndex else { return false }
-        return messages[(anchorUserIndex + 1)..<roundEndIndex].contains { candidate in
-            candidate.role != .user && candidate.imageFileNames?.isEmpty == false
-        }
+    private func shouldRetryMessageAsImageGeneration() -> Bool {
+        guard let runnableModel = selectedModelSubject.value else { return false }
+        return shouldRouteMessageToImageGeneration(using: runnableModel)
     }
 
     private func retryImageGenerationMessage(
-        messages: [ChatMessage],
-        anchorUserIndex: Int,
+        preparedRetry: PreparedMessageRetry,
         currentSession: ChatSession
     ) async {
         guard let runnableModel = selectedModelSubject.value else {
@@ -314,67 +342,62 @@ extension ChatService {
         }
 
         guard shouldRouteMessageToImageGeneration(using: runnableModel) else {
-            let reason = NSLocalizedString("当前模型不可用于生图，请在模型设置中将用途设为图片生成，或在模型能力中开启可生成图片。", comment: "模型没有生图能力提示")
+            let reason = NSLocalizedString("当前模型不可用于独立生图，请在模型设置中将模型类型设为图像。", comment: "模型不是图像类型提示")
             addErrorMessage(reason, sessionID: currentSession.id)
             emitSessionRequestStatus(.error, sessionID: currentSession.id)
             return
         }
 
-        guard let adapter = adapters[runnableModel.provider.apiFormat] else {
+        guard let adapter = adapters[runnableModel.effectiveAPIFormat] else {
             let reason = String(
                 format: NSLocalizedString("错误: 找不到适用于 '%@' 格式的 API 适配器。", comment: "Missing API adapter error"),
-                runnableModel.provider.apiFormat
+                runnableModel.effectiveAPIFormat
             )
             addErrorMessage(reason, sessionID: currentSession.id)
             emitSessionRequestStatus(.error, sessionID: currentSession.id)
             return
         }
 
-        let originalPrompt = messages[anchorUserIndex].content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !originalPrompt.isEmpty else {
+        let visibleRequestMessages = ChatResponseAttemptSupport.visibleMessages(
+            from: preparedRetry.requestMessages
+        )
+        let prompt = preparedRetry.representativeUserMessage?.content
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !prompt.isEmpty else {
             let reason = NSLocalizedString("错误: 生图提示词不能为空。", comment: "Image generation prompt empty")
             addErrorMessage(reason, sessionID: currentSession.id)
             emitSessionRequestStatus(.error, sessionID: currentSession.id)
             return
         }
 
-        var updatedMessages = messages
-        let responseAttempt = prepareRetryAttemptMetadata(
-            in: &updatedMessages,
-            anchorUserIndex: anchorUserIndex
-        )
-        let retryRequestedAt = Date()
-        let loadingMessage = ChatMessage(
-            role: .assistant,
-            content: "",
-            requestedAt: retryRequestedAt,
-            responseGroupID: responseAttempt.groupID,
-            responseAttemptID: responseAttempt.attemptID,
-            responseAttemptIndex: responseAttempt.attemptIndex,
-            selectedResponseAttemptID: responseAttempt.attemptID
-        )
-        let insertionIndex = responseRoundEndIndex(in: updatedMessages, anchorUserIndex: anchorUserIndex)
-        updatedMessages.insert(loadingMessage, at: insertionIndex)
-        let messageToSend = updatedMessages[anchorUserIndex]
-        retryTargetMessageID = nil
-        retryTargetOriginalAssistantMessage = nil
-
-        persistAndPublishMessages(updatedMessages, for: currentSession.id)
-
-        let prompt = messageToSend.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        let referenceImages = (messageToSend.imageFileNames ?? []).compactMap { fileName in
+        let explicitReferenceImages = currentTurnUserMessages(
+            containing: preparedRetry.representativeUserMessage?.id,
+            in: visibleRequestMessages
+        ).flatMap(\.modelVisibleImageFileNames).compactMap { fileName in
             let attachment = loadImageAttachmentFromStorage(fileName: fileName)
             if attachment != nil {
                 logger.info("重试生图时恢复参考图: \(fileName)")
             }
             return attachment
         }
+        let referenceImages: [ImageAttachment]
+        if explicitReferenceImages.isEmpty, runnableModel.model.supportsVisionInput {
+            let userMessageID = preparedRetry.representativeUserMessage?.id
+            let historyPrefix = userMessageID.flatMap { messageID in
+                visibleRequestMessages.firstIndex(where: { $0.id == messageID })
+            }.map { Array(visibleRequestMessages[..<$0]) } ?? visibleRequestMessages
+            referenceImages = latestAssistantImageReference(
+                in: historyPrefix
+            ).map { [$0] } ?? []
+        } else {
+            referenceImages = explicitReferenceImages
+        }
 
         emitSessionRequestStatus(.started, sessionID: currentSession.id)
         imageGenerationStatusSubject.send(
             .started(
                 sessionID: currentSession.id,
-                loadingMessageID: loadingMessage.id,
+                loadingMessageID: preparedRetry.loadingMessage.id,
                 prompt: prompt,
                 startedAt: Date(),
                 referenceCount: referenceImages.count
@@ -386,10 +409,10 @@ extension ChatService {
             RequestExecutionContext(
                 token: requestToken,
                 task: nil,
-                loadingMessageID: loadingMessage.id,
+                loadingMessageID: preparedRetry.loadingMessage.id,
                 imageGenerationContext: ImageGenerationContext(
                     sessionID: currentSession.id,
-                    loadingMessageID: loadingMessage.id,
+                    loadingMessageID: preparedRetry.loadingMessage.id,
                     prompt: prompt
                 )
             ),
@@ -422,7 +445,7 @@ extension ChatService {
                 runnableModel: runnableModel,
                 prompt: prompt,
                 referenceImages: referenceImages,
-                loadingMessageID: loadingMessage.id,
+                loadingMessageID: preparedRetry.loadingMessage.id,
                 currentSessionID: currentSession.id,
                 requestLogContext: requestLogContext
             )
@@ -446,6 +469,21 @@ extension ChatService {
         }
     }
 
+    private func currentTurnUserMessages(
+        containing messageID: UUID?,
+        in messages: [ChatMessage]
+    ) -> [ChatMessage] {
+        guard let messageID,
+              let turn = ChatConversationTurnSupport.turn(
+                containingMessageID: messageID,
+                in: messages
+              ),
+              let userRange = turn.userRange else {
+            return []
+        }
+        return Array(messages[userRange])
+    }
+
     public func retryLastMessage(
         aiTemperature: Double,
         aiTopP: Double,
@@ -463,10 +501,9 @@ extension ChatService {
         enableResponseSpeedMetrics: Bool = true
     ) async {
         let messages = messagesForSessionSubject.value
-        guard let lastUserMessageIndex = messages.lastIndex(where: { $0.role == .user }) else { return }
-        let lastUserMessage = messages[lastUserMessageIndex]
+        guard let lastMessage = ChatResponseAttemptSupport.visibleMessages(from: messages).last else { return }
         await retryMessage(
-            lastUserMessage,
+            lastMessage,
             aiTemperature: aiTemperature,
             aiTopP: aiTopP,
             systemPrompt: systemPrompt,

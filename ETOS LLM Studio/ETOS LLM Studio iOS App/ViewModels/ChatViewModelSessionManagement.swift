@@ -16,6 +16,34 @@ extension ChatViewModel {
         chatService.deleteMessage(message)
     }
 
+    /// 正文与图片附件是同一条记录中的独立展示部分；有图片时只清正文气泡。
+    func deleteTextBubbleOrMessage(_ message: ChatMessage) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if let sessionID = currentSession?.id {
+                await chatService.cancelRequestIfGenerating(
+                    messageID: message.id,
+                    in: sessionID
+                )
+            }
+            guard let currentMessage = findMessage(by: message.id) else { return }
+            guard !(currentMessage.imageFileNames ?? []).isEmpty else {
+                deleteAllVersions(of: currentMessage)
+                return
+            }
+
+            var updatedMessage = currentMessage
+            updatedMessage.clearContentVersions()
+            updatedMessage.reasoningContent = nil
+            updatedMessage.reasoningProviderSpecificFields = nil
+            updatedMessage.providerResponseMetadata = nil
+            updatedMessage.toolCalls = nil
+            updatedMessage.toolCallsPlacement = nil
+            updatedMessage.fullErrorContent = nil
+            updateMessage(updatedMessage)
+        }
+    }
+
     func deleteMessages(withIDs messageIDs: Set<UUID>) {
         chatService.deleteMessages(withIDs: messageIDs)
     }
@@ -29,14 +57,14 @@ extension ChatViewModel {
         chatService.deleteSessions(sessions)
     }
 
-    func messageCount(for session: ChatSession) -> Int {
+    func messageCount(for session: ChatSession) async -> Int {
         if session.id == currentSession?.id {
             return allMessagesForSession.count
         }
         if let temporaryCount = chatService.temporaryChatMessageCount(for: session.id) {
             return temporaryCount
         }
-        return Persistence.loadMessageCount(for: session.id)
+        return await Persistence.loadMessageCountAsync(for: session.id)
     }
 
     @discardableResult
@@ -70,8 +98,18 @@ extension ChatViewModel {
         chatService.isTemporaryChatEnabled(for: sessionID)
     }
 
-    func enableTemporaryChat() {
-        chatService.enableTemporaryChat()
+    func temporaryChatMemoryMode(for sessionID: UUID?) -> TemporaryChatMemoryMode? {
+        chatService.temporaryChatMemoryMode(for: sessionID)
+    }
+
+    func performTemporaryChatTap(
+        preferredMemoryMode: TemporaryChatMemoryMode,
+        canEnable: Bool
+    ) -> TemporaryChatTapOutcome {
+        chatService.performTemporaryChatTap(
+            preferredMemoryMode: preferredMemoryMode,
+            canEnable: canEnable
+        )
     }
 
     @discardableResult
@@ -91,8 +129,7 @@ extension ChatViewModel {
         let coordinator = DailyPulseDeliveryCoordinator.shared
         await DailyPulseManager.shared.generateForScheduledDeliveryIfNeeded(
             reminderEnabled: coordinator.reminderEnabled,
-            reminderHour: coordinator.reminderHour,
-            reminderMinute: coordinator.reminderMinute,
+            deliveryTimes: coordinator.deliveryTimes,
             referenceDate: referenceDate
         )
     }
@@ -223,10 +260,22 @@ extension ChatViewModel {
         }
     }
 
+    func retryVideoAnalysis(
+        _ message: ChatMessage,
+        fileName: String
+    ) async throws -> VideoAnalysisResult {
+        try await chatService.retryVideoAnalysis(
+            messageID: message.id,
+            fileName: fileName,
+            sessionID: currentSession?.id
+        )
+    }
+
     func rewriteMessage(
         _ message: ChatMessage,
         instruction: String,
-        referenceVersions: [MessageRewriteReferenceVersion] = []
+        referenceVersions: [MessageRewriteReferenceVersion] = [],
+        selectionTarget: MessageRewriteSelectionTarget? = nil
     ) {
         let sessionID = currentSession?.id
         Task {
@@ -236,7 +285,8 @@ extension ChatViewModel {
                     instruction: instruction,
                     aiTemperature: aiTemperature,
                     sessionID: sessionID,
-                    referenceVersions: referenceVersions
+                    referenceVersions: referenceVersions,
+                    selectionTarget: selectionTarget
                 )
             } catch is CancellationError {
             } catch {
@@ -372,8 +422,7 @@ extension ChatViewModel {
     }
 
     func deleteResponseAttemptVersion(at index: Int, of message: ChatMessage) -> Bool {
-        guard let groupID = message.responseGroupID,
-              message.responseAttemptID != nil else {
+        guard let groupID = responseAttemptVersionInfo(for: message)?.responseGroupID else {
             return false
         }
 

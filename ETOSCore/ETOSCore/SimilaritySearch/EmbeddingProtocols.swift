@@ -56,18 +56,6 @@ public protocol DistanceMetricProtocol {
     func distance(between firstEmbedding: [Float], and secondEmbedding: [Float]) -> Float
 }
 
-/// 文本分割器协议
-public protocol TextSplitterProtocol {
-    /// 将输入文本分割成块的元组和可选的词元ID。
-    ///
-    /// - Parameters:
-    ///   - text: 要分块的输入文本。
-    ///   - chunkSize: 每个块的词元数。
-    ///   - overlapSize: 连续块之间的重叠词元数。
-    /// - Returns: 一个包含分块文本数组和可选的词元ID数组的元组。
-    func split(text: String, chunkSize: Int, overlapSize: Int) -> ([String], [[String]]?)
-}
-
 /// 分词器协议
 public protocol TokenizerProtocol {
     /// 将文本分词

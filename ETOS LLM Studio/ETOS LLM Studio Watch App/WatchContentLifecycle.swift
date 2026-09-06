@@ -26,10 +26,18 @@ extension ContentView {
     }
 
     func openDailyPulse() {
+        _ = notificationCenter.consumePendingRoute()
         isSettingsPresented = true
         settingsDestination = nil
         DispatchQueue.main.async {
-            settingsDestination = .dailyPulse
+            if let selection = notificationCenter.consumePendingDailyPulseSelection() {
+                settingsDestination = .dailyPulseCard(
+                    runID: selection.runID,
+                    cardID: selection.cardID
+                )
+            } else {
+                settingsDestination = .dailyPulse
+            }
         }
     }
 
@@ -42,6 +50,18 @@ extension ContentView {
         _ = notificationCenter.consumePendingRoute()
         guard let sessionID = notificationCenter.consumePendingChatSessionID() else { return }
         openChatSession(sessionID: sessionID)
+    }
+
+    func openContextCompressionFromNotification() {
+        _ = notificationCenter.consumePendingRoute()
+        guard let sessionID = notificationCenter.pendingContextCompressionSessionID,
+              let session = viewModel.chatSessions.first(where: { $0.id == sessionID }),
+              !session.isTemporary else {
+            return
+        }
+        openChatSession(sessionID: sessionID)
+        contextCompressionReminderSourceSession = session
+        _ = notificationCenter.consumePendingContextCompressionSessionID()
     }
 
     func openAchievementJournalFromNotification() {

@@ -110,6 +110,78 @@ struct AppLogCenterTests {
         #expect(output?.contains("已截断") == false)
     }
 
+    @Test("响应体默认隐藏模型文本但保留结构和用量")
+    func testResponseBodySanitizationHidesTextByDefault() {
+        let source = """
+        {
+          "id": "response-1",
+          "choices": [
+            {
+              "message": {
+                "role": "assistant",
+                "content": "这是模型回复原文"
+              }
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 12,
+            "completion_tokens": 8
+          }
+        }
+        """
+
+        let output = AppLogRedactor.sanitizeResponseBodyForLog(
+            source,
+            exposesMessageFields: false
+        )
+
+        #expect(output.contains("这是模型回复原文") == false)
+        #expect(output.contains("[已隐藏") == true)
+        #expect(output.contains("\"prompt_tokens\" : 12") == true)
+        #expect(output.contains("\"id\" : \"response-1\"") == true)
+    }
+
+    @Test("响应体明文开关开启后保留文本并隐藏 Base64")
+    func testResponseBodySanitizationKeepsTextAndHidesBinary() {
+        let source = """
+        {
+          "output_text": "完整回复",
+          "data": "SGVsbG8=",
+          "image_url": "data:image/png;base64,abcdef"
+        }
+        """
+
+        let output = AppLogRedactor.sanitizeResponseBodyForLog(
+            source,
+            exposesMessageFields: true
+        )
+
+        #expect(output.contains("完整回复") == true)
+        #expect(output.contains("SGVsbG8=") == false)
+        #expect(output.contains("data:image/png;base64,abcdef") == false)
+        #expect(output.contains("[二进制内容已隐藏") == true)
+    }
+
+    @Test("流式响应逐行脱敏并保留协议边界")
+    func testStreamingResponseSanitization() {
+        let source = """
+        event: message
+        data: {"choices":[{"delta":{"content":"流式秘密"}}]}
+
+        data: [DONE]
+        """
+
+        let output = AppLogRedactor.sanitizeResponseBodyForLog(
+            source,
+            exposesMessageFields: false
+        )
+
+        #expect(output.contains("event: message"))
+        #expect(output.contains("data: [DONE]"))
+        #expect(output.contains("流式秘密") == false)
+        #expect(output.contains("[已隐藏") == true)
+    }
+
     @Test("日志长文本会按四千字符分页")
     func testAppLogTextPaginatorSplitsByFourThousandCharacters() {
         let text = String(repeating: "a", count: 8_001)
@@ -219,6 +291,98 @@ struct AppLogCenterTests {
 
         #expect(buffer.values.count == 3)
         #expect(buffer.values.map(\.message) == ["#3", "#4", "#5"])
+    }
+
+    @Test("请求事务编码一次并按同一事件投影两种格式")
+    func testRequestTransactionUsesSingleCanonicalEvent() throws {
+        let event = AppLogEvent(
+            timestamp: Date(timeIntervalSince1970: 1_800_000_000),
+            channel: .developer,
+            level: .info,
+            category: "HTTP",
+            action: "success",
+            message: "POST /v1/chat → 200",
+            payload: [
+                "method": "POST",
+                "request_body": "安全请求体",
+                "response_body": "安全响应体",
+                "request_id": "request-1",
+                "token_usage": #"{"total_tokens":9}"#
+            ],
+            presentation: .requestTransaction
+        )
+
+        let user = try #require(event.presented(in: .user))
+        let developer = try #require(event.presented(in: .developer))
+
+        #expect(user.id == event.id)
+        #expect(developer.id == event.id)
+        #expect(user.presentedID != developer.presentedID)
+        #expect(user.payload?["request_body"] == "安全请求体")
+        #expect(user.payload?["response_body"] == "安全响应体")
+        #expect(user.payload?["request_id"] == nil)
+        #expect(user.payload?["token_usage"] == nil)
+        #expect(developer.payload?["request_id"] == "request-1")
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(AppLogEvent.self, from: data)
+        #expect(decoded == event)
+    }
+
+    @Test("旧日志缺少投影字段时仍可读取")
+    func testLegacyEventWithoutPresentationStillDecodes() throws {
+        let legacyJSON = #"""
+        {
+          "id": "EFC62D61-DBAE-454B-B68B-BECB50A1B309",
+          "timestamp": "2026-07-26T12:00:00Z",
+          "channel": "user",
+          "level": "info",
+          "category": "操作",
+          "action": "旧日志",
+          "message": "[已隐藏]"
+        }
+        """#
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let event = try decoder.decode(AppLogEvent.self, from: Data(legacyJSON.utf8))
+
+        #expect(event.presentation == nil)
+        #expect(event.channel == .user)
+        #expect(event.presented(in: .developer) == nil)
+    }
+
+    @Test("清除一种请求日志格式会保留另一种格式")
+    func testClearingOneTransactionPresentationKeepsTheOther() throws {
+        let event = AppLogEvent(
+            channel: .developer,
+            level: .info,
+            category: "HTTP",
+            action: "success",
+            message: "POST /v1/chat → 200",
+            payload: [
+                "request_body": "安全请求体",
+                "request_id": "request-1"
+            ],
+            presentation: .requestTransaction
+        )
+
+        let withoutUser = try #require(event.removingVisibility(in: .user))
+        #expect(withoutUser.channel == .developer)
+        #expect(withoutUser.presentation == nil)
+        #expect(withoutUser.payload?["request_id"] == "request-1")
+        #expect(withoutUser.presented(in: .user) == nil)
+
+        let withoutDeveloper = try #require(event.removingVisibility(in: .developer))
+        #expect(withoutDeveloper.channel == .user)
+        #expect(withoutDeveloper.presentation == nil)
+        #expect(withoutDeveloper.payload?["request_body"] == "安全请求体")
+        #expect(withoutDeveloper.payload?["request_id"] == nil)
+        #expect(withoutDeveloper.presented(in: .developer) == nil)
     }
 
     @Test("按天目录持久化仅保留最近 7 天")
@@ -346,6 +510,114 @@ struct AppLogCenterTests {
         #expect(dayFolders.first?.runs.first?.totalEventCount == 3)
     }
 
+    @Test("清除全部日志会等待先前写入且不会被旧任务恢复")
+    @MainActor
+    func testClearAllSerializesPendingPersistence() async throws {
+        let fileManager = FileManager.default
+        let tempDirectory = fileManager.temporaryDirectory
+            .appendingPathComponent("app-log-clear-order-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: tempDirectory) }
+
+        let store = AppLogFileStore(baseDirectory: tempDirectory)
+        let center = AppLogCenter(fileStore: store, shouldAutoLoad: false)
+
+        center.logDeveloper(
+            category: "HTTP",
+            action: "旧请求",
+            message: "清除前等待落盘的请求日志"
+        )
+        center.clearAll()
+        await center.waitForPendingPersistence()
+
+        let persistedEvents = await store.loadRecentEvents()
+        #expect(persistedEvents.isEmpty)
+        #expect(center.mergedLogs.isEmpty)
+        #expect(center.logDayFolders.isEmpty)
+    }
+
+    @Test("追加日志直接返回增量运行摘要")
+    func testAppendReturnsIncrementalRunSummary() async throws {
+        let fileManager = FileManager.default
+        let tempDirectory = fileManager.temporaryDirectory
+            .appendingPathComponent("app-log-incremental-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: tempDirectory) }
+
+        let store = AppLogFileStore(baseDirectory: tempDirectory, retentionDays: 7)
+        let transaction = AppLogEvent(
+            channel: .developer,
+            level: .info,
+            category: "HTTP",
+            action: "success",
+            message: "POST /v1/chat → 200",
+            payload: ["method": "POST", "request_id": "request-1"],
+            presentation: .requestTransaction
+        )
+        let userEvent = AppLogEvent(
+            channel: .user,
+            level: .info,
+            category: "操作",
+            action: "测试",
+            message: "[已隐藏]"
+        )
+
+        let firstResult = await store.append(transaction)
+        let secondResult = await store.append(userEvent)
+        let first = try #require(firstResult)
+        let second = try #require(secondResult)
+
+        #expect(first.totalEventCount == 1)
+        #expect(first.developerEventCount == 1)
+        #expect(first.userEventCount == 1)
+        #expect(second.totalEventCount == 2)
+        #expect(second.developerEventCount == 1)
+        #expect(second.userEventCount == 2)
+        #expect(second.fileSizeBytes > first.fileSizeBytes)
+
+        let events = await store.loadEvents(for: second)
+        #expect(events.count == 2)
+        #expect(events.first?.presentation == .requestTransaction)
+    }
+
+    @Test("文件存储清除一种请求日志格式后保留另一种")
+    func testFileStoreClearKeepsOtherTransactionPresentation() async throws {
+        let fileManager = FileManager.default
+        let tempDirectory = fileManager.temporaryDirectory
+            .appendingPathComponent("app-log-clear-presentation-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: tempDirectory) }
+
+        let store = AppLogFileStore(baseDirectory: tempDirectory, retentionDays: 7)
+        let transaction = AppLogEvent(
+            channel: .developer,
+            level: .info,
+            category: "HTTP",
+            action: "success",
+            message: "POST /v1/chat → 200",
+            payload: [
+                "request_body": "安全请求体",
+                "request_id": "request-1"
+            ],
+            presentation: .requestTransaction
+        )
+
+        let appended = try #require(await store.append(transaction))
+        await store.clear(channel: .user)
+
+        let developerOnlyEvents = await store.loadEvents(for: appended)
+        let developerOnly = try #require(developerOnlyEvents.first)
+        #expect(developerOnlyEvents.count == 1)
+        #expect(developerOnly.presentation == nil)
+        #expect(developerOnly.channel == .developer)
+        #expect(developerOnly.payload?["request_id"] == "request-1")
+        #expect(developerOnly.presented(in: .user) == nil)
+
+        await store.clear(channel: .developer)
+        let clearedEvents = await store.loadEvents(for: appended)
+        #expect(clearedEvents.isEmpty)
+    }
+
     @Test("可以删除单个运行日志文件")
     func testDeleteSingleRunFile() async throws {
         let fileManager = FileManager.default
@@ -372,7 +644,8 @@ struct AppLogCenterTests {
 
         await store.deleteRunFile(relativePath: "2026-03-07/run-a.jsonl")
 
-        let folders = await store.loadDayFolders()
+        let now = try #require(ISO8601DateFormatter().date(from: "2026-03-08T12:00:00Z"))
+        let folders = await store.loadDayFolders(now: now)
         #expect(folders.count == 1)
         #expect(folders.first?.day == "2026-03-07")
         #expect(folders.first?.runs.count == 1)
@@ -406,7 +679,8 @@ struct AppLogCenterTests {
 
         await store.deleteDayFolder(day: "2026-03-07")
 
-        let folders = await store.loadDayFolders()
+        let now = try #require(ISO8601DateFormatter().date(from: "2026-03-08T12:00:00Z"))
+        let folders = await store.loadDayFolders(now: now)
         #expect(folders.count == 1)
         #expect(folders.first?.day == "2026-03-08")
     }

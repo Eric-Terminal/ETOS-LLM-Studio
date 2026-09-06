@@ -18,7 +18,11 @@ struct MCPServerDetailView: View {
     @State private var showingDeleteConfirmation = false
 
     private var status: MCPServerStatus {
-        manager.status(for: server)
+        manager.status(for: currentServer)
+    }
+
+    private var currentServer: MCPServerConfiguration {
+        manager.servers.first(where: { $0.id == server.id }) ?? server
     }
 
     var body: some View {
@@ -101,11 +105,9 @@ struct MCPServerDetailView: View {
                 }
             }
         }
-        .sheet(isPresented: $isEditing) {
-            NavigationStack {
-                MCPServerEditor(existingServer: server) { updated in
-                    manager.save(server: updated)
-                }
+        .navigationDestination(isPresented: $isEditing) {
+            MCPServerEditor(existingServer: currentServer) { updated in
+                manager.save(server: updated)
             }
         }
         .confirmationDialog(NSLocalizedString("确定要删除此服务器？", comment: ""), isPresented: $showingDeleteConfirmation) {
@@ -115,6 +117,38 @@ struct MCPServerDetailView: View {
             }
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) { }
         }
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: GuidePageID(rawValue: "mcp-server-\(server.id.uuidString.lowercased())"),
+                title: currentServer.displayName,
+                documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
+                tools: [
+                    GuidePageTool(definition: GuideToolCatalog.updateMCPServer, access: .proposeChange)
+                ]
+            ),
+            snapshot: {
+                GuideMCPServerSettingsSupport.snapshot(
+                    server: currentServer,
+                    status: manager.status(for: currentServer)
+                )
+            },
+            buildProposal: { call, _ in
+                try GuideMCPServerSettingsSupport.buildProposal(
+                    call: call,
+                    pageID: GuidePageID(rawValue: "mcp-server-\(server.id.uuidString.lowercased())"),
+                    server: currentServer
+                )
+            },
+            execute: { proposal in
+                let application = try GuideMCPServerSettingsSupport.apply(
+                    proposal,
+                    to: currentServer
+                )
+                manager.save(server: application.server)
+                manager.connectSelectedServersIfNeeded()
+                return application.execution
+            }
+        )
     }
 
     private func bindingForSelection() -> Binding<Bool> {
@@ -224,6 +258,26 @@ struct MCPBuiltInServerRestoreView: View {
             }
         }
         .navigationTitle(NSLocalizedString("内置工具", comment: "Built-in tools section title"))
+        .guideSettingsPageContext(
+            id: "mcp-built-in-server-restore",
+            title: NSLocalizedString("内置工具", comment: "内置 MCP 恢复向导上下文标题"),
+            documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
+            settings: [
+                .readOnly(
+                    "restorable_servers",
+                    label: NSLocalizedString("可恢复的内置服务器", comment: "内置 MCP 恢复向导字段"),
+                    value: {
+                        .array(manager.restorableBuiltInServers.map { server in
+                            .dictionary([
+                                "id": .string(server.id.uuidString.lowercased()),
+                                "name": .string(server.displayName),
+                                "notes": .string(server.notes ?? "")
+                            ])
+                        })
+                    }
+                )
+            ]
+        )
     }
 }
 
@@ -269,6 +323,59 @@ struct MCPToolSettingsDetailView: View {
             }
         }
         .navigationTitle(NSLocalizedString("工具设置", comment: ""))
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: guidePageID,
+                title: String(
+                    format: NSLocalizedString("MCP 工具：%@", comment: "MCP 工具向导上下文标题"),
+                    tool.toolId
+                ),
+                documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
+                tools: [
+                    GuidePageTool(definition: GuideToolCatalog.updateMCPTool, access: .proposeChange)
+                ]
+            ),
+            snapshot: {
+                guard let server = currentServer else { return .empty }
+                return GuideMCPToolSettingsSupport.snapshot(server: server, tool: tool)
+            },
+            buildProposal: { call, _ in
+                guard let server = currentServer else { throw GuideError.invalidToolArguments }
+                return try GuideMCPToolSettingsSupport.buildProposal(
+                    call: call,
+                    pageID: guidePageID,
+                    server: server,
+                    tool: tool
+                )
+            },
+            execute: { proposal in
+                guard let server = currentServer else { throw GuideError.invalidToolArguments }
+                let application = try GuideMCPToolSettingsSupport.apply(
+                    proposal,
+                    server: server,
+                    tool: tool
+                )
+                manager.setToolEnabled(
+                    serverID: serverID,
+                    toolId: tool.toolId,
+                    isEnabled: application.enabled
+                )
+                manager.setToolApprovalPolicy(
+                    serverID: serverID,
+                    toolId: tool.toolId,
+                    policy: application.approvalPolicy
+                )
+                return application.execution
+            }
+        )
+    }
+
+    private var guidePageID: GuidePageID {
+        GuidePageID(rawValue: "mcp-tool-\(serverID.uuidString.lowercased())-\(tool.toolId)")
+    }
+
+    private var currentServer: MCPServerConfiguration? {
+        manager.servers.first(where: { $0.id == serverID })
     }
 
     private var toolBinding: Binding<Bool> {

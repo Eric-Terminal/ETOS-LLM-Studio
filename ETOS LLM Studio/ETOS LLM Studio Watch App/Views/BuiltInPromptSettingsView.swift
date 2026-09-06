@@ -13,6 +13,7 @@ struct BuiltInPromptSettingsView: View {
     var body: some View {
         BuiltInPromptOverviewListView()
             .navigationTitle(NSLocalizedString("提示词设置", comment: "Built-in prompt settings title"))
+            .watchGuideEntry()
     }
 }
 
@@ -41,6 +42,25 @@ private struct BuiltInPromptOverviewListView: View {
                 Text(NSLocalizedString("分类", comment: "Built-in prompt settings section"))
             }
         }
+        .guideSettingsPageContext(
+            id: "settings-built-in-prompts",
+            title: NSLocalizedString("提示词设置", comment: "内置提示词向导上下文标题"),
+            documents: [GuideDocumentReference(id: "built-in-prompts", title: "Built-in Prompts")],
+            settings: [
+                .readOnly(
+                    "categories",
+                    label: NSLocalizedString("提示词分类", comment: "内置提示词向导字段"),
+                    value: {
+                        .array(BuiltInPromptCategory.allCases.map { category in
+                            .dictionary([
+                                "id": .string(category.rawValue),
+                                "title": .string(category.title)
+                            ])
+                        })
+                    }
+                )
+            ]
+        )
     }
 }
 
@@ -75,6 +95,29 @@ private struct BuiltInPromptCategoryListView: View {
             }
         }
         .navigationTitle(category.title)
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "settings-built-in-prompts-\(category.rawValue)"),
+            title: category.title,
+            documents: [GuideDocumentReference(id: "built-in-prompts", title: "Built-in Prompts")],
+            settings: [
+                .readOnly(
+                    "templates",
+                    label: NSLocalizedString("提示词模板", comment: "内置提示词分类向导字段"),
+                    value: {
+                        .array(prompts.map { prompt in
+                            .dictionary([
+                                "id": .string(prompt.id.rawValue),
+                                "title": .string(prompt.title),
+                                "detail": .string(prompt.detail),
+                                "is_customized": .bool(prompt.isCustomized),
+                                "variables": .array(prompt.variables.map { .string($0.token) })
+                            ])
+                        })
+                    }
+                )
+            ]
+        )
+        .watchGuideEntry()
         .task {
             await reload()
         }
@@ -179,6 +222,13 @@ private struct BuiltInPromptEditorView: View {
             }
         }
         .navigationTitle(snapshot?.title ?? NSLocalizedString("提示词", comment: "Built-in prompt editor title"))
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "settings-built-in-prompt-\(promptID.rawValue)"),
+            title: snapshot?.title ?? NSLocalizedString("提示词", comment: "内置提示词编辑器向导上下文标题"),
+            documents: [GuideDocumentReference(id: "built-in-prompts", title: "Built-in Prompts")],
+            settings: editorGuideSettings
+        )
+        .watchGuideEntry()
         .task {
             await reload()
         }
@@ -193,6 +243,49 @@ private struct BuiltInPromptEditorView: View {
                 .accessibilityLabel(NSLocalizedString("保存", comment: "Built-in prompt save button"))
             }
         }
+    }
+
+    private var editorGuideSettings: [GuidePageSetting] {
+        [
+            .readOnly(
+                "prompt_id",
+                label: NSLocalizedString("提示词 ID", comment: "内置提示词编辑器向导字段"),
+                value: { .string(promptID.rawValue) }
+            ),
+            .string(
+                "template",
+                label: NSLocalizedString("模板", comment: "内置提示词编辑器向导字段"),
+                get: { draft },
+                set: { draft = $0 }
+            ),
+            .readOnly(
+                "is_customized",
+                label: NSLocalizedString("自定义状态", comment: "内置提示词编辑器向导字段"),
+                value: { .bool(snapshot?.isCustomized ?? false) }
+            ),
+            .readOnly(
+                "available_variables",
+                label: NSLocalizedString("可用变量", comment: "内置提示词编辑器向导字段"),
+                value: {
+                    .array((snapshot?.variables ?? []).map { variable in
+                        .dictionary([
+                            "token": .string(variable.token),
+                            "description": .string(variable.description)
+                        ])
+                    })
+                }
+            ),
+            .readOnly(
+                "default_template",
+                label: NSLocalizedString("当前语言默认模板", comment: "内置提示词编辑器向导字段"),
+                value: { .string(snapshot?.defaultTemplate ?? "") }
+            ),
+            .readOnly(
+                "requires_save",
+                label: NSLocalizedString("应用方式", comment: "向导设置字段"),
+                value: { .string(NSLocalizedString("修改后需要保存", comment: "向导草稿应用方式")) }
+            )
+        ]
     }
 
     private func reload() async {

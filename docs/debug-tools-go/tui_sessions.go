@@ -689,10 +689,23 @@ func sessionInfoText(session map[string]any) string {
 	if strings.TrimSpace(asString(session["folderID"])) != "" {
 		parts = append(parts, "文件夹")
 	}
-	if asBool(session["worldbookContextIsolationEnabled"]) {
-		parts = append(parts, "隔离")
+	if sessionContextIsolationEnabled(session, "memoryContextIsolationEnabled") {
+		parts = append(parts, "屏蔽记忆")
+	}
+	if sessionContextIsolationEnabled(session, "toolContextIsolationEnabled") {
+		parts = append(parts, "屏蔽工具")
+	}
+	if sessionContextIsolationEnabled(session, "globalSystemPromptIsolationEnabled") {
+		parts = append(parts, "屏蔽全局提示词")
 	}
 	return truncateRunes(strings.Join(parts, " / "), 28)
+}
+
+func sessionContextIsolationEnabled(session map[string]any, key string) bool {
+	if value, exists := session[key]; exists {
+		return asBool(value)
+	}
+	return key != "globalSystemPromptIsolationEnabled" && asBool(session["worldbookContextIsolationEnabled"])
 }
 
 func sessionLorebookIDs(session map[string]any) []string {

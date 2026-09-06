@@ -164,7 +164,8 @@ public final class MCPClient {
                     Task {
                         try? await cancellationClient.cancelRequest(
                             requestID,
-                            reason: options.cancellationReason ?? "请求已超时"
+                            reason: options.cancellationReason
+                                ?? NSLocalizedString("请求已超时", comment: "MCP request timeout cancellation reason")
                         )
                     }
                 }
@@ -176,7 +177,8 @@ public final class MCPClient {
             Task {
                 try? await cancellationClient.cancelRequest(
                     requestID,
-                    reason: options.cancellationReason ?? "客户端已取消请求"
+                    reason: options.cancellationReason
+                        ?? NSLocalizedString("客户端已取消请求", comment: "MCP client cancellation reason")
                 )
             }
         }
@@ -378,7 +380,9 @@ private extension MCPClient {
         if capabilities.sampling != nil {
             await sdkClient.withSamplingHandler { [weak self] params in
                 guard let self, let samplingHandler = self.samplingHandler else {
-                    throw MCPError.internalError("客户端未启用 Sampling 能力")
+                    throw MCPError.internalError(
+                        NSLocalizedString("客户端未启用 Sampling 能力", comment: "MCP Sampling capability unavailable")
+                    )
                 }
                 let request = MCPSDKBridge.samplingRequest(from: params)
                 let response = try await samplingHandler.handleSamplingRequest(request)

@@ -35,6 +35,10 @@ extension ChatViewModel {
         chatService.activatedOCRModels
     }
 
+    var videoAnalysisModelOptions: [RunnableModel] {
+        chatService.activatedVideoAnalysisModels
+    }
+
     private func persistSpecializedModelIdentifier(_ identifier: String, for key: AppConfigKey) {
         AppConfigStore.persistSynchronously(.text(identifier), for: key)
     }
@@ -59,16 +63,6 @@ extension ChatViewModel {
         if speechModelIdentifier != newIdentifier {
             speechModelIdentifier = newIdentifier
         }
-    }
-
-    func setSelectedTTSModel(_ model: RunnableModel?) {
-        selectedTTSModel = model
-        let newIdentifier = model?.id ?? ""
-        persistSpecializedModelIdentifier(newIdentifier, for: .ttsModelIdentifier)
-        if ttsModelIdentifier != newIdentifier {
-            ttsModelIdentifier = newIdentifier
-        }
-        ttsManager.updateSelectedModel(model)
     }
 
     func setSelectedEmbeddingModel(_ model: RunnableModel?) {
@@ -138,24 +132,6 @@ extension ChatViewModel {
         selectedSpeechModel = nil
         persistSpecializedModelIdentifier("", for: .speechModelIdentifier)
         speechModelIdentifier = ""
-    }
-
-    func syncTTSModelSelection() {
-        if let match = ttsModels.first(where: { $0.id == ttsModelIdentifier }) {
-            selectedTTSModel = match
-            ttsManager.updateSelectedModel(match)
-            return
-        }
-        guard !ttsModelIdentifier.isEmpty else {
-            selectedTTSModel = nil
-            ttsManager.updateSelectedModel(nil)
-            return
-        }
-        guard !ttsModels.isEmpty else { return }
-        selectedTTSModel = nil
-        persistSpecializedModelIdentifier("", for: .ttsModelIdentifier)
-        ttsModelIdentifier = ""
-        ttsManager.updateSelectedModel(nil)
     }
 
     func syncEmbeddingModelSelection() {

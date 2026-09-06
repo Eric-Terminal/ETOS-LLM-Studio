@@ -11,6 +11,7 @@ import ETOSCore
 
 enum ChatQuickAction: String, CaseIterable, Identifiable {
     case temporaryChat
+    case contextCompression
     case settings
     case toolCenter
     case dailyPulse
@@ -22,6 +23,8 @@ enum ChatQuickAction: String, CaseIterable, Identifiable {
     case roleplay
     case worldbook
     case extendedFeatures
+    case browser
+    case localTerminal
 
     var id: String { rawValue }
 
@@ -29,6 +32,8 @@ enum ChatQuickAction: String, CaseIterable, Identifiable {
         switch self {
         case .temporaryChat:
             return NSLocalizedString("临时对话", comment: "聊天快捷功能标题")
+        case .contextCompression:
+            return NSLocalizedString("压缩为续聊", comment: "聊天快捷功能标题")
         case .settings:
             return NSLocalizedString("设置", comment: "聊天快捷功能标题")
         case .toolCenter:
@@ -51,12 +56,17 @@ enum ChatQuickAction: String, CaseIterable, Identifiable {
             return NSLocalizedString("世界书", comment: "聊天快捷功能标题")
         case .extendedFeatures:
             return NSLocalizedString("拓展功能", comment: "聊天快捷功能标题")
+        case .browser:
+            return NSLocalizedString("浏览器", comment: "聊天快捷功能标题")
+        case .localTerminal:
+            return NSLocalizedString("Linux 终端", comment: "聊天快捷功能标题")
         }
     }
 
     var systemImage: String {
         switch self {
         case .temporaryChat: return "eye.slash"
+        case .contextCompression: return "rectangle.compress.vertical"
         case .settings: return "gearshape"
         case .toolCenter: return "wrench"
         case .dailyPulse: return "sparkles"
@@ -68,12 +78,23 @@ enum ChatQuickAction: String, CaseIterable, Identifiable {
         case .roleplay: return "theatermasks"
         case .worldbook: return "book"
         case .extendedFeatures: return "ellipsis.circle"
+        case .browser: return "safari"
+        case .localTerminal: return "terminal"
         }
+    }
+
+    func systemImage(
+        isTemporaryChatEnabled: Bool,
+        memoryMode: TemporaryChatMemoryMode = .enabled
+    ) -> String {
+        guard self == .temporaryChat else { return systemImage }
+        guard isTemporaryChatEnabled else { return "eye" }
+        return memoryMode == .isolated ? "eye.slash.fill" : "eye.slash"
     }
 }
 
 enum ChatQuickActionSelection {
-    static let fallback: [ChatQuickAction] = [.temporaryChat]
+    static let fallback = ChatQuickAction.allCases
 
     static func decode(_ rawValue: String) -> [ChatQuickAction] {
         let selectedIDs = Set(rawValue.split(separator: ",").map(String.init))
@@ -85,6 +106,20 @@ enum ChatQuickActionSelection {
         let selectedIDs = Set(actions.map(\.rawValue))
         let normalized = ChatQuickAction.allCases.filter { selectedIDs.contains($0.rawValue) }
         return (normalized.isEmpty ? fallback : normalized).map(\.rawValue).joined(separator: ",")
+    }
+}
+
+enum ChatQuickActionFolderLayout {
+    static func estimatedColumnCount(actionCount: Int, usesAccessibilitySize: Bool) -> Int {
+        if usesAccessibilitySize {
+            return 2
+        }
+        return actionCount <= 4 ? 2 : 3
+    }
+
+    static func estimatedRowCount(actionCount: Int, columnCount: Int) -> Int {
+        guard actionCount > 0, columnCount > 0 else { return 0 }
+        return (actionCount + columnCount - 1) / columnCount
     }
 }
 
@@ -113,10 +148,56 @@ struct ChatQuickActionSettingsView: View {
                     .disabled(selectedActions.count == 1 && selectedActions.contains(action))
                 }
             } footer: {
-                Text(NSLocalizedString("选择一个功能时会直接执行；选择多个功能时，聊天页按钮会展开快捷菜单。至少保留一个功能。", comment: "聊天快捷功能设置说明"))
+                Text(NSLocalizedString("选择一个功能时会直接执行；选择多个功能时，聊天页按钮会展开自适应快捷文件夹。至少保留一个功能。", comment: "聊天快捷功能设置说明"))
             }
         }
         .navigationTitle(NSLocalizedString("聊天快捷功能", comment: "聊天快捷功能设置页标题"))
+        .guideSettingsPageContext(
+            id: "settings-chat-quick-actions",
+            title: NSLocalizedString("聊天快捷功能", comment: "聊天快捷功能向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            settings: [
+                .json(
+                    "actions",
+                    label: NSLocalizedString("已选择的快捷功能", comment: "聊天快捷功能向导字段"),
+                    schema: .dictionary([
+                        "type": .string("array"),
+                        "items": .dictionary([
+                            "type": .string("string"),
+                            "enum": .array(ChatQuickAction.allCases.map { .string($0.rawValue) })
+                        ]),
+                        "minItems": .int(1),
+                        "uniqueItems": .bool(true)
+                    ]),
+                    get: { .array(selectedActions.map { .string($0.rawValue) }) },
+                    normalize: { value in
+                        guard case .array(let items) = value, !items.isEmpty else { throw GuideError.invalidToolArguments }
+                        var seen = Set<ChatQuickAction>()
+                        let actions = try items.map { item -> ChatQuickAction in
+                            guard case .string(let rawValue) = item,
+                                  let action = ChatQuickAction(rawValue: rawValue),
+                                  seen.insert(action).inserted else {
+                                throw GuideError.invalidToolArguments
+                            }
+                            return action
+                        }
+                        return .array(actions.map { .string($0.rawValue) })
+                    },
+                    set: { value in
+                        guard case .array(let items) = value else { throw GuideError.invalidToolArguments }
+                        let actions = try items.map { item -> ChatQuickAction in
+                            guard case .string(let rawValue) = item,
+                                  let action = ChatQuickAction(rawValue: rawValue) else {
+                                throw GuideError.invalidToolArguments
+                            }
+                            return action
+                        }
+                        selectedActions = actions
+                        appConfig.chatQuickActionIDs = ChatQuickActionSelection.encode(actions)
+                    }
+                )
+            ]
+        )
         .onAppear(perform: reloadSelection)
         .onChange(of: appConfig.chatQuickActionIDs) { _, _ in
             reloadSelection()
@@ -142,27 +223,9 @@ extension ChatView {
     @ViewBuilder
     var navBarQuickActionButton: some View {
         if selectedChatQuickActions.count > 1 {
-            Menu {
-                ForEach(selectedChatQuickActions) { action in
-                    if action == .temporaryChat {
-                        Toggle(isOn: temporaryChatBinding) {
-                            Label(action.title, systemImage: singleQuickActionSystemImage(for: action))
-                        }
-                    } else {
-                        Button {
-                            performQuickAction(action)
-                        } label: {
-                            Label(action.title, systemImage: action.systemImage)
-                        }
-                    }
-                }
-            } label: {
-                navBarIconLabel(
-                    systemName: "ellipsis",
-                    accessibilityLabel: NSLocalizedString("快捷功能", comment: "聊天快捷菜单无障碍标签")
-                )
-            }
-            .buttonStyle(.plain)
+            Color.clear
+                .frame(width: navBarIconSize, height: navBarIconSize)
+                .accessibilityHidden(true)
         } else if let action = selectedChatQuickActions.first {
             Button {
                 performQuickAction(action)
@@ -173,52 +236,193 @@ extension ChatView {
                 )
             }
             .buttonStyle(.plain)
+            .disabled(!isQuickActionAvailable(action))
         }
     }
 
-    var temporaryChatBinding: Binding<Bool> {
-        Binding(
-            get: { isTemporaryChatEnabled },
-            set: { setTemporaryChatEnabled($0) }
-        )
+    func chatQuickActionFolderOverlay(viewportWidth: CGFloat) -> some View {
+        ZStack(alignment: .topTrailing) {
+            if isChatQuickActionFolderPresented {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        setChatQuickActionFolderPresented(false)
+                    }
+                    .accessibilityHidden(true)
+            }
+
+            ChatQuickActionFolderPanel(
+                actions: selectedChatQuickActions,
+                isTemporaryChatEnabled: isTemporaryChatEnabled,
+                temporaryChatMemoryMode: temporaryChatMemoryMode,
+                isTemporaryChatToggleAvailable: isQuickActionAvailable(.temporaryChat),
+                isPresented: isChatQuickActionFolderPresented,
+                collapsedSize: navBarIconSize,
+                expandedWidth: min(max(220, viewportWidth - 32), 420),
+                usesLiquidGlass: isLiquidGlassEnabled,
+                glassTintOpacity: appConfig.liquidGlassTintOpacity,
+                onTogglePresentation: {
+                    setChatQuickActionFolderPresented(!isChatQuickActionFolderPresented)
+                },
+                onPerform: performFolderQuickAction
+            )
+            .padding(.horizontal, 16)
+            .padding(.top, navBarVerticalPadding)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+    }
+
+    func setChatQuickActionFolderPresented(_ isPresented: Bool) {
+        if accessibilityReduceMotion {
+            isChatQuickActionFolderPresented = isPresented
+        } else {
+            withAnimation(.spring(response: 0.34, dampingFraction: 1)) {
+                isChatQuickActionFolderPresented = isPresented
+            }
+        }
     }
 
     func singleQuickActionSystemImage(for action: ChatQuickAction) -> String {
-        guard action == .temporaryChat, isTemporaryChatEnabled else {
-            return action.systemImage
-        }
-        return "eye.slash.fill"
+        action.systemImage(
+            isTemporaryChatEnabled: isTemporaryChatEnabled,
+            memoryMode: temporaryChatMemoryMode
+        )
     }
 
     func performQuickAction(_ action: ChatQuickAction) {
         if action == .temporaryChat {
-            setTemporaryChatEnabled(!isTemporaryChatEnabled)
+            guard isQuickActionAvailable(action) else { return }
+            performTemporaryChatTap()
+        } else if action == .contextCompression {
+            guard let session = viewModel.currentSession,
+                  !session.isTemporary,
+                  !viewModel.allMessagesForSession.isEmpty || continuationContext != nil else { return }
+            contextCompressionSourceSession = session
         } else {
+            if action == .localTerminal {
+                localTerminalInitialJobID = nil
+            }
             navigationDestination = action
         }
     }
 
-    func setTemporaryChatEnabled(_ isEnabled: Bool) {
-        if isEnabled {
-            viewModel.enableTemporaryChat()
-        } else {
-            viewModel.saveCurrentTemporarySession()
+    func performFolderQuickAction(_ action: ChatQuickAction) {
+        if action == .temporaryChat {
+            performQuickAction(action)
+            return
         }
-        isTemporaryChatEnabled = isEnabled
+
+        setChatQuickActionFolderPresented(false)
+        DispatchQueue.main.async {
+            performQuickAction(action)
+        }
+    }
+
+    func performTemporaryChatTap() {
+        let preferredMode: TemporaryChatMemoryMode = appConfig.temporaryChatMemoryEnabled
+            ? .enabled
+            : .isolated
+        let outcome = viewModel.performTemporaryChatTap(
+            preferredMemoryMode: preferredMode,
+            canEnable: isQuickActionAvailable(.temporaryChat)
+        )
+
+        let notice: ChatTransientNotice
+        switch outcome {
+        case .enabled(let memoryMode):
+            isTemporaryChatEnabled = true
+            temporaryChatMemoryMode = memoryMode
+            notice = ChatTransientNotice(
+                message: temporaryChatEnabledMessage(for: memoryMode),
+                systemImage: ChatQuickAction.temporaryChat.systemImage(
+                    isTemporaryChatEnabled: true,
+                    memoryMode: memoryMode
+                ),
+                tint: .accentColor
+            )
+        case .memoryModeChanged(let memoryMode):
+            appConfig.temporaryChatMemoryEnabled = memoryMode.isMemoryEnabled
+            isTemporaryChatEnabled = true
+            temporaryChatMemoryMode = memoryMode
+            notice = ChatTransientNotice(
+                message: temporaryChatMemoryModeChangedMessage(for: memoryMode),
+                systemImage: ChatQuickAction.temporaryChat.systemImage(
+                    isTemporaryChatEnabled: true,
+                    memoryMode: memoryMode
+                ),
+                tint: .accentColor
+            )
+        case .disabled:
+            isTemporaryChatEnabled = false
+            notice = ChatTransientNotice(
+                message: NSLocalizedString("临时对话已关闭", comment: "临时对话状态提示"),
+                systemImage: "eye",
+                tint: .secondary
+            )
+        case .unavailable:
+            return
+        }
+
+        showChatTransientNotice(
+            notice
+        )
     }
 
     func refreshTemporaryChatState() {
         isTemporaryChatEnabled = viewModel.isTemporaryChatEnabled(for: viewModel.currentSession?.id)
+        if let memoryMode = viewModel.temporaryChatMemoryMode(for: viewModel.currentSession?.id) {
+            temporaryChatMemoryMode = memoryMode
+        }
+    }
+
+    private func temporaryChatEnabledMessage(for memoryMode: TemporaryChatMemoryMode) -> String {
+        switch memoryMode {
+        case .enabled:
+            return NSLocalizedString(
+                "临时对话已开启，可使用记忆。2 秒内再点可切换模式。",
+                comment: "开启允许记忆的临时对话提示"
+            )
+        case .isolated:
+            return NSLocalizedString(
+                "临时对话已开启，已隔离记忆。2 秒内再点可切换模式。",
+                comment: "开启隔离记忆的临时对话提示"
+            )
+        }
+    }
+
+    private func temporaryChatMemoryModeChangedMessage(for memoryMode: TemporaryChatMemoryMode) -> String {
+        switch memoryMode {
+        case .enabled:
+            return NSLocalizedString("临时对话已切换为可使用记忆", comment: "临时对话允许记忆提示")
+        case .isolated:
+            return NSLocalizedString("临时对话已切换为记忆隔离", comment: "临时对话隔离记忆提示")
+        }
+    }
+
+    func isQuickActionAvailable(_ action: ChatQuickAction) -> Bool {
+        if action == .browser {
+            return viewModel.currentSession != nil
+        } else if action == .localTerminal {
+            return appConfig.localLinuxEnabled && viewModel.currentSession != nil
+        }
+        guard action == .temporaryChat else { return true }
+        return TemporaryChatToggleAvailability.isAvailable(
+            isTemporaryChatEnabled: isTemporaryChatEnabled,
+            hasConversationStarted: !viewModel.allMessagesForSession.isEmpty || continuationContext != nil
+        )
     }
 
     func reloadChatQuickActions() {
         selectedChatQuickActions = ChatQuickActionSelection.decode(appConfig.chatQuickActionIDs)
+        if selectedChatQuickActions.count <= 1 {
+            setChatQuickActionFolderPresented(false)
+        }
     }
 
     @ViewBuilder
     func quickActionDestinationView(for action: ChatQuickAction) -> some View {
         switch action {
-        case .temporaryChat:
+        case .temporaryChat, .contextCompression:
             EmptyView()
         case .settings:
             SettingsView()
@@ -242,6 +446,202 @@ extension ChatView {
             WorldbookSettingsView().environmentObject(viewModel)
         case .extendedFeatures:
             ExtendedFeaturesView().environmentObject(viewModel)
+        case .browser:
+            BrowserAgentFeatureView(sessionID: viewModel.currentSession?.id)
+        case .localTerminal:
+            LocalLinuxTerminalView(initialJobID: localTerminalInitialJobID)
         }
+    }
+}
+
+private struct ChatQuickActionFolderPanel: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var minimumItemWidth: CGFloat = 78
+    @ScaledMetric(relativeTo: .body) private var itemHeight: CGFloat = 86
+    @ScaledMetric(relativeTo: .title2) private var iconSize: CGFloat = 46
+    @ScaledMetric(relativeTo: .body) private var dismissButtonSize: CGFloat = 44
+
+    let actions: [ChatQuickAction]
+    let isTemporaryChatEnabled: Bool
+    let temporaryChatMemoryMode: TemporaryChatMemoryMode
+    let isTemporaryChatToggleAvailable: Bool
+    let isPresented: Bool
+    let collapsedSize: CGFloat
+    let expandedWidth: CGFloat
+    let usesLiquidGlass: Bool
+    let glassTintOpacity: Double
+    let onTogglePresentation: () -> Void
+    let onPerform: (ChatQuickAction) -> Void
+
+    private var columns: [GridItem] {
+        let count = ChatQuickActionFolderLayout.estimatedColumnCount(
+            actionCount: actions.count,
+            usesAccessibilitySize: dynamicTypeSize.isAccessibilitySize
+        )
+        return Array(repeating: GridItem(.flexible(minimum: minimumItemWidth), spacing: 8), count: count)
+    }
+
+    private var preferredHeight: CGFloat {
+        let columnCount = ChatQuickActionFolderLayout.estimatedColumnCount(
+            actionCount: actions.count,
+            usesAccessibilitySize: dynamicTypeSize.isAccessibilitySize
+        )
+        let rowCount = ChatQuickActionFolderLayout.estimatedRowCount(
+            actionCount: actions.count,
+            columnCount: columnCount
+        )
+        let gridHeight = CGFloat(rowCount) * itemHeight + CGFloat(max(0, rowCount - 1)) * 8
+        return min(max(gridHeight + 64, 150), 440)
+    }
+
+    var body: some View {
+        let cornerRadius = isPresented ? CGFloat(24) : collapsedSize / 2
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+
+        Group {
+            if #available(iOS 26.0, *), usesLiquidGlass {
+                morphingContent
+                    .background(shape.fill(glassOverlayColor))
+                    .glassEffect(.clear.interactive(), in: shape)
+                    .overlay(shape.stroke(glassStrokeColor, lineWidth: 0.5))
+                    .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+            } else {
+                morphingContent
+                    .background(
+                        shape
+                            .fill(.ultraThinMaterial)
+                            .overlay(shape.fill(glassOverlayColor))
+                            .overlay(shape.stroke(glassStrokeColor, lineWidth: 0.5))
+                            .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+                    )
+            }
+        }
+        .frame(
+            width: isPresented ? expandedWidth : collapsedSize,
+            height: isPresented ? preferredHeight : collapsedSize,
+            alignment: .topTrailing
+        )
+        .clipShape(shape)
+    }
+
+    private var morphingContent: some View {
+        // 入口与面板保持为同一视图，让玻璃只改变尺寸与圆角而不重新入场。
+        ZStack(alignment: .topTrailing) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text(NSLocalizedString("快捷功能", comment: "聊天快捷文件夹标题"))
+                        .font(.headline)
+
+                    Spacer()
+
+                    Color.clear
+                        .frame(width: dismissButtonSize, height: dismissButtonSize)
+                }
+
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 8) {
+                        ForEach(actions) { action in
+                            actionButton(for: action)
+                        }
+                    }
+                }
+                .scrollIndicators(.hidden)
+            }
+            .padding()
+            .frame(width: expandedWidth, height: preferredHeight)
+            .opacity(isPresented ? 1 : 0)
+            .scaleEffect(isPresented ? 1 : 0.96, anchor: .topTrailing)
+            .allowsHitTesting(isPresented)
+            .accessibilityHidden(!isPresented)
+
+            Button(action: onTogglePresentation) {
+                Image(systemName: "ellipsis")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: isPresented ? dismissButtonSize : collapsedSize,
+                           height: isPresented ? dismissButtonSize : collapsedSize)
+                    .background(Color.primary.opacity(isPresented ? 0.08 : 0), in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .padding(isPresented ? 16 : 0)
+            .accessibilityLabel(
+                isPresented
+                    ? NSLocalizedString("收起快捷功能", comment: "收起聊天快捷文件夹按钮")
+                    : NSLocalizedString("快捷功能", comment: "聊天快捷菜单无障碍标签")
+            )
+        }
+        .frame(
+            width: isPresented ? expandedWidth : collapsedSize,
+            height: isPresented ? preferredHeight : collapsedSize,
+            alignment: .topTrailing
+        )
+    }
+
+    private var glassOverlayColor: Color {
+        let opacity = LiquidGlassTintSetting.normalized(glassTintOpacity)
+        return colorScheme == .dark ? Color.black.opacity(opacity) : Color.white.opacity(opacity)
+    }
+
+    private var glassStrokeColor: Color {
+        Color.white.opacity(colorScheme == .dark ? 0.18 : 0.28)
+    }
+
+    private var glassShadowColor: Color {
+        Color.black.opacity(colorScheme == .dark ? 0.3 : 0.1)
+    }
+
+    private func actionButton(for action: ChatQuickAction) -> some View {
+        Button {
+            onPerform(action)
+        } label: {
+            VStack {
+                Image(systemName: systemImage(for: action))
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .frame(width: iconSize, height: iconSize)
+                    .background(
+                        Color.accentColor.opacity(0.12),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    )
+
+                Text(action.title)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity, minHeight: itemHeight, alignment: .top)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(ChatQuickActionFolderButtonStyle())
+        .disabled(action == .temporaryChat && !isTemporaryChatToggleAvailable)
+        .accessibilityLabel(action.title)
+    }
+
+    private func systemImage(for action: ChatQuickAction) -> String {
+        action.systemImage(
+            isTemporaryChatEnabled: isTemporaryChatEnabled,
+            memoryMode: temporaryChatMemoryMode
+        )
+    }
+}
+
+private struct ChatQuickActionFolderButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.42)
+            .scaleEffect(configuration.isPressed && !accessibilityReduceMotion ? 0.96 : 1)
+            .animation(
+                accessibilityReduceMotion
+                    ? .easeOut(duration: 0.12)
+                    : .spring(response: 0.28, dampingFraction: 1),
+                value: configuration.isPressed
+            )
     }
 }

@@ -122,17 +122,12 @@ extension SyncEngine {
         merged.lorebookIDs = mergeOrderedUUIDs(local.lorebookIDs, incoming.lorebookIDs)
         merged.tagIDs = mergeOrderedUUIDs(local.tagIDs, incoming.tagIDs)
 
-        if local.worldbookContextIsolationEnabled != incoming.worldbookContextIsolationEnabled {
-            let localHasBindings = !local.lorebookIDs.isEmpty
-            let incomingHasBindings = !incoming.lorebookIDs.isEmpty
-            if local.worldbookContextIsolationEnabled && !localHasBindings {
-                merged.worldbookContextIsolationEnabled = incoming.worldbookContextIsolationEnabled
-            } else if incoming.worldbookContextIsolationEnabled && !incomingHasBindings {
-                merged.worldbookContextIsolationEnabled = local.worldbookContextIsolationEnabled
-            } else if local.worldbookContextIsolationEnabled || incoming.worldbookContextIsolationEnabled {
-                merged.worldbookContextIsolationEnabled = true
-            }
-        }
+        merged.memoryContextIsolationEnabled = local.memoryContextIsolationEnabled
+            || incoming.memoryContextIsolationEnabled
+        merged.toolContextIsolationEnabled = local.toolContextIsolationEnabled
+            || incoming.toolContextIsolationEnabled
+        merged.globalSystemPromptIsolationEnabled = local.globalSystemPromptIsolationEnabled
+            || incoming.globalSystemPromptIsolationEnabled
 
         if local.name != incoming.name {
             if local.baseNameWithoutSyncSuffix == incoming.baseNameWithoutSyncSuffix {
@@ -234,6 +229,12 @@ extension SyncEngine {
         ) else {
             return nil
         }
+        let mergedImageNameSet = Set(mergedImageFiles.value ?? [])
+        var mergedExcludedImageFiles: [String] = []
+        for fileName in (local.modelExcludedImageFileNames ?? []) + (incoming.modelExcludedImageFileNames ?? [])
+        where mergedImageNameSet.contains(fileName) && !mergedExcludedImageFiles.contains(fileName) {
+            mergedExcludedImageFiles.append(fileName)
+        }
         let mergedFileFiles = mergeUnsyncedFileReferences(local.fileFileNames, incoming.fileFileNames)
 
         let mergedTokenUsage = mergeTokenUsage(local.tokenUsage, incoming.tokenUsage)
@@ -263,6 +264,7 @@ extension SyncEngine {
             tokenUsage: mergedTokenUsage,
             audioFileName: audioFileName.value,
             imageFileNames: mergedImageFiles.value,
+            modelExcludedImageFileNames: mergedExcludedImageFiles.isEmpty ? nil : mergedExcludedImageFiles,
             fileFileNames: mergedFileFiles.value,
             fullErrorContent: fullErrorContent.value,
             responseMetrics: mergedResponseMetrics,
@@ -316,6 +318,7 @@ extension SyncEngine {
         tokenUsage: MessageTokenUsage?,
         audioFileName: String?,
         imageFileNames: [String]?,
+        modelExcludedImageFileNames: [String]?,
         fileFileNames: [String]?,
         fullErrorContent: String?,
         responseMetrics: MessageResponseMetrics?,
@@ -338,6 +341,7 @@ extension SyncEngine {
             costEstimate: costEstimate,
             audioFileName: audioFileName,
             imageFileNames: imageFileNames,
+            modelExcludedImageFileNames: modelExcludedImageFileNames,
             fileFileNames: fileFileNames,
             fullErrorContent: fullErrorContent,
             responseMetrics: responseMetrics

@@ -38,10 +38,12 @@ extension ChatService {
     func scheduleConversationMemoryUpdateIfNeeded(for sessionID: UUID, enableMemory: Bool) {
         guard enableMemory else { return }
         guard isConversationMemoryEnabled() else { return }
-        guard let session = chatSessionsSubject.value.first(where: { $0.id == sessionID }), !session.isTemporary else {
+        guard let session = conversationSession(withID: sessionID),
+              !session.isTemporary,
+              !session.isEmbeddedSubagent else {
             return
         }
-        guard !session.isWorldbookContextIsolationActive else { return }
+        guard !session.isMemoryContextIsolationActive else { return }
         let messagesSnapshot = ChatResponseAttemptSupport.visibleMessages(from: messagesSnapshot(for: sessionID))
         Task { [weak self] in
             await self?.performConversationMemoryUpdateIfNeeded(
@@ -71,7 +73,7 @@ extension ChatService {
             )
             let summary = sanitizeReasoningSummaryText(rawSummary)
             guard !summary.isEmpty else { return }
-            applyReasoningSummary(summary, for: messageID, in: sessionID, expectedReasoning: reasoning)
+            await applyReasoningSummary(summary, for: messageID, in: sessionID, expectedReasoning: reasoning)
         } catch {
             logger.warning("异步思考摘要生成失败: \(error.localizedDescription)")
         }
@@ -101,19 +103,22 @@ extension ChatService {
         return String(trimmedPrefix.prefix(maxLength)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func applyReasoningSummary(_ summary: String, for messageID: UUID, in sessionID: UUID, expectedReasoning: String) {
-        var messages = messagesSnapshot(for: sessionID)
-        guard let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
+    private func applyReasoningSummary(_ summary: String, for messageID: UUID, in sessionID: UUID, expectedReasoning: String) async {
+        guard var message = messagesSnapshot(for: sessionID).first(where: { $0.id == messageID }) else { return }
 
-        let currentReasoning = messages[index].reasoningContent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let currentReasoning = message.reasoningContent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard currentReasoning == expectedReasoning else { return }
 
-        var metrics = messages[index].responseMetrics ?? MessageResponseMetrics()
+        var metrics = message.responseMetrics ?? MessageResponseMetrics()
         guard metrics.reasoningSummary != summary else { return }
 
         metrics.reasoningSummary = summary
-        messages[index].responseMetrics = metrics
-        persistAndPublishMessages(messages, for: sessionID)
+        message.responseMetrics = metrics
+        do {
+            _ = try await upsertConversationMessage(message, to: sessionID)
+        } catch {
+            logger.error("原子保存思考摘要失败：\(error.localizedDescription)")
+        }
     }
 
     private func performConversationMemoryUpdateIfNeeded(for sessionID: UUID, messages: [ChatMessage]) async {
@@ -343,7 +348,8 @@ extension ChatService {
         temperature: Double = 0.4,
         runnableModel: RunnableModel? = nil,
         requestSource: UsageRequestSource,
-        sessionID: UUID? = nil
+        sessionID: UUID? = nil,
+        responseValidator: (@Sendable (String) throws -> Void)? = nil
     ) async throws -> String {
         let trimmedUserPrompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedUserPrompt.isEmpty else { return "" }
@@ -365,7 +371,8 @@ extension ChatService {
             temperature: temperature,
             runnableModel: runnableModel,
             requestSource: requestSource,
-            sessionID: sessionID
+            sessionID: sessionID,
+            responseValidator: responseValidator
         )
     }
 
@@ -375,7 +382,11 @@ extension ChatService {
         temperature: Double = 0.4,
         runnableModel: RunnableModel? = nil,
         requestSource: UsageRequestSource,
-        sessionID: UUID? = nil
+        sessionID: UUID? = nil,
+        audioAttachments: [UUID: AudioAttachment] = [:],
+        imageAttachments: [UUID: [ImageAttachment]] = [:],
+        fileAttachments: [UUID: [FileAttachment]] = [:],
+        responseValidator: (@Sendable (String) throws -> Void)? = nil
     ) async throws -> String {
         let requestMessages = messages.filter { !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         guard !requestMessages.isEmpty else { return "" }
@@ -395,16 +406,32 @@ extension ChatService {
         )
 
         if LocalModelProviderBridge.isLocalRunnableModel(targetModel) {
+            guard audioAttachments.isEmpty, imageAttachments.isEmpty, fileAttachments.isEmpty else {
+                throw DetachedCompletionError.unsupportedAttachments
+            }
             return try await generateDetachedLocalLLMCompletion(
                 runnableModel: targetModel,
                 requestMessages: requestMessages,
                 temperature: temperature,
-                requestLogContext: requestContext
+                requestLogContext: requestContext,
+                responseValidator: responseValidator
             )
         }
 
-        guard let adapter = adapters[targetModel.provider.apiFormat] else {
+        guard let adapter = adapters[targetModel.effectiveAPIFormat] else {
             throw DetachedCompletionError.unsupportedAdapter
+        }
+
+        var preparedFileAttachments = fileAttachments
+        var selectedGeminiAPIKey: String?
+        if let geminiAdapter = adapter as? GeminiAdapter {
+            let preparation = try await prepareGeminiNativeVideoAttachments(
+                fileAttachments,
+                provider: targetModel.provider,
+                adapter: geminiAdapter
+            )
+            preparedFileAttachments = preparation.attachments
+            selectedGeminiAPIKey = preparation.apiKey
         }
 
         let payload: [String: Any] = [
@@ -413,30 +440,29 @@ extension ChatService {
         ]
         var commonPayload = payload
         commonPayload[ReasoningContentEchoPayload.key] = await openAIReasoningContentEchoModeControlValue()
+        if let selectedGeminiAPIKey {
+            commonPayload[GeminiAdapter.apiKeyControlKey] = selectedGeminiAPIKey
+        }
         guard let request = adapter.buildChatRequest(
             for: targetModel,
             commonPayload: commonPayload,
             messages: requestMessages,
             tools: nil,
-            audioAttachments: [:],
-            imageAttachments: [:],
-            fileAttachments: [:]
+            audioAttachments: audioAttachments,
+            imageAttachments: imageAttachments,
+            fileAttachments: preparedFileAttachments
         ) else {
             throw DetachedCompletionError.buildRequestFailed
         }
 
+        var didPersistTerminalStatus = false
         do {
             let data = try await fetchData(for: request, provider: targetModel.provider)
+            let responseMessage: ChatMessage
             do {
-                let responseMessage = try adapter.parseResponse(data: data)
-                persistRequestLog(
-                    context: requestContext,
-                    status: .success,
-                    tokenUsage: responseMessage.tokenUsage,
-                    finishedAt: Date()
-                )
-                return responseMessage.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                responseMessage = try adapter.parseResponse(data: data)
             } catch {
+                didPersistTerminalStatus = true
                 persistRequestLog(
                     context: requestContext,
                     status: .failed,
@@ -446,35 +472,65 @@ extension ChatService {
                 )
                 throw error
             }
-        } catch is CancellationError {
+
+            let content = responseMessage.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            do {
+                try responseValidator?(content)
+            } catch {
+                didPersistTerminalStatus = true
+                persistRequestLog(
+                    context: requestContext,
+                    status: .failed,
+                    tokenUsage: responseMessage.tokenUsage,
+                    finishedAt: Date(),
+                    errorKind: "response_validation_failed"
+                )
+                throw error
+            }
+
+            didPersistTerminalStatus = true
             persistRequestLog(
                 context: requestContext,
-                status: .cancelled,
-                tokenUsage: nil,
-                finishedAt: Date(),
-                errorKind: "cancelled"
+                status: .success,
+                tokenUsage: responseMessage.tokenUsage,
+                finishedAt: Date()
             )
+            return content
+        } catch is CancellationError {
+            if !didPersistTerminalStatus {
+                persistRequestLog(
+                    context: requestContext,
+                    status: .cancelled,
+                    tokenUsage: nil,
+                    finishedAt: Date(),
+                    errorKind: "cancelled"
+                )
+            }
             throw CancellationError()
         } catch NetworkError.badStatusCode(let code, let bodyData) {
-            persistRequestLog(
-                context: requestContext,
-                status: .failed,
-                tokenUsage: nil,
-                finishedAt: Date(),
-                httpStatusCode: code,
-                errorKind: "bad_status_code"
-            )
+            if !didPersistTerminalStatus {
+                persistRequestLog(
+                    context: requestContext,
+                    status: .failed,
+                    tokenUsage: nil,
+                    finishedAt: Date(),
+                    httpStatusCode: code,
+                    errorKind: "bad_status_code"
+                )
+            }
             throw NetworkError.badStatusCode(code: code, responseBody: bodyData)
         } catch {
             let errorKind = isCancellationError(error) ? "cancelled" : "network_error"
             let status: RequestLogStatus = isCancellationError(error) ? .cancelled : .failed
-            persistRequestLog(
-                context: requestContext,
-                status: status,
-                tokenUsage: nil,
-                finishedAt: Date(),
-                errorKind: errorKind
-            )
+            if !didPersistTerminalStatus {
+                persistRequestLog(
+                    context: requestContext,
+                    status: status,
+                    tokenUsage: nil,
+                    finishedAt: Date(),
+                    errorKind: errorKind
+                )
+            }
             throw error
         }
     }

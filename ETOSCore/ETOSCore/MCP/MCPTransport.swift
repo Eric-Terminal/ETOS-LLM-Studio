@@ -1,8 +1,7 @@
 // ============================================================================
 // MCPTransport.swift
 // ============================================================================
-// 实现 MCP 客户端可用的传输层。
-// 目前仅支持 HTTP(S)，因为 iOS/watchOS 无法通过 stdio 启动外部进程。
+// 定义 MCP 客户端兼容传输协议与 OAuth 传输实现。
 // ============================================================================
 
 import Foundation
@@ -43,198 +42,26 @@ public enum MCPTransportError: LocalizedError {
         switch self {
         case .httpStatus(let code, let body):
             if let body, !body.isEmpty {
-                return "HTTP \(code): \(body)"
+                return String(
+                    format: NSLocalizedString("HTTP %d：%@", comment: "MCP HTTP error with response body"),
+                    code,
+                    body
+                )
             } else {
-                return "HTTP \(code): 服务器返回错误"
+                return String(
+                    format: NSLocalizedString("HTTP %d：服务器返回错误", comment: "MCP HTTP error without response body"),
+                    code
+                )
             }
         case .oauthConfiguration(let message):
-            return "OAuth 配置错误：\(message)"
+            return String(
+                format: NSLocalizedString("OAuth 配置错误：%@", comment: "MCP OAuth configuration error"),
+                message
+            )
         }
     }
 }
 
-public final class MCPHTTPTransport: MCPTransport, MCPProtocolVersionConfigurableTransport, @unchecked Sendable {
-    private let endpoint: URL
-    private let session: URLSession
-    private let headers: [String: String]
-    private var protocolVersion: String?
-
-    public init(
-        endpoint: URL,
-        session: URLSession = NetworkSessionConfiguration.shared,
-        headers: [String: String] = [:],
-        protocolVersion: String? = MCPProtocolVersion.current
-    ) {
-        self.endpoint = endpoint
-        self.session = session
-        self.headers = headers
-        self.protocolVersion = protocolVersion
-    }
-
-    public func sendMessage(_ payload: Data) async throws -> Data {
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.httpBody = payload
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        for (key, value) in headers {
-            request.setValue(value, forHTTPHeaderField: key)
-        }
-        if let protocolVersion, !protocolVersion.isEmpty, !Self.hasHeader("MCP-Protocol-Version", in: headers) {
-            request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
-        }
-
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw MCPClientError.invalidResponse
-        }
-
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            let message = String(data: data, encoding: .utf8)
-            throw MCPTransportError.httpStatus(code: httpResponse.statusCode, body: message)
-        }
-
-        return data
-    }
-
-    public func sendNotification(_ payload: Data) async throws {
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.httpBody = payload
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        for (key, value) in headers {
-            request.setValue(value, forHTTPHeaderField: key)
-        }
-        if let protocolVersion, !protocolVersion.isEmpty, !Self.hasHeader("MCP-Protocol-Version", in: headers) {
-            request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
-        }
-
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw MCPClientError.invalidResponse
-        }
-
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            let message = String(data: data, encoding: .utf8)
-            throw MCPTransportError.httpStatus(code: httpResponse.statusCode, body: message)
-        }
-    }
-
-    public func updateProtocolVersion(_ protocolVersion: String?) async {
-        self.protocolVersion = protocolVersion
-    }
-
-    private static func hasHeader(_ name: String, in headers: [String: String]) -> Bool {
-        headers.keys.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
-    }
-}
-
-public final class MCPSSETransport: MCPTransport, MCPProtocolVersionConfigurableTransport, @unchecked Sendable {
-    private let endpoint: URL
-    private let session: URLSession
-    private let headers: [String: String]
-    private var protocolVersion: String?
-
-    public init(
-        endpoint: URL,
-        session: URLSession = NetworkSessionConfiguration.shared,
-        headers: [String: String] = [:],
-        protocolVersion: String? = MCPProtocolVersion.current
-    ) {
-        self.endpoint = endpoint
-        self.session = session
-        self.headers = headers
-        self.protocolVersion = protocolVersion
-    }
-
-    public func sendMessage(_ payload: Data) async throws -> Data {
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.httpBody = payload
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-
-        for (key, value) in headers {
-            request.setValue(value, forHTTPHeaderField: key)
-        }
-        if let protocolVersion, !protocolVersion.isEmpty, !Self.hasHeader("MCP-Protocol-Version", in: headers) {
-            request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
-        }
-
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw MCPClientError.invalidResponse
-        }
-
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            let message = String(data: data, encoding: .utf8)
-            throw MCPTransportError.httpStatus(code: httpResponse.statusCode, body: message)
-        }
-
-        return try extractLastEvent(from: data)
-    }
-
-    public func sendNotification(_ payload: Data) async throws {
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.httpBody = payload
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-
-        for (key, value) in headers {
-            request.setValue(value, forHTTPHeaderField: key)
-        }
-        if let protocolVersion, !protocolVersion.isEmpty, !Self.hasHeader("MCP-Protocol-Version", in: headers) {
-            request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
-        }
-
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw MCPClientError.invalidResponse
-        }
-
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            let message = String(data: data, encoding: .utf8)
-            throw MCPTransportError.httpStatus(code: httpResponse.statusCode, body: message)
-        }
-    }
-
-    public func updateProtocolVersion(_ protocolVersion: String?) async {
-        self.protocolVersion = protocolVersion
-    }
-
-    private func extractLastEvent(from data: Data) throws -> Data {
-        guard let raw = String(data: data, encoding: .utf8) else {
-            throw MCPClientError.invalidResponse
-        }
-        let normalized = raw.replacingOccurrences(of: "\r\n", with: "\n")
-        let events = normalized.components(separatedBy: "\n\n")
-        var payloads: [String] = []
-        for event in events {
-            var buffer = ""
-            event.split(separator: "\n").forEach { line in
-                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard trimmed.hasPrefix("data:") else { return }
-                let content = trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces)
-                guard content != "[DONE]" else { return }
-                buffer.append(content)
-            }
-            if !buffer.isEmpty {
-                payloads.append(buffer)
-            }
-        }
-        if let last = payloads.last,
-           let data = last.data(using: .utf8) {
-            return data
-        }
-        throw MCPClientError.invalidResponse
-    }
-
-    private static func hasHeader(_ name: String, in headers: [String: String]) -> Bool {
-        headers.keys.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
-    }
-}
 
 public actor MCPOAuthHTTPTransport: MCPTransport, MCPProtocolVersionConfigurableTransport {
     private let endpoint: URL
@@ -375,10 +202,14 @@ public actor MCPOAuthHTTPTransport: MCPTransport, MCPProtocolVersionConfigurable
                 queryItems.append(URLQueryItem(name: "grant_type", value: "client_credentials"))
             case .authorizationCode:
                 guard let resolvedCode = normalized(authorizationCode), !resolvedCode.isEmpty else {
-                    throw MCPTransportError.oauthConfiguration(message: "授权码模式缺少 authorizationCode。")
+                    throw MCPTransportError.oauthConfiguration(
+                        message: NSLocalizedString("授权码模式缺少 authorizationCode。", comment: "OAuth authorization code missing")
+                    )
                 }
                 guard let resolvedRedirectURI = normalized(redirectURI), !resolvedRedirectURI.isEmpty else {
-                    throw MCPTransportError.oauthConfiguration(message: "授权码模式缺少 redirectURI。")
+                    throw MCPTransportError.oauthConfiguration(
+                        message: NSLocalizedString("授权码模式缺少 redirectURI。", comment: "OAuth redirect URI missing")
+                    )
                 }
                 queryItems.append(URLQueryItem(name: "grant_type", value: "authorization_code"))
                 queryItems.append(URLQueryItem(name: "code", value: resolvedCode))

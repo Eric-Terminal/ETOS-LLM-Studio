@@ -55,51 +55,22 @@ extension TelegramMessageComposer {
             }
 
             if let audio = viewModel.pendingAudioAttachment {
-                ZStack(alignment: .topTrailing) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "waveform")
-                            .etFont(.system(size: 18))
-                            .foregroundColor(TelegramColors.attachButtonColor)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(NSLocalizedString("语音消息", comment: ""))
-                                .etFont(.system(size: 13, weight: .medium))
-                            Text(audio.fileName)
-                                .etFont(.system(size: 11))
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                        }
-
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .padding(.trailing, 26)
-
-                    Button {
-                        viewModel.clearPendingAudioAttachment()
-                    } label: {
-                        removeAttachmentButtonLabel
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(String(format: NSLocalizedString("移除附件 %@", comment: "Remove pending attachment accessibility label"), audio.fileName))
-                    .padding(4)
+                PendingAudioAttachmentPreview(attachment: audio) {
+                    viewModel.clearPendingAudioAttachment()
                 }
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(uiColor: .secondarySystemBackground))
-                )
+                .id(audio.id)
             }
 
             ForEach(viewModel.pendingFileAttachments) { attachment in
+                let isVideo = VideoAttachmentSupport.isVideo(attachment)
                 ZStack(alignment: .topTrailing) {
                     HStack(spacing: 8) {
-                        Image(systemName: "doc")
+                        Image(systemName: isVideo ? "video" : "doc")
                             .etFont(.system(size: 18))
                             .foregroundColor(TelegramColors.attachButtonColor)
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(NSLocalizedString("文件", comment: ""))
+                            Text(NSLocalizedString(isVideo ? "视频" : "文件", comment: ""))
                                 .etFont(.system(size: 13, weight: .medium))
                             Text(attachment.fileName)
                                 .etFont(.system(size: 11))

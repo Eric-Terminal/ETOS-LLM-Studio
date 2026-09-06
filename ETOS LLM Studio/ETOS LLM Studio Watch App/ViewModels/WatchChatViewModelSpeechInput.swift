@@ -349,32 +349,6 @@ extension ChatViewModel {
         }
     }
 
-    func sendToolSupplementMessage(_ content: String) {
-        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedContent.isEmpty, !isSendingMessage else { return }
-
-        Task {
-            await chatService.sendAndProcessMessage(
-                content: trimmedContent,
-                aiTemperature: aiTemperature,
-                aiTopP: aiTopP,
-                systemPrompt: systemPrompt,
-                maxChatHistory: maxChatHistory,
-                enableStreaming: enableStreaming,
-                enhancedPrompt: currentSession?.enhancedPrompt,
-                enableMemory: enableMemory,
-                enableMemoryWrite: enableMemoryWrite,
-                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
-                includeSystemTime: includeSystemTimeInPrompt,
-                systemTimeInjectionPosition: systemTimeInjectionPosition,
-                enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
-                periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
-                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
-                audioAttachment: nil
-            )
-        }
-    }
-
     private func resetRecordingVisuals() {
         recordingDuration = 0
         waveformSamples = Array(repeating: 0, count: waveformSampleCount)

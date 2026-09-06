@@ -34,8 +34,12 @@ public struct ModelRequestBodyControlSliderDescriptor: Hashable, Sendable {
         optionCount = control.options.count
         options = control.options
         defaultOptionID = control.defaultOptionID
-        discreteDisplayValues = control.options.map {
-            Self.scalarDisplayValue(in: $0.payload) ?? $0.title
+        let scalarDisplayValues = control.options.map { Self.scalarDisplayValue(in: $0.payload) }
+        if scalarDisplayValues.allSatisfy({ $0 != nil }) {
+            discreteDisplayValues = scalarDisplayValues.compactMap { $0 }
+        } else {
+            // 多字段预设必须统一展示人为命名的档位，避免泄露零散协议值。
+            discreteDisplayValues = control.options.map(\.title)
         }
 
         if let numericConfiguration = Self.numericConfiguration(for: control.options) {
@@ -224,6 +228,12 @@ private extension ModelRequestBodyControlSliderDescriptor {
     static func numericConfiguration(
         for options: [ModelRequestBodyControlOption]
     ) -> NumericConfiguration? {
+        // 连续插值只适用于单一数值维度；多字段 payload 必须作为完整预设离散切换。
+        guard options.allSatisfy({
+            scalarDisplayValues(in: .dictionary($0.payload)).count == 1
+        }) else {
+            return nil
+        }
         let leavesByOption = options.map { numericLeaves(in: .dictionary($0.payload)) }
         guard leavesByOption.allSatisfy({ $0.count == 1 }),
               let firstLeaf = leavesByOption.first?.first else {

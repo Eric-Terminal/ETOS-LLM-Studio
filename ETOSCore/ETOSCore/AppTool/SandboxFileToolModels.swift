@@ -98,17 +98,23 @@ public struct SandboxFileChunkReadResult: Codable, Hashable, Sendable {
     public let path: String
     public let startLine: Int
     public let endLine: Int
-    public let totalLines: Int
+    public let totalLines: Int?
     public let hasMore: Bool
     public let content: String
+    public let contentTruncated: Bool
+    public let nextByteOffset: UInt64?
+    public let nextStartLine: Int?
 
     public init(
         path: String,
         startLine: Int,
         endLine: Int,
-        totalLines: Int,
+        totalLines: Int?,
         hasMore: Bool,
-        content: String
+        content: String,
+        contentTruncated: Bool = false,
+        nextByteOffset: UInt64? = nil,
+        nextStartLine: Int? = nil
     ) {
         self.path = path
         self.startLine = startLine
@@ -116,6 +122,9 @@ public struct SandboxFileChunkReadResult: Codable, Hashable, Sendable {
         self.totalLines = totalLines
         self.hasMore = hasMore
         self.content = content
+        self.contentTruncated = contentTruncated
+        self.nextByteOffset = nextByteOffset
+        self.nextStartLine = nextStartLine
     }
 }
 
@@ -227,6 +236,7 @@ public enum SandboxFileToolError: LocalizedError {
     case cannotMoveIntoSelf
     case sourceAndDestinationSame
     case cannotCopyIntoSelf
+    case destinationContainsSource
     case emptyBatchRules
     case noUndoHistory
 
@@ -284,6 +294,8 @@ public enum SandboxFileToolError: LocalizedError {
             return NSLocalizedString("源路径与目标路径相同，无需移动。", comment: "Sandbox tool source destination same")
         case .cannotCopyIntoSelf:
             return NSLocalizedString("不能把目录复制到其自身或子目录下。", comment: "Sandbox tool copy into self")
+        case .destinationContainsSource:
+            return NSLocalizedString("目标路径不能包含源项目，覆盖它会移除源路径。", comment: "Sandbox tool destination contains source")
         case .emptyBatchRules:
             return NSLocalizedString("批量编辑规则不能为空。", comment: "Sandbox tool empty batch rules")
         case .noUndoHistory:

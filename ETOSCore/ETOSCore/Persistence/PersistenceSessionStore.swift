@@ -17,7 +17,7 @@ extension Persistence {
         if let store = activeGRDBStore() {
             store.saveChatSessions(sessions)
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
             return
         }
 
@@ -46,7 +46,7 @@ extension Persistence {
             try writeSessionIndexFile(index)
             logger.info("会话索引保存成功。")
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
         } catch {
             logger.error("保存会话索引失败: \(error.localizedDescription)")
         }
@@ -89,6 +89,19 @@ extension Persistence {
         }
     }
 
+    /// 按 ID 读取会话；运行时可以借此访问不会进入常规列表的内嵌子代理。
+    public static func loadChatSession(id sessionID: UUID) -> ChatSession? {
+        if let store = activeGRDBStore() {
+            return store.loadChatSession(id: sessionID)
+        }
+        return loadChatSessions().first(where: { $0.id == sessionID })
+    }
+
+    /// 返回直接存放在指定主会话内的隐藏子代理 ID。
+    public static func loadEmbeddedSubagentSessionIDs(containerSessionID: UUID) -> [UUID] {
+        activeGRDBStore()?.loadEmbeddedSubagentSessionIDs(containerSessionID: containerSessionID) ?? []
+    }
+
     // MARK: - 会话文件夹持久化
 
     /// 保存会话文件夹列表。
@@ -96,7 +109,7 @@ extension Persistence {
         if let store = activeGRDBStore() {
             store.saveSessionFolders(folders)
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
             return
         }
 
@@ -116,7 +129,7 @@ extension Persistence {
             try data.write(to: sessionFoldersFileURL(), options: .atomic)
             logger.info("会话文件夹保存成功，共 \(normalizedFolders.count) 个。")
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
         } catch {
             logger.error("保存会话文件夹失败: \(error.localizedDescription)")
         }
@@ -158,7 +171,7 @@ extension Persistence {
         if let store = activeGRDBStore() {
             store.saveSessionTags(tags)
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
             return
         }
 
@@ -178,7 +191,7 @@ extension Persistence {
             try data.write(to: sessionTagsFileURL(), options: .atomic)
             logger.info("会话标签保存成功，共 \(normalizedTags.count) 个。")
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
         } catch {
             logger.error("保存会话标签失败: \(error.localizedDescription)")
         }
@@ -230,7 +243,7 @@ extension Persistence {
         if let store = activeGRDBStore() {
             store.saveMessages(messages, for: sessionID)
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
             return
         }
 
@@ -243,7 +256,7 @@ extension Persistence {
             try writeSessionRecordFile(record, for: sessionID)
             logger.info("会话 \(sessionID.uuidString) 的消息已保存到会话存储（\(normalized.messages.count) 条）。")
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
         } catch {
             logger.error("保存会话 \(sessionID.uuidString) 消息失败: \(error.localizedDescription)")
         }
@@ -251,6 +264,11 @@ extension Persistence {
 
     /// 加载指定会话的聊天消息
     public static func loadMessages(for sessionID: UUID) -> [ChatMessage] {
+        let signpost = TelemetrySignpost.begin(.sessionMessageLoad)
+        defer {
+            TelemetrySignpost.end(signpost)
+        }
+
         if let store = activeGRDBStore() {
             return store.loadMessages(for: sessionID)
         }
@@ -286,10 +304,26 @@ extension Persistence {
         }
     }
 
+    /// 异步加载指定会话的消息，GRDB 连接繁忙时挂起任务而不是阻塞调用线程。
+    public static func loadMessagesAsync(for sessionID: UUID) async -> [ChatMessage] {
+        if let store = activeGRDBStore() {
+            return await store.loadMessagesAsync(for: sessionID)
+        }
+        return loadMessages(for: sessionID)
+    }
+
     /// 统计指定会话的消息数量。
     public static func loadMessageCount(for sessionID: UUID) -> Int {
         if let store = activeGRDBStore() {
             return store.loadMessageCount(for: sessionID)
+        }
+        return loadMessages(for: sessionID).count
+    }
+
+    /// 异步统计指定会话的消息数量，供 UI 交互路径使用。
+    public static func loadMessageCountAsync(for sessionID: UUID) async -> Int {
+        if let store = activeGRDBStore() {
+            return await store.loadMessageCountAsync(for: sessionID)
         }
         return loadMessages(for: sessionID).count
     }
@@ -534,6 +568,7 @@ extension Persistence {
 
     /// 删除会话相关的消息持久化文件（当前格式 + legacy）。
     public static func deleteSessionArtifacts(sessionID: UUID) {
+        LocalLinuxWorkspaceCleanupCoordinator.scheduleForDeletedSession(sessionID)
         if let store = activeGRDBStore() {
             store.deleteSessionArtifacts(sessionID: sessionID)
             return

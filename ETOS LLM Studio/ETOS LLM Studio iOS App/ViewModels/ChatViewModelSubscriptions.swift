@@ -35,6 +35,7 @@ extension ChatViewModel {
         enableStreaming = appConfig.enableStreaming
         enableResponseSpeedMetrics = appConfig.enableResponseSpeedMetrics
         enableOpenAIStreamIncludeUsage = appConfig.enableOpenAIStreamIncludeUsage
+        automaticHistoryLoadingEnabled = appConfig.automaticHistoryLoadingEnabled
         lazyLoadMessageCount = appConfig.lazyLoadMessageCount
         currentBackgroundImage = appConfig.currentBackgroundImage
         enableAutoRotateBackground = appConfig.enableAutoRotateBackground
@@ -54,7 +55,6 @@ extension ChatViewModel {
         sendSpeechAsAudio = appConfig.sendSpeechAsAudio
         enableSpeechInput = appConfig.enableSpeechInput
         speechModelIdentifier = appConfig.speechModelIdentifier
-        ttsModelIdentifier = appConfig.ttsModelIdentifier
         memoryEmbeddingModelIdentifier = appConfig.memoryEmbeddingModelIdentifier
         titleGenerationModelIdentifier = appConfig.titleGenerationModelIdentifier
         dailyPulseModelIdentifier = appConfig.dailyPulseModelIdentifier
@@ -72,11 +72,15 @@ extension ChatViewModel {
 
     func refreshAfterAppConfigPersistentStoreLoad() {
         applyAppConfigSnapshotToLocalState()
+        BackgroundGenerationKeepAliveManager.shared.setGenerationActive(!runningSessionIDs.isEmpty)
+        BackgroundGenerationAudioKeepAliveManager.shared.setGenerationActive(!runningSessionIDs.isEmpty)
         chatService.reloadLocalModelsAndAppConfigBackedModelState()
+        providers = chatService.providersSubject.value
+        applyActivatedConversationModels(chatService.activatedConversationModels)
+        selectedModel = chatService.selectedModelSubject.value
         MessageRegexRuleStore.shared.reload()
         refreshVisualMessagesAfterRegexRulesChange()
         syncSpeechModelSelection()
-        syncTTSModelSelection()
         syncEmbeddingModelSelection()
         syncTitleGenerationModelSelection()
         syncDailyPulseModelSelection()
@@ -179,7 +183,16 @@ extension ChatViewModel {
 
     @objc func handleDidBecomeActive() {
         isApplicationActive = true
+        BackgroundGenerationKeepAliveManager.shared.refreshStatus()
         chatService.reloadLocalModelsAndProvidersIfNeeded()
+        clearCurrentSessionReplyNotifications()
+    }
+
+    private func clearCurrentSessionReplyNotifications() {
+        guard let sessionID = currentSession?.id else { return }
+        Task {
+            await AppLocalNotificationCenter.shared.removeChatReplyNotifications(sessionID: sessionID)
+        }
     }
 
     func shouldPresentMemoryEmbeddingErrorAlert(message: String) -> Bool {
@@ -219,7 +232,23 @@ extension ChatViewModel {
         }
     }
 
+    func observeUserMessagePreviewCharacterLimit() {
+        AppConfigStore.shared.$userMessagePreviewCharacterLimit
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                // 包含暂时离开历史窗口的缓存，返回聊天时不会继续显示旧阈值的预览。
+                for state in self.messageStateByID.values where state.message.role == .user {
+                    self.scheduleVisualMessagePreparationIfNeeded(for: state, source: state.message)
+                }
+            }
+            .store(in: &cancellables)
+    }
+
     func setupSubscriptions() {
+        observeUserMessagePreviewCharacterLimit()
         NotificationCenter.default.publisher(for: AppConfigStore.persistentStoreDidLoadNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -240,6 +269,15 @@ extension ChatViewModel {
         NotificationCenter.default.publisher(for: MessageRegexRuleStore.didChangeNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
+                self?.refreshVisualMessagesAfterRegexRulesChange()
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                guard notification.userInfo?[RoleplayStore.changeKindUserInfoKey] as? String
+                        == RoleplayStore.libraryChangeKind else { return }
                 self?.refreshVisualMessagesAfterRegexRulesChange()
             }
             .store(in: &cancellables)
@@ -285,16 +323,31 @@ extension ChatViewModel {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] session in
                 guard let self else { return }
+                beginHistorySession(session?.id)
                 currentSession = session
+                refreshSessionScopedAppToolRequests()
                 imageGenerationFeedback = .idle
                 refreshCurrentSessionSendingState()
+#if canImport(UIKit)
+                if UIApplication.shared.applicationState == .active {
+                    clearCurrentSessionReplyNotifications()
+                }
+#endif
             }
             .store(in: &cancellables)
 
         chatService.messagesForSessionSubject
+            .map { [chatService] messages in
+                (
+                    sessionID: chatService.currentSessionSubject.value?.id,
+                    messages: messages
+                )
+            }
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] messages in
-                self?.applyMessagesUpdate(messages)
+            .sink { [weak self] update in
+                guard let self else { return }
+                guard update.sessionID == chatService.currentSessionSubject.value?.id else { return }
+                applyMessagesUpdate(update.messages, for: update.sessionID)
             }
             .store(in: &cancellables)
 
@@ -303,20 +356,27 @@ extension ChatViewModel {
             .sink { [weak self] providers in
                 guard let self else { return }
                 self.providers = providers
-                self.configuredModels = chatService.configuredRunnableModels
+                self.applyConfiguredModels(chatService.configuredRunnableModels)
                 self.applyActivatedModels(chatService.activatedRunnableModels)
                 self.applyActivatedConversationModels(chatService.activatedConversationModels)
                 self.applyActivatedChatModels(chatService.activatedChatModels)
                 self.speechModels = chatService.activatedSpeechModels
-                self.ttsModels = chatService.activatedTTSModels
                 self.syncSpeechModelSelection()
-                self.syncTTSModelSelection()
                 self.syncEmbeddingModelSelection()
                 self.syncTitleGenerationModelSelection()
                 self.syncDailyPulseModelSelection()
                 self.syncConversationSummaryModelSelection()
                 self.syncReasoningSummaryModelSelection()
                 self.syncOCRModelSelection()
+            }
+            .store(in: &cancellables)
+
+        AppConfigStore.shared.$modelPickerFolderPathsByProvider
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.applyConfiguredModels(self.configuredModels)
             }
             .store(in: &cancellables)
 
@@ -334,12 +394,22 @@ extension ChatViewModel {
                 guard let self else { return }
                 self.runningSessionIDs = runningSessionIDs
                 refreshCurrentSessionSendingState()
+                flushPendingToolSupplementMessagesIfPossible()
                 if runningSessionIDs.isEmpty {
                     endBackgroundTaskIfNeeded()
                 } else {
                     beginBackgroundTaskIfNeeded()
                 }
+                BackgroundGenerationKeepAliveManager.shared.setGenerationActive(!runningSessionIDs.isEmpty)
+                BackgroundGenerationAudioKeepAliveManager.shared.setGenerationActive(!runningSessionIDs.isEmpty)
                 updateAutoReasoningPreviewState(with: allMessagesForSession)
+            }
+            .store(in: &cancellables)
+
+        chatService.conversationRuntimeStatesSubject
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] states in
+                self?.conversationRuntimeStates = states
             }
             .store(in: &cancellables)
 
@@ -421,16 +491,6 @@ extension ChatViewModel {
             }
             .store(in: &cancellables)
 
-        ttsManager.$isSpeaking
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] speaking in
-                guard let self else { return }
-                if !speaking {
-                    self.ttsManager.updateSelectedModel(self.selectedTTSModel)
-                }
-            }
-            .store(in: &cancellables)
-
         NotificationCenter.default.publisher(for: .globalSystemPromptStoreDidChange)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -439,18 +499,20 @@ extension ChatViewModel {
             .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: .appToolFillUserInputRequested)
-            .receive(on: DispatchQueue.main)
             .sink { [weak self] notification in
-                guard let request = AppToolInputDraftRequest.decode(from: notification.userInfo) else { return }
-                self?.applyToolInputDraftRequest(request)
+                guard let self,
+                      let request = AppToolInputDraftRequest.decode(from: notification.userInfo),
+                      let receipt = AppToolUIRequestDeliveryReceipt.decode(from: notification.userInfo) else { return }
+                receiveToolInputDraftRequest(request, receipt: receipt)
             }
             .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: .appToolAskUserInputRequested)
-            .receive(on: DispatchQueue.main)
             .sink { [weak self] notification in
-                guard let request = AppToolAskUserInputRequest.decode(from: notification.userInfo) else { return }
-                self?.activeAskUserInputRequest = request
+                guard let self,
+                      let request = AppToolAskUserInputRequest.decode(from: notification.userInfo),
+                      let receipt = AppToolUIRequestDeliveryReceipt.decode(from: notification.userInfo) else { return }
+                receiveAskUserInputRequest(request, receipt: receipt)
             }
             .store(in: &cancellables)
 
@@ -462,7 +524,6 @@ extension ChatViewModel {
             .store(in: &cancellables)
 
         syncSpeechModelSelection()
-        syncTTSModelSelection()
         syncEmbeddingModelSelection()
         syncTitleGenerationModelSelection()
         syncDailyPulseModelSelection()
@@ -521,8 +582,33 @@ extension ChatViewModel {
         }
     }
 
+    func applyConfiguredModels(_ models: [RunnableModel]) {
+        configuredModels = models
+        let groups = RunnableModelGrouping.groups(models: models, providerOrder: providers)
+        configuredModelsByProviderID = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0.models) })
+        configuredModelsByID = Dictionary(uniqueKeysWithValues: models.map { ($0.id, $0) })
+        configuredModelOrganizationsByProviderID = Dictionary(
+            uniqueKeysWithValues: groups.map {
+                (
+                    $0.id,
+                    RunnableModelPickerOrganization(
+                        models: $0.models,
+                        groupPaths: AppConfigStore.shared.modelPickerFolderPaths(for: $0.id),
+                        itemOrderIDs: AppConfigStore.shared.modelPickerItemOrderIDs(for: $0.id)
+                    )
+                )
+            }
+        )
+    }
+
     func applyActivatedConversationModels(_ models: [RunnableModel]) {
         activatedConversationModels = models
+        let groups = RunnableModelGrouping.groups(models: models, providerOrder: providers)
+        activatedConversationModelGroups = groups
+        activatedConversationModelsByProviderID = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0.models) })
+        activatedConversationModelLayoutsByProviderID = Dictionary(
+            uniqueKeysWithValues: groups.map { ($0.id, $0.pickerLayout) }
+        )
     }
 
     func applyActivatedChatModels(_ models: [RunnableModel]) {

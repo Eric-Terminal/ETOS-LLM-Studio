@@ -29,7 +29,22 @@ struct MCPBuiltInSearchServerTests {
             return
         }
         #expect(properties["url"] != nil)
+        #expect(properties["search_engine"] != nil)
         #expect(properties["timeout_seconds"] != nil)
+        #expect(schema["anyOf"] == .array([
+            .dictionary(["required": .array([.string("query")])]),
+            .dictionary(["required": .array([.string("url")])])
+        ]))
+
+        let missingArgumentsResult = try await client.executeTool(
+            toolId: MCPBuiltInSearchServer.toolID,
+            inputs: [:]
+        )
+        guard case let .dictionary(missingArgumentsObject) = missingArgumentsResult else {
+            Issue.record("缺少搜索目标时应返回结构化错误。")
+            return
+        }
+        #expect(missingArgumentsObject["isError"] == .bool(true))
 
         let result = try await client.executeTool(
             toolId: MCPBuiltInSearchServer.toolID,
@@ -50,8 +65,6 @@ struct MCPBuiltInSearchServerTests {
             return
         }
         #expect(text.contains("Swift MCP"))
-        #expect(text.contains("https://swift.org"))
-        #expect(text.contains("https://modelcontextprotocol.io"))
 
         guard case let .dictionary(structuredContent)? = resultObject["structuredContent"],
               case let .string(provider)? = structuredContent["provider"],
@@ -61,8 +74,152 @@ struct MCPBuiltInSearchServerTests {
         }
         #expect(provider == "etos_builtin_web_search")
         #expect(items.count == 2)
+        #expect(items.contains { item in
+            guard case let .dictionary(fields) = item,
+                  case let .string(url)? = fields["url"] else { return false }
+            return url == "https://swift.org/"
+        })
+        #expect(items.contains { item in
+            guard case let .dictionary(fields) = item,
+                  case let .string(url)? = fields["url"] else { return false }
+            return url == "https://modelcontextprotocol.io/"
+        })
+        #expect(items.allSatisfy { item in
+            guard case let .dictionary(fields) = item,
+                  case let .string(source)? = fields["source"] else { return false }
+            return source == "duckduckgo_html"
+        })
 
         await client.disconnect()
+    }
+
+    @Test("优先使用 DuckDuckGo")
+    func testBuiltInSearchPrefersDuckDuckGo() async throws {
+        let recorder = SearchRequestRecorder()
+        let engine = MCPBuiltInSearchServerEngine { request in
+            guard let url = request.url else {
+                throw URLError(.badURL)
+            }
+
+            switch url.host {
+            case "www.bing.com":
+                recorder.sawBingRequest = true
+                let html = """
+                <html><body>
+                  <li class="b_algo"><h2><a href="https://example.com/irrelevant">无关结果</a></h2></li>
+                </body></html>
+                """
+                let response = HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: "HTTP/1.1",
+                    headerFields: ["Content-Type": "text/html; charset=utf-8"]
+                )!
+                return (Data(html.utf8), response)
+            case "html.duckduckgo.com":
+                recorder.sawDuckDuckGoRequest = true
+                let html = """
+                <html><body>
+                  <a class="result__a" href="https://swift.org/">Swift.org</a>
+                  <div class="result__snippet">The Swift programming language.</div>
+                </body></html>
+                """
+                let response = HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: "HTTP/1.1",
+                    headerFields: ["Content-Type": "text/html; charset=utf-8"]
+                )!
+                return (Data(html.utf8), response)
+            default:
+                throw URLError(.cannotFindHost)
+            }
+        }
+
+        let payload: [String: Any] = [
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": [
+                "name": MCPBuiltInSearchServer.toolID,
+                "arguments": ["query": "Swift", "max_results": 1]
+            ]
+        ]
+        let response = try await engine.handleMessage(JSONSerialization.data(withJSONObject: payload))
+        guard let object = try JSONSerialization.jsonObject(with: response) as? [String: Any],
+              let result = object["result"] as? [String: Any],
+              let structuredContent = result["structuredContent"] as? [String: Any],
+              let items = structuredContent["items"] as? [[String: Any]],
+              let firstItem = items.first else {
+            Issue.record("备用搜索源应返回网页结果。")
+            return
+        }
+
+        #expect(recorder.sawDuckDuckGoRequest)
+        #expect(!recorder.sawBingRequest)
+        #expect(firstItem["source"] as? String == "duckduckgo_html")
+        #expect(firstItem["url"] as? String == "https://swift.org/")
+    }
+
+    @Test("指定 Bing 时优先请求并在失败后回退 DuckDuckGo")
+    func testBuiltInSearchPrefersBingAndFallsBackToDuckDuckGo() async throws {
+        let recorder = SearchRequestRecorder()
+        let engine = MCPBuiltInSearchServerEngine { request in
+            guard let url = request.url else {
+                throw URLError(.badURL)
+            }
+
+            switch url.host {
+            case "html.duckduckgo.com":
+                recorder.sawDuckDuckGoRequest = true
+                let html = """
+                <html><body>
+                  <a class="result__a" href="https://swift.org/">Swift.org</a>
+                  <div class="result__snippet">The Swift programming language.</div>
+                </body></html>
+                """
+                let response = HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: "HTTP/1.1",
+                    headerFields: ["Content-Type": "text/html; charset=utf-8"]
+                )!
+                return (Data(html.utf8), response)
+            case "www.bing.com":
+                recorder.sawBingRequest = true
+                throw URLError(.cannotConnectToHost)
+            default:
+                throw URLError(.cannotFindHost)
+            }
+        }
+
+        let payload: [String: Any] = [
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": [
+                "name": MCPBuiltInSearchServer.toolID,
+                "arguments": [
+                    "query": "Swift",
+                    "search_engine": "bing",
+                    "max_results": 1
+                ]
+            ]
+        ]
+        let response = try await engine.handleMessage(JSONSerialization.data(withJSONObject: payload))
+        guard let object = try JSONSerialization.jsonObject(with: response) as? [String: Any],
+              let result = object["result"] as? [String: Any],
+              let structuredContent = result["structuredContent"] as? [String: Any],
+              let items = structuredContent["items"] as? [[String: Any]],
+              let firstItem = items.first else {
+            Issue.record("备用搜索源应返回网页结果。")
+            return
+        }
+
+        #expect(recorder.sawDuckDuckGoRequest)
+        #expect(recorder.sawBingRequest)
+        #expect(firstItem["source"] as? String == "duckduckgo_html")
+        #expect(firstItem["url"] as? String == "https://swift.org/")
     }
 
     @Test("query 包含 URL 时优先抓取网页标题和摘要")
@@ -269,10 +426,28 @@ struct MCPBuiltInSearchServerTests {
                 html = """
                 <html>
                 <body>
-                  <a class="result__a" href="/l/?uddg=https%3A%2F%2Fswift.org%2F&amp;rut=abc">Swift.org - Swift</a>
+                  <a class="result__a" href="https://swift.org/">Swift.org - Swift</a>
                   <div class="result__snippet">Swift is a powerful and intuitive programming language.</div>
-                  <a class="result__a" href="/l/?uddg=https%3A%2F%2Fmodelcontextprotocol.io%2F&amp;rut=def">Model Context Protocol</a>
+                  <a class="result__a" href="https://modelcontextprotocol.io/">Model Context Protocol</a>
                   <div class="result__snippet">MCP is an open protocol for connecting AI applications.</div>
+                </body>
+                </html>
+                """
+            case "www.bing.com":
+                #expect(request.value(forHTTPHeaderField: "Range") == nil)
+                html = """
+                <html>
+                <body>
+                  <li class="b_algo">
+                    <div class="b_algoheader">
+                      <a href="https://swift.org/"><h2>Swift.org - Swift</h2></a>
+                    </div>
+                    <div class="b_caption"><p>Swift is a powerful and intuitive programming language.</p></div>
+                  </li>
+                  <li class="b_algo">
+                    <h2><a href="https://modelcontextprotocol.io/">Model Context Protocol</a></h2>
+                    <div class="b_caption"><p>MCP is an open protocol for connecting AI applications.</p></div>
+                  </li>
                 </body>
                 </html>
                 """
@@ -304,5 +479,7 @@ struct MCPBuiltInSearchServerTests {
     private final class SearchRequestRecorder: @unchecked Sendable {
         var sawRangeRequest = false
         var sawPlainRequest = false
+        var sawBingRequest = false
+        var sawDuckDuckGoRequest = false
     }
 }

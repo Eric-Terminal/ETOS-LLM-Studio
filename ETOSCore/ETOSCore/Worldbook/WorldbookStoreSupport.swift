@@ -442,21 +442,30 @@ extension WorldbookStore {
 
     public static func uniqueSyncName(baseName: String, existing: [String]) -> String {
         let trimmed = baseName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let fallback = trimmed.isEmpty ? "导入世界书" : trimmed
+        let fallback = trimmed.isEmpty
+            ? NSLocalizedString("导入世界书", comment: "Imported worldbook fallback name")
+            : trimmed
         let existingSet = Set(existing.map { $0.lowercased() })
 
         if !existingSet.contains(fallback.lowercased()) {
             return fallback
         }
 
-        let first = "\(fallback)（同步）"
+        let first = String(
+            format: NSLocalizedString("%@（同步）", comment: "Synchronized worldbook duplicate name"),
+            fallback
+        )
         if !existingSet.contains(first.lowercased()) {
             return first
         }
 
         var index = 2
         while true {
-            let candidate = "\(fallback)（同步\(index)）"
+            let candidate = String(
+                format: NSLocalizedString("%@（同步%d）", comment: "Numbered synchronized worldbook duplicate name"),
+                fallback,
+                index
+            )
             if !existingSet.contains(candidate.lowercased()) {
                 return candidate
             }

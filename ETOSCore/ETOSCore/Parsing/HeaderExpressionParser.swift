@@ -27,13 +27,13 @@ public enum HeaderExpressionParser {
         public var errorDescription: String? {
             switch self {
             case .emptyExpression:
-                return "Expression cannot be empty."
+                return NSLocalizedString("表达式不能为空。", comment: "Empty header expression")
             case .missingAssignmentOperator:
-                return "Use the format: key = value."
+                return NSLocalizedString("请使用 key = value 格式。", comment: "Header expression format")
             case .invalidKey:
-                return "Key cannot be empty."
+                return NSLocalizedString("键不能为空。", comment: "Empty header key")
             case .emptyValue:
-                return "Value cannot be empty."
+                return NSLocalizedString("值不能为空。", comment: "Empty header value")
             }
         }
     }

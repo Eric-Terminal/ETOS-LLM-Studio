@@ -14,8 +14,12 @@ extension ChatBubble {
         appConfig.messageActionBarSettings
     }
 
+    var messageActionBarFontScale: CGFloat {
+        CGFloat(messageActionBarConfiguration.fontScale)
+    }
+
     var messageActionBarRole: MessageActionBarRole {
-        message.role == .user ? .user : .assistant
+        isOutgoing ? .user : .assistant
     }
 
     var configuredMessageActionBarItems: [MessageActionBarItem] {
@@ -82,7 +86,7 @@ extension ChatBubble {
         if showsMessageActionBarOuterBorder {
             let shape = Capsule()
 
-            if message.role == .user {
+            if isOutgoing {
                 if enableLiquidGlass {
                     if #available(watchOS 26.0, *) {
                         shape
@@ -129,55 +133,66 @@ extension ChatBubble {
 
     var messageActionBarForegroundColor: Color {
         if showsMessageActionBarOuterBorder {
-            switch message.role {
-            case .user, .error:
+            if isOutgoing || message.role == .error {
                 return resolvedTextColor(default: .white)
-            case .assistant, .system, .tool:
-                return resolvedTextColor(default: .primary)
-            @unknown default:
-                return resolvedTextColor(default: .primary)
             }
+            return resolvedTextColor(default: .primary)
         }
         return resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.86)
     }
 
     @ViewBuilder
     func messageActionBarItemView(_ item: MessageActionBarItem) -> some View {
+        // 字重在字体适配后叠加，确保功能栏沿用正文槽位而不是“粗体”槽位。
         switch item {
         case .quickRetry:
             Button(action: onRetry) {
                 Image(systemName: item.systemImage)
-                    .etFont(.system(size: 11, weight: .semibold))
+                    .etFont(.system(size: 11 * messageActionBarFontScale))
+                    .fontWeight(.semibold)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(item.title))
             .watchMessageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .copyMessage:
-            Button(action: onCopy) {
-                Image(systemName: item.systemImage)
-                    .etFont(.system(size: 11, weight: .semibold))
+            CopyConfirmationButton(action: onCopy) { didCopy in
+                Image(systemName: didCopy ? "checkmark" : item.systemImage)
+                    .etFont(.system(size: 11 * messageActionBarFontScale))
+                    .fontWeight(.semibold)
+                    .contentTransition(.symbolEffect(.replace))
+                    .accessibilityLabel(
+                        Text(didCopy ? NSLocalizedString("已复制", comment: "") : item.title)
+                    )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(Text(item.title))
             .watchMessageActionBarItemStyle(foreground: messageActionBarForegroundColor)
+        case .readAloud:
+            MessageReadAloudButton(messageID: message.id) { messageState.message }
+                .etFont(.system(size: 11 * messageActionBarFontScale))
+                .fontWeight(.semibold)
+                .watchMessageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .requestTime:
             Label(messageRequestTimeText, systemImage: item.systemImage)
-                .etFont(.system(size: 10, weight: .semibold))
+                .etFont(.system(size: 10 * messageActionBarFontScale))
+                .fontWeight(.semibold)
                 .watchMessageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .inputTokens:
             Label("\(inputTokenCount)", systemImage: item.systemImage)
-                .etFont(.system(size: 10, weight: .semibold))
+                .etFont(.system(size: 10 * messageActionBarFontScale))
+                .fontWeight(.semibold)
                 .monospacedDigit()
                 .watchMessageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .outputTokens:
             Label("\(outputTokenCount)", systemImage: item.systemImage)
-                .etFont(.system(size: 10, weight: .semibold))
+                .etFont(.system(size: 10 * messageActionBarFontScale))
+                .fontWeight(.semibold)
                 .monospacedDigit()
                 .watchMessageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .costEstimate:
             if let estimate = resolvedCostEstimate {
                 Label(MessageCostFormatter.formatCompact(estimate), systemImage: item.systemImage)
-                    .etFont(.system(size: 10, weight: .semibold))
+                    .etFont(.system(size: 10 * messageActionBarFontScale))
+                    .fontWeight(.semibold)
                     .monospacedDigit()
                     .watchMessageActionBarItemStyle(foreground: messageActionBarForegroundColor)
             }
@@ -195,21 +210,24 @@ extension ChatBubble {
                 onSwitchToPreviousVersion()
             } label: {
                 Image(systemName: "chevron.left")
-                    .etFont(.system(size: 11, weight: .bold))
+                    .etFont(.system(size: 11 * messageActionBarFontScale))
+                    .fontWeight(.bold)
             }
             .buttonStyle(.plain)
             .disabled(currentIndex == 0)
             .opacity(currentIndex > 0 ? 1 : 0.4)
 
             Text("\(currentIndex + 1)/\(totalCount)")
-                .etFont(.system(size: 10, weight: .semibold))
+                .etFont(.system(size: 10 * messageActionBarFontScale))
+                .fontWeight(.semibold)
                 .monospacedDigit()
 
             Button {
                 onSwitchToNextVersion()
             } label: {
                 Image(systemName: "chevron.right")
-                    .etFont(.system(size: 11, weight: .bold))
+                    .etFont(.system(size: 11 * messageActionBarFontScale))
+                    .fontWeight(.bold)
             }
             .buttonStyle(.plain)
             .disabled(currentIndex >= totalCount - 1)
@@ -232,6 +250,8 @@ extension ChatBubble {
             return canRetry
         case .copyMessage:
             return !message.content.isEmpty
+        case .readAloud:
+            return MessageActionBarAvailability.canReadAloud(message)
         case .requestTime:
             return messageRequestDate != nil
         case .inputTokens:
@@ -396,13 +416,13 @@ extension ChatBubble {
     }
 
     var shouldRenderReasoningToolTimeline: Bool {
-        message.role != .user
+        !isOutgoing
             && message.role != .error
             && (hasToolCalls || !(message.reasoningContent ?? "").isEmpty)
     }
 
     var usesNoBubbleStyle: Bool {
-        enableNoBubbleUI && message.role != .user && message.role != .error
+        enableNoBubbleUI && !isOutgoing && message.role != .error
     }
 
     var hasMainContentWhenToolCallsSeparated: Bool {
@@ -438,7 +458,7 @@ extension ChatBubble {
     }
 
     var shouldShowMergedSeparator: Bool {
-        !usesNoBubbleStyle && mergeWithPrevious && message.role != .user && message.role != .error
+        !usesNoBubbleStyle && mergeWithPrevious && !isOutgoing && message.role != .error
     }
 
     var separatorThickness: CGFloat {
@@ -470,7 +490,7 @@ extension ChatBubble {
             return min(max(rowWidth * 0.96, 1), availableBubbleWidth)
         }
         let availableBubbleWidth = max(1, rowWidth - rowSpacerReserveWidth)
-        let widthRatio: CGFloat = (message.role == .user || message.role == .error) ? 0.86 : 0.92
+        let widthRatio: CGFloat = (isOutgoing || message.role == .error) ? 0.86 : 0.92
         return min(rowWidth * widthRatio, availableBubbleWidth)
     }
 
@@ -478,7 +498,7 @@ extension ChatBubble {
         if usesNoBubbleStyle {
             return true
         }
-        return message.role != .user
+        return !isOutgoing
             && message.role != .error
             && (mergeWithPrevious || mergeWithNext || shouldRenderReasoningToolTimeline)
     }
@@ -502,7 +522,8 @@ extension ChatBubble {
     var pendingToolCallForAutoPresentation: InternalToolCall? {
         guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return nil }
         return toolCalls.first { call in
-            activeToolPermissionRequest(for: call) != nil && !hasAutoOpenedPendingToolCall(call.id)
+            activeToolPermissionRequest(for: call) != nil
+                && !hasAutoOpenedPendingToolCall(pendingToolCallPresentationID(call.id))
         }
     }
 

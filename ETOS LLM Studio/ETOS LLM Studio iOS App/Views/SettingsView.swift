@@ -11,7 +11,9 @@ import Foundation
 import ETOSCore
 
 enum SettingsNavigationDestination: Hashable, Identifiable {
+    case modelManagement
     case dailyPulse
+    case dailyPulseCard(runID: UUID, cardID: UUID)
     case feedbackCenter
     case feedbackIssue(issueNumber: Int)
     case achievementJournal
@@ -19,8 +21,12 @@ enum SettingsNavigationDestination: Hashable, Identifiable {
 
     var id: String {
         switch self {
+        case .modelManagement:
+            return "modelManagement"
         case .dailyPulse:
             return "dailyPulse"
+        case .dailyPulseCard(let runID, let cardID):
+            return "dailyPulseCard-\(runID.uuidString)-\(cardID.uuidString)"
         case .feedbackCenter:
             return "feedbackCenter"
         case .feedbackIssue(let issueNumber):
@@ -33,14 +39,51 @@ enum SettingsNavigationDestination: Hashable, Identifiable {
     }
 }
 
+private enum CoreSettingsNavigationDestination: Hashable {
+    case modelManagement
+    case conversation
+    case prompts
+    case output
+    case display
+    case sync
+}
+
+struct SettingsCoreGridLayout: Equatable {
+    private static let compactCardHeight: CGFloat = 100
+    private static let wideCardHeight: CGFloat = 140
+
+    let columnCount: Int
+    let preferredCardHeight: CGFloat
+
+    static func resolved(
+        horizontalSizeClass: UserInterfaceSizeClass?,
+        verticalSizeClass: UserInterfaceSizeClass?
+    ) -> SettingsCoreGridLayout {
+        let usesWideLayout = horizontalSizeClass == .regular || verticalSizeClass == .compact
+        return usesWideLayout
+            ? SettingsCoreGridLayout(columnCount: 3, preferredCardHeight: wideCardHeight)
+            : SettingsCoreGridLayout(columnCount: 2, preferredCardHeight: compactCardHeight)
+    }
+}
+
 struct SettingsView: View {
+    private static let portraitCoreSettingsColumns = Array(
+        repeating: GridItem(.flexible()),
+        count: 2
+    )
+    private static let landscapeCoreSettingsColumns = Array(
+        repeating: GridItem(.flexible()),
+        count: 3
+    )
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @EnvironmentObject private var viewModel: ChatViewModel
-    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var announcementManager = AnnouncementManager.shared
     @ObservedObject private var pulseManager = DailyPulseManager.shared
     @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
     @ObservedObject private var appConfig = AppConfigStore.shared
     @Binding private var requestedDestination: SettingsNavigationDestination?
+    @State private var coreSettingsDestination: CoreSettingsNavigationDestination?
     @State private var settingsResearchTask: Task<Void, Never>?
 
     init(requestedDestination: Binding<SettingsNavigationDestination?> = .constant(nil)) {
@@ -49,90 +92,11 @@ struct SettingsView: View {
     
     var body: some View {
         List {
-            Section(NSLocalizedString("当前模型", comment: "设置当前模型分组")) {
-                let options = viewModel.activatedConversationModels
-                if options.isEmpty {
-                    Text(NSLocalizedString("暂无可用模型，请先在“提供商与模型管理”中启用。", comment: "无可用模型提示"))
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
-                } else {
-                    NavigationLink {
-                        CurrentModelSelectionView(
-                            models: options,
-                            selectedModel: selectedModelBinding
-                        )
-                    } label: {
-                        HStack(spacing: 8) {
-                            settingsListIcon(.currentModel)
-                            Text(NSLocalizedString("模型", comment: "模型标签"))
-                            Text(selectedModelLabel(in: options))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            .foregroundStyle(.secondary)
-                            .allowsHitTesting(false)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                        }
-                    }
-                }
-                
-                Button {
-                    viewModel.createNewSession()
-                    dismiss()
-                    NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
-                } label: {
-                    SettingsListIconLabel("开启新对话", icon: .newConversation)
-                }
-            }
-
-            Section(NSLocalizedString("对话行为", comment: "设置对话行为分组")) {
-                NavigationLink {
-                    SessionListView().environmentObject(viewModel)
-                } label: {
-                    SettingsListIconLabel("历史会话管理", icon: .sessionHistory)
-                }
-
-                NavigationLink {
-                    ProviderListView().environmentObject(viewModel)
-                } label: {
-                    SettingsListIconLabel("提供商与模型管理", icon: .providerManagement)
-                }
-                
-                NavigationLink {
-                    ModelAdvancedSettingsView(
-                        aiTemperature: $viewModel.aiTemperature,
-                        aiTopP: $viewModel.aiTopP,
-                        aiTemperatureEnabled: $viewModel.aiTemperatureEnabled,
-                        aiTopPEnabled: $viewModel.aiTopPEnabled,
-                        globalSystemPromptEntries: $viewModel.globalSystemPromptEntries,
-                        selectedGlobalSystemPromptEntryID: $viewModel.selectedGlobalSystemPromptEntryID,
-                        maxChatHistory: $viewModel.maxChatHistory,
-                        lazyLoadMessageCount: $viewModel.lazyLoadMessageCount,
-                        enableStreaming: $viewModel.enableStreaming,
-                        enableResponseSpeedMetrics: $viewModel.enableResponseSpeedMetrics,
-                        enableOpenAIStreamIncludeUsage: $viewModel.enableOpenAIStreamIncludeUsage,
-                        enableAutoSessionNaming: $viewModel.enableAutoSessionNaming,
-                        enableReasoningSummary: $viewModel.enableReasoningSummary,
-                        currentSession: $viewModel.currentSession,
-                        includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
-                        systemTimeInjectionPosition: $viewModel.systemTimeInjectionPosition,
-                        enablePeriodicTimeLandmark: $viewModel.enablePeriodicTimeLandmark,
-                        periodicTimeLandmarkIntervalMinutes: $viewModel.periodicTimeLandmarkIntervalMinutes,
-                        addGlobalSystemPromptEntry: viewModel.addGlobalSystemPromptEntry,
-                        selectGlobalSystemPromptEntry: viewModel.selectGlobalSystemPromptEntry,
-                        updateSelectedGlobalSystemPromptContent: viewModel.updateSelectedGlobalSystemPromptContent,
-                        updateGlobalSystemPromptEntry: viewModel.updateGlobalSystemPromptEntry,
-                        deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) }
-                    )
-                } label: {
-                    SettingsListIconLabel("偏好设置", icon: .modelAdvanced)
-                }
-
-                NavigationLink {
-                    TTSSettingsView()
-                        .environmentObject(viewModel)
-                } label: {
-                    SettingsListIconLabel("语音朗读（TTS）", icon: .tts)
-                }
+            Section {
+                coreSettingsGrid
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             }
 
             Section(NSLocalizedString("拓展能力", comment: "设置拓展能力分组")) {
@@ -222,49 +186,33 @@ struct SettingsView: View {
                 }
 
                 NavigationLink {
+                    LocalLinuxFeatureView(sessionID: viewModel.currentSession?.id)
+                } label: {
+                    SettingsListIconLabel("本地 Linux", icon: .localLinux)
+                }
+
+                NavigationLink {
+                    BrowserAgentFeatureView(sessionID: viewModel.currentSession?.id)
+                } label: {
+                    SettingsListIconLabel("Browser Agent", icon: .browserAgent)
+                }
+
+                NavigationLink {
                     ExtendedFeaturesView()
                         .environmentObject(viewModel)
                 } label: {
                     SettingsListIconLabel("拓展功能", icon: .extendedFeatures)
                 }
             }
-            
-            Section(NSLocalizedString("显示与体验", comment: "设置显示与体验分组")) {
+
+            Section(NSLocalizedString("帮助", comment: "设置帮助分组")) {
                 NavigationLink {
-                    DisplaySettingsView(
-                        enableMarkdown: $viewModel.enableMarkdown,
-                        enableBackground: $viewModel.enableBackground,
-                        backgroundBlur: $viewModel.backgroundBlur,
-                        backgroundOpacity: $viewModel.backgroundOpacity,
-                        enableAutoRotateBackground: $viewModel.enableAutoRotateBackground,
-                        currentBackgroundImage: $viewModel.currentBackgroundImage,
-                        backgroundContentMode: $viewModel.backgroundContentMode,
-                        enableLiquidGlass: $viewModel.enableLiquidGlass,
-                        enableChatTopBlurFade: $viewModel.enableChatTopBlurFade,
-                        enableAdvancedRenderer: $viewModel.enableAdvancedRenderer,
-                        enableAutoReasoningPreview: $viewModel.enableAutoReasoningPreview,
-                        enableNoBubbleUI: $viewModel.enableNoBubbleUI,
-                        allBackgrounds: viewModel.backgroundImages
-                    )
+                    GuideSettingsView()
+                        .environmentObject(viewModel)
                 } label: {
-                    SettingsListIconLabel("背景与视觉", icon: .display)
-                }
-                
-                NavigationLink {
-                    DeviceSyncSettingsView()
-                } label: {
-                    SettingsListIconLabel("同步与备份", icon: .sync)
+                    SettingsListIconLabel("页面向导", icon: .guide)
                 }
             }
-
-            Section(NSLocalizedString("关于", comment: "设置关于分组")) {
-                NavigationLink {
-                    AboutView()
-                } label: {
-                    SettingsListIconLabel("关于 ETOS LLM Studio", icon: .about)
-                }
-            }
-
             // MARK: - 公告通知 Section
             if announcementManager.shouldShowInSettings {
                 Section(NSLocalizedString("系统公告", comment: "系统公告分组")) {
@@ -284,27 +232,90 @@ struct SettingsView: View {
                     }
                 }
             }
+
+            Section(NSLocalizedString("关于", comment: "设置关于分组")) {
+                NavigationLink {
+                    AboutView()
+                } label: {
+                    SettingsListIconLabel("关于 ETOS LLM Studio", icon: .about)
+                }
+            }
         }
         .navigationTitle(NSLocalizedString("设置", comment: "设置页标题"))
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: "settings-root",
+                title: NSLocalizedString("设置", comment: "设置页向导上下文标题"),
+                documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")]
+            ),
+            isFallback: true,
+            snapshot: {
+                GuidePageSnapshot(fields: [
+                    "provider_count": GuideSnapshotField(
+                        label: NSLocalizedString("提供商数量", comment: "设置页向导快照字段"),
+                        value: .int(viewModel.providers.count),
+                        access: .readOnly
+                    ),
+                    "selected_model": GuideSnapshotField(
+                        label: NSLocalizedString("当前模型", comment: "设置页向导快照字段"),
+                        value: .string(viewModel.selectedModel?.model.displayName ?? ""),
+                        access: .readOnly
+                    )
+                ])
+            }
+        )
         .onAppear {
-            ensureSelectedModel(in: viewModel.activatedConversationModels)
             scheduleSettingsResearchAchievementIfNeeded()
         }
         .onDisappear {
             cancelSettingsResearchAchievementTask()
-        }
-        .onChange(of: viewModel.activatedModelListVersion) { _, _ in
-            ensureSelectedModel(in: viewModel.activatedConversationModels)
         }
         .onChange(of: viewModel.enableMarkdown) { _, isEnabled in
             if !isEnabled, viewModel.enableAdvancedRenderer {
                 viewModel.enableAdvancedRenderer = false
             }
         }
+        .navigationDestination(item: $coreSettingsDestination) { destination in
+            switch destination {
+            case .modelManagement:
+                ProviderListView()
+                    .environmentObject(viewModel)
+            case .conversation:
+                advancedSettingsView(destination: .conversation)
+            case .prompts:
+                advancedSettingsView(destination: .prompts)
+            case .output:
+                advancedSettingsView(destination: .output)
+            case .display:
+                DisplaySettingsView(
+                    enableMarkdown: $viewModel.enableMarkdown,
+                    enableBackground: $viewModel.enableBackground,
+                    backgroundBlur: $viewModel.backgroundBlur,
+                    backgroundOpacity: $viewModel.backgroundOpacity,
+                    enableAutoRotateBackground: $viewModel.enableAutoRotateBackground,
+                    currentBackgroundImage: $viewModel.currentBackgroundImage,
+                    backgroundContentMode: $viewModel.backgroundContentMode,
+                    enableLiquidGlass: $viewModel.enableLiquidGlass,
+                    enableChatTopBlurFade: $viewModel.enableChatTopBlurFade,
+                    enableAdvancedRenderer: $viewModel.enableAdvancedRenderer,
+                    enableAutoReasoningPreview: $viewModel.enableAutoReasoningPreview,
+                    enableNoBubbleUI: $viewModel.enableNoBubbleUI,
+                    allBackgrounds: viewModel.backgroundImages
+                )
+            case .sync:
+                DeviceSyncSettingsView()
+            }
+        }
         .navigationDestination(item: $requestedDestination) { destination in
             switch destination {
+            case .modelManagement:
+                ProviderListView()
+                    .environmentObject(viewModel)
             case .dailyPulse:
                 DailyPulseView()
+                    .environmentObject(viewModel)
+            case .dailyPulseCard(let runID, let cardID):
+                DailyPulseView(initialRunID: runID, initialCardID: cardID)
                     .environmentObject(viewModel)
             case .feedbackCenter:
                 FeedbackCenterView()
@@ -316,6 +327,74 @@ struct SettingsView: View {
                 UpdateTimelineView()
             }
         }
+    }
+
+    /// 使用导航开始前已经确定的尺寸等级，避免在 List 布局过程中切换网格结构。
+    private var coreSettingsGrid: some View {
+        let layout = SettingsCoreGridLayout.resolved(
+            horizontalSizeClass: horizontalSizeClass,
+            verticalSizeClass: verticalSizeClass
+        )
+        let columns = layout.columnCount == 3
+            ? Self.landscapeCoreSettingsColumns
+            : Self.portraitCoreSettingsColumns
+
+        return LazyVGrid(columns: columns) {
+            coreSettingsButton(
+                titleKey: "模型管理",
+                icon: .providerManagement,
+                destination: .modelManagement,
+                preferredHeight: layout.preferredCardHeight
+            )
+            coreSettingsButton(
+                titleKey: "会话",
+                icon: .conversationSettings,
+                destination: .conversation,
+                preferredHeight: layout.preferredCardHeight
+            )
+            coreSettingsButton(
+                titleKey: "提示词",
+                icon: .promptSettings,
+                destination: .prompts,
+                preferredHeight: layout.preferredCardHeight
+            )
+            coreSettingsButton(
+                titleKey: "输出",
+                icon: .outputSettings,
+                destination: .output,
+                preferredHeight: layout.preferredCardHeight
+            )
+            coreSettingsButton(
+                titleKey: "背景与视觉",
+                icon: .display,
+                destination: .display,
+                preferredHeight: layout.preferredCardHeight
+            )
+            coreSettingsButton(
+                titleKey: "同步与备份",
+                icon: .sync,
+                destination: .sync,
+                preferredHeight: layout.preferredCardHeight
+            )
+        }
+    }
+
+    private func coreSettingsButton(
+        titleKey: String,
+        icon: SettingsListIcon,
+        destination: CoreSettingsNavigationDestination,
+        preferredHeight: CGFloat
+    ) -> some View {
+        Button {
+            coreSettingsDestination = destination
+        } label: {
+            SettingsCategoryCard(
+                titleKey,
+                icon: icon,
+                preferredHeight: preferredHeight
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - 辅助方法
@@ -348,16 +427,6 @@ struct SettingsView: View {
         }
     }
 
-    private func ensureSelectedModel(in options: [RunnableModel]) {
-        guard let first = options.first else { return }
-        guard let selectedID = viewModel.selectedModel?.id,
-              options.contains(where: { $0.id == selectedID }) else {
-            viewModel.selectedModel = first
-            ChatService.shared.setSelectedModel(first)
-            return
-        }
-    }
-
     private func scheduleSettingsResearchAchievementIfNeeded() {
         cancelSettingsResearchAchievementTask()
         guard !AchievementCenter.shared.hasUnlocked(id: .settingsResearcher) else { return }
@@ -380,16 +449,6 @@ struct SettingsView: View {
         settingsResearchTask = nil
     }
 
-    private var selectedModelBinding: Binding<RunnableModel?> {
-        Binding(
-            get: { viewModel.selectedModel },
-            set: { model in
-                viewModel.selectedModel = model
-                ChatService.shared.setSelectedModel(model)
-            }
-        )
-    }
-
     private var dailyPulseEntryStatusText: String? {
         if pulseManager.isPreparingTodayPulse {
             return NSLocalizedString("准备中", comment: "每日脉冲准备中状态")
@@ -400,23 +459,47 @@ struct SettingsView: View {
         if pulseManager.todayRun != nil {
             return NSLocalizedString("今日已生成", comment: "每日脉冲今日已生成状态")
         }
+        if pulseManager.tomorrowRun != nil {
+            return NSLocalizedString("明日已准备", comment: "每日脉冲明日已准备状态")
+        }
         if deliveryCoordinator.reminderEnabled {
             return String(
-                format: NSLocalizedString("明早 %@", comment: "每日脉冲明早提醒状态"),
-                deliveryCoordinator.reminderTimeText
+                format: NSLocalizedString("%d 张卡片", comment: "Daily Pulse configured card count"),
+                deliveryCoordinator.deliveryTimes.count
             )
         }
         return nil
     }
 
-    private func selectedModelLabel(in options: [RunnableModel]) -> String {
-        if let selected = viewModel.selectedModel,
-           options.contains(where: { $0.id == selected.id }) {
-            return "\(selected.model.displayName) | \(selected.provider.name)"
-        }
-
-        guard let first = options.first else { return "" }
-        return "\(first.model.displayName) | \(first.provider.name)"
+    private func advancedSettingsView(
+        destination: ModelAdvancedSettingsDestination
+    ) -> ModelAdvancedSettingsView {
+        ModelAdvancedSettingsView(
+            aiTemperature: $viewModel.aiTemperature,
+            aiTopP: $viewModel.aiTopP,
+            aiTemperatureEnabled: $viewModel.aiTemperatureEnabled,
+            aiTopPEnabled: $viewModel.aiTopPEnabled,
+            globalSystemPromptEntries: $viewModel.globalSystemPromptEntries,
+            selectedGlobalSystemPromptEntryID: $viewModel.selectedGlobalSystemPromptEntryID,
+            maxChatHistory: $viewModel.maxChatHistory,
+            lazyLoadMessageCount: $viewModel.lazyLoadMessageCount,
+            enableStreaming: $viewModel.enableStreaming,
+            enableResponseSpeedMetrics: $viewModel.enableResponseSpeedMetrics,
+            enableOpenAIStreamIncludeUsage: $viewModel.enableOpenAIStreamIncludeUsage,
+            enableAutoSessionNaming: $viewModel.enableAutoSessionNaming,
+            enableReasoningSummary: $viewModel.enableReasoningSummary,
+            currentSession: $viewModel.currentSession,
+            includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
+            systemTimeInjectionPosition: $viewModel.systemTimeInjectionPosition,
+            enablePeriodicTimeLandmark: $viewModel.enablePeriodicTimeLandmark,
+            periodicTimeLandmarkIntervalMinutes: $viewModel.periodicTimeLandmarkIntervalMinutes,
+            addGlobalSystemPromptEntry: viewModel.addGlobalSystemPromptEntry,
+            selectGlobalSystemPromptEntry: viewModel.selectGlobalSystemPromptEntry,
+            updateSelectedGlobalSystemPromptContent: viewModel.updateSelectedGlobalSystemPromptContent,
+            updateGlobalSystemPromptEntry: viewModel.updateGlobalSystemPromptEntry,
+            deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) },
+            destination: destination
+        )
     }
 }
 
@@ -426,13 +509,12 @@ struct SettingsListIcon {
 }
 
 extension SettingsListIcon {
-    static let currentModel = SettingsListIcon(systemName: "cpu", backgroundColor: .blue)
-    static let newConversation = SettingsListIcon(systemName: "plus", backgroundColor: .green)
     static let chatQuickAction = SettingsListIcon(systemName: "ellipsis.circle", backgroundColor: .indigo)
-    static let sessionHistory = SettingsListIcon(systemName: "clock", backgroundColor: .indigo)
+    static let slashCommands = SettingsListIcon(systemName: "terminal", backgroundColor: .indigo)
     static let providerManagement = SettingsListIcon(systemName: "cube", backgroundColor: .orange)
-    static let modelAdvanced = SettingsListIcon(systemName: "gearshape", backgroundColor: .purple)
-    static let tts = SettingsListIcon(systemName: "speaker", backgroundColor: .pink)
+    static let conversationSettings = SettingsListIcon(systemName: "bubble.left.and.bubble.right", backgroundColor: .indigo)
+    static let promptSettings = SettingsListIcon(systemName: "text.quote", backgroundColor: .purple)
+    static let outputSettings = SettingsListIcon(systemName: "waveform", backgroundColor: .blue)
     static let toolCenter = SettingsListIcon(systemName: "wrench", backgroundColor: .teal)
     static let dailyPulse = SettingsListIcon(systemName: "sparkles", backgroundColor: .yellow)
     static let usageAnalytics = SettingsListIcon(systemName: "chart.bar", backgroundColor: .cyan)
@@ -445,7 +527,11 @@ extension SettingsListIcon {
     static let roleplay = SettingsListIcon(systemName: "theatermasks", backgroundColor: .purple)
     static let speechInput = SettingsListIcon(systemName: "mic", backgroundColor: .red)
     static let extendedFeatures = SettingsListIcon(systemName: "ellipsis", backgroundColor: .indigo)
+    static let backgroundGeneration = SettingsListIcon(systemName: "location", backgroundColor: .green)
     static let localModels = SettingsListIcon(systemName: "cpu", backgroundColor: .blue)
+    static let localLinux = SettingsListIcon(systemName: "terminal", backgroundColor: .green)
+    static let browserAgent = SettingsListIcon(systemName: "safari", backgroundColor: .blue)
+    static let guide = SettingsListIcon(systemName: "questionmark.bubble", backgroundColor: .blue)
     static let display = SettingsListIcon(systemName: "sun.max", backgroundColor: .purple)
     static let sync = SettingsListIcon(systemName: "arrow.clockwise", backgroundColor: .green)
     static let security = SettingsListIcon(systemName: "lock", backgroundColor: .red)
@@ -481,6 +567,61 @@ struct SettingsListIconLabel: View {
     }
 }
 
+private struct SettingsCategoryCard: View {
+    let title: String
+    let icon: SettingsListIcon
+    let preferredHeight: CGFloat
+    @ObservedObject private var appConfig = AppConfigStore.shared
+
+    init(_ titleKey: String, icon: SettingsListIcon, preferredHeight: CGFloat) {
+        self.title = NSLocalizedString(titleKey, comment: "核心设置分类入口标题")
+        self.icon = icon
+        self.preferredHeight = preferredHeight
+    }
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            categoryIcon
+            Spacer()
+            HStack(alignment: .firstTextBaseline) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding()
+        // 只限制卡片随宽度增长的目标高度，动态字体仍可按内容继续撑开。
+        .frame(maxWidth: .infinity, minHeight: preferredHeight, alignment: .leading)
+        .background(
+            Color(uiColor: .secondarySystemGroupedBackground),
+            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var categoryIcon: some View {
+        if appConfig.settingsColorfulIconsEnabled {
+            Image(systemName: icon.systemName)
+                .symbolVariant(.fill)
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(icon.backgroundColor)
+                .accessibilityHidden(true)
+        } else {
+            Image(systemName: icon.systemName)
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(.primary)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
 struct SettingsListPlainIconView: View {
     let icon: SettingsListIcon
 
@@ -506,38 +647,5 @@ struct SettingsListIconView: View {
                     .foregroundStyle(.white)
             }
             .accessibilityHidden(true)
-    }
-}
-
-private struct CurrentModelSelectionView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    let models: [RunnableModel]
-    @Binding var selectedModel: RunnableModel?
-
-    var body: some View {
-        List {
-            ForEach(models) { model in
-                Button {
-                    select(model)
-                } label: {
-                    MarqueeTitleSubtitleSelectionRow(
-                        title: model.model.displayName,
-                        subtitle: "\(model.provider.name) · \(model.model.modelName)",
-                        isSelected: selectedModel?.id == model.id,
-                        subtitleUIFont: .monospacedSystemFont(
-                            ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
-                            weight: .regular
-                        )
-                    )
-                }
-            }
-        }
-        .navigationTitle(NSLocalizedString("当前模型", comment: "当前模型选择页标题"))
-    }
-
-    private func select(_ model: RunnableModel) {
-        selectedModel = model
-        dismiss()
     }
 }

@@ -31,12 +31,20 @@ extension ChatBubble {
 
     @ViewBuilder
     func renderContent(_ content: String) -> some View {
-        let retryFailedPrefix = NSLocalizedString("重试失败", comment: "Retry failed error message prefix")
         let shouldRenderAsOutgoing = message.role == .user
             || message.role == .error
-            || (message.role == .assistant
-                && (message.content.hasPrefix(retryFailedPrefix) || message.content.hasPrefix("重试失败")))
-        if let extraction = messageState.roleplayHTML,
+        if messageState.isUserContentTruncated {
+            VStack(alignment: .leading) {
+                Text(content)
+                if let onOpenMore, !isSelectionMode {
+                    Button(action: onOpenMore) {
+                        Text(NSLocalizedString("更多", comment: ""))
+                            .etFont(.caption)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        } else if let extraction = messageState.roleplayHTML,
            let roleplaySessionID,
            extraction.containsHTML {
             VStack(alignment: .leading) {
@@ -51,6 +59,7 @@ extension ChatBubble {
                         customTextColor: customTextColorOverride,
                         customTextStyleColors: customTextStyleColors,
                         isStreaming: showsStreamingIndicators,
+                        streamingState: messageState.streamingMarkdownState,
                         onCodeBlockHeaderTap: onCodeBlockHeaderTap
                     )
                 }
@@ -58,7 +67,8 @@ extension ChatBubble {
                     extraction: extraction,
                     sessionID: roleplaySessionID,
                     messageID: message.id,
-                    versionIndex: message.getCurrentVersionIndex()
+                    versionIndex: message.getCurrentVersionIndex(),
+                    chatMessages: roleplayMessages
                 ) { item in
                     webHTMLPageItem = item
                 }
@@ -74,6 +84,7 @@ extension ChatBubble {
                 customTextColor: customTextColorOverride,
                 customTextStyleColors: customTextStyleColors,
                 isStreaming: showsStreamingIndicators,
+                streamingState: messageState.streamingMarkdownState,
                 onCodeBlockHeaderTap: onCodeBlockHeaderTap
             )
         }
@@ -198,11 +209,10 @@ extension ChatBubble {
     func fileAttachmentsView(fileNames: [String], isOutgoing: Bool) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(fileNames, id: \.self) { fileName in
-                Button {
-                    loadFilePreview(fileName)
-                } label: {
+                let isVideo = VideoAttachmentSupport.isVideo(fileName: fileName)
+                if isVideo {
                     HStack(spacing: 6) {
-                        Image(systemName: "doc")
+                        Image(systemName: "video")
                             .etFont(.system(size: 13, weight: .semibold))
                             .foregroundStyle(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
 
@@ -212,10 +222,6 @@ extension ChatBubble {
                             .foregroundStyle(resolvedTextColor(default: .primary))
 
                         Spacer(minLength: 4)
-
-                        Image(systemName: "eye")
-                            .etFont(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
@@ -224,9 +230,37 @@ extension ChatBubble {
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .fill(Color.secondary.opacity(0.15))
                     )
+                } else {
+                    Button {
+                        loadFilePreview(fileName)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc")
+                                .etFont(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
+
+                            Text(fileName)
+                                .etFont(.system(size: 11, weight: .medium))
+                                .lineLimit(1)
+                                .foregroundStyle(resolvedTextColor(default: .primary))
+
+                            Spacer(minLength: 4)
+
+                            Image(systemName: "eye")
+                                .etFont(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color.secondary.opacity(0.15))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(NSLocalizedString("预览", comment: ""))
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(NSLocalizedString("预览", comment: ""))
             }
         }
         .frame(maxWidth: bubbleMaxWidth, alignment: isOutgoing ? .trailing : .leading)
@@ -296,7 +330,9 @@ extension ChatBubble {
                         textColor: contentColor,
                         customTextStyleColors: customTextStyleColors,
                         font: .footnote,
-                        onCodeBlockHeaderTap: onCodeBlockHeaderTap
+                        onCodeBlockHeaderTap: onCodeBlockHeaderTap,
+                        streamingMarkdownState: messageState.streamingMarkdownState,
+                        isStreaming: showsStreamingIndicators
                     )
                 }
             }

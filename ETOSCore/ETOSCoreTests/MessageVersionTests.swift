@@ -309,7 +309,11 @@ final class MessageVersionTests: XCTestCase {
             firstFinal.id,
             nextUser.id
         ])
-        XCTAssertNil(ChatResponseAttemptSupport.versionInfo(for: firstToolCall, in: switchedMessages))
+        let firstToolCallInfo = try XCTUnwrap(
+            ChatResponseAttemptSupport.versionInfo(for: firstToolCall, in: switchedMessages)
+        )
+        XCTAssertEqual(firstToolCallInfo.currentAttemptID, firstAttemptID)
+        XCTAssertEqual(firstToolCallInfo.currentIndex, 0)
 
         let firstInfo = try XCTUnwrap(ChatResponseAttemptSupport.versionInfo(for: firstFinal, in: switchedMessages))
         XCTAssertEqual(firstInfo.currentAttemptID, firstAttemptID)
@@ -422,8 +426,8 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertFalse(ChatResponseAttemptSupport.shouldMergeAdjacentAssistantTurnMessages(legacyAssistant, userMessage))
     }
 
-    /// 测试工具调用结果位于回复组底部时，由底部气泡承载版本切换信息
-    func testResponseAttemptVersionInfoMovesToBottomToolMessage() throws {
+    /// 测试同一轮任意可见气泡都能切换完整回复版本
+    func testResponseAttemptVersionInfoAvailableAcrossVisibleTurn() throws {
         let userID = UUID()
         let firstAttemptID = UUID()
         let secondAttemptID = UUID()
@@ -456,7 +460,11 @@ final class MessageVersionTests: XCTestCase {
         )
         let messages = [userMessage, firstAssistant, firstToolResult, secondAssistant]
 
-        XCTAssertNil(ChatResponseAttemptSupport.versionInfo(for: firstAssistant, in: messages))
+        let userInfo = try XCTUnwrap(ChatResponseAttemptSupport.versionInfo(for: userMessage, in: messages))
+        XCTAssertEqual(userInfo.currentAttemptID, firstAttemptID)
+
+        let assistantInfo = try XCTUnwrap(ChatResponseAttemptSupport.versionInfo(for: firstAssistant, in: messages))
+        XCTAssertEqual(assistantInfo.currentAttemptID, firstAttemptID)
 
         let toolInfo = try XCTUnwrap(ChatResponseAttemptSupport.versionInfo(for: firstToolResult, in: messages))
         XCTAssertEqual(toolInfo.currentAttemptID, firstAttemptID)
@@ -768,6 +776,37 @@ final class ChatQuickRetrySupportTests: XCTestCase {
         XCTAssertFalse(ChatQuickRetrySupport.canRetryLatestMessage(in: messages, isSending: false))
     }
 
+    func testToolCallingAssistantCanQuickRetryToContinue() {
+        let call = InternalToolCall(
+            id: "call_1",
+            toolName: "search_memory",
+            arguments: #"{"mode":"keyword","query":"线索"}"#,
+            result: "找到线索"
+        )
+        let messages = [
+            ChatMessage(role: .user, content: "继续调查"),
+            ChatMessage(role: .assistant, content: "", toolCalls: [call])
+        ]
+
+        XCTAssertTrue(ChatQuickRetrySupport.canRetryLatestMessage(in: messages, isSending: false))
+    }
+
+    func testToolResultCanQuickRetryToContinue() {
+        let call = InternalToolCall(
+            id: "call_1",
+            toolName: "search_memory",
+            arguments: #"{"mode":"keyword","query":"线索"}"#,
+            result: "找到线索"
+        )
+        let messages = [
+            ChatMessage(role: .user, content: "继续调查"),
+            ChatMessage(role: .assistant, content: "", toolCalls: [call]),
+            ChatMessage(role: .tool, content: "找到线索", toolCalls: [call])
+        ]
+
+        XCTAssertTrue(ChatQuickRetrySupport.canRetryLatestMessage(in: messages, isSending: false))
+    }
+
     func testSendingStateDoesNotQuickRetry() {
         let messages = [
             ChatMessage(role: .user, content: "你好"),
@@ -775,6 +814,219 @@ final class ChatQuickRetrySupportTests: XCTestCase {
         ]
 
         XCTAssertFalse(ChatQuickRetrySupport.canRetryLatestMessage(in: messages, isSending: true))
+    }
+}
+
+final class ChatMessageTopologySupportTests: XCTestCase {
+    func testConversationExamplesProduceExpectedTurnBoundaries() {
+        let firstConversation = [
+            ChatMessage(role: .user, content: "A"),
+            ChatMessage(role: .assistant, content: "B"),
+            ChatMessage(role: .assistant, content: "C"),
+            ChatMessage(role: .user, content: "D"),
+            ChatMessage(role: .assistant, content: "E")
+        ]
+        let toolConversation = [
+            ChatMessage(role: .user, content: "A"),
+            ChatMessage(role: .assistant, content: "B"),
+            ChatMessage(role: .assistant, content: "C"),
+            ChatMessage(role: .assistant, content: "D"),
+            ChatMessage(role: .user, content: "E"),
+            ChatMessage(role: .assistant, content: "F")
+        ]
+
+        XCTAssertEqual(
+            ChatConversationTurnSupport.turns(in: firstConversation).map(\.range),
+            [0..<3, 3..<5]
+        )
+        XCTAssertEqual(
+            ChatConversationTurnSupport.turns(in: toolConversation).map(\.range),
+            [0..<4, 4..<6]
+        )
+    }
+
+    func testConsecutiveUserMessagesBelongToOneTurn() throws {
+        let messages = [
+            ChatMessage(role: .user, content: "图片一"),
+            ChatMessage(role: .user, content: "图片二"),
+            ChatMessage(role: .assistant, content: "工具调用"),
+            ChatMessage(role: .assistant, content: "最终回答"),
+            ChatMessage(role: .user, content: "下一轮")
+        ]
+
+        let turns = ChatConversationTurnSupport.turns(in: messages)
+
+        XCTAssertEqual(turns.map(\.range), [0..<4, 4..<5])
+        XCTAssertEqual(turns[0].userRange, 0..<2)
+        XCTAssertEqual(turns[0].responseRange, 2..<4)
+    }
+
+    func testAssistantPrefixFormsIndependentTurn() {
+        let messages = [
+            ChatMessage(role: .assistant, content: "开场白"),
+            ChatMessage(role: .user, content: "第一问"),
+            ChatMessage(role: .assistant, content: "第一答"),
+            ChatMessage(role: .user, content: "第二问"),
+            ChatMessage(role: .assistant, content: "第二答")
+        ]
+
+        let turns = ChatConversationTurnSupport.turns(in: messages)
+
+        XCTAssertEqual(turns.map(\.range), [0..<1, 1..<3, 3..<5])
+        XCTAssertNil(turns[0].userRange)
+        XCTAssertEqual(turns[1].userRange, 1..<2)
+        XCTAssertEqual(turns[2].userRange, 3..<4)
+    }
+
+    func testMixedUserAttachmentsBecomeIndependentMessages() {
+        let source = ChatMessage(
+            role: .user,
+            content: "请比较这些内容",
+            audioFileName: "voice.m4a",
+            imageFileNames: ["a.jpg", "b.jpg"],
+            fileFileNames: ["notes.pdf", "clip.mp4"]
+        )
+
+        let components = ChatMessageAtomicContentSupport.atomized(source)
+
+        XCTAssertEqual(components.count, 6)
+        XCTAssertEqual(components.compactMap(\.audioFileName), ["voice.m4a"])
+        XCTAssertEqual(components.flatMap { $0.imageFileNames ?? [] }, ["a.jpg", "b.jpg"])
+        XCTAssertEqual(components.flatMap { $0.fileFileNames ?? [] }, ["notes.pdf", "clip.mp4"])
+        XCTAssertEqual(components.last?.content, "请比较这些内容")
+        XCTAssertEqual(Set(components.map(\.id)).count, components.count)
+        XCTAssertEqual(components.last?.id, source.id)
+    }
+
+    func testThreeImagesAndTextBecomeFourIndependentlyAddressableMessages() {
+        let source = ChatMessage(
+            role: .user,
+            content: "比较三张图片",
+            imageFileNames: ["a.png", "b.png", "c.png"]
+        )
+
+        let components = ChatMessageAtomicContentSupport.atomized(source)
+
+        XCTAssertEqual(components.count, 4)
+        XCTAssertEqual(components[0].imageFileNames, ["a.png"])
+        XCTAssertEqual(components[1].imageFileNames, ["b.png"])
+        XCTAssertEqual(components[2].imageFileNames, ["c.png"])
+        XCTAssertEqual(components[3].content, "比较三张图片")
+        XCTAssertTrue(components[3].imageFileNames?.isEmpty ?? true)
+
+        let afterDeletingSecondImage = components.filter { $0.id != components[1].id }
+        XCTAssertEqual(
+            afterDeletingSecondImage.flatMap { $0.imageFileNames ?? [] },
+            ["a.png", "c.png"]
+        )
+        XCTAssertEqual(afterDeletingSecondImage.last?.content, "比较三张图片")
+    }
+
+    func testAssistantTextAndImagesKeepResponseMetadataOnTextMessage() throws {
+        let groupID = UUID()
+        let attemptID = UUID()
+        let source = ChatMessage(
+            role: .assistant,
+            content: "这里是说明",
+            providerResponseMetadata: ["response_id": .string("resp_1")],
+            tokenUsage: MessageTokenUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
+            imageFileNames: ["one.png", "two.png"],
+            responseGroupID: groupID,
+            responseAttemptID: attemptID,
+            responseAttemptIndex: 1
+        )
+
+        let components = ChatMessageAtomicContentSupport.atomized(source)
+
+        XCTAssertEqual(components.count, 3)
+        XCTAssertEqual(components.last?.id, source.id)
+        XCTAssertEqual(components.last?.content, "这里是说明")
+        XCTAssertEqual(components.last?.providerResponseMetadata?["response_id"], .string("resp_1"))
+        XCTAssertEqual(components.last?.tokenUsage?.totalTokens, 15)
+        XCTAssertTrue(components.dropLast().allSatisfy { $0.providerResponseMetadata == nil })
+        XCTAssertTrue(components.allSatisfy { $0.responseGroupID == groupID })
+        XCTAssertTrue(components.allSatisfy { $0.responseAttemptID == attemptID })
+    }
+
+    func testUserAudioTranscriptionRemainsPartOfItsAudioMessage() {
+        let source = ChatMessage(
+            role: .user,
+            content: "这是语音转写",
+            audioFileName: "voice.m4a"
+        )
+
+        XCTAssertEqual(ChatMessageAtomicContentSupport.atomized(source), [source])
+    }
+
+    func testImageOnlyResponseKeepsOriginalIdentityOnLastImage() {
+        let source = ChatMessage(
+            role: .assistant,
+            content: "[图片]",
+            providerResponseMetadata: ["response_id": .string("resp_image")],
+            imageFileNames: ["one.png", "two.png"]
+        )
+
+        let components = ChatMessageAtomicContentSupport.atomized(source)
+
+        XCTAssertEqual(components.count, 2)
+        XCTAssertEqual(components.last?.id, source.id)
+        XCTAssertEqual(components.last?.providerResponseMetadata?["response_id"], .string("resp_image"))
+        XCTAssertNil(components.first?.providerResponseMetadata)
+    }
+
+    func testResponseVersionsCanSwitchBetweenDifferentMessageCountsFromAnyBubble() throws {
+        let groupID = UUID()
+        let firstAttemptID = UUID()
+        let secondAttemptID = UUID()
+        let userMessage = ChatMessage(
+            id: groupID,
+            role: .user,
+            content: "A",
+            selectedResponseAttemptID: secondAttemptID
+        )
+        let firstAttempt = ["B", "C", "D", "E", "F"].map { content in
+            ChatMessage(
+                role: .assistant,
+                content: content,
+                responseGroupID: groupID,
+                responseAttemptID: firstAttemptID,
+                responseAttemptIndex: 0,
+                selectedResponseAttemptID: secondAttemptID
+            )
+        }
+        let secondAttempt = ["B", "C", "D", "E"].map { content in
+            ChatMessage(
+                role: .assistant,
+                content: content,
+                responseGroupID: groupID,
+                responseAttemptID: secondAttemptID,
+                responseAttemptIndex: 1,
+                selectedResponseAttemptID: secondAttemptID
+            )
+        }
+        let nextUser = ChatMessage(role: .user, content: "下一轮")
+        let messages = [userMessage] + firstAttempt + secondAttempt + [nextUser]
+
+        XCTAssertEqual(
+            ChatResponseAttemptSupport.visibleMessages(from: messages).map(\.content),
+            ["A", "B", "C", "D", "E", "下一轮"]
+        )
+
+        let versionInfo = try XCTUnwrap(
+            ChatResponseAttemptSupport.versionInfo(for: secondAttempt[1], in: messages)
+        )
+        XCTAssertEqual(versionInfo.currentIndex, 1)
+        XCTAssertEqual(versionInfo.totalCount, 2)
+
+        let switched = try XCTUnwrap(
+            ChatResponseAttemptSupport.selectPreviousAttempt(for: secondAttempt[1], in: messages)
+        )
+        XCTAssertEqual(
+            ChatResponseAttemptSupport.visibleMessages(from: switched).map(\.content),
+            ["A", "B", "C", "D", "E", "F", "下一轮"]
+        )
+        XCTAssertNotNil(ChatResponseAttemptSupport.versionInfo(for: firstAttempt[0], in: switched))
+        XCTAssertNotNil(ChatResponseAttemptSupport.versionInfo(for: firstAttempt[3], in: switched))
     }
 }
 

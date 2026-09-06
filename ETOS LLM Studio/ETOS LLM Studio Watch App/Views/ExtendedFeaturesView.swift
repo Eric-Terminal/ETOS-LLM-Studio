@@ -44,14 +44,40 @@ public struct ExtendedFeaturesView: View {
 
             Section {
                 NavigationLink {
+                    SlashCommandSettingsView()
+                } label: {
+                    settingsNavigationLabel("快速指令", icon: .slashCommands)
+                        .etFont(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text(NSLocalizedString("用简短命令快速打开聊天操作和设置页面。", comment: "Watch slash commands entry footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                NavigationLink {
+                    WatchBackgroundGenerationSettingsView()
+                } label: {
+                    settingsNavigationLabel("后台生成", icon: .backgroundGeneration)
+                        .etFont(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text(NSLocalizedString("减少切换 App 后长回复中断。", comment: "watchOS 后台生成入口说明"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                NavigationLink {
                     AppLockSettingsView()
                 } label: {
                     settingsNavigationLabel("应用锁", icon: .security)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
-            } header: {
-                Text(NSLocalizedString("安全", comment: "设置安全分组"))
             } footer: {
                 Text(NSLocalizedString("保护本机界面与离线数据库文件。", comment: "应用锁入口说明"))
                     .etFont(.footnote)
@@ -126,6 +152,34 @@ public struct ExtendedFeaturesView: View {
                 }
             } footer: {
                 Text(NSLocalizedString("配置 MCP 工具服务器，让助手调用外部能力。", comment: "MCP 入口说明"))
+                    .etFont(.footnote)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                NavigationLink {
+                    LocalLinuxWatchFeatureView(sessionID: viewModel.currentSession?.id)
+                } label: {
+                    settingsNavigationLabel("本地 Linux", icon: .localLinux)
+                        .etFont(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text(NSLocalizedString("按需准备 Linux 用户态环境、终端与本地 Agent 工具。", comment: "Watch local Linux entry footer"))
+                    .etFont(.footnote)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                NavigationLink {
+                    BrowserAgentWatchFeatureView(sessionID: viewModel.currentSession?.id)
+                } label: {
+                    settingsNavigationLabel("Browser Agent", icon: .browserAgent)
+                        .etFont(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text(NSLocalizedString("使用本机实验性网页能力，或由你选择委托给 iPhone。", comment: "Watch Browser Agent settings entry footer"))
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
@@ -257,6 +311,22 @@ public struct ExtendedFeaturesView: View {
             }
         }
         .navigationTitle(NSLocalizedString("拓展功能", comment: "拓展功能页标题"))
+        .guideSettingsPageContext(
+            id: "settings-extended-features",
+            title: NSLocalizedString("拓展功能", comment: "拓展功能向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-extended", title: "Extended Features")],
+            settings: [
+                .readOnly("available_sections", label: NSLocalizedString("可用功能入口", comment: "向导设置字段"), value: {
+                    .array([
+                        "slash_commands", "background_generation", "app_lock", "tts", "speech_input",
+                        "feedback", "memory", "mcp", "local_linux", "browser_agent", "shortcuts",
+                        "agent_skills", "roleplay", "worldbook", "local_models", "remote_files",
+                        "storage", "data_import", "image_gallery"
+                    ].map(JSONValue.string))
+                })
+            ]
+        )
+        .watchGuideEntry()
     }
 
     private func settingsIntroCard(
@@ -386,6 +456,17 @@ struct LongTermMemoryFeatureView: View {
             }
         }
         .navigationTitle(NSLocalizedString("记忆系统", comment: "记忆系统页标题"))
+        .guideSettingsPageContext(
+            id: "settings-memory-system",
+            title: NSLocalizedString("记忆系统", comment: "记忆系统向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-memory", title: "Memory System")],
+            settings: [
+                .bool("memory_enabled", label: NSLocalizedString("启用记忆功能", comment: "向导设置字段"), get: { viewModel.enableMemory }, set: { viewModel.enableMemory = $0 }),
+                .bool("memory_write_enabled", label: NSLocalizedString("允许写入新的记忆", comment: "向导设置字段"), get: { viewModel.enableMemoryWrite }, set: { viewModel.enableMemoryWrite = $0 }),
+                .bool("cross_conversation_memory_enabled", label: NSLocalizedString("启用异步跨对话记忆", comment: "向导设置字段"), get: { viewModel.enableConversationMemoryAsync }, set: { viewModel.enableConversationMemoryAsync = $0 })
+            ]
+        )
+        .watchGuideEntry()
     }
 
     private func settingsIntroCard(

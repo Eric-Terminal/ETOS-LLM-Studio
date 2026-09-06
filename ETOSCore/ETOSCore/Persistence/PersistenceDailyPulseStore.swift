@@ -17,7 +17,7 @@ extension Persistence {
         if let store = activeGRDBStore() {
             store.saveDailyPulseRuns(runs)
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
             return
         }
 
@@ -30,7 +30,7 @@ extension Persistence {
             let data = try encoder.encode(runs)
             try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
         } catch {
             logger.error("保存每日脉冲记录失败: \(error.localizedDescription)")
         }
@@ -62,7 +62,7 @@ extension Persistence {
         if let store = activeGRDBStore() {
             store.saveDailyPulseFeedbackHistory(history)
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
             return
         }
 
@@ -75,7 +75,7 @@ extension Persistence {
             let data = try encoder.encode(history)
             try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
         } catch {
             logger.error("保存每日脉冲反馈历史失败: \(error.localizedDescription)")
         }
@@ -107,7 +107,7 @@ extension Persistence {
         if let store = activeGRDBStore() {
             store.saveDailyPulsePendingCuration(note)
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
             return
         }
 
@@ -116,7 +116,7 @@ extension Persistence {
         guard let note else {
             try? removeItemIfExists(at: fileURL)
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
             return
         }
 
@@ -128,7 +128,7 @@ extension Persistence {
             let data = try encoder.encode(note)
             try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
         } catch {
             logger.error("保存每日脉冲策展输入失败: \(error.localizedDescription)")
         }
@@ -160,7 +160,7 @@ extension Persistence {
         if let store = activeGRDBStore() {
             store.saveDailyPulseExternalSignals(signals)
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
             return
         }
 
@@ -173,7 +173,7 @@ extension Persistence {
             let data = try encoder.encode(signals)
             try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
         } catch {
             logger.error("保存每日脉冲外部信号历史失败: \(error.localizedDescription)")
         }
@@ -205,7 +205,7 @@ extension Persistence {
         if let store = activeGRDBStore() {
             store.saveDailyPulseTasks(tasks)
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
             return
         }
 
@@ -218,7 +218,7 @@ extension Persistence {
             let data = try encoder.encode(tasks)
             try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
         } catch {
             logger.error("保存每日脉冲任务失败: \(error.localizedDescription)")
         }
@@ -242,6 +242,45 @@ extension Persistence {
         } catch {
             logger.error("读取每日脉冲任务失败: \(error.localizedDescription)")
             return []
+        }
+    }
+
+    static func saveDailyPulseGenerationRuntimeState(_ state: DailyPulseGenerationRuntimeState) {
+        if let store = activeGRDBStore() {
+            store.saveDailyPulseGenerationRuntimeState(state)
+            return
+        }
+
+        let fileURL = dailyPulseGenerationRuntimeFileURL()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+
+        do {
+            let data = try encoder.encode(state)
+            try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
+        } catch {
+            logger.error("保存每日脉冲生成进度失败: \(error.localizedDescription)")
+        }
+    }
+
+    static func loadDailyPulseGenerationRuntimeState() -> DailyPulseGenerationRuntimeState {
+        if let store = activeGRDBStore() {
+            return store.loadDailyPulseGenerationRuntimeState()
+        }
+
+        let fileURL = dailyPulseGenerationRuntimeFileURL()
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return .empty }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        do {
+            let data = try Data(contentsOf: fileURL)
+            return try decoder.decode(DailyPulseGenerationRuntimeState.self, from: data)
+        } catch {
+            logger.error("读取每日脉冲生成进度失败: \(error.localizedDescription)")
+            return .empty
         }
     }
 }

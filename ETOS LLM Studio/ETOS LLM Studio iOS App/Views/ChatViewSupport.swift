@@ -91,7 +91,97 @@ struct MessageJumpRequest: Equatable {
     let messageID: UUID
 }
 
+enum ChatAutomaticHistoryDirection: Equatable {
+    case earlier
+    case later
+}
+
+struct ChatAutomaticHistoryLoadRequest: Equatable {
+    let direction: ChatAutomaticHistoryDirection
+    let anchorMessageID: UUID
+}
+
+enum ChatMessageJumpAnimationPhase: Equatable {
+    case adjacent
+    case accelerating
+    case cruising
+    case decelerating
+    case complete
+}
+
+enum ChatBubbleRendererIdentity: String, Hashable, Sendable {
+    case none
+    case plainText
+    case streamingUIKit
+    case nativeMarkdown
+    case webMarkdown
+    case roleplayHTML
+
+    nonisolated static func resolved(
+        hasContent: Bool,
+        enableMarkdown: Bool,
+        isStreaming: Bool,
+        isAwaitingStaticHandoff: Bool,
+        hasPreparedMarkdown: Bool,
+        usesWebRenderer: Bool,
+        hasRoleplayHTML: Bool = false
+    ) -> Self {
+        if hasRoleplayHTML { return .roleplayHTML }
+        guard hasContent else { return .none }
+        if isStreaming || isAwaitingStaticHandoff { return .streamingUIKit }
+        guard enableMarkdown, hasPreparedMarkdown else { return .plainText }
+        return usesWebRenderer ? .webMarkdown : .nativeMarkdown
+    }
+}
+
+/// 只在会改变气泡高度的结构切换时重建视觉子树。
+struct ChatBubbleLayoutIdentity: Hashable {
+    let messageID: UUID
+    let structuralRevision: UInt
+    let layoutRecoveryRevision: UInt
+    let isStreaming: Bool
+    let hasPreparedMarkdown: Bool
+    let hasPreparedReasoningMarkdown: Bool
+    let usesNoBubbleStyle: Bool
+    let contentRenderer: ChatBubbleRendererIdentity
+    let reasoningRenderer: ChatBubbleRendererIdentity
+    let layoutWidthBucket: Int
+
+    init(
+        messageID: UUID,
+        structuralRevision: UInt,
+        layoutRecoveryRevision: UInt = 0,
+        isStreaming: Bool,
+        isStaticMarkdownHandoffInProgress: Bool = false,
+        hasPreparedMarkdown: Bool,
+        hasPreparedReasoningMarkdown: Bool,
+        usesNoBubbleStyle: Bool = false,
+        contentRenderer: ChatBubbleRendererIdentity = .plainText,
+        reasoningRenderer: ChatBubbleRendererIdentity = .none,
+        layoutWidthBucket: Int = 0
+    ) {
+        let preservesStreamingView = isStreaming || isStaticMarkdownHandoffInProgress
+        self.messageID = messageID
+        self.structuralRevision = preservesStreamingView ? 0 : structuralRevision
+        self.layoutRecoveryRevision = layoutRecoveryRevision
+        self.isStreaming = preservesStreamingView
+        // 交接期间冻结完整身份，避免任一通道先完成时重建另一通道的流式子树。
+        self.hasPreparedMarkdown = preservesStreamingView ? false : hasPreparedMarkdown
+        self.hasPreparedReasoningMarkdown = preservesStreamingView ? false : hasPreparedReasoningMarkdown
+        self.usesNoBubbleStyle = usesNoBubbleStyle
+        self.contentRenderer = preservesStreamingView ? .streamingUIKit : contentRenderer
+        self.reasoningRenderer = preservesStreamingView ? .streamingUIKit : reasoningRenderer
+        self.layoutWidthBucket = layoutWidthBucket
+    }
+
+    nonisolated static func widthBucket(for width: CGFloat?) -> Int {
+        guard let width, width.isFinite, width > 0 else { return 0 }
+        return Int((width / 8).rounded())
+    }
+}
+
 enum ChatScrollTargetID: Hashable {
+    case top
     case message(UUID)
     case bottom
 }
@@ -112,94 +202,27 @@ struct ChatInputBarHeightPreferenceKey: PreferenceKey {
     }
 }
 
-struct ScrollDistanceToBottomObserver: UIViewRepresentable {
-    let onDistanceChange: (CGFloat, Bool) -> Void
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onDistanceChange: onDistanceChange)
-    }
-
-    func makeUIView(context: Context) -> ObserverView {
-        let view = ObserverView()
-        view.isUserInteractionEnabled = false
-        view.backgroundColor = .clear
-        view.coordinator = context.coordinator
-        return view
-    }
-
-    func updateUIView(_ uiView: ObserverView, context: Context) {
-        context.coordinator.onDistanceChange = onDistanceChange
-        uiView.coordinator = context.coordinator
-        DispatchQueue.main.async {
-            uiView.attachToScrollViewIfNeeded()
+extension View {
+    /// iOS 18 起由 SwiftUI 在同一轮布局中处理静态尺寸变化；流式期间会主动关闭该锚点。
+    @ViewBuilder
+    func chatDefaultSizeChangeScrollAnchor(_ anchor: UnitPoint?) -> some View {
+        if #available(iOS 18.0, *) {
+            defaultScrollAnchor(anchor, for: .sizeChanges)
+        } else {
+            self
         }
     }
 
-    final class Coordinator {
-        var onDistanceChange: (CGFloat, Bool) -> Void
-        weak var scrollView: UIScrollView?
-        private var contentOffsetObservation: NSKeyValueObservation?
-        private var contentSizeObservation: NSKeyValueObservation?
-        private var boundsObservation: NSKeyValueObservation?
-
-        init(onDistanceChange: @escaping (CGFloat, Bool) -> Void) {
-            self.onDistanceChange = onDistanceChange
-        }
-
-        func attach(to scrollView: UIScrollView) {
-            guard self.scrollView !== scrollView else {
-                notifyDistanceChange()
-                return
+    /// 手势开始只由 UIKit 的真实拖动边沿认领；SwiftUI 阶段仅补充可靠的静止回报。
+    @ViewBuilder
+    func chatOnScrollIdle(_ action: @escaping () -> Void) -> some View {
+        if #available(iOS 18.0, *) {
+            onScrollPhaseChange { _, newPhase, _ in
+                guard newPhase == .idle else { return }
+                action()
             }
-
-            self.scrollView = scrollView
-            contentOffsetObservation = scrollView.observe(\.contentOffset, options: [.initial, .new]) { [weak self] _, _ in
-                self?.notifyDistanceChange()
-            }
-            contentSizeObservation = scrollView.observe(\.contentSize, options: [.initial, .new]) { [weak self] _, _ in
-                self?.notifyDistanceChange()
-            }
-            boundsObservation = scrollView.observe(\.bounds, options: [.initial, .new]) { [weak self] _, _ in
-                self?.notifyDistanceChange()
-            }
-        }
-
-        private func notifyDistanceChange() {
-            guard let scrollView else { return }
-            let visibleMaxY = scrollView.contentOffset.y + scrollView.bounds.height - scrollView.adjustedContentInset.bottom
-            let distanceToBottom = max(scrollView.contentSize.height - visibleMaxY, 0)
-            let isUserInteracting = scrollView.isDragging || scrollView.isTracking || scrollView.isDecelerating
-            onDistanceChange(distanceToBottom, isUserInteracting)
-        }
-    }
-
-    final class ObserverView: UIView {
-        weak var coordinator: Coordinator?
-
-        override func didMoveToWindow() {
-            super.didMoveToWindow()
-            attachToScrollViewIfNeeded()
-        }
-
-        override func didMoveToSuperview() {
-            super.didMoveToSuperview()
-            attachToScrollViewIfNeeded()
-        }
-
-        func attachToScrollViewIfNeeded() {
-            guard let coordinator, let scrollView = enclosingScrollView() else { return }
-            coordinator.attach(to: scrollView)
-        }
-
-        private func enclosingScrollView() -> UIScrollView? {
-            var currentSuperview = superview
-            while let view = currentSuperview {
-                if let scrollView = view as? UIScrollView {
-                    return scrollView
-                }
-                currentSuperview = view.superview
-            }
-            return nil
+        } else {
+            self
         }
     }
 }

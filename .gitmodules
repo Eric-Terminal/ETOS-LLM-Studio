@@ -1,3 +1,6 @@
 [submodule "Dependencies/llama.cpp"]
 	path = Dependencies/llama.cpp
 	url = https://github.com/Eric-Terminal/llama.cpp.git
+[submodule "Dependencies/ish-multiarch"]
+	path = Dependencies/ish-multiarch
+	url = https://github.com/Eric-Terminal/ish-multiarch.git

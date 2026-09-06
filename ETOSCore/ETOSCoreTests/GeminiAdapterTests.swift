@@ -25,6 +25,37 @@ struct GeminiAdapterTests {
         model: Model(modelName: "gemini-2.5-pro")
     )
 
+    @Test("Gemini 请求使用 Files API URI 并把原生视频放在用户问题之前")
+    func testGeminiNativeVideoPartPrecedesText() throws {
+        let message = ChatMessage(role: .user, content: "概括这段视频")
+        let video = FileAttachment(
+            data: Data([0x01, 0x02, 0x03]),
+            mimeType: "video/mp4",
+            fileName: "sample.mp4",
+            remoteFileURI: "https://generativelanguage.googleapis.com/v1beta/files/video-1"
+        )
+
+        let request = try #require(adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [GeminiAdapter.apiKeyControlKey: "selected-key"],
+            messages: [message],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [message.id: [video]]
+        ))
+        let body = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let contents = try #require(payload["contents"] as? [[String: Any]])
+        let parts = try #require(contents.first?["parts"] as? [[String: Any]])
+        let fileData = try #require(parts.first?["file_data"] as? [String: Any])
+
+        #expect(fileData["mime_type"] as? String == "video/mp4")
+        #expect(fileData["file_uri"] as? String == "https://generativelanguage.googleapis.com/v1beta/files/video-1")
+        #expect(parts.dropFirst().first?["text"] as? String == "概括这段视频")
+        #expect(request.url?.query?.contains("key=selected-key") == true)
+    }
+
     @Test("Gemini 原生模型列表会保留嵌入模型")
     func testGeminiModelListKeepsEmbeddingOnlyModels() throws {
         let data = Data("""
@@ -52,6 +83,65 @@ struct GeminiAdapterTests {
         #expect(chatModel?.supportsEmbedding == false)
         #expect(chatModel?.kind == .chat)
         #expect(chatModel?.capabilities.contains(.toolCalling) == true)
+    }
+
+    @Test("Gemini 模型列表不会根据模型名称推断提示缓存能力")
+    func testGeminiModelListDoesNotInferPromptCachingFromModelName() throws {
+        let data = Data("""
+        {
+          "models": [
+            {
+              "name": "models/gemini-2.0-flash",
+              "supportedGenerationMethods": ["generateContent"]
+            },
+            {
+              "name": "models/gemini-2.5-flash",
+              "supportedGenerationMethods": ["generateContent"]
+            },
+            {
+              "name": "models/gemini-3.1-pro-preview",
+              "supportedGenerationMethods": ["generateContent"]
+            }
+          ]
+        }
+        """.utf8)
+
+        let models = try adapter.parseModelListResponse(data: data)
+        #expect(models.allSatisfy { !$0.capabilities.contains(.promptCaching) })
+    }
+
+    @Test("Gemini 隐式缓存能力不会添加请求参数")
+    func testGeminiImplicitPromptCachingDoesNotAddRequestParameter() throws {
+        let provider = Provider(
+            id: UUID(),
+            name: "Gemini Test Provider",
+            baseURL: "https://generativelanguage.googleapis.com/v1beta",
+            apiKeys: ["test-key"],
+            apiFormat: "gemini"
+        )
+        let model = RunnableModel(
+            provider: provider,
+            model: Model(
+                modelName: "gemini-2.5-pro",
+                capabilities: [.toolCalling, .promptCaching]
+            )
+        )
+
+        let request = try #require(adapter.buildChatRequest(
+            for: model,
+            commonPayload: [:],
+            messages: [ChatMessage(role: .user, content: "测试隐式缓存")],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let body = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+
+        #expect(payload["cache_control"] == nil)
+        #expect(payload["cachedContent"] == nil)
+        #expect(payload["cached_content"] == nil)
     }
 
     @Test("Gemini 嵌入请求使用原生端点并修正官方 OpenAI 兼容基址")
@@ -436,6 +526,17 @@ struct GeminiAdapterTests {
         #expect(call.providerSpecificFields?["thought_signature"] == .string("sig-123"))
     }
 
+    @Test("Gemini 缺少函数调用 ID 时按响应生成唯一 ID")
+    func testGeminiResponseGeneratesResponseScopedCallID() throws {
+        let payload = #"{"candidates":[{"content":{"parts":[{"functionCall":{"name":"lookup","args":{}}}]}}]}"#
+
+        let first = try #require(adapter.parseResponse(data: Data(payload.utf8)).toolCalls?.first)
+        let second = try #require(adapter.parseResponse(data: Data(payload.utf8)).toolCalls?.first)
+
+        #expect(first.id != second.id)
+        #expect(first.id.hasPrefix("gemini-"))
+    }
+
     @Test("Gemini 请求体保留 thoughtSignature 并透传 function id")
     func testGeminiBuildRequestPreservesThoughtSignatureAndCallID() throws {
         let assistantCall = InternalToolCall(
@@ -496,6 +597,35 @@ struct GeminiAdapterTests {
         #expect(functionResponseID == "function-call-456")
     }
 
+    @Test("Gemini 末尾时间以 user 消息保留在 system_instruction 之外")
+    func testGeminiTailTimeRemainsUserContent() throws {
+        let messages = [
+            ChatMessage(role: .system, content: "稳定系统提示"),
+            ChatMessage(role: .user, content: "现在几点？"),
+            ChatMessage(role: .user, content: "<time>当前系统时间</time>")
+        ]
+
+        let request = try #require(adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [:],
+            messages: messages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let httpBody = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+        let systemInstruction = try #require(payload["system_instruction"] as? [String: Any])
+        let systemParts = try #require(systemInstruction["parts"] as? [[String: Any]])
+        let contents = try #require(payload["contents"] as? [[String: Any]])
+        let tailParts = try #require(contents.last?["parts"] as? [[String: Any]])
+
+        #expect(systemParts.compactMap { $0["text"] as? String } == ["稳定系统提示"])
+        #expect(contents.compactMap { $0["role"] as? String } == ["user", "user"])
+        #expect(tailParts.first?["text"] as? String == "<time>当前系统时间</time>")
+    }
+
     @Test("Gemini 请求体在不回传模式下移除 thoughtSignature")
     func testGeminiBuildRequestOmitsThoughtSignatureWhenDisabled() throws {
         let assistantCall = InternalToolCall(
@@ -534,15 +664,15 @@ struct GeminiAdapterTests {
         #expect(functionCall["thoughtSignature"] == nil)
     }
 
-    @Test("Gemini 默认思考控制使用原生 thinkingConfig")
-    func testGeminiDefaultThinkingControlUsesNativeThinkingConfig() throws {
+    @Test("Gemini 思考控制按适配器使用原生 thinkingLevel")
+    func testGeminiThinkingControlUsesNativeThinkingLevel() throws {
+        var thinkingControl = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "gemini")
+        thinkingControl.defaultOptionID = "medium"
         let model = RunnableModel(
             provider: dummyModel.provider,
             model: Model(
-                modelName: "gemini-2.5-pro",
-                requestBodyControls: [
-                    ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "gemini")
-                ]
+                modelName: "adapter-only-model",
+                requestBodyControls: [thinkingControl]
             )
         )
 
@@ -560,7 +690,9 @@ struct GeminiAdapterTests {
         let generationConfig = try #require(payload["generationConfig"] as? [String: Any])
         let thinkingConfig = try #require(generationConfig["thinkingConfig"] as? [String: Any])
 
-        #expect(thinkingConfig["thinkingLevel"] as? String == "MEDIUM")
+        #expect(thinkingConfig["thinkingLevel"] as? String == "medium")
+        #expect(thinkingConfig["includeThoughts"] as? Bool == true)
+        #expect(thinkingConfig["thinkingBudget"] == nil)
     }
 
     @Test("Gemini 自定义 Body 会原样和运行时工具合并")
@@ -636,6 +768,22 @@ struct GeminiAdapterTests {
         #expect(delta.id == "function-call-stream")
         #expect(delta.nameFragment == "shortcut_weather")
         #expect(delta.providerSpecificFields?["thought_signature"] == .string("sig-stream"))
+    }
+
+    @Test("Gemini 流式 finishReason 和错误响应会报告终止状态")
+    func testGeminiStreamingTerminationEvents() throws {
+        let completedLine = """
+        data: {"candidates":[{"content":{"parts":[{"text":"完成"}]},"finishReason":"STOP"}]}
+        """
+        let failedLine = """
+        data: {"error":{"code":503,"message":"服务暂时不可用","status":"UNAVAILABLE"}}
+        """
+
+        let completedPart = try #require(adapter.parseStreamingResponse(line: completedLine))
+        let failedPart = try #require(adapter.parseStreamingResponse(line: failedLine))
+
+        #expect(completedPart.streamTermination == .completed)
+        #expect(failedPart.streamTermination == .failed(reason: "服务暂时不可用"))
     }
 
     @Test("Gemini 文生图请求走 generateContent 端点并带 key 参数")

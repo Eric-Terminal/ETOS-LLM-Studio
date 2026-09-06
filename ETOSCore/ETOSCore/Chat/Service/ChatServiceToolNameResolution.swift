@@ -54,6 +54,7 @@ extension ChatService {
                 toolName: resolvedName,
                 arguments: call.arguments,
                 result: call.result,
+                resultDisposition: call.resultDisposition,
                 providerSpecificFields: call.providerSpecificFields
             )
         }

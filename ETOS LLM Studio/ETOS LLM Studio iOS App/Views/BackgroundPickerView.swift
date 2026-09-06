@@ -46,6 +46,12 @@ struct BackgroundPickerView: View {
     var body: some View {
         contentView
             .navigationTitle(NSLocalizedString("选择背景", comment: ""))
+            .guideSettingsPageContext(
+                id: "settings-background-picker",
+                title: NSLocalizedString("选择背景", comment: "背景选择向导上下文标题"),
+                documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+                settings: backgroundGuideSettings
+            )
             .toolbar { addBackgroundToolbar }
             .photosPicker(isPresented: $isShowingPhotoPicker, selection: $selectedItem, matching: .any(of: [.images, .videos]))
             .onChange(of: selectedItem) { _, newItem in
@@ -87,6 +93,25 @@ struct BackgroundPickerView: View {
                 let loaded = ConfigLoader.loadBackgroundImages()
                 backgrounds = loaded.isEmpty ? allBackgrounds : loaded
             }
+    }
+
+    private var backgroundGuideSettings: [GuidePageSetting] {
+        let available = backgrounds.isEmpty ? allBackgrounds : backgrounds
+        return [
+            .readOnly(
+                "available_backgrounds",
+                label: NSLocalizedString("可用背景", comment: "背景选择向导字段"),
+                value: { .array(available.map(JSONValue.string)) }
+            ),
+            .string(
+                "selected_background",
+                label: NSLocalizedString("当前背景", comment: "背景选择向导字段"),
+                allowedValues: available,
+                allowsEmpty: false,
+                get: { selectedBackground },
+                set: { selectedBackground = $0 }
+            )
+        ]
     }
     
     private var contentView: some View {

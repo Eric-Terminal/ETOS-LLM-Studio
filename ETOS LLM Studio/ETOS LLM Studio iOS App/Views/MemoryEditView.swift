@@ -20,6 +20,7 @@ struct MemoryEditView: View {
     @State private var reembedStatusIsError = false
     @State private var reembedAlert: MemoryReembedAlert?
     @State private var showUnsavedChangesAlert = false
+    @State private var mutationHistory: [MemoryMutationRecord] = []
     
     init(memory: MemoryItem) {
         _memory = State(initialValue: memory)
@@ -78,10 +79,55 @@ struct MemoryEditView: View {
                     .foregroundStyle(.secondary)
             }
             
-            Section {
-                LabeledContent(NSLocalizedString("更新时间", comment: "")) {
-                    Text(memory.displayDate.formatted(date: .abbreviated, time: .shortened))
+            Section(NSLocalizedString("来源与时间", comment: "Memory source and dates section")) {
+                LabeledContent(NSLocalizedString("来源", comment: "Memory source field"), value: memory.source.localizedTitle)
+                LabeledContent(NSLocalizedString("创建时间", comment: "Memory created date field")) {
+                    Text(memory.createdAt.formatted(date: .abbreviated, time: .shortened))
                         .foregroundStyle(.secondary)
+                }
+                if let updatedAt = memory.updatedAt {
+                    LabeledContent(NSLocalizedString("更新时间", comment: "")) {
+                        Text(updatedAt.formatted(date: .abbreviated, time: .shortened))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                LabeledContent(NSLocalizedString("有效期", comment: "Memory validity field"), value: validityDescription)
+                if let sourceSessionID = memory.sourceSessionID {
+                    LabeledContent(NSLocalizedString("来源会话", comment: "Memory source session field")) {
+                        Text(sourceSessionID.uuidString)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+
+            Section(NSLocalizedString("变更时间线", comment: "Memory mutation timeline section")) {
+                if mutationHistory.isEmpty {
+                    Text(NSLocalizedString("这条记忆还没有可显示的历史记录。", comment: "Empty memory mutation history"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(mutationHistory) { record in
+                        VStack(alignment: .leading) {
+                            HStack {
+                                Text(record.operation.localizedTitle)
+                                Spacer()
+                                Text(record.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Text(record.context.origin.localizedTitle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            if let summary = record.after?.summary ?? record.before?.summary {
+                                Text(summary)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(3)
+                            }
+                        }
+                    }
                 }
             }
 
@@ -116,6 +162,22 @@ struct MemoryEditView: View {
         .navigationTitle(NSLocalizedString("编辑记忆", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(hasChanges)
+        .guideSettingsPageContext(
+            id: "settings-memory-editor",
+            title: NSLocalizedString("编辑记忆", comment: "编辑记忆向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-memory", title: "Memory System")],
+            settings: [
+                .string("content", label: NSLocalizedString("记忆内容", comment: "向导设置字段"), allowsEmpty: false, get: { memory.content }, set: { memory.content = $0; hasChanges = true }),
+                .bool("archived", label: NSLocalizedString("已归档", comment: "向导设置字段"), get: { memory.isArchived }, set: { memory.isArchived = $0; hasChanges = true }),
+                .string("kind", label: NSLocalizedString("类型", comment: "向导设置字段"), allowedValues: MemoryKind.allCases.map(\.rawValue), get: { memory.kind.rawValue }, set: { memory.kind = MemoryKind(rawValue: $0) ?? memory.kind; hasChanges = true }),
+                .double("importance", label: NSLocalizedString("重要度", comment: "向导设置字段"), range: 0...1, get: { memory.importance }, set: { memory.importance = $0; hasChanges = true }),
+                .double("confidence", label: NSLocalizedString("置信度", comment: "向导设置字段"), range: 0...1, get: { memory.confidence }, set: { memory.confidence = $0; hasChanges = true }),
+                .string("entities", label: NSLocalizedString("相关实体（用逗号分隔）", comment: "向导设置字段"), get: { entitiesBinding.wrappedValue }, set: { entitiesBinding.wrappedValue = $0 }),
+                .readOnly("memory_id", label: NSLocalizedString("记忆 ID", comment: "向导设置字段"), value: { .string(memory.id.uuidString) }),
+                .readOnly("source", label: NSLocalizedString("来源", comment: "向导设置字段"), value: { .string(memory.source.rawValue) }),
+                .readOnly("requires_save", label: NSLocalizedString("应用方式", comment: "向导设置字段"), value: { .string(NSLocalizedString("修改后需要保存", comment: "向导草稿应用方式")) })
+            ]
+        )
         .alert(item: $reembedAlert) { alert in
             Alert(
                 title: Text(alert.title),
@@ -155,6 +217,9 @@ struct MemoryEditView: View {
         } message: {
             Text(NSLocalizedString("要保存当前编辑内容，还是放弃更改并离开？", comment: "Unsaved generic editor alert message"))
         }
+        .task(id: memory.id) {
+            mutationHistory = await MemoryManager.shared.mutationHistory(for: memory.id)
+        }
     }
 
     private var reembedButtonTitle: String {
@@ -178,6 +243,23 @@ struct MemoryEditView: View {
                 hasChanges = true
             }
         )
+    }
+
+    private var validityDescription: String {
+        switch (memory.validFrom, memory.validUntil) {
+        case (nil, nil):
+            return NSLocalizedString("长期有效", comment: "Memory validity without bounds")
+        case (let start?, nil):
+            return String(format: NSLocalizedString("从 %@ 起", comment: "Memory validity starting date"), start.formatted(date: .abbreviated, time: .omitted))
+        case (nil, let end?):
+            return String(format: NSLocalizedString("至 %@", comment: "Memory validity ending date"), end.formatted(date: .abbreviated, time: .omitted))
+        case (let start?, let end?):
+            return String(
+                format: NSLocalizedString("%@ 至 %@", comment: "Memory validity date range"),
+                start.formatted(date: .abbreviated, time: .omitted),
+                end.formatted(date: .abbreviated, time: .omitted)
+            )
+        }
     }
 
     private func requestDismiss() {

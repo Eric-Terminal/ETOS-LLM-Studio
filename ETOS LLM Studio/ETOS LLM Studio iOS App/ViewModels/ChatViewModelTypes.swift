@@ -56,5 +56,14 @@ extension ChatViewModel {
     struct MessageRewritePayload: Identifiable {
         let id = UUID()
         let message: ChatMessage
+        let selectionTarget: MessageRewriteSelectionTarget?
+
+        init(
+            message: ChatMessage,
+            selectionTarget: MessageRewriteSelectionTarget? = nil
+        ) {
+            self.message = message
+            self.selectionTarget = selectionTarget
+        }
     }
 }

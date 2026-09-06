@@ -123,13 +123,16 @@ private struct RequestBodyControlImportRow: View {
 }
 
 struct RequestBodyControlDetailView: View {
+    @Environment(\.dismiss) private var dismiss
     @Binding var control: ModelRequestBodyControl
     let payloadDisplayMode: Model.RequestBodyOverrideMode
+    let onSplit: ([ModelRequestBodyControl]) -> Void
     @State private var payloadSuggestionsByOptionID: [String: [String: JSONValue]] = [:]
     @State private var hasInitializedPayloadSuggestions = false
     @State private var automaticSliderGranularity: Double?
     @State private var sliderGranularityText = ""
     @State private var showsNumericSortAction = false
+    @State private var canAutomaticallySplit = false
 
     var body: some View {
         Form {
@@ -199,11 +202,29 @@ struct RequestBodyControlDetailView: View {
                 }
             }
 
+            if canAutomaticallySplit {
+                Section(
+                    footer: Text(NSLocalizedString("Split nested control footer", comment: "结构化控制自动拆分说明"))
+                ) {
+                    Button(action: splitNestedPayload) {
+                        Label(
+                            NSLocalizedString("Split by nested paths", comment: "结构化控制自动拆分按钮"),
+                            systemImage: "square.split.2x1"
+                        )
+                    }
+                }
+            }
+
             if control.kind == .optionGroup {
                 Section(
                     header: Text(NSLocalizedString("滑块", comment: "")),
-                    footer: Text(NSLocalizedString("启用后，字符串选项会吸附到档位，数字选项可在档位之间连续调节。数字粒度默认取相邻档位最小差值的 10%，也可手动覆盖。至少需要两个选项。", comment: ""))
+                    footer: Text(NSLocalizedString("至少需要两个选项。", comment: "启用滑块的条件"))
                 ) {
+                    SettingsHelpCard(
+                        title: NSLocalizedString("滑块", comment: "滑块说明标题"),
+                        summary: NSLocalizedString("用滑动来切换档位或调节数值。", comment: "滑块说明摘要"),
+                        details: NSLocalizedString("启用后，字符串选项会吸附到档位，数字选项可在档位之间连续调节。数字粒度默认取相邻档位最小差值的 10%，也可手动覆盖。至少需要两个选项。", comment: "滑块使用说明")
+                    )
                     Toggle(NSLocalizedString("启用滑块", comment: ""), isOn: $control.isSliderEnabled)
                         .disabled(control.options.count < 2)
 
@@ -237,16 +258,95 @@ struct RequestBodyControlDetailView: View {
             }
         }
         .navigationTitle(displayTitle)
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "settings-request-body-control-\(control.id)"),
+            title: displayTitle,
+            documents: [GuideDocumentReference(id: "model-request-body", title: "Request Body Controls")],
+            settings: guideSettings
+        )
+        .watchGuideEntry()
         .onAppear {
             initializePayloadSuggestionsIfNeeded()
             refreshSliderConfiguration()
+            refreshSplitAvailability()
+        }
+        .onChange(of: control.payload) { _, _ in
+            refreshSplitAvailability()
         }
         .onChange(of: control.options) { _, options in
             if options.count < 2 {
                 control.isSliderEnabled = false
             }
             refreshSliderConfiguration()
+            refreshSplitAvailability()
         }
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        var settings: [GuidePageSetting] = [
+            .readOnly("control_id", label: NSLocalizedString("控制项 ID", comment: "结构化控制向导字段"), value: { .string(control.id) }),
+            .readOnly("kind", label: NSLocalizedString("控制类型", comment: "结构化控制向导字段"), value: { .string(control.kind.rawValue) }),
+            .string("title", label: NSLocalizedString("显示名称", comment: "结构化控制向导字段"), allowsEmpty: false, get: { control.title }, set: { control.title = $0 }),
+            .bool("enabled", label: NSLocalizedString("启用", comment: "结构化控制向导字段"), get: { control.isEnabled }, set: { control.isEnabled = $0 })
+        ]
+        switch control.kind {
+        case .toggle:
+            settings.append(.bool("default_active", label: NSLocalizedString("默认开启", comment: "结构化控制向导字段"), get: { control.defaultIsActive }, set: { control.defaultIsActive = $0 }))
+            settings.append(.json(
+                "payload",
+                label: NSLocalizedString("请求体参数", comment: "结构化控制向导字段"),
+                schema: GuideRequestBodyControlSettingsSupport.payloadSchema,
+                get: { GuideRequestBodyControlSettingsSupport.payloadValue(control.payload) },
+                normalize: GuideRequestBodyControlSettingsSupport.normalizePayload,
+                set: { control.payload = try GuideRequestBodyControlSettingsSupport.payload(from: $0) }
+            ))
+        case .optionGroup:
+            settings.append(.json(
+                "options",
+                label: NSLocalizedString("选项列表", comment: "结构化控制向导字段"),
+                schema: GuideRequestBodyControlSettingsSupport.optionsSchema,
+                get: { GuideRequestBodyControlSettingsSupport.optionsValue(control.options) },
+                normalize: GuideRequestBodyControlSettingsSupport.normalizeOptions,
+                set: { value in
+                    let options = try GuideRequestBodyControlSettingsSupport.options(from: value)
+                    control.options = options
+                    if let defaultID = control.defaultOptionID,
+                       !options.contains(where: { $0.id == defaultID }) {
+                        control.defaultOptionID = nil
+                    }
+                    if options.count < 2 { control.isSliderEnabled = false }
+                }
+            ))
+            settings.append(.json(
+                "default_option_id",
+                label: NSLocalizedString("默认选项", comment: "结构化控制向导字段"),
+                schema: .dictionary(["type": .string("string"), "description": .string("留空表示没有默认选项")]),
+                get: { .string(control.defaultOptionID ?? "") },
+                normalize: { value in
+                    guard case .string = value else { throw GuideError.invalidToolArguments }
+                    return value
+                },
+                set: { value in
+                    guard case .string(let optionID) = value else { throw GuideError.invalidToolArguments }
+                    guard optionID.isEmpty || control.options.contains(where: { $0.id == optionID }) else {
+                        throw GuideError.invalidToolArguments
+                    }
+                    control.defaultOptionID = optionID.isEmpty ? nil : optionID
+                }
+            ))
+            settings.append(.bool("slider_enabled", label: NSLocalizedString("启用滑块", comment: "结构化控制向导字段"), get: { control.isSliderEnabled }, set: { control.isSliderEnabled = $0 && control.options.count >= 2 }))
+            settings.append(.json(
+                "slider_granularity",
+                label: NSLocalizedString("滑块粒度", comment: "结构化控制向导字段"),
+                schema: GuideRequestBodyControlSettingsSupport.optionalPositiveNumberSchema,
+                get: { GuideRequestBodyControlSettingsSupport.optionalPositiveNumberValue(control.sliderGranularity) },
+                normalize: GuideRequestBodyControlSettingsSupport.normalizeOptionalPositiveNumber,
+                set: { control.sliderGranularity = try GuideRequestBodyControlSettingsSupport.optionalPositiveNumber(from: $0) }
+            ))
+            settings.append(.bool("rainbow_at_maximum", label: NSLocalizedString("最高档彩虹效果", comment: "结构化控制向导字段"), get: { control.usesRainbowAtMaximum }, set: { control.usesRainbowAtMaximum = $0 }))
+        }
+        settings.append(.readOnly("requires_save", label: NSLocalizedString("应用方式", comment: "向导设置字段"), value: { .string(NSLocalizedString("修改后需要保存模型", comment: "模型草稿应用方式")) }))
+        return settings
     }
 
     private var displayTitle: String {
@@ -278,6 +378,16 @@ struct RequestBodyControlDetailView: View {
         let displayedGranularity = control.sliderGranularity
             ?? descriptor?.automaticNumericGranularity
         sliderGranularityText = displayedGranularity.map(formattedGranularity) ?? ""
+    }
+
+    private func refreshSplitAvailability() {
+        canAutomaticallySplit = ModelRequestBodyControlSplitter.canSplit(control)
+    }
+
+    private func splitNestedPayload() {
+        guard let splitControls = ModelRequestBodyControlSplitter.split(control) else { return }
+        onSplit(splitControls)
+        dismiss()
     }
 
     private func sortOptionsByNumericValue() {
@@ -442,7 +552,35 @@ struct RequestBodyOptionDetailView: View {
             }
         }
         .navigationTitle(displayTitle)
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "settings-request-body-option-\(option.id)"),
+            title: displayTitle,
+            documents: [GuideDocumentReference(id: "model-request-body", title: "Request Body Controls")],
+            settings: optionGuideSettings
+        )
+        .watchGuideEntry()
         .onDisappear(perform: onEditingFinished)
+    }
+
+    private var optionGuideSettings: [GuidePageSetting] {
+        var settings: [GuidePageSetting] = [
+            .readOnly("option_id", label: NSLocalizedString("选项 ID", comment: "结构化控制选项向导字段"), value: { .string(option.id) }),
+            .string("title", label: NSLocalizedString("显示名称", comment: "结构化控制选项向导字段"), allowsEmpty: false, get: { option.title }, set: { option.title = $0 }),
+            .bool("is_default", label: NSLocalizedString("设为默认", comment: "结构化控制选项向导字段"), get: { defaultOptionBinding.wrappedValue }, set: { defaultOptionBinding.wrappedValue = $0 }),
+            .json(
+                "payload",
+                label: NSLocalizedString("请求体参数", comment: "结构化控制选项向导字段"),
+                schema: GuideRequestBodyControlSettingsSupport.payloadSchema,
+                get: { GuideRequestBodyControlSettingsSupport.payloadValue(option.payload) },
+                normalize: GuideRequestBodyControlSettingsSupport.normalizePayload,
+                set: { option.payload = try GuideRequestBodyControlSettingsSupport.payload(from: $0) }
+            )
+        ]
+        if let maximumRainbowEnabled {
+            settings.append(.bool("rainbow_at_maximum", label: NSLocalizedString("最高档彩虹效果", comment: "结构化控制选项向导字段"), get: { maximumRainbowEnabled.wrappedValue }, set: { maximumRainbowEnabled.wrappedValue = $0 }))
+        }
+        settings.append(.readOnly("requires_save", label: NSLocalizedString("应用方式", comment: "向导设置字段"), value: { .string(NSLocalizedString("修改后需要保存模型", comment: "模型草稿应用方式")) }))
+        return settings
     }
 
     private var displayTitle: String {

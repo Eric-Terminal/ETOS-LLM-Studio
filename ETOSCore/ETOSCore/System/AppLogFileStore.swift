@@ -26,6 +26,8 @@ actor AppLogFileStore {
     private let sessionDayKey: String
     private let sessionFileName: String
     private var didMigrateLegacyFiles = false
+    private var sessionSummary: AppLogRunFile?
+    private var lastRetentionPurgeDay: String?
 
     init(
         fileManager: FileManager = .default,
@@ -65,7 +67,7 @@ actor AppLogFileStore {
     func loadRecentEvents(now: Date = Date()) -> [AppLogEvent] {
         do {
             try ensureBaseDirectory()
-            try purgeExpiredFiles(now: now)
+            try purgeExpiredFilesIfNeeded(now: now)
             let files = try sortedLogFiles()
 
             var events: [AppLogEvent] = []
@@ -84,7 +86,7 @@ actor AppLogFileStore {
     func loadDayFolders(now: Date = Date()) -> [AppLogDayFolder] {
         do {
             try ensureBaseDirectory()
-            try purgeExpiredFiles(now: now)
+            try purgeExpiredFilesIfNeeded(now: now)
 
             let dayDirectories = try sortedDayDirectories(order: .descending)
             var folders: [AppLogDayFolder] = []
@@ -95,38 +97,7 @@ actor AppLogFileStore {
 
                 var runs: [AppLogRunFile] = []
                 for runFileURL in runFiles {
-                    let events = try readEvents(from: runFileURL)
-                    let firstEventAt = events.first?.timestamp
-                    let lastEventAt = events.last?.timestamp
-                    let developerCount = events.reduce(0) { partialResult, event in
-                        partialResult + (event.channel == .developer ? 1 : 0)
-                    }
-                    let userCount = events.count - developerCount
-
-                    let values = try? runFileURL.resourceValues(
-                        forKeys: [.creationDateKey, .contentModificationDateKey, .fileSizeKey]
-                    )
-                    let dayDate = dateFromDayFolderName(day) ?? Date.distantPast
-                    let createdAt = values?.creationDate ?? firstEventAt ?? dayDate
-                    let updatedAt = values?.contentModificationDate ?? lastEventAt ?? createdAt
-                    let fileSizeBytes = Int64(values?.fileSize ?? 0)
-
-                    let relativePath = "\(day)/\(runFileURL.lastPathComponent)"
-                    runs.append(
-                        AppLogRunFile(
-                            relativePath: relativePath,
-                            day: day,
-                            fileName: runFileURL.lastPathComponent,
-                            createdAt: createdAt,
-                            updatedAt: updatedAt,
-                            firstEventAt: firstEventAt,
-                            lastEventAt: lastEventAt,
-                            totalEventCount: events.count,
-                            developerEventCount: developerCount,
-                            userEventCount: userCount,
-                            fileSizeBytes: fileSizeBytes
-                        )
-                    )
+                    runs.append(try makeRunSummary(fileURL: runFileURL, day: day))
                 }
 
                 let sortedRuns = runs.sorted { lhs, rhs in
@@ -140,6 +111,9 @@ actor AppLogFileStore {
                 }
             }
 
+            sessionSummary = folders
+                .flatMap(\.runs)
+                .first(where: { $0.relativePath == sessionRelativePath })
             return folders
         } catch {
             logger.error("加载日志目录索引失败: \(error.localizedDescription, privacy: .public)")
@@ -150,7 +124,7 @@ actor AppLogFileStore {
     func loadEvents(for runFile: AppLogRunFile) -> [AppLogEvent] {
         do {
             try ensureBaseDirectory()
-            try purgeExpiredFiles(now: Date())
+            try purgeExpiredFilesIfNeeded(now: Date())
             guard let fileURL = resolveFileURL(relativePath: runFile.relativePath) else {
                 logger.error("日志路径非法，拒绝读取: \(runFile.relativePath, privacy: .public)")
                 return []
@@ -170,6 +144,9 @@ actor AppLogFileStore {
             let dayDirectory = baseDirectory.appendingPathComponent(day, isDirectory: true)
             guard fileManager.fileExists(atPath: dayDirectory.path) else { return }
             try fileManager.removeItem(at: dayDirectory)
+            if day == sessionDayKey {
+                sessionSummary = nil
+            }
         } catch {
             logger.error("删除日志日期目录失败: \(error.localizedDescription, privacy: .public)")
         }
@@ -187,20 +164,34 @@ actor AppLogFileStore {
 
             try fileManager.removeItem(at: fileURL)
             try purgeEmptyDayDirectories()
+            if relativePath == sessionRelativePath {
+                sessionSummary = nil
+            }
         } catch {
             logger.error("删除日志文件失败: \(error.localizedDescription, privacy: .public)")
         }
     }
 
-    func append(_ event: AppLogEvent) {
+    @discardableResult
+    func append(_ event: AppLogEvent) -> AppLogRunFile? {
         do {
             try ensureBaseDirectory()
-            try purgeExpiredFiles(now: event.timestamp)
+            try purgeExpiredFilesIfNeeded(now: event.timestamp)
             let fileURL = sessionLogFileURL()
             try ensureDirectory(fileURL.deletingLastPathComponent())
-            try append(event, to: fileURL)
+            let fileAlreadyExisted = fileManager.fileExists(atPath: fileURL.path)
+            let appendedBytes = try append(event, to: fileURL)
+            let summary = try updatedSessionSummary(
+                appending: event,
+                appendedBytes: appendedBytes,
+                fileURL: fileURL,
+                fileAlreadyExisted: fileAlreadyExisted
+            )
+            sessionSummary = summary
+            return summary
         } catch {
             logger.error("追加日志失败: \(error.localizedDescription, privacy: .public)")
+            return nil
         }
     }
 
@@ -210,10 +201,11 @@ actor AppLogFileStore {
             let files = try sortedLogFiles()
             for fileURL in files {
                 let events = try readEvents(from: fileURL)
-                let filtered = events.filter { $0.channel != channel }
+                let filtered = events.compactMap { $0.removingVisibility(in: channel) }
                 try rewrite(events: filtered, to: fileURL)
             }
             try purgeEmptyDayDirectories()
+            sessionSummary = nil
         } catch {
             logger.error("清理日志失败: \(error.localizedDescription, privacy: .public)")
         }
@@ -225,6 +217,8 @@ actor AppLogFileStore {
                 try fileManager.removeItem(at: baseDirectory)
             }
             didMigrateLegacyFiles = false
+            sessionSummary = nil
+            lastRetentionPurgeDay = nil
             try ensureBaseDirectory()
         } catch {
             logger.error("清空日志失败: \(error.localizedDescription, privacy: .public)")
@@ -279,7 +273,7 @@ actor AppLogFileStore {
         }
     }
 
-    private func append(_ event: AppLogEvent, to fileURL: URL) throws {
+    private func append(_ event: AppLogEvent, to fileURL: URL) throws -> Int64 {
         let encoded = try encoder.encode(event)
         var line = Data()
         line.append(encoded)
@@ -293,6 +287,80 @@ actor AppLogFileStore {
         } else {
             try line.write(to: fileURL, options: .atomic)
         }
+        return Int64(line.count)
+    }
+
+    private func updatedSessionSummary(
+        appending event: AppLogEvent,
+        appendedBytes: Int64,
+        fileURL: URL,
+        fileAlreadyExisted: Bool
+    ) throws -> AppLogRunFile {
+        if !fileAlreadyExisted {
+            return AppLogRunFile(
+                relativePath: sessionRelativePath,
+                day: sessionDayKey,
+                fileName: sessionFileName,
+                createdAt: event.timestamp,
+                updatedAt: event.timestamp,
+                firstEventAt: event.timestamp,
+                lastEventAt: event.timestamp,
+                totalEventCount: 1,
+                developerEventCount: event.isVisible(in: .developer) ? 1 : 0,
+                userEventCount: event.isVisible(in: .user) ? 1 : 0,
+                fileSizeBytes: appendedBytes
+            )
+        }
+
+        guard let previous = sessionSummary else {
+            return try makeRunSummary(fileURL: fileURL, day: sessionDayKey)
+        }
+
+        return AppLogRunFile(
+            relativePath: previous.relativePath,
+            day: previous.day,
+            fileName: previous.fileName,
+            createdAt: previous.createdAt,
+            updatedAt: event.timestamp,
+            firstEventAt: previous.firstEventAt ?? event.timestamp,
+            lastEventAt: event.timestamp,
+            totalEventCount: previous.totalEventCount + 1,
+            developerEventCount: previous.developerEventCount + (event.isVisible(in: .developer) ? 1 : 0),
+            userEventCount: previous.userEventCount + (event.isVisible(in: .user) ? 1 : 0),
+            fileSizeBytes: previous.fileSizeBytes + appendedBytes
+        )
+    }
+
+    private func makeRunSummary(fileURL: URL, day: String) throws -> AppLogRunFile {
+        let events = try readEvents(from: fileURL)
+        let firstEventAt = events.first?.timestamp
+        let lastEventAt = events.last?.timestamp
+        let developerCount = events.reduce(0) { partialResult, event in
+            partialResult + (event.isVisible(in: .developer) ? 1 : 0)
+        }
+        let userCount = events.reduce(0) { partialResult, event in
+            partialResult + (event.isVisible(in: .user) ? 1 : 0)
+        }
+        let values = try? fileURL.resourceValues(
+            forKeys: [.creationDateKey, .contentModificationDateKey, .fileSizeKey]
+        )
+        let dayDate = dateFromDayFolderName(day) ?? Date.distantPast
+        let createdAt = values?.creationDate ?? firstEventAt ?? dayDate
+        let updatedAt = values?.contentModificationDate ?? lastEventAt ?? createdAt
+
+        return AppLogRunFile(
+            relativePath: "\(day)/\(fileURL.lastPathComponent)",
+            day: day,
+            fileName: fileURL.lastPathComponent,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            firstEventAt: firstEventAt,
+            lastEventAt: lastEventAt,
+            totalEventCount: events.count,
+            developerEventCount: developerCount,
+            userEventCount: userCount,
+            fileSizeBytes: Int64(values?.fileSize ?? 0)
+        )
     }
 
     private func readEvents(from fileURL: URL) throws -> [AppLogEvent] {
@@ -349,6 +417,13 @@ actor AppLogFileStore {
         }
 
         try purgeEmptyDayDirectories()
+    }
+
+    private func purgeExpiredFilesIfNeeded(now: Date) throws {
+        let day = dayFormatter.string(from: now)
+        guard lastRetentionPurgeDay != day else { return }
+        try purgeExpiredFiles(now: now)
+        lastRetentionPurgeDay = day
     }
 
     private func purgeEmptyDayDirectories() throws {
@@ -433,6 +508,10 @@ actor AppLogFileStore {
         baseDirectory
             .appendingPathComponent(sessionDayKey, isDirectory: true)
             .appendingPathComponent(sessionFileName, isDirectory: false)
+    }
+
+    private var sessionRelativePath: String {
+        "\(sessionDayKey)/\(sessionFileName)"
     }
 
     private func resolveFileURL(relativePath: String) -> URL? {

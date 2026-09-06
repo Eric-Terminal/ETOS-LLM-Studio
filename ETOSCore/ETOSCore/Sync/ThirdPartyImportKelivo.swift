@@ -170,7 +170,10 @@ extension ThirdPartyImportService {
         for (index, conversationAny) in conversations.enumerated() {
             guard let conversation = dictionary(conversationAny) else { continue }
             let conversationID = nonEmpty(string(conversation["id"])) ?? "kelivo-conversation-\(index)"
-            let title = nonEmpty(string(conversation["title"])) ?? "Kelivo 对话 \(index + 1)"
+            let title = nonEmpty(string(conversation["title"])) ?? String(
+                format: NSLocalizedString("Kelivo 对话 %d", comment: "Imported Kelivo conversation fallback name"),
+                index + 1
+            )
             let rawMessages = messagesByConversationID[conversationID] ?? []
             guard !rawMessages.isEmpty else { continue }
 
@@ -233,7 +236,10 @@ extension ThirdPartyImportService {
 
                 let session = ChatSession(
                     id: stableUUID(from: conversationID) ?? UUID(),
-                    name: "Kelivo 对话 \(index + 1)",
+                    name: String(
+                        format: NSLocalizedString("Kelivo 对话 %d", comment: "Imported Kelivo conversation fallback name"),
+                        index + 1
+                    ),
                     isTemporary: false
                 )
                 sessions.append(SyncedSession(session: session, messages: converted))

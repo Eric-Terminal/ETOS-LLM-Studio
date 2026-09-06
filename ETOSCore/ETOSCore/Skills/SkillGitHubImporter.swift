@@ -41,7 +41,9 @@ public enum SkillGitHubImporter {
 
     public static func importSkill(from repoURL: String) async throws -> SkillImportResult {
         guard let info = parseGitHubURL(repoURL) else {
-            throw SkillStoreError.networkError("无效的 GitHub 仓库链接。")
+            throw SkillStoreError.networkError(
+                NSLocalizedString("无效的 GitHub 仓库链接。", comment: "Invalid GitHub skill repository URL")
+            )
         }
 
         var files: [GitHubListedFile] = []
@@ -56,7 +58,9 @@ public enum SkillGitHubImporter {
 
         let selected = try selectedFilesForImport(files)
         guard !selected.files.isEmpty else {
-            throw SkillStoreError.networkError("仓库目录为空，未找到可导入文件。")
+            throw SkillStoreError.networkError(
+                NSLocalizedString("仓库目录为空，未找到可导入文件。", comment: "GitHub skill repository directory is empty")
+            )
         }
 
         var fileContents: [String: Data] = [:]
@@ -111,7 +115,9 @@ public enum SkillGitHubImporter {
             switch item.type {
             case "file":
                 guard let downloadURL = item.downloadURL, !downloadURL.isEmpty else {
-                    throw SkillStoreError.networkError("下载地址缺失：\(item.path)")
+                    throw SkillStoreError.networkError(
+                        String(format: NSLocalizedString("下载地址缺失：%@", comment: "GitHub skill file download URL missing"), item.path)
+                    )
                 }
                 let relative = makeRelativePath(itemPath: item.path, basePath: basePath)
                 guard !relative.isEmpty else { continue }
@@ -142,7 +148,12 @@ public enum SkillGitHubImporter {
             .filter { URL(fileURLWithPath: $0).lastPathComponent == SkillStore.defaultSkillFileName }
         guard skillFilePaths.count == 1, let skillFilePath = skillFilePaths.first else {
             if skillFilePaths.count > 1 {
-                throw SkillStoreError.saveFailed("仓库中找到多个 SKILL.md，请使用 GitHub tree 链接指向具体技能目录。")
+                throw SkillStoreError.saveFailed(
+                    NSLocalizedString(
+                        "仓库中找到多个 SKILL.md，请使用 GitHub tree 链接指向具体技能目录。",
+                        comment: "Multiple skill manifests found in GitHub repository"
+                    )
+                )
             }
             throw SkillStoreError.missingSkillFile
         }
@@ -212,7 +223,9 @@ public enum SkillGitHubImporter {
             components.queryItems = [URLQueryItem(name: "ref", value: branch)]
         }
         guard let url = components.url else {
-            throw SkillStoreError.networkError("无法构造 GitHub API 地址。")
+            throw SkillStoreError.networkError(
+                NSLocalizedString("无法构造 GitHub API 地址。", comment: "Cannot create GitHub API URL")
+            )
         }
         return url
     }
@@ -311,17 +324,26 @@ public enum SkillGitHubImporter {
 
         let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
-            throw SkillStoreError.networkError("GitHub 响应无效。")
+            throw SkillStoreError.networkError(
+                NSLocalizedString("GitHub 响应无效。", comment: "Invalid GitHub response")
+            )
         }
         guard (200...299).contains(http.statusCode) else {
-            throw SkillStoreError.networkError("GitHub 请求失败（\(http.statusCode)）。")
+            throw SkillStoreError.networkError(
+                String(
+                    format: NSLocalizedString("GitHub 请求失败（%d）。", comment: "GitHub request status failure"),
+                    http.statusCode
+                )
+            )
         }
         return data
     }
 
     private static func downloadData(url: String) async throws -> Data {
         guard let targetURL = URL(string: url) else {
-            throw SkillStoreError.networkError("下载链接无效：\(url)")
+            throw SkillStoreError.networkError(
+                String(format: NSLocalizedString("下载链接无效：%@", comment: "Invalid skill download URL"), url)
+            )
         }
         return try await fetchData(url: targetURL)
     }

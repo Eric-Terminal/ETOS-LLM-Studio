@@ -25,7 +25,8 @@ extension AppToolManager {
         let result = try await Self.runSandboxFileOperationOffMainThread {
             try SandboxFileToolSupport.createDirectory(
                 relativePath: args.path,
-                createIntermediateDirectories: args.create_parent_directories ?? true
+                createIntermediateDirectories: args.create_parent_directories ?? true,
+                rootDirectory: SandboxFileToolSupport.activeRootDirectory
             )
         }
         let payload: [String: Any] = [
@@ -63,7 +64,8 @@ extension AppToolManager {
                 relativePath: args.path,
                 rules: rules,
                 replaceAll: args.replace_all ?? false,
-                ignoreMissing: args.ignore_missing ?? false
+                ignoreMissing: args.ignore_missing ?? false,
+                rootDirectory: SandboxFileToolSupport.activeRootDirectory
             )
         }
         refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.path])
@@ -103,7 +105,8 @@ extension AppToolManager {
         return try await Self.runSandboxFileOperationOffMainThread {
             try SandboxFileToolSupport.diffTextFile(
                 relativePath: args.path,
-                updatedContent: args.updated_content
+                updatedContent: args.updated_content,
+                rootDirectory: SandboxFileToolSupport.activeRootDirectory
             )
         }
     }
@@ -128,7 +131,8 @@ extension AppToolManager {
                 relativePath: args.path,
                 oldText: args.old_text,
                 newText: args.new_text,
-                replaceAll: args.replace_all ?? false
+                replaceAll: args.replace_all ?? false,
+                rootDirectory: SandboxFileToolSupport.activeRootDirectory
             )
         }
         refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.path])
@@ -153,7 +157,10 @@ extension AppToolManager {
         }
 
         let result = try await Self.runSandboxFileOperationOffMainThread {
-            try SandboxFileToolSupport.deleteItem(relativePath: args.path)
+            try SandboxFileToolSupport.deleteItem(
+                relativePath: args.path,
+                rootDirectory: SandboxFileToolSupport.activeRootDirectory
+            )
         }
         refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.path])
         let payload: [String: Any] = [

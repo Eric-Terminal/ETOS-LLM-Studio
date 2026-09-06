@@ -129,7 +129,8 @@ public final class FeedbackService: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.tickets = FeedbackStore.loadTickets()
+                let tickets = await Task.detached(priority: .utility) { FeedbackStore.loadTickets() }.value
+                self?.tickets = tickets
             }
         }
     }
@@ -155,45 +156,48 @@ public final class FeedbackService: ObservableObject {
 
     @discardableResult
     public func submit(draft: FeedbackDraft) async throws -> FeedbackTicket {
-        func normalizedOptionalField(_ value: String?) -> String? {
-            guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !trimmed.isEmpty else {
-                return nil
-            }
-            return trimmed
-        }
-
-        let sanitizedTitle = draft.sanitizedTitle
-        let sanitizedDetail = draft.sanitizedDetail
-        let sanitizedReproductionSteps = normalizedOptionalField(draft.reproductionSteps)
-        let sanitizedExpectedBehavior = normalizedOptionalField(draft.expectedBehavior)
-        let sanitizedActualBehavior = normalizedOptionalField(draft.actualBehavior)
-        let sanitizedExtraContext = normalizedOptionalField(draft.extraContext)
-        guard !sanitizedTitle.isEmpty, !sanitizedDetail.isEmpty else {
-            throw FeedbackServiceError.invalidInput
-        }
-
         isSubmitting = true
         defer { isSubmitting = false }
 
-        let challenge = try await requestChallenge()
-        let payload = SubmitIssuePayload(
-            type: draft.category.rawValue,
-            title: FeedbackTextSanitizer.redact(sanitizedTitle),
-            detail: FeedbackTextSanitizer.redact(sanitizedDetail),
-            reproductionSteps: FeedbackTextSanitizer.redact(sanitizedReproductionSteps ?? ""),
-            expectedBehavior: FeedbackTextSanitizer.redact(sanitizedExpectedBehavior ?? ""),
-            actualBehavior: FeedbackTextSanitizer.redact(sanitizedActualBehavior ?? ""),
-            extraContext: FeedbackTextSanitizer.redact(sanitizedExtraContext ?? ""),
-            environment: FeedbackEnvironmentCollector.collectSnapshot(),
-            logs: FeedbackEnvironmentCollector.collectMinimalLogs().map(FeedbackTextSanitizer.redact)
-        )
+        // 自动诊断可能含多条完整事件，数据库统计、正则脱敏和编码必须离开主线程。
+        let encoder = encoder
+        let prepared = try await Task.detached(priority: .userInitiated) {
+            func normalizedOptionalField(_ value: String?) -> String? {
+                guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !trimmed.isEmpty else { return nil }
+                return trimmed
+            }
+            let normalized = FeedbackDraft(
+                category: draft.category,
+                title: draft.sanitizedTitle,
+                detail: draft.sanitizedDetail,
+                reproductionSteps: normalizedOptionalField(draft.reproductionSteps),
+                expectedBehavior: normalizedOptionalField(draft.expectedBehavior),
+                actualBehavior: normalizedOptionalField(draft.actualBehavior),
+                extraContext: normalizedOptionalField(draft.extraContext)
+            )
+            guard normalized.isValid else { throw FeedbackServiceError.invalidInput }
+            let payload = SubmitIssuePayload(
+                type: normalized.category.rawValue,
+                title: FeedbackTextSanitizer.redact(normalized.title),
+                detail: FeedbackTextSanitizer.redact(normalized.detail),
+                reproductionSteps: FeedbackTextSanitizer.redact(normalized.reproductionSteps ?? ""),
+                expectedBehavior: FeedbackTextSanitizer.redact(normalized.expectedBehavior ?? ""),
+                actualBehavior: FeedbackTextSanitizer.redact(normalized.actualBehavior ?? ""),
+                extraContext: FeedbackTextSanitizer.redact(normalized.extraContext ?? ""),
+                environment: FeedbackEnvironmentCollector.collectSnapshot(),
+                logs: FeedbackEnvironmentCollector.collectMinimalLogs().map(FeedbackTextSanitizer.redact)
+            )
+            let bodyData = try encoder.encode(payload)
+            return (draft: normalized, bodyData: bodyData, bodyHash: FeedbackSignature.bodyHashHex(bodyData))
+        }.value
 
-        let bodyData = try encoder.encode(payload)
+        let challenge = try await requestChallenge()
+        let bodyData = prepared.bodyData
         let submitPath = config.issuesPath
         var request = try buildRequest(path: submitPath, method: "POST")
         let timestamp = String(Int(Date().timeIntervalSince1970))
-        let bodyHash = FeedbackSignature.bodyHashHex(bodyData)
+        let bodyHash = prepared.bodyHash
         let signingText = "POST\n\(submitPath)\n\(timestamp)\n\(bodyHash)\n\(challenge.nonce)"
         let signature = FeedbackSignature.hmacSHA256Hex(message: signingText, secret: challenge.clientSecret)
         let powBits = max(challenge.powBits ?? 0, 0)
@@ -231,7 +235,10 @@ public final class FeedbackService: ObservableObject {
 
         let submitResponse: SubmitIssueResponse
         do {
-            submitResponse = try decoder.decode(SubmitIssueResponse.self, from: data)
+            let decoder = decoder
+            submitResponse = try await Task.detached(priority: .userInitiated) {
+                try decoder.decode(SubmitIssueResponse.self, from: data)
+            }.value
         } catch {
             logger.error("解析提交响应失败: \(error.localizedDescription)")
             throw FeedbackServiceError.decodeFailed
@@ -248,7 +255,7 @@ public final class FeedbackService: ObservableObject {
             issueNumber: submitResponse.issueNumber,
             ticketToken: submitResponse.ticketToken,
             category: draft.category,
-            title: sanitizedTitle,
+            title: prepared.draft.title,
             createdAt: now,
             lastKnownStatus: status,
             lastCheckedAt: now,
@@ -257,16 +264,18 @@ public final class FeedbackService: ObservableObject {
             moderationBlocked: submitResponse.moderationBlocked,
             moderationMessage: submitResponse.moderationMessage,
             archiveID: submitResponse.archiveID,
-            submittedTitle: sanitizedTitle,
-            submittedDetail: sanitizedDetail,
-            submittedReproductionSteps: sanitizedReproductionSteps,
-            submittedExpectedBehavior: sanitizedExpectedBehavior,
-            submittedActualBehavior: sanitizedActualBehavior,
-            submittedExtraContext: sanitizedExtraContext
+            submittedTitle: prepared.draft.title,
+            submittedDetail: prepared.draft.detail,
+            submittedReproductionSteps: prepared.draft.reproductionSteps,
+            submittedExpectedBehavior: prepared.draft.expectedBehavior,
+            submittedActualBehavior: prepared.draft.actualBehavior,
+            submittedExtraContext: prepared.draft.extraContext
         )
 
-        FeedbackStore.upsertTicket(ticket)
-        tickets = FeedbackStore.loadTickets()
+        tickets = await Task.detached(priority: .utility) {
+            FeedbackStore.upsertTicket(ticket)
+            return FeedbackStore.loadTickets()
+        }.value
         return ticket
     }
 

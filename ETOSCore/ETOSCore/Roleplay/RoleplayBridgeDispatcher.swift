@@ -23,6 +23,14 @@ public enum RoleplayBridgeNotification {
 public enum RoleplayDisplayedMessageBridge {
     public static let variableKey = "__etos_displayed_html"
     public static let didChangeNotification = Notification.Name("com.ETOS.roleplayDisplayedMessage.didChange")
+
+    public static func postDidChange(sessionID: UUID) {
+        NotificationCenter.default.post(
+            name: didChangeNotification,
+            object: nil,
+            userInfo: [RoleplayBridgeNotification.sessionIDKey: sessionID]
+        )
+    }
 }
 
 public enum RoleplayEventBridge {
@@ -175,11 +183,7 @@ public enum RoleplayBridgeDispatcher {
                     versionIndex: target.getCurrentVersionIndex()
                 )
                 store.saveVariableSnapshot(snapshot, sessionID: sessionID)
-                NotificationCenter.default.post(
-                    name: RoleplayDisplayedMessageBridge.didChangeNotification,
-                    object: nil,
-                    userInfo: [RoleplayBridgeNotification.sessionIDKey: sessionID]
-                )
+                RoleplayDisplayedMessageBridge.postDidChange(sessionID: sessionID)
             }
         case "replace_script_buttons":
             guard let scriptID = (payload["script_id"] as? String).flatMap(UUID.init(uuidString:)),

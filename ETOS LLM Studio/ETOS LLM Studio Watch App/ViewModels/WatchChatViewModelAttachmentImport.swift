@@ -231,6 +231,14 @@ extension ChatViewModel {
             return "audio/aac"
         case "flac":
             return "audio/flac"
+        case "mp4", "m4v":
+            return "video/mp4"
+        case "mov":
+            return "video/quicktime"
+        case "webm":
+            return "video/webm"
+        case "mpeg", "mpg":
+            return "video/mpeg"
         case "txt":
             return "text/plain"
         case "json":

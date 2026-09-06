@@ -99,6 +99,12 @@ public struct FileAttachmentTextExtractor {
     public init() {}
 
     public func extractText(from attachment: FileAttachment) throws -> String {
+        let extractedText = try extractTextPreservingLayout(from: attachment)
+        return normalizeWhitespace(in: extractedText)
+    }
+
+    /// 为无截断上下文压缩保留原始换行和空白，不执行展示用途的空白归一化。
+    public func extractTextPreservingLayout(from attachment: FileAttachment) throws -> String {
         let fileName = (attachment.fileName as NSString).lastPathComponent
         let fileExtension = (fileName as NSString).pathExtension.lowercased()
         let extractedText: String
@@ -121,11 +127,10 @@ public struct FileAttachmentTextExtractor {
             }
         }
 
-        let normalized = normalizeWhitespace(in: extractedText)
-        guard !normalized.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard !extractedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw FileAttachmentTextExtractionError.emptyText(fileName: fileName)
         }
-        return normalized
+        return extractedText
     }
 
     private func extractDOCXText(from data: Data, fileName: String) throws -> String {
@@ -217,15 +222,20 @@ public struct FileAttachmentTextExtractor {
     }
 
     private func decodePlainText(from data: Data) -> String? {
-        let encodings: [String.Encoding] = [
-            .utf8,
-            .utf16,
-            .utf16LittleEndian,
-            .utf16BigEndian,
-            .isoLatin1,
-            .windowsCP1252
-        ]
-        for encoding in encodings {
+        if let text = String(data: data, encoding: .utf8) {
+            return text
+        }
+
+        if data.starts(with: [0xFF, 0xFE]),
+           let text = String(data: data, encoding: .utf16LittleEndian) {
+            return text
+        }
+        if data.starts(with: [0xFE, 0xFF]),
+           let text = String(data: data, encoding: .utf16BigEndian) {
+            return text
+        }
+
+        for encoding in [String.Encoding.windowsCP1252, .isoLatin1] {
             if let text = String(data: data, encoding: encoding) {
                 return text
             }
@@ -451,6 +461,7 @@ public enum FileAttachmentPreviewLoader {
 private final class XMLTextCollector: NSObject, XMLParserDelegate {
     private let acceptedTags: Set<String>
     private var isCollecting = false
+    private var currentParts: [String] = []
     private var parts: [String] = []
 
     var text: String {
@@ -468,12 +479,15 @@ private final class XMLTextCollector: NSObject, XMLParserDelegate {
         qualifiedName qName: String?,
         attributes attributeDict: [String: String] = [:]
     ) {
-        isCollecting = acceptedTags.contains(Self.localName(from: elementName))
+        if acceptedTags.contains(Self.localName(from: elementName)) {
+            currentParts = []
+            isCollecting = true
+        }
     }
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {
         guard isCollecting else { return }
-        parts.append(string)
+        currentParts.append(string)
     }
 
     func parser(
@@ -483,6 +497,8 @@ private final class XMLTextCollector: NSObject, XMLParserDelegate {
         qualifiedName qName: String?
     ) {
         if acceptedTags.contains(Self.localName(from: elementName)) {
+            parts.append(currentParts.joined())
+            currentParts = []
             isCollecting = false
         }
     }

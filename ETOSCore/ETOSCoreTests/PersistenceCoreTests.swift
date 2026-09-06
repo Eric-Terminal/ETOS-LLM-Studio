@@ -11,7 +11,7 @@ import Foundation
 import SQLite3
 @testable import ETOSCore
 
-@Suite("Persistence Core Tests")
+@Suite("Persistence Core Tests", .serialized)
 struct PersistenceCoreTests {
     private struct LegacySessionRecord: Decodable {
         struct SessionMeta: Decodable {
@@ -53,7 +53,7 @@ struct PersistenceCoreTests {
     }
 
     private var memoryStoreSQLiteURL: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        StorageUtility.documentsDirectory
             .appendingPathComponent("Memory")
             .appendingPathComponent("memory-store.sqlite")
     }
@@ -106,6 +106,14 @@ struct PersistenceCoreTests {
         let session1 = ChatSession(id: UUID(), name: "Session 1", isTemporary: false)
         let session2 = ChatSession(id: UUID(), name: "Session 2", topicPrompt: "Test Topic", isTemporary: false)
         let sessionsToSave = [session1, session2]
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = false
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            cleanup(sessions: sessionsToSave)
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+        }
 
         Persistence.saveChatSessions(sessionsToSave)
         let loadedSessions = Persistence.loadChatSessions()
@@ -118,7 +126,6 @@ struct PersistenceCoreTests {
         #expect(FileManager.default.fileExists(atPath: currentSessionFileURL(session1.id).path))
         #expect(FileManager.default.fileExists(atPath: currentSessionFileURL(session2.id).path))
 
-        cleanup(sessions: sessionsToSave)
     }
 
     @Test("Save and Load Session Folders with Session Assignment")
@@ -153,6 +160,15 @@ struct PersistenceCoreTests {
             ChatMessage(role: .user, content: "Hello", requestedAt: requestedAt),
             ChatMessage(role: .assistant, content: "Hi there!")
         ]
+        let cleanupSession = ChatSession(id: sessionId, name: "cleanup", isTemporary: false)
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = false
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            cleanup(sessions: [cleanupSession])
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+        }
 
         Persistence.saveMessages(messagesToSave, for: sessionId)
         let loadedMessages = Persistence.loadMessages(for: sessionId)
@@ -174,7 +190,6 @@ struct PersistenceCoreTests {
             Issue.record("会话文件不存在或格式不正确。")
         }
 
-        cleanup(sessions: [ChatSession(id: sessionId, name: "cleanup", isTemporary: false)])
     }
 
     @Test("GRDB backend can count messages without loading full array")
@@ -199,6 +214,49 @@ struct PersistenceCoreTests {
 
         let messageCount = Persistence.loadMessageCount(for: session.id)
         #expect(messageCount == 3)
+
+        cleanup(sessions: [session])
+    }
+
+    @Test("GRDB 异步读取消息与计数保持完整结果")
+    func testGRDBAsyncMessageReadAndCount() async {
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+        }
+
+        let session = ChatSession(id: UUID(), name: "异步读取会话", isTemporary: false)
+        var assistantMessage = ChatMessage(
+            role: .assistant,
+            content: "第一版",
+            imageFileNames: ["image.png"],
+            responseAttemptID: UUID()
+        )
+        assistantMessage.addVersion("第二版")
+        assistantMessage.switchToVersion(0)
+        let messages = [
+            ChatMessage(role: .user, content: "问题"),
+            assistantMessage
+        ]
+
+        Persistence.saveChatSessions([session])
+        Persistence.saveMessages(messages, for: session.id)
+
+        let loadedMessages = await Persistence.loadMessagesAsync(for: session.id)
+        let messageCount = await Persistence.loadMessageCountAsync(for: session.id)
+
+        #expect(messageCount == 3)
+        #expect(loadedMessages.first?.id == messages.first?.id)
+        #expect(loadedMessages[1].imageFileNames == ["image.png"])
+        #expect(loadedMessages[1].content == "[图片]")
+        #expect(loadedMessages.last?.id == assistantMessage.id)
+        #expect(loadedMessages.last?.getAllVersions() == ["第一版", "第二版"])
+        #expect(loadedMessages.last?.getCurrentVersionIndex() == 0)
+        #expect(loadedMessages.last?.imageFileNames == nil)
+        #expect(loadedMessages.last?.responseAttemptID == assistantMessage.responseAttemptID)
 
         cleanup(sessions: [session])
     }
@@ -257,6 +315,42 @@ struct PersistenceCoreTests {
         #expect(loadedMessages[2].responseAttemptID == secondAttemptID)
         #expect(loadedMessages[2].responseAttemptIndex == 1)
         #expect(loadedMessages[2].sentSystemPromptSnapshot == "<long_term_memory>第二次请求的记忆</long_term_memory>")
+
+        cleanup(sessions: [session])
+    }
+
+    @Test("GRDB saveMessages 会保留视频解析结果")
+    func testGRDBSaveAndLoadVideoAnalysisResults() throws {
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+        }
+
+        let session = ChatSession(id: UUID(), name: "视频解析会话", isTemporary: false)
+        let generatedAt = Date(timeIntervalSince1970: 1_750_000_000)
+        let result = VideoAnalysisResult(
+            fileName: "sample.mp4",
+            content: "00:00 出现标题，00:03 人物挥手。",
+            modelIdentifier: "provider-gemini-video",
+            modelDisplayName: "Gemini Video | Provider",
+            generatedAt: generatedAt
+        )
+        let message = ChatMessage(
+            role: .user,
+            content: "这个视频讲了什么？",
+            fileFileNames: ["sample.mp4"],
+            videoAnalysisResults: [result]
+        )
+
+        Persistence.saveChatSessions([session])
+        Persistence.saveMessages([message], for: session.id)
+
+        let loadedMessage = try #require(Persistence.loadMessages(for: session.id).first)
+        #expect(loadedMessage.videoAnalysisResults == [result])
+        #expect(loadedMessage.videoAnalysisResult(for: "sample.mp4") == result)
 
         cleanup(sessions: [session])
     }

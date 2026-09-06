@@ -333,6 +333,21 @@ struct WatchTemperatureSliderView: View {
         .padding()
         .navigationTitle(NSLocalizedString("温度", comment: "Temperature sampling parameter title"))
         .navigationBarTitleDisplayMode(.inline)
+        .guideSettingsPageContext(
+            id: "settings-temperature-slider",
+            title: NSLocalizedString("温度", comment: "温度滑杆向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-core", title: "Core Settings")],
+            settings: [
+                .double(
+                    "temperature",
+                    label: NSLocalizedString("温度", comment: "温度滑杆向导字段"),
+                    range: range,
+                    get: { value },
+                    set: { value = $0 }
+                )
+            ]
+        )
+        .watchGuideEntry()
         .onAppear {
             interactivePosition = normalizedPosition
             lastFeedbackAnchor = feedbackAnchor(at: currentPosition)

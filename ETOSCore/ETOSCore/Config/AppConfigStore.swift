@@ -9,7 +9,7 @@
 import Combine
 import Foundation
 
-private final class AppConfigSnapshotCache: @unchecked Sendable {
+final class AppConfigSnapshotCache: @unchecked Sendable {
     private let lock = NSLock()
     private var values: [String: Any]
 
@@ -56,7 +56,7 @@ private final class AppConfigSnapshotCache: @unchecked Sendable {
     }
 }
 
-private actor AppConfigPersistenceWorker {
+actor AppConfigPersistenceWorker {
     static let shared = AppConfigPersistenceWorker()
 
     func bootstrap(
@@ -99,27 +99,27 @@ public final class AppConfigStore: ObservableObject {
     public static let shared = AppConfigStore()
     public nonisolated static let persistentStoreDidLoadNotification = Notification.Name("com.ETOS.appConfig.persistentStoreDidLoad")
 
-    private nonisolated static let migrationFlagKey = "appConfig.migratedFromUserDefaults.v1"
-    private nonisolated static let chatComposerDraftWriteDebounceNanoseconds: UInt64 = 1_000_000_000
-    private nonisolated static let snapshotCache = AppConfigSnapshotCache(
+    nonisolated static let migrationFlagKey = "appConfig.migratedFromUserDefaults.v1"
+    nonisolated static let chatComposerDraftWriteDebounceNanoseconds: UInt64 = 1_000_000_000
+    nonisolated static let snapshotCache = AppConfigSnapshotCache(
         values: Dictionary(uniqueKeysWithValues: AppConfigKey.allCases.map { key in
             (key.rawValue, key.defaultValue.anyValue)
         })
     )
-    private var isApplyingSnapshot = false
-    private var isReloadingFromPersistentStore = false
-    private var pendingWriteTasks: [UUID: Task<Void, Never>] = [:]
-    private var pendingChatComposerDraftWriteID: UUID?
-    private var persistedChatComposerDraftValue: AppConfigValue = .text("")
-    @Published public private(set) var didLoadPersistentStore = false
-    private var locallyChangedKeysBeforePersistentLoad: Set<AppConfigKey> = []
-    private nonisolated static var shouldSkipQuickSyncForCurrentProcess: Bool {
+    var isApplyingSnapshot = false
+    var isReloadingFromPersistentStore = false
+    var pendingWriteTasks: [UUID: Task<Void, Never>] = [:]
+    var pendingChatComposerDraftWriteID: UUID?
+    var persistedChatComposerDraftValue: AppConfigValue = .text("")
+    @Published public internal(set) var didLoadPersistentStore = false
+    var locallyChangedKeysBeforePersistentLoad: Set<AppConfigKey> = []
+    nonisolated static var shouldSkipQuickSyncForCurrentProcess: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
-    private nonisolated static var shouldSkipRealtimeCloudSyncForCurrentProcess: Bool {
+    nonisolated static var shouldSkipRealtimeCloudSyncForCurrentProcess: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
-    private nonisolated static func shouldTouchWatchConfigDatabase(for key: AppConfigKey) -> Bool {
+    nonisolated static func shouldTouchWatchConfigDatabase(for key: AppConfigKey) -> Bool {
         guard key.participatesInSync else { return false }
         let rawKey = key.rawValue
         guard !rawKey.hasPrefix("sync."),
@@ -175,6 +175,23 @@ public final class AppConfigStore: ObservableObject {
     @Published public var localModelsEnabled: Bool { didSet { write(.localModelsEnabled, localModelsEnabled) } }
     @Published public var localModelPerformanceMonitorEnabled: Bool { didSet { write(.localModelPerformanceMonitorEnabled, localModelPerformanceMonitorEnabled) } }
     @Published public var localModelCacheEnabled: Bool { didSet { write(.localModelCacheEnabled, localModelCacheEnabled) } }
+    @Published public var localModelKVCacheEnabled: Bool { didSet { write(.localModelKVCacheEnabled, localModelKVCacheEnabled) } }
+    @Published public var localLinuxEnabled: Bool { didSet { write(.localLinuxEnabled, localLinuxEnabled) } }
+    @Published public var localLinuxEnvironmentPrivacyEnabled: Bool { didSet { write(.localLinuxEnvironmentPrivacyEnabled, localLinuxEnvironmentPrivacyEnabled) } }
+    @Published public var localLinuxCommandSafetyEnabled: Bool { didSet { write(.localLinuxCommandSafetyEnabled, localLinuxCommandSafetyEnabled) } }
+    @Published public var localLinuxDefaultMountAccess: LocalLinuxMountAccess {
+        didSet { write(.localLinuxDefaultMountAccess, localLinuxDefaultMountAccess.rawValue) }
+    }
+    @Published public var localLinuxDefaultShellPath: String { didSet { write(.localLinuxDefaultShellPath, localLinuxDefaultShellPath) } }
+    @Published public var localLinuxDefaultSessionMode: String { didSet { write(.localLinuxDefaultSessionMode, localLinuxDefaultSessionMode) } }
+    @Published public var localLinuxDefaultTimeoutSeconds: Int { didSet { write(.localLinuxDefaultTimeoutSeconds, localLinuxDefaultTimeoutSeconds) } }
+    @Published public var localLinuxOutputPreviewBytes: Int { didSet { write(.localLinuxOutputPreviewBytes, localLinuxOutputPreviewBytes) } }
+    @Published public var localLinuxLocalMCPOnDemand: Bool { didSet { write(.localLinuxLocalMCPOnDemand, localLinuxLocalMCPOnDemand) } }
+    @Published public var localLinuxActivePromptProfileID: String { didSet { write(.localLinuxActivePromptProfileID, localLinuxActivePromptProfileID) } }
+    @Published public var localLinuxWorkspaceCleanupPolicy: String { didSet { write(.localLinuxWorkspaceCleanupPolicy, localLinuxWorkspaceCleanupPolicy) } }
+    @Published public var localLinuxTerminalShortcutIDs: String { didSet { write(.localLinuxTerminalShortcutIDs, localLinuxTerminalShortcutIDs) } }
+    @Published public var localLinuxChatPreviewMode: String { didSet { write(.localLinuxChatPreviewMode, localLinuxChatPreviewMode) } }
+    @Published public var localLinuxChatPreviewPlacement: String { didSet { write(.localLinuxChatPreviewPlacement, localLinuxChatPreviewPlacement) } }
 
     @Published public var aiTemperature: Double { didSet { write(.aiTemperature, aiTemperature) } }
     @Published public var aiTopP: Double { didSet { write(.aiTopP, aiTopP) } }
@@ -182,16 +199,36 @@ public final class AppConfigStore: ObservableObject {
     @Published public var aiTopPEnabled: Bool { didSet { write(.aiTopPEnabled, aiTopPEnabled) } }
     @Published public var systemPrompt: String { didSet { write(.systemPrompt, systemPrompt) } }
     @Published public var maxChatHistory: Int { didSet { write(.maxChatHistory, maxChatHistory) } }
+    @Published public var enableContextCompressionReminder: Bool {
+        didSet { write(.enableContextCompressionReminder, enableContextCompressionReminder) }
+    }
+    @Published public var contextCompressionReminderTokenThreshold: Int {
+        didSet { write(.contextCompressionReminderTokenThreshold, contextCompressionReminderTokenThreshold) }
+    }
     @Published public var enableStreaming: Bool { didSet { write(.enableStreaming, enableStreaming) } }
     @Published public var enableResponseSpeedMetrics: Bool { didSet { write(.enableResponseSpeedMetrics, enableResponseSpeedMetrics) } }
     @Published public var requestLogEnabled: Bool { didSet { write(.requestLogEnabled, requestLogEnabled) } }
     @Published public var requestLogPlainMessageEnabled: Bool { didSet { write(.requestLogPlainMessageEnabled, requestLogPlainMessageEnabled) } }
+    @Published public var performanceTelemetryEnabled: Bool { didSet { write(.performanceTelemetryEnabled, performanceTelemetryEnabled) } }
     @Published public var modelConnectivityTestConcurrencyLimit: Int { didSet { write(.modelConnectivityTestConcurrencyLimit, modelConnectivityTestConcurrencyLimit) } }
+    @Published public var conversationRuntimeExecutionBudget: Int { didSet { write(.conversationRuntimeExecutionBudget, conversationRuntimeExecutionBudget) } }
     @Published public var enableOpenAIStreamIncludeUsage: Bool { didSet { write(.enableOpenAIStreamIncludeUsage, enableOpenAIStreamIncludeUsage) } }
     @Published public var reasoningContentEchoMode: String { didSet { write(.reasoningContentEchoMode, reasoningContentEchoMode) } }
+    @Published public var automaticHistoryLoadingEnabled: Bool {
+        didSet { write(.automaticHistoryLoadingEnabled, automaticHistoryLoadingEnabled) }
+    }
     @Published public var lazyLoadMessageCount: Int { didSet { write(.lazyLoadMessageCount, lazyLoadMessageCount) } }
     @Published public var enableAutoSessionNaming: Bool { didSet { write(.enableAutoSessionNaming, enableAutoSessionNaming) } }
     @Published public var chatSendDelaySeconds: Double { didSet { write(.chatSendDelaySeconds, chatSendDelaySeconds) } }
+    @Published public var videoFrameExtractionMode: String { didSet { write(.videoFrameExtractionMode, videoFrameExtractionMode) } }
+    @Published public var videoFrameExtractionFPS: Double { didSet { write(.videoFrameExtractionFPS, videoFrameExtractionFPS) } }
+    @Published public var videoFrameMaximumCount: Int { didSet { write(.videoFrameMaximumCount, videoFrameMaximumCount) } }
+    @Published public var enableVideoAnalysisForNonNativeModels: Bool {
+        didSet { write(.enableVideoAnalysisForNonNativeModels, enableVideoAnalysisForNonNativeModels) }
+    }
+    @Published public var videoAnalysisModelIdentifier: String {
+        didSet { write(.videoAnalysisModelIdentifier, videoAnalysisModelIdentifier) }
+    }
 
     @Published public var enableMemory: Bool { didSet { write(.enableMemory, enableMemory) } }
     @Published public var enableMemoryWrite: Bool { didSet { write(.enableMemoryWrite, enableMemoryWrite) } }
@@ -208,6 +245,13 @@ public final class AppConfigStore: ObservableObject {
 
     @Published public var speechModelIdentifier: String { didSet { write(.speechModelIdentifier, speechModelIdentifier) } }
     @Published public var ttsModelIdentifier: String { didSet { write(.ttsModelIdentifier, ttsModelIdentifier) } }
+    @Published public var ttsServiceConfiguration: String { didSet { write(.ttsServiceConfiguration, ttsServiceConfiguration) } }
+    @Published public var ttsCacheNetworkAudioForReplay: Bool {
+        didSet { write(.ttsCacheNetworkAudioForReplay, ttsCacheNetworkAudioForReplay) }
+    }
+    @Published public var ttsTextSelectionMode: String {
+        didSet { write(.ttsTextSelectionMode, ttsTextSelectionMode) }
+    }
     @Published public var memoryEmbeddingModelIdentifier: String { didSet { write(.memoryEmbeddingModelIdentifier, memoryEmbeddingModelIdentifier) } }
     @Published public var titleGenerationModelIdentifier: String { didSet { write(.titleGenerationModelIdentifier, titleGenerationModelIdentifier) } }
     @Published public var dailyPulseModelIdentifier: String { didSet { write(.dailyPulseModelIdentifier, dailyPulseModelIdentifier) } }
@@ -218,6 +262,15 @@ public final class AppConfigStore: ObservableObject {
     @Published public var imageGenerationParameterExpressionsByModel: String { didSet { write(.imageGenerationParameterExpressionsByModel, imageGenerationParameterExpressionsByModel) } }
 
     @Published public var enableMarkdown: Bool { didSet { write(.enableMarkdown, enableMarkdown) } }
+    @Published public var userMessagePreviewCharacterLimit: Int {
+        didSet {
+            let normalized = Self.normalizedIntegerValue(userMessagePreviewCharacterLimit, for: .userMessagePreviewCharacterLimit)
+            if userMessagePreviewCharacterLimit != normalized {
+                userMessagePreviewCharacterLimit = normalized
+            }
+            write(.userMessagePreviewCharacterLimit, userMessagePreviewCharacterLimit)
+        }
+    }
     @Published public var enableAdvancedRenderer: Bool { didSet { write(.enableAdvancedRenderer, enableAdvancedRenderer) } }
     @Published public var enableExperimentalToolResultDisplay: Bool { didSet { write(.enableExperimentalToolResultDisplay, enableExperimentalToolResultDisplay) } }
     @Published public var enableAutoReasoningPreview: Bool { didSet { write(.enableAutoReasoningPreview, enableAutoReasoningPreview) } }
@@ -229,9 +282,30 @@ public final class AppConfigStore: ObservableObject {
     @Published public var backgroundContentMode: String { didSet { write(.backgroundContentMode, backgroundContentMode) } }
     @Published public var currentBackgroundImage: String { didSet { write(.currentBackgroundImage, currentBackgroundImage) } }
     @Published public var enableAutoRotateBackground: Bool { didSet { write(.enableAutoRotateBackground, enableAutoRotateBackground) } }
+    @Published public var continueVideoBackgroundPlaybackWhenChatHidden: Bool {
+        didSet {
+            write(
+                .continueVideoBackgroundPlaybackWhenChatHidden,
+                continueVideoBackgroundPlaybackWhenChatHidden
+            )
+        }
+    }
     @Published public var enableReasoningSummary: Bool { didSet { write(.enableReasoningSummary, enableReasoningSummary) } }
     @Published public var enableLiquidGlass: Bool { didSet { write(.enableLiquidGlass, enableLiquidGlass) } }
+    @Published public var liquidGlassTintOpacity: Double {
+        didSet {
+            let normalizedValue = LiquidGlassTintSetting.normalized(liquidGlassTintOpacity)
+            guard normalizedValue == liquidGlassTintOpacity else {
+                liquidGlassTintOpacity = normalizedValue
+                return
+            }
+            write(.liquidGlassTintOpacity, liquidGlassTintOpacity)
+        }
+    }
     @Published public var enableChatTopBlurFade: Bool { didSet { write(.enableChatTopBlurFade, enableChatTopBlurFade) } }
+    @Published public var chatTimelineNavigationEnabled: Bool {
+        didSet { write(.chatTimelineNavigationEnabled, chatTimelineNavigationEnabled) }
+    }
     @Published public var enableNoBubbleUI: Bool { didSet { write(.enableNoBubbleUI, enableNoBubbleUI) } }
     @Published public var chatScrollAnimationEnabled: Bool { didSet { write(.chatScrollAnimationEnabled, chatScrollAnimationEnabled) } }
     @Published public var chatScrollAnimationSpringResponse: Double { didSet { write(.chatScrollAnimationSpringResponse, chatScrollAnimationSpringResponse) } }
@@ -240,6 +314,16 @@ public final class AppConfigStore: ObservableObject {
     @Published public var chatSendAnimationEnabled: Bool { didSet { write(.chatSendAnimationEnabled, chatSendAnimationEnabled) } }
     @Published public var chatSendAnimationSpringResponse: Double { didSet { write(.chatSendAnimationSpringResponse, chatSendAnimationSpringResponse) } }
     @Published public var chatSendAnimationSpringDamping: Double { didSet { write(.chatSendAnimationSpringDamping, chatSendAnimationSpringDamping) } }
+    @Published public var chatStreamingDisplayMode: String {
+        didSet {
+            let normalizedValue = ChatStreamingDisplayMode.normalized(chatStreamingDisplayMode).rawValue
+            guard normalizedValue == chatStreamingDisplayMode else {
+                chatStreamingDisplayMode = normalizedValue
+                return
+            }
+            write(.chatStreamingDisplayMode, chatStreamingDisplayMode)
+        }
+    }
     @Published public var messageActionBarConfiguration: String {
         didSet {
             write(.messageActionBarConfiguration, messageActionBarConfiguration)
@@ -258,23 +342,168 @@ public final class AppConfigStore: ObservableObject {
         }
     }
 
-    @Published public var fontUseCustomFonts: Bool { didSet { write(.fontUseCustomFonts, fontUseCustomFonts) } }
-    @Published public var fontFallbackScope: String { didSet { write(.fontFallbackScope, fontFallbackScope) } }
-    @Published public var fontCustomScale: Double { didSet { write(.fontCustomScale, fontCustomScale) } }
+    @Published public var fontUseCustomFonts: Bool {
+        didSet {
+            write(.fontUseCustomFonts, fontUseCustomFonts)
+            updateFontRuntimeSettings()
+        }
+    }
+    @Published public var fontFallbackScope: String {
+        didSet {
+            write(.fontFallbackScope, fontFallbackScope)
+            updateFontRuntimeSettings()
+        }
+    }
+    @Published public var fontCustomScale: Double {
+        didSet {
+            write(.fontCustomScale, fontCustomScale)
+            updateFontRuntimeSettings()
+        }
+    }
+    @Published public var fontLineSpacingEmIOS: Double {
+        didSet {
+            let normalizedValue = FontLibrary.normalizedLineSpacingEm(
+                fontLineSpacingEmIOS,
+                fallback: FontLibrary.defaultIOSLineSpacingEm
+            )
+            guard normalizedValue == fontLineSpacingEmIOS else {
+                fontLineSpacingEmIOS = normalizedValue
+                return
+            }
+            write(.fontLineSpacingEmIOS, fontLineSpacingEmIOS)
+        }
+    }
+    @Published public var fontLineSpacingEmWatchOS: Double {
+        didSet {
+            let normalizedValue = FontLibrary.normalizedLineSpacingEm(
+                fontLineSpacingEmWatchOS,
+                fallback: FontLibrary.defaultWatchLineSpacingEm
+            )
+            guard normalizedValue == fontLineSpacingEmWatchOS else {
+                fontLineSpacingEmWatchOS = normalizedValue
+                return
+            }
+            write(.fontLineSpacingEmWatchOS, fontLineSpacingEmWatchOS)
+        }
+    }
     @Published public var appLanguage: String { didSet { write(.appLanguage, appLanguage) } }
+    @Published public var watchInputQuickActionConfiguration: String {
+        didSet {
+            write(.watchInputQuickActionConfiguration, watchInputQuickActionConfiguration)
+            let decoded = WatchInputQuickActionConfiguration.decoded(
+                from: watchInputQuickActionConfiguration
+            )
+            if watchInputQuickActionSettings != decoded {
+                watchInputQuickActionSettings = decoded
+            }
+        }
+    }
+    @Published public var watchInputQuickActionSettings: WatchInputQuickActionConfiguration {
+        didSet {
+            let encoded = watchInputQuickActionSettings.encodedString()
+            if watchInputQuickActionConfiguration != encoded {
+                watchInputQuickActionConfiguration = encoded
+            }
+        }
+    }
     @Published public var watchAttachmentLastSource: String { didSet { write(.watchAttachmentLastSource, watchAttachmentLastSource) } }
     @Published public var watchAttachmentSourceHistory: String { didSet { write(.watchAttachmentSourceHistory, watchAttachmentSourceHistory) } }
     @Published public var watchBackgroundLastSource: String { didSet { write(.watchBackgroundLastSource, watchBackgroundLastSource) } }
     @Published public var watchBackgroundSourceHistory: String { didSet { write(.watchBackgroundSourceHistory, watchBackgroundSourceHistory) } }
     @Published public var watchUseThirdPartyKeyboard: Bool { didSet { write(.watchUseThirdPartyKeyboard, watchUseThirdPartyKeyboard) } }
     @Published public var settingsColorfulIconsEnabled: Bool { didSet { write(.settingsColorfulIconsEnabled, settingsColorfulIconsEnabled) } }
+    @Published public var guideOverlayEnabled: Bool { didSet { write(.guideOverlayEnabled, guideOverlayEnabled) } }
+    @Published public var guidePreferredRoute: String { didSet { write(.guidePreferredRoute, guidePreferredRoute) } }
+    @Published public var guidePreferredModelIdentifier: String { didSet { write(.guidePreferredModelIdentifier, guidePreferredModelIdentifier) } }
+    @Published public var iOSModelPickerGroupsByProvider: Bool { didSet { write(.iOSModelPickerGroupsByProvider, iOSModelPickerGroupsByProvider) } }
+    @Published public var watchModelPickerGroupsByProvider: Bool { didSet { write(.watchModelPickerGroupsByProvider, watchModelPickerGroupsByProvider) } }
+    @Published public var modelPickerPromptShortcutEnabled: Bool { didSet { write(.modelPickerPromptShortcutEnabled, modelPickerPromptShortcutEnabled) } }
+    @Published public var modelPickerWorldbookShortcutEnabled: Bool { didSet { write(.modelPickerWorldbookShortcutEnabled, modelPickerWorldbookShortcutEnabled) } }
+    // 展开记录按设备独立保存；未记录的新分组自然保持收起。
+    @Published public var iOSModelPickerExpandedGroupIDs: Set<String> {
+        didSet {
+            write(
+                .iOSModelPickerExpandedGroupIDs,
+                Self.encodeStringArray(iOSModelPickerExpandedGroupIDs.sorted())
+            )
+        }
+    }
+    @Published public var watchModelPickerExpandedGroupIDs: Set<String> {
+        didSet {
+            write(
+                .watchModelPickerExpandedGroupIDs,
+                Self.encodeStringArray(watchModelPickerExpandedGroupIDs.sorted())
+            )
+        }
+    }
+    /// 提供商 UUID 对应模型目录元数据 JSON；同时保留空目录和混合条目顺序。
+    @Published public var modelPickerFolderPathsByProvider: [String: String] {
+        didSet {
+            write(
+                .modelPickerFolderPathsByProvider,
+                Self.encodeStringDictionary(modelPickerFolderPathsByProvider)
+            )
+        }
+    }
+
+    public func modelPickerFolderPaths(for providerID: UUID) -> [String] {
+        guard let encoded = modelPickerFolderPathsByProvider[providerID.uuidString] else {
+            return []
+        }
+        return Self.decodeModelPickerOrganizationMetadata(from: encoded).folderPaths
+    }
+
+    public func modelPickerItemOrderIDs(for providerID: UUID) -> [String] {
+        guard let encoded = modelPickerFolderPathsByProvider[providerID.uuidString] else {
+            return []
+        }
+        return Self.decodeModelPickerOrganizationMetadata(from: encoded).itemOrderIDs
+    }
+
+    public func setModelPickerOrganization(
+        folderPaths paths: [String],
+        itemOrderIDs: [String],
+        for providerID: UUID
+    ) {
+        var seenPaths = Set<String>()
+        let normalizedPaths = paths.compactMap(Model.normalizedPickerGroupName).filter {
+            seenPaths.insert($0).inserted
+        }
+        var seenItemIDs = Set<String>()
+        let normalizedItemOrderIDs = itemOrderIDs.filter {
+            !$0.isEmpty && seenItemIDs.insert($0).inserted
+        }
+        var updated = modelPickerFolderPathsByProvider
+        if normalizedPaths.isEmpty && normalizedItemOrderIDs.isEmpty {
+            updated.removeValue(forKey: providerID.uuidString)
+        } else {
+            updated[providerID.uuidString] = Self.encodeModelPickerOrganizationMetadata(
+                folderPaths: normalizedPaths,
+                itemOrderIDs: normalizedItemOrderIDs
+            )
+        }
+        modelPickerFolderPathsByProvider = updated
+    }
     @Published public var chatQuickActionIDs: String { didSet { write(.chatQuickActionIDs, chatQuickActionIDs) } }
+    @Published public var temporaryChatMemoryEnabled: Bool {
+        didSet { write(.temporaryChatMemoryEnabled, temporaryChatMemoryEnabled) }
+    }
+    @Published public var enableSlashCommands: Bool { didSet { write(.enableSlashCommands, enableSlashCommands) } }
+    @Published public var chatComposerStyle: String { didSet { write(.chatComposerStyle, chatComposerStyle) } }
+    @Published public var iOSHardwareKeyboardReturnSendsMessage: Bool {
+        didSet { write(.iOSHardwareKeyboardReturnSendsMessage, iOSHardwareKeyboardReturnSendsMessage) }
+    }
     @Published public var chatComposerDraft: String { didSet { write(.chatComposerDraft, chatComposerDraft) } }
     @Published public var restoreLastSessionOnLaunch: Bool { didSet { write(.restoreLastSessionOnLaunch, restoreLastSessionOnLaunch) } }
+    @Published public var restoreLastSessionOnlyIfRecent: Bool { didSet { write(.restoreLastSessionOnlyIfRecent, restoreLastSessionOnlyIfRecent) } }
+    @Published public var restoreLastSessionWithinMinutes: Int {
+        didSet { write(.restoreLastSessionWithinMinutes, restoreLastSessionWithinMinutes) }
+    }
     @Published public var providerDetailGroupByMainstream: Bool { didSet { write(.providerDetailGroupByMainstream, providerDetailGroupByMainstream) } }
     @Published public var backgroundCropTarget: String { didSet { write(.backgroundCropTarget, backgroundCropTarget) } }
     @Published public var shortcutBridgeShortcutName: String { didSet { write(.shortcutBridgeShortcutName, shortcutBridgeShortcutName) } }
 
+    @Published public var openAITailContextUsesSystemRole: Bool { didSet { write(.openAITailContextUsesSystemRole, openAITailContextUsesSystemRole) } }
     @Published public var includeSystemTimeInPrompt: Bool { didSet { write(.includeSystemTimeInPrompt, includeSystemTimeInPrompt) } }
     @Published public var systemTimeInjectionPosition: String { didSet { write(.systemTimeInjectionPosition, systemTimeInjectionPosition) } }
     @Published public var enablePeriodicTimeLandmark: Bool { didSet { write(.enablePeriodicTimeLandmark, enablePeriodicTimeLandmark) } }
@@ -282,6 +511,27 @@ public final class AppConfigStore: ObservableObject {
     @Published public var sendSpeechAsAudio: Bool { didSet { write(.sendSpeechAsAudio, sendSpeechAsAudio) } }
     @Published public var enableSpeechInput: Bool { didSet { write(.enableSpeechInput, enableSpeechInput) } }
     @Published public var audioRecordingFormat: String { didSet { write(.audioRecordingFormat, audioRecordingFormat) } }
+    @Published public var backgroundGenerationKeepAliveEnabled: Bool {
+        didSet { write(.backgroundGenerationKeepAliveEnabled, backgroundGenerationKeepAliveEnabled) }
+    }
+    @Published public var backgroundGenerationAudioKeepAliveEnabled: Bool {
+        didSet { write(.backgroundGenerationAudioKeepAliveEnabled, backgroundGenerationAudioKeepAliveEnabled) }
+    }
+    @Published public var backgroundGenerationAudioKeepAliveVolume: Double {
+        didSet {
+            let normalizedValue = BackgroundGenerationAudioKeepAliveSettings.normalizedVolume(
+                backgroundGenerationAudioKeepAliveVolume
+            )
+            guard normalizedValue == backgroundGenerationAudioKeepAliveVolume else {
+                backgroundGenerationAudioKeepAliveVolume = normalizedValue
+                return
+            }
+            write(.backgroundGenerationAudioKeepAliveVolume, backgroundGenerationAudioKeepAliveVolume)
+        }
+    }
+    @Published public var continueTTSPlaybackInBackground: Bool {
+        didSet { write(.continueTTSPlaybackInBackground, continueTTSPlaybackInBackground) }
+    }
     @Published public var enableBackgroundReplyNotification: Bool { didSet { write(.enableBackgroundReplyNotification, enableBackgroundReplyNotification) } }
     @Published public var hasRequestedBackgroundReplyNotificationPermission: Bool { didSet { write(.hasRequestedBackgroundReplyNotificationPermission, hasRequestedBackgroundReplyNotificationPermission) } }
     @Published public var hasRequestedBackgroundReplyNotificationPermissionWatch: Bool { didSet { write(.hasRequestedBackgroundReplyNotificationPermissionWatch, hasRequestedBackgroundReplyNotificationPermissionWatch) } }
@@ -290,6 +540,28 @@ public final class AppConfigStore: ObservableObject {
     @Published public var lastAnnouncementId: Int { didSet { write(.lastAnnouncementId, lastAnnouncementId) } }
     @Published public var hideAnnouncementSection: Bool { didSet { write(.hideAnnouncementSection, hideAnnouncementSection) } }
     @Published public var hiddenAnnouncementKeys: String { didSet { write(.hiddenAnnouncementKeys, hiddenAnnouncementKeys) } }
+
+    public var launchSessionBehavior: LaunchSessionBehavior {
+        get {
+            LaunchSessionPolicy.behavior(
+                restoreLastSession: restoreLastSessionOnLaunch,
+                onlyIfRecent: restoreLastSessionOnlyIfRecent
+            )
+        }
+        set {
+            switch newValue {
+            case .newSession:
+                restoreLastSessionOnLaunch = false
+                restoreLastSessionOnlyIfRecent = false
+            case .alwaysRestore:
+                restoreLastSessionOnlyIfRecent = false
+                restoreLastSessionOnLaunch = true
+            case .restoreIfRecent:
+                restoreLastSessionOnlyIfRecent = true
+                restoreLastSessionOnLaunch = true
+            }
+        }
+    }
 
     public init(userDefaults: UserDefaults = .standard) {
         let userDefaultsInitialValues = Self.initialValues(userDefaults: userDefaults)
@@ -335,6 +607,29 @@ public final class AppConfigStore: ObservableObject {
         localModelsEnabled = Self.boolValue(.localModelsEnabled, userDefaults: userDefaults)
         localModelPerformanceMonitorEnabled = Self.boolValue(.localModelPerformanceMonitorEnabled, userDefaults: userDefaults)
         localModelCacheEnabled = Self.boolValue(.localModelCacheEnabled, userDefaults: userDefaults)
+        localModelKVCacheEnabled = Self.boolValue(.localModelKVCacheEnabled, userDefaults: userDefaults)
+        localLinuxEnabled = Self.boolValue(.localLinuxEnabled, userDefaults: userDefaults)
+        localLinuxEnvironmentPrivacyEnabled = Self.boolValue(.localLinuxEnvironmentPrivacyEnabled, userDefaults: userDefaults)
+        localLinuxCommandSafetyEnabled = Self.boolValue(.localLinuxCommandSafetyEnabled, userDefaults: userDefaults)
+        localLinuxDefaultMountAccess = LocalLinuxMountAccess(
+            rawValue: Self.textValue(.localLinuxDefaultMountAccess, userDefaults: userDefaults)
+        ) ?? .readOnly
+        localLinuxDefaultShellPath = LocalLinuxTerminalShellConfiguration.normalizedPath(
+            Self.textValue(.localLinuxDefaultShellPath, userDefaults: userDefaults)
+        )
+        localLinuxDefaultSessionMode = Self.textValue(.localLinuxDefaultSessionMode, userDefaults: userDefaults)
+        localLinuxDefaultTimeoutSeconds = Self.integerValue(.localLinuxDefaultTimeoutSeconds, userDefaults: userDefaults)
+        localLinuxOutputPreviewBytes = Self.integerValue(.localLinuxOutputPreviewBytes, userDefaults: userDefaults)
+        localLinuxLocalMCPOnDemand = Self.boolValue(.localLinuxLocalMCPOnDemand, userDefaults: userDefaults)
+        localLinuxActivePromptProfileID = Self.textValue(.localLinuxActivePromptProfileID, userDefaults: userDefaults)
+        localLinuxWorkspaceCleanupPolicy = Self.textValue(.localLinuxWorkspaceCleanupPolicy, userDefaults: userDefaults)
+        localLinuxTerminalShortcutIDs = Self.textValue(.localLinuxTerminalShortcutIDs, userDefaults: userDefaults)
+        localLinuxChatPreviewMode = LocalLinuxChatPreviewMode.normalized(
+            Self.textValue(.localLinuxChatPreviewMode, userDefaults: userDefaults)
+        ).rawValue
+        localLinuxChatPreviewPlacement = LocalLinuxChatPreviewPlacement.normalized(
+            Self.textValue(.localLinuxChatPreviewPlacement, userDefaults: userDefaults)
+        ).rawValue
 
         aiTemperature = Self.realValue(.aiTemperature, userDefaults: userDefaults)
         aiTopP = Self.realValue(.aiTopP, userDefaults: userDefaults)
@@ -342,18 +637,32 @@ public final class AppConfigStore: ObservableObject {
         aiTopPEnabled = Self.boolValue(.aiTopPEnabled, userDefaults: userDefaults)
         systemPrompt = Self.textValue(.systemPrompt, userDefaults: userDefaults)
         maxChatHistory = Self.integerValue(.maxChatHistory, userDefaults: userDefaults)
+        enableContextCompressionReminder = Self.boolValue(.enableContextCompressionReminder, userDefaults: userDefaults)
+        contextCompressionReminderTokenThreshold = ContextCompressionReminderPolicy.normalizedTokenThreshold(
+            Self.integerValue(.contextCompressionReminderTokenThreshold, userDefaults: userDefaults)
+        )
         enableStreaming = Self.boolValue(.enableStreaming, userDefaults: userDefaults)
         enableResponseSpeedMetrics = Self.boolValue(.enableResponseSpeedMetrics, userDefaults: userDefaults)
         requestLogEnabled = Self.boolValue(.requestLogEnabled, userDefaults: userDefaults)
         requestLogPlainMessageEnabled = Self.boolValue(.requestLogPlainMessageEnabled, userDefaults: userDefaults)
+        performanceTelemetryEnabled = Self.boolValue(.performanceTelemetryEnabled, userDefaults: userDefaults)
         modelConnectivityTestConcurrencyLimit = Self.integerValue(.modelConnectivityTestConcurrencyLimit, userDefaults: userDefaults)
+        conversationRuntimeExecutionBudget = Self.integerValue(.conversationRuntimeExecutionBudget, userDefaults: userDefaults)
         enableOpenAIStreamIncludeUsage = Self.boolValue(.enableOpenAIStreamIncludeUsage, userDefaults: userDefaults)
         reasoningContentEchoMode = ReasoningContentEchoMode.normalized(
             Self.textValue(.reasoningContentEchoMode, userDefaults: userDefaults)
         ).rawValue
+        automaticHistoryLoadingEnabled = Self.boolValue(.automaticHistoryLoadingEnabled, userDefaults: userDefaults)
         lazyLoadMessageCount = Self.integerValue(.lazyLoadMessageCount, userDefaults: userDefaults)
         enableAutoSessionNaming = Self.boolValue(.enableAutoSessionNaming, userDefaults: userDefaults)
         chatSendDelaySeconds = Self.realValue(.chatSendDelaySeconds, userDefaults: userDefaults)
+        videoFrameExtractionMode = VideoFrameExtractionMode.normalized(
+            Self.textValue(.videoFrameExtractionMode, userDefaults: userDefaults)
+        ).rawValue
+        videoFrameExtractionFPS = Self.realValue(.videoFrameExtractionFPS, userDefaults: userDefaults)
+        videoFrameMaximumCount = Self.integerValue(.videoFrameMaximumCount, userDefaults: userDefaults)
+        enableVideoAnalysisForNonNativeModels = Self.boolValue(.enableVideoAnalysisForNonNativeModels, userDefaults: userDefaults)
+        videoAnalysisModelIdentifier = Self.textValue(.videoAnalysisModelIdentifier, userDefaults: userDefaults)
 
         enableMemory = Self.boolValue(.enableMemory, userDefaults: userDefaults)
         enableMemoryWrite = Self.boolValue(.enableMemoryWrite, userDefaults: userDefaults)
@@ -370,6 +679,9 @@ public final class AppConfigStore: ObservableObject {
 
         speechModelIdentifier = Self.textValue(.speechModelIdentifier, userDefaults: userDefaults)
         ttsModelIdentifier = Self.textValue(.ttsModelIdentifier, userDefaults: userDefaults)
+        ttsServiceConfiguration = Self.textValue(.ttsServiceConfiguration, userDefaults: userDefaults)
+        ttsCacheNetworkAudioForReplay = Self.boolValue(.ttsCacheNetworkAudioForReplay, userDefaults: userDefaults)
+        ttsTextSelectionMode = Self.textValue(.ttsTextSelectionMode, userDefaults: userDefaults)
         memoryEmbeddingModelIdentifier = Self.textValue(.memoryEmbeddingModelIdentifier, userDefaults: userDefaults)
         titleGenerationModelIdentifier = Self.textValue(.titleGenerationModelIdentifier, userDefaults: userDefaults)
         dailyPulseModelIdentifier = Self.textValue(.dailyPulseModelIdentifier, userDefaults: userDefaults)
@@ -385,15 +697,22 @@ public final class AppConfigStore: ObservableObject {
         enableAutoReasoningPreview = Self.boolValue(.enableAutoReasoningPreview, userDefaults: userDefaults)
         enableResponsiveReasoningPreviewHeight = Self.boolValue(.enableResponsiveReasoningPreviewHeight, userDefaults: userDefaults)
         reasoningPreviewHeightPercent = Self.realValue(.reasoningPreviewHeightPercent, userDefaults: userDefaults)
+        userMessagePreviewCharacterLimit = Self.integerValue(.userMessagePreviewCharacterLimit, userDefaults: userDefaults)
         enableBackground = Self.boolValue(.enableBackground, userDefaults: userDefaults)
         backgroundBlur = Self.realValue(.backgroundBlur, userDefaults: userDefaults)
         backgroundOpacity = Self.realValue(.backgroundOpacity, userDefaults: userDefaults)
         backgroundContentMode = Self.textValue(.backgroundContentMode, userDefaults: userDefaults)
         currentBackgroundImage = Self.textValue(.currentBackgroundImage, userDefaults: userDefaults)
         enableAutoRotateBackground = Self.boolValue(.enableAutoRotateBackground, userDefaults: userDefaults)
+        continueVideoBackgroundPlaybackWhenChatHidden = Self.boolValue(
+            .continueVideoBackgroundPlaybackWhenChatHidden,
+            userDefaults: userDefaults
+        )
         enableReasoningSummary = Self.boolValue(.enableReasoningSummary, userDefaults: userDefaults)
         enableLiquidGlass = Self.boolValue(.enableLiquidGlass, userDefaults: userDefaults)
+        liquidGlassTintOpacity = Self.realValue(.liquidGlassTintOpacity, userDefaults: userDefaults)
         enableChatTopBlurFade = Self.boolValue(.enableChatTopBlurFade, userDefaults: userDefaults)
+        chatTimelineNavigationEnabled = Self.boolValue(.chatTimelineNavigationEnabled, userDefaults: userDefaults)
         enableNoBubbleUI = Self.boolValue(.enableNoBubbleUI, userDefaults: userDefaults)
         chatScrollAnimationEnabled = Self.boolValue(.chatScrollAnimationEnabled, userDefaults: userDefaults)
         chatScrollAnimationSpringResponse = Self.realValue(.chatScrollAnimationSpringResponse, userDefaults: userDefaults)
@@ -402,6 +721,7 @@ public final class AppConfigStore: ObservableObject {
         chatSendAnimationEnabled = Self.boolValue(.chatSendAnimationEnabled, userDefaults: userDefaults)
         chatSendAnimationSpringResponse = Self.realValue(.chatSendAnimationSpringResponse, userDefaults: userDefaults)
         chatSendAnimationSpringDamping = Self.realValue(.chatSendAnimationSpringDamping, userDefaults: userDefaults)
+        chatStreamingDisplayMode = Self.textValue(.chatStreamingDisplayMode, userDefaults: userDefaults)
         let initialMessageActionBarConfiguration = Self.textValue(.messageActionBarConfiguration, userDefaults: userDefaults)
         messageActionBarConfiguration = initialMessageActionBarConfiguration
         messageActionBarSettings = MessageActionBarConfiguration.decoded(from: initialMessageActionBarConfiguration)
@@ -409,22 +729,64 @@ public final class AppConfigStore: ObservableObject {
         fontUseCustomFonts = Self.boolValue(.fontUseCustomFonts, userDefaults: userDefaults)
         fontFallbackScope = Self.textValue(.fontFallbackScope, userDefaults: userDefaults)
         fontCustomScale = Self.realValue(.fontCustomScale, userDefaults: userDefaults)
+        fontLineSpacingEmIOS = Self.realValue(.fontLineSpacingEmIOS, userDefaults: userDefaults)
+        fontLineSpacingEmWatchOS = Self.realValue(.fontLineSpacingEmWatchOS, userDefaults: userDefaults)
         appLanguage = Self.textValue(.appLanguage, userDefaults: userDefaults)
+        let initialWatchInputQuickActionConfiguration = Self.textValue(
+            .watchInputQuickActionConfiguration,
+            userDefaults: userDefaults
+        )
+        watchInputQuickActionConfiguration = initialWatchInputQuickActionConfiguration
+        watchInputQuickActionSettings = WatchInputQuickActionConfiguration.decoded(
+            from: initialWatchInputQuickActionConfiguration
+        )
         watchAttachmentLastSource = Self.textValue(.watchAttachmentLastSource, userDefaults: userDefaults)
         watchAttachmentSourceHistory = Self.textValue(.watchAttachmentSourceHistory, userDefaults: userDefaults)
         watchBackgroundLastSource = Self.textValue(.watchBackgroundLastSource, userDefaults: userDefaults)
         watchBackgroundSourceHistory = Self.textValue(.watchBackgroundSourceHistory, userDefaults: userDefaults)
         watchUseThirdPartyKeyboard = Self.boolValue(.watchUseThirdPartyKeyboard, userDefaults: userDefaults)
         settingsColorfulIconsEnabled = Self.boolValue(.settingsColorfulIconsEnabled, userDefaults: userDefaults)
+        guideOverlayEnabled = Self.boolValue(.guideOverlayEnabled, userDefaults: userDefaults)
+        guidePreferredRoute = Self.textValue(.guidePreferredRoute, userDefaults: userDefaults)
+        guidePreferredModelIdentifier = Self.textValue(.guidePreferredModelIdentifier, userDefaults: userDefaults)
+        iOSModelPickerGroupsByProvider = Self.boolValue(.iOSModelPickerGroupsByProvider, userDefaults: userDefaults)
+        watchModelPickerGroupsByProvider = Self.boolValue(.watchModelPickerGroupsByProvider, userDefaults: userDefaults)
+        modelPickerPromptShortcutEnabled = Self.boolValue(.modelPickerPromptShortcutEnabled, userDefaults: userDefaults)
+        modelPickerWorldbookShortcutEnabled = Self.boolValue(.modelPickerWorldbookShortcutEnabled, userDefaults: userDefaults)
+        iOSModelPickerExpandedGroupIDs = Set(
+            Self.decodeStringArray(
+                from: Self.textValue(.iOSModelPickerExpandedGroupIDs, userDefaults: userDefaults)
+            ) ?? []
+        )
+        watchModelPickerExpandedGroupIDs = Set(
+            Self.decodeStringArray(
+                from: Self.textValue(.watchModelPickerExpandedGroupIDs, userDefaults: userDefaults)
+            ) ?? []
+        )
+        modelPickerFolderPathsByProvider = Self.decodeStringDictionary(
+            from: Self.textValue(.modelPickerFolderPathsByProvider, userDefaults: userDefaults)
+        ) ?? [:]
         chatQuickActionIDs = Self.textValue(.chatQuickActionIDs, userDefaults: userDefaults)
+        temporaryChatMemoryEnabled = Self.boolValue(.temporaryChatMemoryEnabled, userDefaults: userDefaults)
+        enableSlashCommands = Self.boolValue(.enableSlashCommands, userDefaults: userDefaults)
+        chatComposerStyle = ChatComposerStyle.normalized(
+            Self.textValue(.chatComposerStyle, userDefaults: userDefaults)
+        ).rawValue
+        iOSHardwareKeyboardReturnSendsMessage = Self.boolValue(
+            .iOSHardwareKeyboardReturnSendsMessage,
+            userDefaults: userDefaults
+        )
         let initialChatComposerDraft = Self.textValue(.chatComposerDraft, userDefaults: userDefaults)
         chatComposerDraft = initialChatComposerDraft
         persistedChatComposerDraftValue = Self.normalizedAppConfigValue(.text(initialChatComposerDraft), for: .chatComposerDraft)
         restoreLastSessionOnLaunch = Self.boolValue(.restoreLastSessionOnLaunch, userDefaults: userDefaults)
+        restoreLastSessionOnlyIfRecent = Self.boolValue(.restoreLastSessionOnlyIfRecent, userDefaults: userDefaults)
+        restoreLastSessionWithinMinutes = Self.integerValue(.restoreLastSessionWithinMinutes, userDefaults: userDefaults)
         providerDetailGroupByMainstream = Self.boolValue(.providerDetailGroupByMainstream, userDefaults: userDefaults)
         backgroundCropTarget = Self.textValue(.backgroundCropTarget, userDefaults: userDefaults)
         shortcutBridgeShortcutName = Self.textValue(.shortcutBridgeShortcutName, userDefaults: userDefaults)
 
+        openAITailContextUsesSystemRole = Self.boolValue(.openAITailContextUsesSystemRole, userDefaults: userDefaults)
         includeSystemTimeInPrompt = Self.boolValue(.includeSystemTimeInPrompt, userDefaults: userDefaults)
         systemTimeInjectionPosition = Self.textValue(.systemTimeInjectionPosition, userDefaults: userDefaults)
         enablePeriodicTimeLandmark = Self.boolValue(.enablePeriodicTimeLandmark, userDefaults: userDefaults)
@@ -432,6 +794,12 @@ public final class AppConfigStore: ObservableObject {
         sendSpeechAsAudio = Self.boolValue(.sendSpeechAsAudio, userDefaults: userDefaults)
         enableSpeechInput = Self.boolValue(.enableSpeechInput, userDefaults: userDefaults)
         audioRecordingFormat = Self.textValue(.audioRecordingFormat, userDefaults: userDefaults)
+        backgroundGenerationKeepAliveEnabled = Self.boolValue(.backgroundGenerationKeepAliveEnabled, userDefaults: userDefaults)
+        backgroundGenerationAudioKeepAliveEnabled = Self.boolValue(.backgroundGenerationAudioKeepAliveEnabled, userDefaults: userDefaults)
+        backgroundGenerationAudioKeepAliveVolume = BackgroundGenerationAudioKeepAliveSettings.normalizedVolume(
+            Self.realValue(.backgroundGenerationAudioKeepAliveVolume, userDefaults: userDefaults)
+        )
+        continueTTSPlaybackInBackground = Self.boolValue(.continueTTSPlaybackInBackground, userDefaults: userDefaults)
         enableBackgroundReplyNotification = Self.boolValue(.enableBackgroundReplyNotification, userDefaults: userDefaults)
         hasRequestedBackgroundReplyNotificationPermission = Self.boolValue(.hasRequestedBackgroundReplyNotificationPermission, userDefaults: userDefaults)
         hasRequestedBackgroundReplyNotificationPermissionWatch = Self.boolValue(.hasRequestedBackgroundReplyNotificationPermissionWatch, userDefaults: userDefaults)
@@ -441,1045 +809,7 @@ public final class AppConfigStore: ObservableObject {
         hideAnnouncementSection = Self.boolValue(.hideAnnouncementSection, userDefaults: userDefaults)
         hiddenAnnouncementKeys = Self.textValue(.hiddenAnnouncementKeys, userDefaults: userDefaults)
 
+        updateFontRuntimeSettings()
         loadPersistentStoreInBackground(initialValues: initialValues, userDefaults: userDefaults)
-    }
-
-    public nonisolated static func persistentSnapshot(includeLocalOnly: Bool = false) -> [String: Any] {
-        snapshotCache.snapshot(includeLocalOnly: includeLocalOnly)
-    }
-
-    fileprivate nonisolated static func loadPersistentSnapshotFromDatabase(includeLocalOnly: Bool = false) -> [String: Any] {
-        var result: [String: Any] = [:]
-        for key in AppConfigKey.allCases where includeLocalOnly || key.participatesInSync {
-            switch key.defaultValue {
-            case .bool(let defaultValue):
-                result[key.rawValue] = (Persistence.readAppConfigInteger(key: key.rawValue) ?? (defaultValue ? 1 : 0)) != 0
-            case .integer(let defaultValue):
-                result[key.rawValue] = Persistence.readAppConfigInteger(key: key.rawValue) ?? defaultValue
-            case .real(let defaultValue):
-                let stored = Persistence.readAppConfigReal(key: key.rawValue) ?? defaultValue
-                result[key.rawValue] = normalizedRealValue(stored, for: key)
-            case .text(let defaultValue):
-                let stored = Persistence.readAppConfigText(key: key.rawValue) ?? defaultValue
-                if key == .reasoningContentEchoMode {
-                    result[key.rawValue] = ReasoningContentEchoMode.normalized(stored).rawValue
-                } else {
-                    result[key.rawValue] = stored
-                }
-            }
-        }
-        return result
-    }
-
-    public func snapshot(includeLocalOnly: Bool = false) -> [String: Any] {
-        Self.snapshotCache.snapshot(includeLocalOnly: includeLocalOnly)
-    }
-
-    public nonisolated static func textValue(
-        for key: AppConfigKey,
-        legacyUserDefaultsKey: String? = nil,
-        userDefaults: UserDefaults = .standard,
-        defaultValue: String? = nil
-    ) -> String {
-        if userDefaults === UserDefaults.standard {
-            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
-        }
-        if let stored = Persistence.readAppConfigText(key: key.rawValue) {
-            let normalized = key == .reasoningContentEchoMode
-                ? ReasoningContentEchoMode.normalized(stored).rawValue
-                : stored
-            snapshotCache.set(normalized, for: key)
-            return normalized
-        }
-
-        guard userDefaults !== UserDefaults.standard else {
-            return defaultValue ?? defaultText(for: key)
-        }
-
-        let rawKey = legacyUserDefaultsKey ?? key.rawValue
-        if let legacy = userDefaults.string(forKey: rawKey) {
-            if persistSynchronously(.text(legacy), for: key) {
-                userDefaults.removeObject(forKey: rawKey)
-            }
-            return legacy
-        }
-
-        return defaultValue ?? defaultText(for: key)
-    }
-
-    public nonisolated static func boolValue(
-        for key: AppConfigKey,
-        legacyUserDefaultsKey: String? = nil,
-        userDefaults: UserDefaults = .standard,
-        defaultValue: Bool? = nil
-    ) -> Bool {
-        if userDefaults === UserDefaults.standard {
-            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
-        }
-        if let stored = Persistence.readAppConfigInteger(key: key.rawValue) {
-            let value = stored != 0
-            snapshotCache.set(value, for: key)
-            return value
-        }
-
-        guard userDefaults !== UserDefaults.standard else {
-            return defaultValue ?? defaultBool(for: key)
-        }
-
-        let rawKey = legacyUserDefaultsKey ?? key.rawValue
-        if userDefaults.object(forKey: rawKey) != nil {
-            let legacy = userDefaults.bool(forKey: rawKey)
-            if persistSynchronously(.bool(legacy), for: key) {
-                userDefaults.removeObject(forKey: rawKey)
-            }
-            return legacy
-        }
-
-        return defaultValue ?? defaultBool(for: key)
-    }
-
-    public nonisolated static func stringArrayValue(
-        for key: AppConfigKey,
-        legacyUserDefaultsKey: String? = nil,
-        userDefaults: UserDefaults = .standard,
-        defaultValue: [String]? = nil
-    ) -> [String]? {
-        if userDefaults === UserDefaults.standard {
-            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
-        }
-        if let stored = Persistence.readAppConfigText(key: key.rawValue),
-           let decoded = decodeStringArray(from: stored) {
-            snapshotCache.set(stored, for: key)
-            return decoded
-        }
-
-        guard userDefaults !== UserDefaults.standard else {
-            return defaultValue ?? defaultStringArray(for: key)
-        }
-
-        let rawKey = legacyUserDefaultsKey ?? key.rawValue
-        if let legacy = userDefaults.stringArray(forKey: rawKey) {
-            if persistStringArray(legacy, for: key) {
-                userDefaults.removeObject(forKey: rawKey)
-            }
-            return legacy
-        }
-
-        return defaultValue ?? defaultStringArray(for: key)
-    }
-
-    @discardableResult
-    public nonisolated static func persistStringArray(
-        _ values: [String],
-        for key: AppConfigKey,
-        quickSync: Bool = true
-    ) -> Bool {
-        persistSynchronously(.text(encodeStringArray(values)), for: key, quickSync: quickSync)
-    }
-
-    public nonisolated static func stringDictionaryValue(
-        for key: AppConfigKey,
-        legacyUserDefaultsKey: String? = nil,
-        userDefaults: UserDefaults = .standard
-    ) -> [String: String] {
-        if userDefaults === UserDefaults.standard {
-            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
-        }
-        if let stored = Persistence.readAppConfigText(key: key.rawValue),
-           let decoded = decodeStringDictionary(from: stored) {
-            snapshotCache.set(stored, for: key)
-            return decoded
-        }
-
-        guard userDefaults !== UserDefaults.standard else {
-            return defaultStringDictionary(for: key)
-        }
-
-        let rawKey = legacyUserDefaultsKey ?? key.rawValue
-        if let legacy = userDefaults.dictionary(forKey: rawKey) as? [String: String] {
-            if persistStringDictionary(legacy, for: key) {
-                userDefaults.removeObject(forKey: rawKey)
-            }
-            return legacy
-        }
-
-        if case .text(let rawDefault) = key.defaultValue {
-            return decodeStringDictionary(from: rawDefault) ?? [:]
-        }
-        return [:]
-    }
-
-    @discardableResult
-    public nonisolated static func persistStringDictionary(
-        _ values: [String: String],
-        for key: AppConfigKey,
-        quickSync: Bool = true
-    ) -> Bool {
-        persistSynchronously(.text(encodeStringDictionary(values)), for: key, quickSync: quickSync)
-    }
-
-    @discardableResult
-    public nonisolated static func persistSynchronously(
-        _ value: AppConfigValue,
-        for key: AppConfigKey,
-        quickSync: Bool = true
-    ) -> Bool {
-        let normalizedValue = normalizedAppConfigValue(value, for: key)
-        guard persist(normalizedValue, for: key) else { return false }
-        snapshotCache.set(normalizedValue.anyValue, for: key)
-        if shouldTouchWatchConfigDatabase(for: key) {
-            WatchDatabaseSyncService.markDatabaseChanged(.config)
-        }
-        #if canImport(WatchConnectivity)
-        if quickSync,
-           !shouldSkipQuickSyncForCurrentProcess,
-           key.participatesInSync {
-            Task { @MainActor in
-                WatchSyncManager.shared.performQuickSync(key: key.rawValue, value: normalizedValue.anyValue)
-            }
-        }
-        #endif
-        if !shouldSkipRealtimeCloudSyncForCurrentProcess,
-           key.participatesInSync {
-            Task { @MainActor in
-                CloudSyncManager.shared.scheduleRealtimeSyncIfEnabled(reason: "appConfig.\(key.rawValue)")
-            }
-        }
-        return true
-    }
-
-    public func flushPendingWrites() async {
-        await flushPendingChatComposerDraftWriteIfNeeded()
-        let tasks = Array(pendingWriteTasks.values)
-        for task in tasks {
-            await task.value
-        }
-    }
-
-    private func flushPendingChatComposerDraftWriteIfNeeded() async {
-        let task = cancelPendingChatComposerDraftWrite()
-        await task?.value
-
-        let normalizedValue = Self.normalizedAppConfigValue(.text(chatComposerDraft), for: .chatComposerDraft)
-        guard shouldPersistChatComposerDraft(normalizedValue) else { return }
-        let didWrite = await AppConfigPersistenceWorker.shared.write(key: AppConfigKey.chatComposerDraft.rawValue, value: normalizedValue)
-        if didWrite {
-            markChatComposerDraftPersisted(normalizedValue)
-        }
-    }
-
-    public func reloadFromPersistentStore() {
-        Task(priority: .utility) { [weak self] in
-            let snapshot = await AppConfigPersistenceWorker.shared.loadSnapshot(includeLocalOnly: true)
-            self?.applyPersistentStoreSnapshot(snapshot, preservingLocalBootstrapChanges: false)
-        }
-    }
-
-    public func waitForPersistentStoreLoaded() async {
-        if didLoadPersistentStore { return }
-        for await loaded in $didLoadPersistentStore.values where loaded {
-            return
-        }
-    }
-
-    private func loadPersistentStoreInBackground(
-        initialValues: [AppConfigKey: AppConfigValue],
-        userDefaults: UserDefaults
-    ) {
-        Task(priority: .utility) { [weak self] in
-            let snapshot = await AppConfigPersistenceWorker.shared.bootstrap(
-                migrationFlagKey: Self.migrationFlagKey,
-                initialValues: initialValues
-            )
-            self?.applyPersistentStoreSnapshot(snapshot, preservingLocalBootstrapChanges: true)
-        }
-    }
-
-    private func applyPersistentStoreSnapshot(
-        _ snapshot: [String: Any],
-        preservingLocalBootstrapChanges: Bool
-    ) {
-        let skippedKeys = preservingLocalBootstrapChanges ? locallyChangedKeysBeforePersistentLoad : Set<AppConfigKey>()
-        let acceptedSnapshot = snapshot.filter { rawKey, _ in
-            guard let key = AppConfigKey(rawValue: rawKey) else { return false }
-            return !skippedKeys.contains(key)
-        }
-
-        Self.snapshotCache.merge(acceptedSnapshot)
-        markChatComposerDraftPersisted(from: acceptedSnapshot)
-        isReloadingFromPersistentStore = true
-        defer {
-            isReloadingFromPersistentStore = false
-            didLoadPersistentStore = true
-            if preservingLocalBootstrapChanges {
-                locallyChangedKeysBeforePersistentLoad.removeAll()
-            }
-            NotificationCenter.default.post(name: Self.persistentStoreDidLoadNotification, object: self)
-        }
-
-        for (rawKey, value) in acceptedSnapshot {
-            guard let key = AppConfigKey(rawValue: rawKey) else { continue }
-            setValue(value, for: key)
-        }
-    }
-
-    public func apply(snapshot: [String: Any]) {
-        isApplyingSnapshot = true
-        defer { isApplyingSnapshot = false }
-
-        for (rawKey, value) in snapshot {
-            guard let key = AppConfigKey(rawValue: rawKey), key.participatesInSync else {
-                continue
-            }
-            setValue(value, for: key)
-        }
-    }
-
-    public func value(for key: AppConfigKey) -> AppConfigValue {
-        switch key {
-        case .syncProviders: return .bool(syncProviders)
-        case .syncSessions: return .bool(syncSessions)
-        case .syncBackgrounds: return .bool(syncBackgrounds)
-        case .syncMemories: return .bool(syncMemories)
-        case .syncMCPServers: return .bool(syncMCPServers)
-        case .syncAudioFiles: return .bool(syncAudioFiles)
-        case .syncImageFiles: return .bool(syncImageFiles)
-        case .syncSkills: return .bool(syncSkills)
-        case .syncShortcutTools: return .bool(syncShortcutTools)
-        case .syncWorldbooks: return .bool(syncWorldbooks)
-        case .syncFeedbackTickets: return .bool(syncFeedbackTickets)
-        case .syncDailyPulse: return .bool(syncDailyPulse)
-        case .syncUsageStats: return .bool(syncUsageStats)
-        case .syncFontFiles: return .bool(syncFontFiles)
-        case .syncAppStorage: return .bool(syncAppStorage)
-        case .syncGlobalPrompt: return .bool(syncGlobalPrompt)
-        case .syncAutoSyncEnabled: return .bool(syncAutoSyncEnabled)
-        case .cloudSyncEnabled: return .bool(cloudSyncEnabled)
-        case .cloudSyncAutoSyncEnabled: return .bool(cloudSyncAutoSyncEnabled)
-        case .syncBackupS3Enabled: return .bool(syncBackupS3Enabled)
-        case .syncBackupUploadEndpoint: return .text(syncBackupUploadEndpoint)
-        case .syncBackupS3Region: return .text(syncBackupS3Region)
-        case .syncBackupS3Bucket: return .text(syncBackupS3Bucket)
-        case .syncBackupS3KeyPrefix: return .text(syncBackupS3KeyPrefix)
-        case .syncBackupS3AccessKeyID: return .text(syncBackupS3AccessKeyID)
-        case .syncBackupS3SecretAccessKey: return .text(syncBackupS3SecretAccessKey)
-        case .syncBackupS3SessionToken: return .text(syncBackupS3SessionToken)
-        case .syncBackupCreateOnLaunch: return .bool(syncBackupCreateOnLaunch)
-        case .modelOrderRunnableModels,
-             .providerOrderIDs,
-             .selectedRunnableModelID,
-             .lastActiveSessionID,
-             .appToolsChatToolsEnabled,
-             .appToolsEnabledToolIDs,
-             .appToolsKnownDefaultToolIDs,
-             .appToolsToolApprovalPolicies,
-             .mcpChatToolsEnabled,
-             .mcpDeletedBuiltInServerIDs,
-             .skillsChatToolsEnabled,
-             .skillsEnabledNames,
-             .shortcutChatToolsEnabled,
-             .messageRegexRules,
-             .shortcutOfficialImportShortcutName,
-             .configLoaderDownloadOnceCompleted,
-             .configLoaderToolCapabilityMigrated,
-             .feedbackAPIBaseURL,
-             .localDebugLastServerAddress,
-             .memoryAutoConsolidationState:
-            return Self.cachedValue(for: key) ?? key.defaultValue
-        case .appLockEnabled: return .bool(appLockEnabled)
-        case .appLockTimeoutSeconds: return .integer(appLockTimeoutSeconds)
-        case .appLockBiometricEnabled: return .bool(appLockBiometricEnabled)
-        case .databaseEncryptionEnabled: return .bool(databaseEncryptionEnabled)
-        case .localModelsEnabled: return .bool(localModelsEnabled)
-        case .localModelPerformanceMonitorEnabled: return .bool(localModelPerformanceMonitorEnabled)
-        case .localModelCacheEnabled: return .bool(localModelCacheEnabled)
-
-        case .aiTemperature: return .real(aiTemperature)
-        case .aiTopP: return .real(aiTopP)
-        case .aiTemperatureEnabled: return .bool(aiTemperatureEnabled)
-        case .aiTopPEnabled: return .bool(aiTopPEnabled)
-        case .systemPrompt: return .text(systemPrompt)
-        case .maxChatHistory: return .integer(maxChatHistory)
-        case .enableStreaming: return .bool(enableStreaming)
-        case .enableResponseSpeedMetrics: return .bool(enableResponseSpeedMetrics)
-        case .requestLogEnabled: return .bool(requestLogEnabled)
-        case .requestLogPlainMessageEnabled: return .bool(requestLogPlainMessageEnabled)
-        case .modelConnectivityTestConcurrencyLimit: return .integer(modelConnectivityTestConcurrencyLimit)
-        case .enableOpenAIStreamIncludeUsage: return .bool(enableOpenAIStreamIncludeUsage)
-        case .reasoningContentEchoMode: return .text(reasoningContentEchoMode)
-        case .lazyLoadMessageCount: return .integer(lazyLoadMessageCount)
-        case .enableAutoSessionNaming: return .bool(enableAutoSessionNaming)
-        case .chatSendDelaySeconds: return .real(chatSendDelaySeconds)
-
-        case .enableMemory: return .bool(enableMemory)
-        case .enableMemoryWrite: return .bool(enableMemoryWrite)
-        case .enableMemoryActiveRetrieval: return .bool(enableMemoryActiveRetrieval)
-        case .memoryTopK: return .integer(memoryTopK)
-        case .memorySendUpdateTime: return .bool(memorySendUpdateTime)
-        case .memoryReembeddingConcurrencyLimit: return .integer(memoryReembeddingConcurrencyLimit)
-        case .enableMemoryAutoConsolidation: return .bool(enableMemoryAutoConsolidation)
-        case .enableConversationMemoryAsync: return .bool(enableConversationMemoryAsync)
-        case .conversationMemoryRecentLimit: return .integer(conversationMemoryRecentLimit)
-        case .conversationMemoryRoundThreshold: return .integer(conversationMemoryRoundThreshold)
-        case .conversationMemorySummaryMinIntervalMinutes: return .integer(conversationMemorySummaryMinIntervalMinutes)
-        case .enableConversationProfileDailyUpdate: return .bool(enableConversationProfileDailyUpdate)
-
-        case .speechModelIdentifier: return .text(speechModelIdentifier)
-        case .ttsModelIdentifier: return .text(ttsModelIdentifier)
-        case .memoryEmbeddingModelIdentifier: return .text(memoryEmbeddingModelIdentifier)
-        case .titleGenerationModelIdentifier: return .text(titleGenerationModelIdentifier)
-        case .dailyPulseModelIdentifier: return .text(dailyPulseModelIdentifier)
-        case .conversationSummaryModelIdentifier: return .text(conversationSummaryModelIdentifier)
-        case .reasoningSummaryModelIdentifier: return .text(reasoningSummaryModelIdentifier)
-        case .ocrModelIdentifier: return .text(ocrModelIdentifier)
-        case .imageGenerationModelIdentifier: return .text(imageGenerationModelIdentifier)
-        case .imageGenerationParameterExpressionsByModel: return .text(imageGenerationParameterExpressionsByModel)
-
-        case .enableMarkdown: return .bool(enableMarkdown)
-        case .enableAdvancedRenderer: return .bool(enableAdvancedRenderer)
-        case .enableExperimentalToolResultDisplay: return .bool(enableExperimentalToolResultDisplay)
-        case .enableAutoReasoningPreview: return .bool(enableAutoReasoningPreview)
-        case .enableResponsiveReasoningPreviewHeight: return .bool(enableResponsiveReasoningPreviewHeight)
-        case .reasoningPreviewHeightPercent: return .real(reasoningPreviewHeightPercent)
-        case .enableBackground: return .bool(enableBackground)
-        case .backgroundBlur: return .real(backgroundBlur)
-        case .backgroundOpacity: return .real(backgroundOpacity)
-        case .backgroundContentMode: return .text(backgroundContentMode)
-        case .currentBackgroundImage: return .text(currentBackgroundImage)
-        case .enableAutoRotateBackground: return .bool(enableAutoRotateBackground)
-        case .enableReasoningSummary: return .bool(enableReasoningSummary)
-        case .enableLiquidGlass: return .bool(enableLiquidGlass)
-        case .enableChatTopBlurFade: return .bool(enableChatTopBlurFade)
-        case .enableNoBubbleUI: return .bool(enableNoBubbleUI)
-        case .chatScrollAnimationEnabled: return .bool(chatScrollAnimationEnabled)
-        case .chatScrollAnimationSpringResponse: return .real(chatScrollAnimationSpringResponse)
-        case .chatScrollAnimationSpringDamping: return .real(chatScrollAnimationSpringDamping)
-        case .chatScrollAnimationOffset: return .real(chatScrollAnimationOffset)
-        case .chatSendAnimationEnabled: return .bool(chatSendAnimationEnabled)
-        case .chatSendAnimationSpringResponse: return .real(chatSendAnimationSpringResponse)
-        case .chatSendAnimationSpringDamping: return .real(chatSendAnimationSpringDamping)
-        case .messageActionBarConfiguration: return .text(messageActionBarConfiguration)
-
-        case .fontUseCustomFonts: return .bool(fontUseCustomFonts)
-        case .fontFallbackScope: return .text(fontFallbackScope)
-        case .fontCustomScale: return .real(fontCustomScale)
-        case .appLanguage: return .text(appLanguage)
-        case .watchAttachmentLastSource: return .text(watchAttachmentLastSource)
-        case .watchAttachmentSourceHistory: return .text(watchAttachmentSourceHistory)
-        case .watchBackgroundLastSource: return .text(watchBackgroundLastSource)
-        case .watchBackgroundSourceHistory: return .text(watchBackgroundSourceHistory)
-        case .watchUseThirdPartyKeyboard: return .bool(watchUseThirdPartyKeyboard)
-        case .settingsColorfulIconsEnabled: return .bool(settingsColorfulIconsEnabled)
-        case .chatQuickActionIDs: return .text(chatQuickActionIDs)
-        case .chatComposerDraft: return .text(chatComposerDraft)
-        case .restoreLastSessionOnLaunch: return .bool(restoreLastSessionOnLaunch)
-        case .providerDetailGroupByMainstream: return .bool(providerDetailGroupByMainstream)
-        case .backgroundCropTarget: return .text(backgroundCropTarget)
-        case .shortcutBridgeShortcutName: return .text(shortcutBridgeShortcutName)
-
-        case .includeSystemTimeInPrompt: return .bool(includeSystemTimeInPrompt)
-        case .systemTimeInjectionPosition: return .text(systemTimeInjectionPosition)
-        case .enablePeriodicTimeLandmark: return .bool(enablePeriodicTimeLandmark)
-        case .periodicTimeLandmarkIntervalMinutes: return .integer(periodicTimeLandmarkIntervalMinutes)
-        case .sendSpeechAsAudio: return .bool(sendSpeechAsAudio)
-        case .enableSpeechInput: return .bool(enableSpeechInput)
-        case .audioRecordingFormat: return .text(audioRecordingFormat)
-        case .enableBackgroundReplyNotification: return .bool(enableBackgroundReplyNotification)
-        case .hasRequestedBackgroundReplyNotificationPermission: return .bool(hasRequestedBackgroundReplyNotificationPermission)
-        case .hasRequestedBackgroundReplyNotificationPermissionWatch: return .bool(hasRequestedBackgroundReplyNotificationPermissionWatch)
-        case .updateTimelineAutoCheckEnabled: return .bool(updateTimelineAutoCheckEnabled)
-        case .updateTimelineAutoSummaryEnabled: return .bool(updateTimelineAutoSummaryEnabled)
-        case .lastAnnouncementId: return .integer(lastAnnouncementId)
-        case .hideAnnouncementSection: return .bool(hideAnnouncementSection)
-        case .hiddenAnnouncementKeys: return .text(hiddenAnnouncementKeys)
-        }
-    }
-
-    private func setValue(_ value: Any, for key: AppConfigKey) {
-        switch key.defaultValue {
-        case .bool:
-            guard let value = Self.coerceBool(value) else { return }
-            setBool(value, for: key)
-        case .integer:
-            guard let value = Self.coerceInt(value) else { return }
-            setInteger(value, for: key)
-        case .real:
-            guard let value = Self.coerceDouble(value) else { return }
-            setReal(value, for: key)
-        case .text:
-            guard let value = Self.coerceString(value) else { return }
-            setText(value, for: key)
-        }
-    }
-
-    private func setBool(_ value: Bool, for key: AppConfigKey) {
-        switch key {
-        case .syncProviders: syncProviders = value
-        case .syncSessions: syncSessions = value
-        case .syncBackgrounds: syncBackgrounds = value
-        case .syncMemories: syncMemories = value
-        case .syncMCPServers: syncMCPServers = value
-        case .syncAudioFiles: syncAudioFiles = value
-        case .syncImageFiles: syncImageFiles = value
-        case .syncSkills: syncSkills = value
-        case .syncShortcutTools: syncShortcutTools = value
-        case .syncWorldbooks: syncWorldbooks = value
-        case .syncFeedbackTickets: syncFeedbackTickets = value
-        case .syncDailyPulse: syncDailyPulse = value
-        case .syncUsageStats: syncUsageStats = value
-        case .syncFontFiles: syncFontFiles = value
-        case .syncAppStorage: syncAppStorage = value
-        case .syncGlobalPrompt: syncGlobalPrompt = value
-        case .syncAutoSyncEnabled: syncAutoSyncEnabled = value
-        case .cloudSyncEnabled: cloudSyncEnabled = value
-        case .cloudSyncAutoSyncEnabled: cloudSyncAutoSyncEnabled = value
-        case .syncBackupS3Enabled: syncBackupS3Enabled = value
-        case .syncBackupCreateOnLaunch: syncBackupCreateOnLaunch = value
-        case .appToolsChatToolsEnabled,
-             .mcpChatToolsEnabled,
-             .skillsChatToolsEnabled,
-             .shortcutChatToolsEnabled:
-            Self.persistSynchronously(.bool(value), for: key, quickSync: false)
-        case .appLockEnabled: appLockEnabled = value
-        case .appLockBiometricEnabled: appLockBiometricEnabled = value
-        case .databaseEncryptionEnabled: databaseEncryptionEnabled = value
-        case .localModelsEnabled: localModelsEnabled = value
-        case .localModelPerformanceMonitorEnabled: localModelPerformanceMonitorEnabled = value
-        case .localModelCacheEnabled: localModelCacheEnabled = value
-        case .aiTemperatureEnabled: aiTemperatureEnabled = value
-        case .aiTopPEnabled: aiTopPEnabled = value
-        case .enableStreaming: enableStreaming = value
-        case .enableResponseSpeedMetrics: enableResponseSpeedMetrics = value
-        case .requestLogEnabled: requestLogEnabled = value
-        case .requestLogPlainMessageEnabled: requestLogPlainMessageEnabled = value
-        case .enableOpenAIStreamIncludeUsage: enableOpenAIStreamIncludeUsage = value
-        case .enableAutoSessionNaming: enableAutoSessionNaming = value
-        case .enableMemory: enableMemory = value
-        case .enableMemoryWrite: enableMemoryWrite = value
-        case .enableMemoryActiveRetrieval: enableMemoryActiveRetrieval = value
-        case .memorySendUpdateTime: memorySendUpdateTime = value
-        case .enableMemoryAutoConsolidation: enableMemoryAutoConsolidation = value
-        case .enableConversationMemoryAsync: enableConversationMemoryAsync = value
-        case .enableConversationProfileDailyUpdate: enableConversationProfileDailyUpdate = value
-        case .enableMarkdown: enableMarkdown = value
-        case .enableAdvancedRenderer: enableAdvancedRenderer = value
-        case .enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay = value
-        case .enableAutoReasoningPreview: enableAutoReasoningPreview = value
-        case .enableResponsiveReasoningPreviewHeight: enableResponsiveReasoningPreviewHeight = value
-        case .enableBackground: enableBackground = value
-        case .enableAutoRotateBackground: enableAutoRotateBackground = value
-        case .enableReasoningSummary: enableReasoningSummary = value
-        case .enableLiquidGlass: enableLiquidGlass = value
-        case .enableChatTopBlurFade: enableChatTopBlurFade = value
-        case .enableNoBubbleUI: enableNoBubbleUI = value
-        case .chatScrollAnimationEnabled: chatScrollAnimationEnabled = value
-        case .chatSendAnimationEnabled: chatSendAnimationEnabled = value
-        case .fontUseCustomFonts: fontUseCustomFonts = value
-        case .watchUseThirdPartyKeyboard: watchUseThirdPartyKeyboard = value
-        case .settingsColorfulIconsEnabled: settingsColorfulIconsEnabled = value
-        case .restoreLastSessionOnLaunch: restoreLastSessionOnLaunch = value
-        case .providerDetailGroupByMainstream: providerDetailGroupByMainstream = value
-        case .includeSystemTimeInPrompt: includeSystemTimeInPrompt = value
-        case .enablePeriodicTimeLandmark: enablePeriodicTimeLandmark = value
-        case .sendSpeechAsAudio: sendSpeechAsAudio = value
-        case .enableSpeechInput: enableSpeechInput = value
-        case .enableBackgroundReplyNotification: enableBackgroundReplyNotification = value
-        case .hasRequestedBackgroundReplyNotificationPermission: hasRequestedBackgroundReplyNotificationPermission = value
-        case .hasRequestedBackgroundReplyNotificationPermissionWatch: hasRequestedBackgroundReplyNotificationPermissionWatch = value
-        case .updateTimelineAutoCheckEnabled: updateTimelineAutoCheckEnabled = value
-        case .updateTimelineAutoSummaryEnabled: updateTimelineAutoSummaryEnabled = value
-        case .hideAnnouncementSection: hideAnnouncementSection = value
-        default: break
-        }
-    }
-
-    private func setInteger(_ value: Int, for key: AppConfigKey) {
-        switch key {
-        case .maxChatHistory: maxChatHistory = value
-        case .lazyLoadMessageCount: lazyLoadMessageCount = value
-        case .modelConnectivityTestConcurrencyLimit: modelConnectivityTestConcurrencyLimit = Self.normalizedIntegerValue(value, for: key)
-        case .memoryTopK: memoryTopK = value
-        case .memoryReembeddingConcurrencyLimit: memoryReembeddingConcurrencyLimit = Self.normalizedIntegerValue(value, for: key)
-        case .conversationMemoryRecentLimit: conversationMemoryRecentLimit = value
-        case .conversationMemoryRoundThreshold: conversationMemoryRoundThreshold = value
-        case .conversationMemorySummaryMinIntervalMinutes: conversationMemorySummaryMinIntervalMinutes = value
-        case .periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes = value
-        case .lastAnnouncementId: lastAnnouncementId = value
-        case .appLockTimeoutSeconds: appLockTimeoutSeconds = value
-        default: break
-        }
-    }
-
-    private func setReal(_ value: Double, for key: AppConfigKey) {
-        switch key {
-        case .aiTemperature: aiTemperature = value
-        case .aiTopP: aiTopP = value
-        case .backgroundBlur: backgroundBlur = value
-        case .backgroundOpacity: backgroundOpacity = value
-        case .fontCustomScale: fontCustomScale = value
-        case .reasoningPreviewHeightPercent: reasoningPreviewHeightPercent = value
-        case .chatScrollAnimationSpringResponse: chatScrollAnimationSpringResponse = value
-        case .chatScrollAnimationSpringDamping: chatScrollAnimationSpringDamping = value
-        case .chatScrollAnimationOffset: chatScrollAnimationOffset = value
-        case .chatSendAnimationSpringResponse: chatSendAnimationSpringResponse = value
-        case .chatSendAnimationSpringDamping: chatSendAnimationSpringDamping = value
-        case .chatSendDelaySeconds: chatSendDelaySeconds = Self.normalizedRealValue(value, for: key)
-        default: break
-        }
-    }
-
-    private func setText(_ value: String, for key: AppConfigKey) {
-        switch key {
-        case .syncBackupUploadEndpoint: syncBackupUploadEndpoint = value
-        case .syncBackupS3Region: syncBackupS3Region = value
-        case .syncBackupS3Bucket: syncBackupS3Bucket = value
-        case .syncBackupS3KeyPrefix: syncBackupS3KeyPrefix = value
-        case .syncBackupS3AccessKeyID: syncBackupS3AccessKeyID = value
-        case .syncBackupS3SecretAccessKey: syncBackupS3SecretAccessKey = value
-        case .syncBackupS3SessionToken: syncBackupS3SessionToken = value
-        case .modelOrderRunnableModels,
-             .providerOrderIDs,
-             .selectedRunnableModelID,
-             .lastActiveSessionID,
-             .appToolsEnabledToolIDs,
-             .appToolsKnownDefaultToolIDs,
-             .appToolsToolApprovalPolicies,
-             .mcpDeletedBuiltInServerIDs,
-             .skillsEnabledNames,
-             .messageRegexRules,
-             .shortcutOfficialImportShortcutName,
-             .localDebugLastServerAddress:
-            Self.persistSynchronously(.text(value), for: key, quickSync: false)
-        case .systemPrompt: systemPrompt = value
-        case .reasoningContentEchoMode:
-            reasoningContentEchoMode = ReasoningContentEchoMode.normalized(value).rawValue
-        case .speechModelIdentifier: speechModelIdentifier = value
-        case .ttsModelIdentifier: ttsModelIdentifier = value
-        case .memoryEmbeddingModelIdentifier: memoryEmbeddingModelIdentifier = value
-        case .titleGenerationModelIdentifier: titleGenerationModelIdentifier = value
-        case .dailyPulseModelIdentifier: dailyPulseModelIdentifier = value
-        case .conversationSummaryModelIdentifier: conversationSummaryModelIdentifier = value
-        case .reasoningSummaryModelIdentifier: reasoningSummaryModelIdentifier = value
-        case .ocrModelIdentifier: ocrModelIdentifier = value
-        case .imageGenerationModelIdentifier: imageGenerationModelIdentifier = value
-        case .imageGenerationParameterExpressionsByModel: imageGenerationParameterExpressionsByModel = value
-        case .backgroundContentMode: backgroundContentMode = value
-        case .currentBackgroundImage: currentBackgroundImage = value
-        case .messageActionBarConfiguration: messageActionBarConfiguration = value
-        case .fontFallbackScope: fontFallbackScope = value
-        case .appLanguage: appLanguage = value
-        case .watchAttachmentLastSource: watchAttachmentLastSource = value
-        case .watchAttachmentSourceHistory: watchAttachmentSourceHistory = value
-        case .watchBackgroundLastSource: watchBackgroundLastSource = value
-        case .watchBackgroundSourceHistory: watchBackgroundSourceHistory = value
-        case .chatQuickActionIDs: chatQuickActionIDs = value
-        case .chatComposerDraft: chatComposerDraft = value
-        case .backgroundCropTarget: backgroundCropTarget = value
-        case .shortcutBridgeShortcutName: shortcutBridgeShortcutName = value
-        case .systemTimeInjectionPosition: systemTimeInjectionPosition = value
-        case .audioRecordingFormat: audioRecordingFormat = value
-        case .hiddenAnnouncementKeys: hiddenAnnouncementKeys = value
-        default: break
-        }
-    }
-
-    private func write(_ key: AppConfigKey, _ value: Bool) {
-        write(key, .bool(value))
-    }
-
-    private func write(_ key: AppConfigKey, _ value: Int) {
-        write(key, .integer(value))
-    }
-
-    private func write(_ key: AppConfigKey, _ value: Double) {
-        write(key, .real(value))
-    }
-
-    private func write(_ key: AppConfigKey, _ value: String) {
-        write(key, .text(value))
-    }
-
-    private func write(_ key: AppConfigKey, _ value: AppConfigValue) {
-        let normalizedValue = Self.normalizedAppConfigValue(value, for: key)
-        guard !isReloadingFromPersistentStore else { return }
-        guard !isApplyingSnapshot || key.participatesInSync else { return }
-        guard Self.cachedValue(for: key) != normalizedValue else { return }
-
-        Self.snapshotCache.set(normalizedValue.anyValue, for: key)
-        if !didLoadPersistentStore {
-            locallyChangedKeysBeforePersistentLoad.insert(key)
-        }
-
-        if key == .chatComposerDraft {
-            cancelPendingChatComposerDraftWrite()
-            guard shouldPersistChatComposerDraft(normalizedValue) else { return }
-        }
-
-        let rawKey = key.rawValue
-        let writeID = UUID()
-        let task: Task<Void, Never>
-        if key == .chatComposerDraft {
-            pendingChatComposerDraftWriteID = writeID
-            task = Task(priority: .utility) { [weak self] in
-                do {
-                    try await Task.sleep(nanoseconds: Self.chatComposerDraftWriteDebounceNanoseconds)
-                } catch {
-                    return
-                }
-                guard !Task.isCancelled else { return }
-                let shouldWrite = await MainActor.run {
-                    guard let self,
-                          self.pendingChatComposerDraftWriteID == writeID,
-                          self.shouldPersistChatComposerDraft(normalizedValue) else {
-                        return false
-                    }
-                    return true
-                }
-                guard shouldWrite else { return }
-                let didWrite = await AppConfigPersistenceWorker.shared.write(key: rawKey, value: normalizedValue)
-                if didWrite {
-                    if Self.shouldTouchWatchConfigDatabase(for: key) {
-                        WatchDatabaseSyncService.markDatabaseChanged(.config)
-                    }
-                    await MainActor.run {
-                        self?.markChatComposerDraftPersisted(normalizedValue)
-                    }
-                }
-            }
-        } else {
-            task = Task(priority: .utility) {
-                let didWrite = await AppConfigPersistenceWorker.shared.write(key: rawKey, value: normalizedValue)
-                if didWrite, Self.shouldTouchWatchConfigDatabase(for: key) {
-                    WatchDatabaseSyncService.markDatabaseChanged(.config)
-                }
-            }
-        }
-        pendingWriteTasks[writeID] = task
-        Task { [weak self] in
-            await task.value
-            await MainActor.run {
-                guard let self else { return }
-                self.pendingWriteTasks[writeID] = nil
-                if self.pendingChatComposerDraftWriteID == writeID {
-                    self.pendingChatComposerDraftWriteID = nil
-                }
-            }
-        }
-
-        #if canImport(WatchConnectivity)
-        if !Self.shouldSkipQuickSyncForCurrentProcess,
-           !isApplyingSnapshot,
-           key.participatesInSync {
-            WatchSyncManager.shared.performQuickSync(key: rawKey, value: normalizedValue.anyValue)
-        }
-        #endif
-        if !Self.shouldSkipRealtimeCloudSyncForCurrentProcess,
-           !isApplyingSnapshot,
-           key.participatesInSync {
-            CloudSyncManager.shared.scheduleRealtimeSyncIfEnabled(reason: "appConfig.\(rawKey)")
-        }
-    }
-
-    @discardableResult
-    private func cancelPendingChatComposerDraftWrite() -> Task<Void, Never>? {
-        guard let writeID = pendingChatComposerDraftWriteID else { return nil }
-        let task = pendingWriteTasks[writeID]
-        task?.cancel()
-        pendingWriteTasks[writeID] = nil
-        pendingChatComposerDraftWriteID = nil
-        return task
-    }
-
-    private func shouldPersistChatComposerDraft(_ value: AppConfigValue) -> Bool {
-        persistedChatComposerDraftValue != value
-    }
-
-    private func markChatComposerDraftPersisted(_ value: AppConfigValue) {
-        persistedChatComposerDraftValue = value
-    }
-
-    private func markChatComposerDraftPersisted(from snapshot: [String: Any]) {
-        guard let value = snapshot[AppConfigKey.chatComposerDraft.rawValue],
-              let configValue = Self.appConfigValue(from: value, for: .chatComposerDraft) else {
-            return
-        }
-        persistedChatComposerDraftValue = configValue
-    }
-
-    private static func initialValues(userDefaults: UserDefaults) -> [AppConfigKey: AppConfigValue] {
-        var values = Dictionary(uniqueKeysWithValues: AppConfigKey.allCases.map { key in
-            (key, userDefaultsValue(for: key, userDefaults: userDefaults) ?? key.defaultValue)
-        })
-        if userDefaults.object(forKey: AppConfigKey.syncAppStorage.rawValue) == nil,
-           let legacyValue = userDefaultsValue(for: .syncGlobalPrompt, userDefaults: userDefaults) {
-            values[.syncAppStorage] = legacyValue
-        }
-        return values
-    }
-
-    private static func persistentBootstrapValues(userDefaults: UserDefaults) -> [AppConfigKey: AppConfigValue] {
-        guard userDefaults === UserDefaults.standard else { return [:] }
-
-        return Persistence.loadAllAppConfigs().reduce(into: [AppConfigKey: AppConfigValue]()) { result, item in
-            guard let key = AppConfigKey(rawValue: item.key),
-                  let value = appConfigValue(from: item.value, for: key) else {
-                return
-            }
-            result[key] = value
-        }
-    }
-
-    private static func snapshot(
-        from values: [AppConfigKey: AppConfigValue],
-        includeLocalOnly: Bool
-    ) -> [String: Any] {
-        values.reduce(into: [String: Any]()) { result, element in
-            let (key, value) = element
-            if includeLocalOnly || key.participatesInSync {
-                result[key.rawValue] = value.anyValue
-            }
-        }
-    }
-
-    private static func boolValue(_ key: AppConfigKey, userDefaults: UserDefaults) -> Bool {
-        if case .bool(let value) = cachedValue(for: key) ?? userDefaultsValue(for: key, userDefaults: userDefaults) ?? key.defaultValue {
-            return value
-        }
-        return false
-    }
-
-    private static func boolValue(_ key: AppConfigKey, initialValues: [AppConfigKey: AppConfigValue]) -> Bool {
-        if case .bool(let value) = initialValues[key] ?? key.defaultValue {
-            return value
-        }
-        return false
-    }
-
-    private static func integerValue(_ key: AppConfigKey, userDefaults: UserDefaults) -> Int {
-        if case .integer(let value) = cachedValue(for: key) ?? userDefaultsValue(for: key, userDefaults: userDefaults) ?? key.defaultValue {
-            return normalizedIntegerValue(value, for: key)
-        }
-        return 0
-    }
-
-    private static func realValue(_ key: AppConfigKey, userDefaults: UserDefaults) -> Double {
-        if case .real(let value) = cachedValue(for: key) ?? userDefaultsValue(for: key, userDefaults: userDefaults) ?? key.defaultValue {
-            return normalizedRealValue(value, for: key)
-        }
-        return 0
-    }
-
-    private static func textValue(_ key: AppConfigKey, userDefaults: UserDefaults) -> String {
-        if case .text(let value) = cachedValue(for: key) ?? userDefaultsValue(for: key, userDefaults: userDefaults) ?? key.defaultValue {
-            return value
-        }
-        return ""
-    }
-
-    private static func userDefaultsValue(for key: AppConfigKey, userDefaults: UserDefaults) -> AppConfigValue? {
-        guard let object = userDefaults.object(forKey: key.rawValue) else {
-            return nil
-        }
-
-        return appConfigValue(from: object, for: key)
-    }
-
-    private static func appConfigValue(from object: Any, for key: AppConfigKey) -> AppConfigValue? {
-        switch key.defaultValue {
-        case .bool:
-            return coerceBool(object).map(AppConfigValue.bool)
-        case .integer:
-            return coerceInt(object).map { .integer(normalizedIntegerValue($0, for: key)) }
-        case .real:
-            return coerceDouble(object).map { .real(normalizedRealValue($0, for: key)) }
-        case .text:
-            if let values = object as? [String] {
-                return .text(encodeStringArray(values))
-            }
-            if let values = object as? [String: String] {
-                return .text(encodeStringDictionary(values))
-            }
-            return coerceString(object).map(AppConfigValue.text)
-        }
-    }
-
-    @discardableResult
-    fileprivate nonisolated static func persist(_ value: AppConfigValue, for key: AppConfigKey) -> Bool {
-        switch value {
-        case .bool(let value):
-            return Persistence.writeAppConfig(key: key.rawValue, integer: value ? 1 : 0, typeHint: "bool")
-        case .integer(let value):
-            return Persistence.writeAppConfig(key: key.rawValue, integer: normalizedIntegerValue(value, for: key), typeHint: "integer")
-        case .real(let value):
-            return Persistence.writeAppConfig(key: key.rawValue, real: normalizedRealValue(value, for: key), typeHint: "real")
-        case .text(let value):
-            return Persistence.writeAppConfig(key: key.rawValue, text: value, typeHint: "text")
-        }
-    }
-
-    private nonisolated static func cachedValue(for key: AppConfigKey) -> AppConfigValue? {
-        guard let value = snapshotCache.value(for: key) else { return nil }
-        switch key.defaultValue {
-        case .bool:
-            return coerceBool(value).map(AppConfigValue.bool)
-        case .integer:
-            return coerceInt(value).map { .integer(normalizedIntegerValue($0, for: key)) }
-        case .real:
-            return coerceDouble(value).map { .real(normalizedRealValue($0, for: key)) }
-        case .text:
-            if key == .reasoningContentEchoMode {
-                return coerceString(value).map { .text(ReasoningContentEchoMode.normalized($0).rawValue) }
-            }
-            return coerceString(value).map(AppConfigValue.text)
-        }
-    }
-
-    private nonisolated static func encodeStringArray(_ values: [String]) -> String {
-        guard let data = try? JSONSerialization.data(withJSONObject: values, options: [.sortedKeys]),
-              let encoded = String(data: data, encoding: .utf8) else {
-            return "[]"
-        }
-        return encoded
-    }
-
-    private nonisolated static func normalizedAppConfigValue(_ value: AppConfigValue, for key: AppConfigKey) -> AppConfigValue {
-        switch value {
-        case .integer(let value):
-            return .integer(normalizedIntegerValue(value, for: key))
-        case .real(let value):
-            return .real(normalizedRealValue(value, for: key))
-        case .text(let value) where key == .reasoningContentEchoMode:
-            return .text(ReasoningContentEchoMode.normalized(value).rawValue)
-        default:
-            return value
-        }
-    }
-
-    private nonisolated static func normalizedIntegerValue(_ value: Int, for key: AppConfigKey) -> Int {
-        switch key {
-        case .modelConnectivityTestConcurrencyLimit,
-             .memoryReembeddingConcurrencyLimit:
-            return max(1, value)
-        default:
-            return value
-        }
-    }
-
-    private nonisolated static func normalizedRealValue(_ value: Double, for key: AppConfigKey) -> Double {
-        switch key {
-        case .chatSendDelaySeconds:
-            guard value.isFinite else { return 0 }
-            return max(0, value)
-        default:
-            return value
-        }
-    }
-
-    private nonisolated static func defaultText(for key: AppConfigKey) -> String {
-        if case .text(let value) = key.defaultValue {
-            return value
-        }
-        return ""
-    }
-
-    private nonisolated static func defaultBool(for key: AppConfigKey) -> Bool {
-        if case .bool(let value) = key.defaultValue {
-            return value
-        }
-        return false
-    }
-
-    private nonisolated static func defaultStringArray(for key: AppConfigKey) -> [String]? {
-        guard case .text(let rawDefault) = key.defaultValue else {
-            return nil
-        }
-        return decodeStringArray(from: rawDefault)
-    }
-
-    private nonisolated static func defaultStringDictionary(for key: AppConfigKey) -> [String: String] {
-        guard case .text(let rawDefault) = key.defaultValue else {
-            return [:]
-        }
-        return decodeStringDictionary(from: rawDefault) ?? [:]
-    }
-
-    private nonisolated static func decodeStringArray(from raw: String) -> [String]? {
-        guard let data = raw.data(using: .utf8),
-              let decoded = try? JSONSerialization.jsonObject(with: data) as? [String] else {
-            return nil
-        }
-        return decoded
-    }
-
-    private nonisolated static func encodeStringDictionary(_ values: [String: String]) -> String {
-        guard let data = try? JSONSerialization.data(withJSONObject: values, options: [.sortedKeys]),
-              let encoded = String(data: data, encoding: .utf8) else {
-            return "{}"
-        }
-        return encoded
-    }
-
-    private nonisolated static func decodeStringDictionary(from raw: String) -> [String: String]? {
-        guard let data = raw.data(using: .utf8),
-              let decoded = try? JSONSerialization.jsonObject(with: data) as? [String: String] else {
-            return nil
-        }
-        return decoded
-    }
-
-    private nonisolated static func coerceBool(_ value: Any) -> Bool? {
-        if let value = value as? Bool {
-            return value
-        }
-        if let value = value as? NSNumber {
-            return value.boolValue
-        }
-        if let value = value as? String {
-            switch value.lowercased() {
-            case "true", "1", "yes":
-                return true
-            case "false", "0", "no":
-                return false
-            default:
-                return nil
-            }
-        }
-        return nil
-    }
-
-    private nonisolated static func coerceInt(_ value: Any) -> Int? {
-        if let value = value as? Int {
-            return value
-        }
-        if let value = value as? NSNumber {
-            return value.intValue
-        }
-        if let value = value as? String {
-            return Int(value)
-        }
-        return nil
-    }
-
-    private nonisolated static func coerceDouble(_ value: Any) -> Double? {
-        if let value = value as? Double {
-            return value
-        }
-        if let value = value as? NSNumber {
-            return value.doubleValue
-        }
-        if let value = value as? String {
-            return Double(value)
-        }
-        return nil
-    }
-
-    private nonisolated static func coerceString(_ value: Any) -> String? {
-        if let value = value as? String {
-            return value
-        }
-        if let value = value as? NSString {
-            return value as String
-        }
-        return nil
     }
 }

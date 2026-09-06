@@ -15,6 +15,37 @@ import Combine
 struct ChatServiceConcurrentSessionInteractionTests {
 
     @MainActor
+    @Test("删除正在生成的消息只取消匹配请求")
+    func testCancellingRequestBeforeDeletingMatchesLoadingMessage() async {
+        let service = ChatService(memoryManager: MemoryManager())
+        let session = service.createSavedSession(name: "删除流式消息")
+        let loadingMessageID = UUID()
+        let requestTask = Task<Void, Error> {
+            try await Task.sleep(nanoseconds: 60_000_000_000)
+        }
+        service.setRequestContext(
+            ChatService.RequestExecutionContext(
+                token: UUID(),
+                task: requestTask,
+                loadingMessageID: loadingMessageID,
+                imageGenerationContext: nil
+            ),
+            for: session.id
+        )
+        defer {
+            requestTask.cancel()
+            service.deleteSessions([session])
+        }
+
+        await service.cancelRequestIfGenerating(messageID: UUID(), in: session.id)
+        #expect(service.hasActiveRequestContext(for: session.id))
+
+        await service.cancelRequestIfGenerating(messageID: loadingMessageID, in: session.id)
+        #expect(!service.hasActiveRequestContext(for: session.id))
+        #expect(!service.runningSessionIDsSubject.value.contains(session.id))
+    }
+
+    @MainActor
     @Test("切回后台运行会话时优先使用运行期消息快照")
     func testActivatingRunningBackgroundSessionUsesRuntimeMessageSnapshot() {
         let service = ChatService(memoryManager: MemoryManager())
@@ -136,7 +167,7 @@ struct ChatServiceConcurrentSessionInteractionTests {
             )
         }
 
-        try await waitUntil("会话 A 请求启动") {
+        try await waitUntil("会话 A 请求启动", timeout: 15.0) {
             ControlledSessionURLProtocol.hasStarted(marker: "A")
         }
 
@@ -156,7 +187,7 @@ struct ChatServiceConcurrentSessionInteractionTests {
             )
         }
 
-        try await waitUntil("会话 B 请求启动") {
+        try await waitUntil("会话 B 请求启动", timeout: 15.0) {
             ControlledSessionURLProtocol.hasStarted(marker: "B")
         }
 
@@ -253,12 +284,82 @@ struct ChatServiceConcurrentSessionInteractionTests {
         )
 
         let storedMessages = Persistence.loadMessages(for: testSession.id)
+        let assistantMessage = storedMessages.first { $0.role == .assistant }
+        let errorMessage = storedMessages.first { $0.role == .error }
         #expect(storedMessages.count == 3)
-        #expect(storedMessages[0].role == .user)
-        #expect(storedMessages[1].role == .assistant)
-        #expect(storedMessages[1].content == "第一段回复")
-        #expect(storedMessages[2].role == .error)
-        #expect(storedMessages[2].content.contains("网络连接已经断开。"))
+        #expect(storedMessages.map(\.role) == [.user, .assistant, .error])
+        #expect(assistantMessage?.content == "第一段回复")
+        #expect(errorMessage?.content.contains("网络连接已经断开。") == true)
+    }
+
+    @MainActor
+    @Test("流式连接正常关闭但缺少结束标记时保留正文并报告中断")
+    func testStreamingEOFWithoutTerminationSignalReportsInterruption() async {
+        let originalProviders = ConfigLoader.loadProviders()
+        defer {
+            replaceProviders(with: originalProviders)
+        }
+
+        let provider = Provider(
+            name: "Streaming EOF Test Provider",
+            baseURL: "https://example.com",
+            apiKeys: ["test-key"],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(modelName: "test-model", displayName: "Test Model", isActivated: true)
+            ]
+        )
+        replaceProviders(with: [provider])
+
+        StreamingTrailingProxyErrorURLProtocol.reset()
+        StreamingTrailingProxyErrorURLProtocol.register(
+            marker: "unexpected-eof",
+            chunks: ["第一段回复\n"]
+        )
+
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [StreamingTrailingProxyErrorURLProtocol.self]
+        let session = URLSession(configuration: sessionConfiguration)
+
+        let service = ChatService(
+            adapters: [
+                "openai-compatible": StreamingFailureMockAdapter(
+                    requiresExplicitStreamingTermination: true
+                )
+            ],
+            memoryManager: MemoryManager(),
+            urlSession: session
+        )
+        service.setSelectedModel(service.activatedRunnableModels.first)
+
+        let testSession = service.createSavedSession(name: "流式意外结束")
+        defer {
+            service.deleteSessions([testSession])
+            StreamingTrailingProxyErrorURLProtocol.reset()
+        }
+        service.setCurrentSession(testSession)
+
+        await service.sendAndProcessMessage(
+            content: "unexpected-eof",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: true,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let storedMessages = Persistence.loadMessages(for: testSession.id)
+        #expect(storedMessages.map(\.role) == [.user, .assistant, .error])
+        #expect(storedMessages.first(where: { $0.role == .assistant })?.content == "第一段回复")
+        #expect(
+            storedMessages.last?.content.contains(
+                URLError(.networkConnectionLost).localizedDescription
+            ) == true
+        )
     }
 
     @MainActor
@@ -324,9 +425,10 @@ struct ChatServiceConcurrentSessionInteractionTests {
         )
 
         let storedMessages = Persistence.loadMessages(for: testSession.id)
+        let assistantMessage = storedMessages.first { $0.role == .assistant }
         #expect(storedMessages.count == 3)
-        #expect(storedMessages[1].role == .assistant)
-        #expect(storedMessages[1].content == "第一段回复")
+        #expect(storedMessages.map(\.role) == [.user, .assistant, .error])
+        #expect(assistantMessage?.content == "第一段回复")
 
         let errorMessage = try #require(storedMessages.last)
         #expect(errorMessage.role == .error)
@@ -444,6 +546,8 @@ struct ChatServiceConcurrentSessionInteractionTests {
 }
 
 final class ConcurrentSessionMockAdapter: APIAdapter {
+    let requiresExplicitStreamingTermination = false
+
     func buildChatRequest(
         for model: RunnableModel,
         commonPayload: [String : Any],
@@ -478,6 +582,12 @@ final class ConcurrentSessionMockAdapter: APIAdapter {
 }
 
 private final class StreamingFailureMockAdapter: APIAdapter {
+    let requiresExplicitStreamingTermination: Bool
+
+    init(requiresExplicitStreamingTermination: Bool = false) {
+        self.requiresExplicitStreamingTermination = requiresExplicitStreamingTermination
+    }
+
     func buildChatRequest(
         for model: RunnableModel,
         commonPayload: [String : Any],
@@ -512,6 +622,8 @@ private final class StreamingFailureMockAdapter: APIAdapter {
 }
 
 private final class StreamingTrailingProxyErrorMockAdapter: APIAdapter {
+    let requiresExplicitStreamingTermination = false
+
     func buildChatRequest(
         for model: RunnableModel,
         commonPayload: [String : Any],
@@ -731,7 +843,7 @@ private final class ControlledStreamingURLProtocol: URLProtocol {
                 url: requestURL,
                 statusCode: 200,
                 httpVersion: nil,
-                headerFields: ["Content-Type": "text/plain; charset=utf-8"]
+                headerFields: ["Content-Type": "text/event-stream; charset=utf-8"]
             )!
             self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
 
@@ -954,7 +1066,7 @@ private final class StreamingFailureURLProtocol: URLProtocol {
                 url: requestURL,
                 statusCode: 200,
                 httpVersion: nil,
-                headerFields: ["Content-Type": "text/plain; charset=utf-8"]
+                headerFields: ["Content-Type": "text/event-stream; charset=utf-8"]
             )!
             self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
 

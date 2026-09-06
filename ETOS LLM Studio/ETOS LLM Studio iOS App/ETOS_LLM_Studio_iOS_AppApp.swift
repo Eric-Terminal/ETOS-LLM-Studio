@@ -12,6 +12,7 @@
 
 import SwiftUI
 import BackgroundTasks
+import Combine
 import ETOSCore
 #if canImport(UIKit)
 import UIKit
@@ -67,8 +68,19 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
         SyncTemporaryFileCleaner.cleanupResidualTemporaryDirectoriesInBackground()
         DailyPulseDeliveryCoordinator.shared.activate()
         FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
+        let performanceTelemetryEnabled = PerformanceTelemetryCenter.resolveLaunchEnabled(
+            requiresManualUnlock: DatabaseEncryptionManager.shared.requiresManualUnlock
+        ) {
+            AppConfigStore.boolValue(for: .performanceTelemetryEnabled)
+        }
+        PerformanceTelemetryCenter.shared.prepareLaunchMeasurement(
+            enabled: performanceTelemetryEnabled
+        )
         Task { @MainActor in
             ChatAppearanceProfileManager.shared.activate()
+            await PerformanceTelemetryCenter.shared.configure(
+                enabled: performanceTelemetryEnabled
+            )
         }
     }
 
@@ -93,6 +105,9 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                             await handleNewAPIProviderImport(url)
                             return
                         }
+                        if await SystemEntryURLRouter.handle(url) {
+                            return
+                        }
                         let handledByShortcutRouter = await ShortcutURLRouter.shared.handleIncomingURL(url)
                         if !handledByShortcutRouter {
                             if IncomingSnapshotRestoreSupport.isSnapshotURL(url) {
@@ -104,6 +119,7 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                     }
                 }
                 .onAppear {
+                    PerformanceTelemetryCenter.shared.markFirstInterfaceReady()
                     appLockWindowPresenter.install()
                     // 启动时自动重连已加入聊天路由的 MCP 服务器
                     mcpManager.connectSelectedServersIfNeeded()
@@ -111,17 +127,29 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                     DailyPulseBackgroundDeliveryScheduler.shared.activate()
                     updateTimelineManager.activateOnLaunchIfNeeded()
                     triggerFeedbackRefreshOnLaunchIfNeeded()
+                    SystemEntrySnapshotPublisher.shared.activate()
+                    SystemFileProviderDomainManager.activate()
+                }
+                .onChange(of: appConfig.performanceTelemetryEnabled) { _, enabled in
+                    Task {
+                        await PerformanceTelemetryCenter.shared.configure(enabled: enabled)
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: AppConfigStore.persistentStoreDidLoadNotification)) { _ in
+                    guard !DatabaseEncryptionManager.shared.requiresManualUnlock else { return }
+                    Task {
+                        await PerformanceTelemetryCenter.shared.configure(
+                            enabled: appConfig.performanceTelemetryEnabled
+                        )
+                    }
                 }
                 .onChange(of: dailyPulseDeliveryCoordinator.reminderEnabled) { _, _ in
                     DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
                 }
-                .onChange(of: dailyPulseDeliveryCoordinator.reminderHour) { _, _ in
+                .onChange(of: dailyPulseManager.isDailyPulseEnabled) { _, _ in
                     DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
                 }
-                .onChange(of: dailyPulseDeliveryCoordinator.reminderMinute) { _, _ in
-                    DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
-                }
-                .onChange(of: dailyPulseManager.todayRun?.dayKey) { _, _ in
+                .onChange(of: dailyPulseManager.tomorrowRun?.dayKey) { _, _ in
                     DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
                 }
                 .task {

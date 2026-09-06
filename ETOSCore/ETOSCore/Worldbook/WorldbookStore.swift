@@ -94,8 +94,7 @@ public final class WorldbookStore {
         if let storageDirectoryOverride {
             return storageDirectoryOverride
         }
-        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
-        return paths[0].appendingPathComponent(Self.directoryName, isDirectory: true)
+        return StorageUtility.documentsDirectory.appendingPathComponent(Self.directoryName, isDirectory: true)
     }
 
     public var storageFileURL: URL {

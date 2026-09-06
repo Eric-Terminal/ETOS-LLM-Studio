@@ -74,6 +74,27 @@ public extension Model {
     mutating func appendCopiesOfRequestBodyControls(_ controls: [ModelRequestBodyControl]) {
         requestBodyControls.append(contentsOf: controls.map { $0.duplicatedWithNewIdentifiers() })
     }
+
+    /// 为声明了推理能力的模型补充可直接调节的思考预算，保留用户已有控制。
+    mutating func ensureThinkingRequestBodyControl(apiFormat: String) {
+        guard !requestBodyControls.contains(where: ModelRequestBodyControlDefaults.isThinkingControl) else {
+            return
+        }
+        requestBodyControls.append(
+            ModelRequestBodyControlDefaults.thinkingOptionGroup(for: apiFormat)
+        )
+    }
+
+    /// 为声明了提示缓存能力的 Anthropic 模型补充自动缓存档位，保留用户已有控制。
+    mutating func ensureAutomaticPromptCachingRequestBodyControl(apiFormat: String) {
+        guard case .anthropic = ProviderAPIFormatFamily(apiFormat: apiFormat),
+              !requestBodyControls.contains(where: ModelRequestBodyControlDefaults.isAutomaticPromptCachingControl) else {
+            return
+        }
+        requestBodyControls.append(
+            ModelRequestBodyControlDefaults.automaticPromptCachingOptionGroup()
+        )
+    }
 }
 
 public extension Model {
@@ -92,8 +113,6 @@ public extension Model {
             return [.text, .image]
         case .embedding, .rerank:
             return [.text]
-        case .speechToText:
-            return [.audio]
         case .textToSpeech:
             return [.text]
         }
@@ -109,8 +128,6 @@ public extension Model {
             return []
         case .rerank:
             return [.text]
-        case .speechToText:
-            return [.text]
         case .textToSpeech:
             return [.audio]
         }
@@ -120,7 +137,7 @@ public extension Model {
         switch kind {
         case .chat:
             return defaultCapabilities
-        case .image, .embedding, .rerank, .speechToText, .textToSpeech:
+        case .image, .embedding, .rerank, .textToSpeech:
             return []
         }
     }
@@ -201,7 +218,6 @@ extension Model {
     enum LegacyCapability: String {
         case chat
         case toolCalling
-        case speechToText
         case textToSpeech
         case embedding
         case imageGeneration
@@ -229,8 +245,6 @@ extension Model {
             resolvedKind = explicitKind
         } else if legacySet.contains(.embedding) {
             resolvedKind = .embedding
-        } else if legacySet.contains(.speechToText) {
-            resolvedKind = .speechToText
         } else if legacySet.contains(.textToSpeech) {
             resolvedKind = .textToSpeech
         } else if legacySet.contains(.imageGeneration), !legacySet.contains(.chat) {
@@ -239,18 +253,12 @@ extension Model {
             resolvedKind = .chat
         }
 
-        var resolvedInputModalities = explicitInputModalities ?? defaultInputModalities(for: resolvedKind)
+        let resolvedInputModalities = explicitInputModalities ?? defaultInputModalities(for: resolvedKind)
         var resolvedOutputModalities = explicitOutputModalities ?? defaultOutputModalities(for: resolvedKind)
         var resolvedCapabilities = explicitCapabilities ?? (legacyCapabilityRawValues == nil ? defaultCapabilities(for: resolvedKind) : [])
 
         if legacySet.contains(.toolCalling), !resolvedCapabilities.contains(.toolCalling) {
             resolvedCapabilities.append(.toolCalling)
-        }
-        if legacySet.contains(.speechToText), !resolvedInputModalities.contains(.audio) {
-            resolvedInputModalities.append(.audio)
-        }
-        if legacySet.contains(.speechToText), !resolvedCapabilities.contains(.speechToText) {
-            resolvedCapabilities.append(.speechToText)
         }
         if legacySet.contains(.textToSpeech), !resolvedOutputModalities.contains(.audio) {
             resolvedOutputModalities.append(.audio)
@@ -296,22 +304,13 @@ extension Model {
             "stable-diffusion",
             "qwen-image"
         ]
-        let rerankSignals = ["rerank", "re-rank"]
         let embeddingSignals = ["embedding", "embed"]
-        let speechToTextSignals = ["transcribe", "transcription", "whisper", "speech-to-text", "stt"]
-        let textToSpeechSignals = ["text-to-speech", "tts", "speech"]
 
         let kind: ModelKind
         if containsAny(normalizedName, signals: embeddingSignals) || (supportsEmbedding && !supportsGenerateContent) {
             kind = .embedding
-        } else if containsAny(normalizedName, signals: rerankSignals) {
-            kind = .rerank
         } else if containsAny(normalizedName, signals: imageModelSignals) {
             kind = .image
-        } else if containsAny(normalizedName, signals: speechToTextSignals) {
-            kind = .speechToText
-        } else if containsAny(normalizedName, signals: textToSpeechSignals) {
-            kind = .textToSpeech
         } else {
             kind = .chat
         }
@@ -381,6 +380,27 @@ public enum ModelOrderIndex {
         orderedIDs.insert(moved, at: destination)
         return orderedIDs
     }
+
+    /// 先按提供商排序，再保留每个提供商内部已有的模型相对顺序。
+    public static func hierarchicalOrder(
+        storedModelIDs: [String],
+        currentModelIDs: [String],
+        providerIDByModelID: [String: String],
+        orderedProviderIDs: [String]
+    ) -> [String] {
+        let mergedModelIDs = merge(storedIDs: storedModelIDs, currentIDs: currentModelIDs)
+        let providerRank = Dictionary(uniqueKeysWithValues: orderedProviderIDs.enumerated().map { ($1, $0) })
+        let modelRank = Dictionary(uniqueKeysWithValues: mergedModelIDs.enumerated().map { ($1, $0) })
+
+        return mergedModelIDs.sorted { leftID, rightID in
+            let leftProviderRank = providerIDByModelID[leftID].flatMap { providerRank[$0] } ?? Int.max
+            let rightProviderRank = providerIDByModelID[rightID].flatMap { providerRank[$0] } ?? Int.max
+            if leftProviderRank != rightProviderRank {
+                return leftProviderRank < rightProviderRank
+            }
+            return (modelRank[leftID] ?? Int.max) < (modelRank[rightID] ?? Int.max)
+        }
+    }
 }
 
 public extension Model {
@@ -400,10 +420,6 @@ public extension Model {
         capabilities.contains(.jsonMode)
     }
 
-    var supportsSpeechToText: Bool {
-        kind == .speechToText || capabilities.contains(.speechToText)
-    }
-
     var supportsTextToSpeech: Bool {
         kind == .textToSpeech || capabilities.contains(.textToSpeech)
     }
@@ -420,8 +436,17 @@ public extension Model {
         inputModalities.contains(.image)
     }
 
+    var supportsNativeVideoInput: Bool {
+        inputModalities.contains(.video)
+    }
+
     var supportsImageGeneration: Bool {
         kind == .image || outputModalities.contains(.image)
+    }
+
+    /// 仅图像类型模型使用独立生图接口；聊天模型的图片输出仍属于对话响应。
+    var usesDedicatedImageGenerationEndpoint: Bool {
+        kind == .image
     }
 
     var isChatModel: Bool {

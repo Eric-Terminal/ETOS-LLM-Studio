@@ -63,7 +63,26 @@ struct WorldbookModelCompatibilityTests {
         let session = try JSONDecoder().decode(ChatSession.self, from: data)
 
         #expect(session.id == id)
-        #expect(session.worldbookContextIsolationEnabled == true)
-        #expect(session.isWorldbookContextIsolationActive == true)
+        #expect(session.memoryContextIsolationEnabled)
+        #expect(session.toolContextIsolationEnabled)
+        #expect(!session.globalSystemPromptIsolationEnabled)
+    }
+
+    @Test("ChatSession 保留独立的上下文屏蔽开关")
+    func testChatSessionPreservesIndependentContextIsolationSwitches() throws {
+        let original = ChatSession(
+            id: UUID(),
+            name: "独立隔离会话",
+            memoryContextIsolationEnabled: false,
+            toolContextIsolationEnabled: true,
+            globalSystemPromptIsolationEnabled: true
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(ChatSession.self, from: data)
+
+        #expect(!decoded.memoryContextIsolationEnabled)
+        #expect(decoded.toolContextIsolationEnabled)
+        #expect(decoded.globalSystemPromptIsolationEnabled)
     }
 }

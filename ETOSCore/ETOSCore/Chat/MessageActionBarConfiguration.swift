@@ -25,6 +25,7 @@ public enum MessageActionBarAlignment: String, CaseIterable, Identifiable, Codab
 public enum MessageActionBarItem: String, CaseIterable, Identifiable, Codable, Sendable {
     case quickRetry
     case copyMessage
+    case readAloud
     case requestTime
     case inputTokens
     case outputTokens
@@ -39,7 +40,7 @@ public enum MessageActionBarItem: String, CaseIterable, Identifiable, Codable, S
             return allCases
         case .user:
             return allCases.filter { item in
-                item != .quickRetry && item != .versionSwitcher
+                item != .quickRetry && item != .versionSwitcher && item != .readAloud
             }
         }
     }
@@ -51,19 +52,22 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
     public var assistantAlignment: MessageActionBarAlignment
     public var userAlignment: MessageActionBarAlignment
     public var showsOuterBorder: Bool
+    public var fontScale: Double
 
     public init(
         assistantItems: [MessageActionBarItem],
         userItems: [MessageActionBarItem],
         assistantAlignment: MessageActionBarAlignment,
         userAlignment: MessageActionBarAlignment,
-        showsOuterBorder: Bool = false
+        showsOuterBorder: Bool = false,
+        fontScale: Double = FontLibrary.defaultFontScale
     ) {
         self.assistantItems = Self.normalizedItems(assistantItems, for: .assistant)
         self.userItems = Self.normalizedItems(userItems, for: .user)
         self.assistantAlignment = assistantAlignment
         self.userAlignment = userAlignment
         self.showsOuterBorder = showsOuterBorder
+        self.fontScale = FontLibrary.normalizedFontScale(fontScale)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -72,6 +76,7 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
         case assistantAlignment
         case userAlignment
         case showsOuterBorder
+        case fontScale
     }
 
     public init(from decoder: Decoder) throws {
@@ -81,12 +86,14 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
         let assistantAlignment = try container.decodeIfPresent(MessageActionBarAlignment.self, forKey: .assistantAlignment) ?? .trailing
         let userAlignment = try container.decodeIfPresent(MessageActionBarAlignment.self, forKey: .userAlignment) ?? .trailing
         let showsOuterBorder = try container.decodeIfPresent(Bool.self, forKey: .showsOuterBorder) ?? false
+        let fontScale = try container.decodeIfPresent(Double.self, forKey: .fontScale) ?? FontLibrary.defaultFontScale
         self.init(
             assistantItems: assistantItems,
             userItems: userItems,
             assistantAlignment: assistantAlignment,
             userAlignment: userAlignment,
-            showsOuterBorder: showsOuterBorder
+            showsOuterBorder: showsOuterBorder,
+            fontScale: fontScale
         )
     }
 
@@ -127,7 +134,7 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
     public func encodedString() -> String {
         guard let data = try? JSONEncoder().encode(normalized()),
               let string = String(data: data, encoding: .utf8) else {
-            return #"{"assistantItems":["versionSwitcher"],"userItems":[],"assistantAlignment":"trailing","userAlignment":"trailing","showsOuterBorder":false}"#
+            return #"{"assistantItems":["versionSwitcher"],"userItems":[],"assistantAlignment":"trailing","userAlignment":"trailing","showsOuterBorder":false,"fontScale":1}"#
         }
         return string
     }
@@ -174,7 +181,8 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
             userItems: userItems,
             assistantAlignment: assistantAlignment,
             userAlignment: userAlignment,
-            showsOuterBorder: showsOuterBorder
+            showsOuterBorder: showsOuterBorder,
+            fontScale: fontScale
         )
     }
 
@@ -190,6 +198,12 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
 }
 
 public enum MessageActionBarAvailability {
+    public static func canReadAloud(_ message: ChatMessage) -> Bool {
+        // 与消息更多菜单的朗读范围保持一致；空的流式占位不显示入口。
+        let supportsSpeech = message.role == .assistant || message.role == .tool || message.role == .system
+        return supportsSpeech && !message.content.isEmpty
+    }
+
     public static func retryableMessageIDs(in messages: [ChatMessage], isSending: Bool) -> Set<UUID> {
         if isSending {
             guard let lastMessage = messages.last else { return [] }
@@ -202,9 +216,9 @@ public enum MessageActionBarAvailability {
 
         return Set(messages.compactMap { message in
             switch message.role {
-            case .user, .assistant, .error:
+            case .user, .assistant, .tool, .error:
                 return message.id
-            case .system, .tool:
+            case .system:
                 return nil
             @unknown default:
                 return nil

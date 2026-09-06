@@ -826,6 +826,16 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
     }
 
     private nonisolated static func mergeTokenTotals(_ source: RequestLogTokenTotals, into target: inout RequestLogTokenTotals) {
+        if target.uncachedInputTokens != nil || source.uncachedInputTokens != nil {
+            target.uncachedInputTokens = (target.uncachedInputTokens ?? max(0, target.sentTokens - target.cacheReadTokens))
+                + (source.uncachedInputTokens ?? max(0, source.sentTokens - source.cacheReadTokens))
+        }
+        if target.cacheWriteFiveMinuteTokens != nil || source.cacheWriteFiveMinuteTokens != nil {
+            target.cacheWriteFiveMinuteTokens = (target.cacheWriteFiveMinuteTokens ?? 0) + (source.cacheWriteFiveMinuteTokens ?? 0)
+        }
+        if target.cacheWriteOneHourTokens != nil || source.cacheWriteOneHourTokens != nil {
+            target.cacheWriteOneHourTokens = (target.cacheWriteOneHourTokens ?? 0) + (source.cacheWriteOneHourTokens ?? 0)
+        }
         target.sentTokens += source.sentTokens
         target.receivedTokens += source.receivedTokens
         target.thinkingTokens += source.thinkingTokens
@@ -911,8 +921,11 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             receivedTokens: usage.completionTokens ?? 0,
             thinkingTokens: usage.thinkingTokens ?? 0,
             cacheWriteTokens: usage.cacheWriteTokens ?? 0,
+            cacheWriteFiveMinuteTokens: usage.cacheWriteFiveMinuteTokens,
+            cacheWriteOneHourTokens: usage.cacheWriteOneHourTokens,
             cacheReadTokens: usage.cacheReadTokens ?? 0,
-            totalTokens: usage.totalTokens ?? 0
+            totalTokens: usage.totalTokens ?? 0,
+            uncachedInputTokens: usage.uncachedInputTokens
         )
     }
 
@@ -923,7 +936,10 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             totalTokens: totals.totalTokens > 0 ? totals.totalTokens : nil,
             thinkingTokens: totals.thinkingTokens > 0 ? totals.thinkingTokens : nil,
             cacheWriteTokens: totals.cacheWriteTokens > 0 ? totals.cacheWriteTokens : nil,
-            cacheReadTokens: totals.cacheReadTokens > 0 ? totals.cacheReadTokens : nil
+            cacheWriteFiveMinuteTokens: totals.cacheWriteFiveMinuteTokens,
+            cacheWriteOneHourTokens: totals.cacheWriteOneHourTokens,
+            cacheReadTokens: totals.cacheReadTokens > 0 ? totals.cacheReadTokens : nil,
+            uncachedInputTokens: totals.uncachedInputTokens
         )
         return usage.hasAnyData ? usage : nil
     }

@@ -6,9 +6,22 @@ ROOT_PATH="${CI_PRIMARY_REPOSITORY_PATH:-$(cd "$(dirname "$0")/.." && pwd)}"
 IOS_PLIST_PATH="$ROOT_PATH/ETOS LLM Studio/Config/iOSInfo.plist"
 WATCH_PLIST_PATH="$ROOT_PATH/ETOS LLM Studio/ETOS LLM Studio Watch App/Info.plist"
 
-# 云端构建优先写入 CI_COMMIT 的短哈希，本地调试保留默认占位。
+# 扩展只携带自身需要的翻译，新增文案必须先同步，不能带着缺失翻译发布。
+python3 "$ROOT_PATH/scripts/sync-extension-localizations.py" --check
+
+# 云端构建写入完整 Commit，界面展示时再截为 7 位；源码向导必须依赖精确版本。
 if [ -n "${CI_COMMIT:-}" ]; then
-    COMMIT_HASH="$(printf '%s' "$CI_COMMIT" | cut -c1-7)"
+    COMMIT_HASH="$(printf '%s' "$CI_COMMIT" | tr '[:upper:]' '[:lower:]')"
+    case "$COMMIT_HASH" in
+        *[!0-9a-f]*)
+            echo "CI_COMMIT 不是有效的 Git 提交哈希"
+            exit 1
+            ;;
+    esac
+    if [ "${#COMMIT_HASH}" -ne 40 ]; then
+        echo "CI_COMMIT 必须是完整 40 位 Git 提交哈希"
+        exit 1
+    fi
 else
     COMMIT_HASH="LocalBuild"
 fi
@@ -35,14 +48,17 @@ write_commit_hash "$WATCH_PLIST_PATH"
 
 export CONFIGURATION="${CONFIGURATION:-Release}"
 
-build_llama_static_library() {
+echo "初始化 Git 子模块。"
+git -C "$ROOT_PATH" submodule update --init --recursive
+
+build_native_static_libraries() {
     sdk_name="$1"
     archs="$2"
 
-    echo "预构建 llama.cpp 静态库：$sdk_name / $archs / $CONFIGURATION"
-    SDK_NAME="$sdk_name" ARCHS="$archs" "$ROOT_PATH/scripts/build-llama-static-library.sh"
+    echo "预构建原生静态库：$sdk_name / $archs / $CONFIGURATION"
+    SDK_NAME="$sdk_name" ARCHS="$archs" "$ROOT_PATH/scripts/build-native-static-libraries.sh"
 }
 
 # Xcode Cloud 只用于发布归档，预构建发布包实际会链接的设备 slice。
-build_llama_static_library iphoneos arm64
-build_llama_static_library watchos "arm64 arm64_32"
+build_native_static_libraries iphoneos arm64
+build_native_static_libraries watchos "arm64 arm64_32"

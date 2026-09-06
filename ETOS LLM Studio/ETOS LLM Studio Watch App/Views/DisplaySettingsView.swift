@@ -29,6 +29,17 @@ struct DisplaySettingsView: View {
 
     @ObservedObject private var appConfig = AppConfigStore.shared
     @ObservedObject private var appearanceProfileManager = ChatAppearanceProfileManager.shared
+    @State private var showsUserMessagePreviewHelp = false
+
+    // watchOS 的数值输入仅提供 Formatter 重载，整数计数保持无分组分隔符。
+    private static let characterCountFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = false
+        formatter.allowsFloats = false
+        formatter.maximumFractionDigits = 0
+        return formatter
+    }()
     
     // MARK: - 属性
     
@@ -64,6 +75,17 @@ struct DisplaySettingsView: View {
                     if #available(watchOS 26.0, *) {
                         Toggle(NSLocalizedString("启用液态玻璃", comment: ""), isOn: $enableLiquidGlass)
                     }
+                }
+            }
+
+            if enableBackground && selectedBackgroundIsVideo {
+                Section(
+                    footer: Text(NSLocalizedString("开启后，进入设置等页面时视频会继续播放，返回聊天时保持原有进度；App 进入后台后仍会暂停。", comment: "Video background continuous playback description"))
+                ) {
+                    Toggle(
+                        NSLocalizedString("离开聊天时继续播放", comment: "Video background continuous playback toggle"),
+                        isOn: $appConfig.continueVideoBackgroundPlaybackWhenChatHidden
+                    )
                 }
             }
 
@@ -104,6 +126,35 @@ struct DisplaySettingsView: View {
                 }
             }
 
+            Section {
+                TextField(
+                    NSLocalizedString("预览字符数", comment: "长用户消息预览设置"),
+                    value: $appConfig.userMessagePreviewCharacterLimit,
+                    formatter: Self.characterCountFormatter
+                )
+                settingsIntroCard
+            } header: {
+                Text(NSLocalizedString("长用户消息", comment: "长用户消息设置分组"))
+            } footer: {
+                Text(NSLocalizedString("仅影响气泡显示；完整内容可在“更多”中查看。", comment: "长用户消息设置说明"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section(
+                header: Text(NSLocalizedString("流式显示", comment: "Streaming response display section")),
+                footer: Text(NSLocalizedString("即时模式优先响应速度，并让新增文字快速淡入；柔和模式会合并更多流式分片，以更舒缓的节奏显示新增文字。", comment: "Streaming response display mode description"))
+            ) {
+                Picker(
+                    NSLocalizedString("流式显示", comment: "Streaming response display mode"),
+                    selection: $appConfig.chatStreamingDisplayMode
+                ) {
+                    ForEach(ChatStreamingDisplayMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode.rawValue)
+                    }
+                }
+            }
+
             // MARK: Section 3：气泡功能栏
             Section(
                 header: Text(NSLocalizedString("气泡功能栏", comment: "")),
@@ -118,6 +169,14 @@ struct DisplaySettingsView: View {
                     WatchMessageActionBarSettingsView(role: .user)
                 } label: {
                     Text(NSLocalizedString("用户气泡", comment: ""))
+                }
+            }
+
+            Section(header: Text(NSLocalizedString("界面与交互", comment: ""))) {
+                NavigationLink {
+                    WatchInputQuickActionSettingsView()
+                } label: {
+                    Text(NSLocalizedString("输入栏快捷功能", comment: "Watch input quick action settings entry"))
                 }
             }
 
@@ -144,7 +203,60 @@ struct DisplaySettingsView: View {
         .onAppear {
             normalizeBackgroundOpacityIfNeeded()
         }
+        .guideSettingsPageContext(
+            id: "settings-display",
+            title: NSLocalizedString("显示设置", comment: "显示设置向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            settings: guideSettings
+        )
+        .watchGuideEntry()
     }
+
+    private var guideSettings: [GuidePageSetting] {
+        [
+            GuideDisplaySettingsSupport.userMessagePreviewCharacterLimit(appConfig: appConfig),
+            .bool("background_enabled", label: NSLocalizedString("显示背景", comment: "向导设置字段"), get: { enableBackground }, set: { enableBackground = $0 }),
+            .readOnly("current_background", label: NSLocalizedString("当前背景图", comment: "向导设置字段"), value: { .string(currentBackgroundImage) }),
+            .string("background_content_mode", label: NSLocalizedString("背景填充模式", comment: "向导设置字段"), allowedValues: ["fill", "fit"], get: { backgroundContentMode }, set: { backgroundContentMode = $0 }),
+            .bool("background_auto_rotation", label: NSLocalizedString("背景随机轮换", comment: "向导设置字段"), get: { enableAutoRotateBackground }, set: { enableAutoRotateBackground = $0 }),
+            .double("background_blur", label: NSLocalizedString("背景模糊", comment: "向导设置字段"), range: 0...25, get: { backgroundBlur }, set: { backgroundBlur = $0 }),
+            .double("background_opacity", label: NSLocalizedString("背景不透明度", comment: "向导设置字段"), range: WatchBackgroundOpacitySetting.allowedRange, get: { backgroundOpacityBinding.wrappedValue }, set: { backgroundOpacityBinding.wrappedValue = $0 }),
+            .bool("video_background_continues_when_hidden", label: NSLocalizedString("离开聊天时继续播放视频背景", comment: "向导设置字段"), get: { appConfig.continueVideoBackgroundPlaybackWhenChatHidden }, set: { appConfig.continueVideoBackgroundPlaybackWhenChatHidden = $0 }),
+            .bool("liquid_glass", label: NSLocalizedString("启用液态玻璃", comment: "向导设置字段"), get: { enableLiquidGlass }, set: { enableLiquidGlass = $0 }),
+            .bool("markdown_rendering", label: NSLocalizedString("渲染 Markdown", comment: "向导设置字段"), get: { enableMarkdown }, set: { enableMarkdown = $0 }),
+            .bool("advanced_renderer", label: NSLocalizedString("使用高级渲染器", comment: "向导设置字段"), get: { enableAdvancedRenderer }, set: { enableAdvancedRenderer = $0 }),
+            .bool("hide_assistant_bubble", label: NSLocalizedString("关闭助手气泡", comment: "向导设置字段"), get: { enableNoBubbleUI }, set: { enableNoBubbleUI = $0 }),
+            .bool("auto_reasoning_preview", label: NSLocalizedString("自动预览思考过程", comment: "向导设置字段"), get: { enableAutoReasoningPreview }, set: { enableAutoReasoningPreview = $0 }),
+            .bool("responsive_reasoning_preview_height", label: NSLocalizedString("响应式思考预览高度", comment: "向导设置字段"), get: { appConfig.enableResponsiveReasoningPreviewHeight }, set: { appConfig.enableResponsiveReasoningPreviewHeight = $0 }),
+            .double("reasoning_preview_height_percent", label: NSLocalizedString("思考预览高度百分比", comment: "向导设置字段"), range: 1...100, get: { appConfig.reasoningPreviewHeightPercent }, set: { appConfig.reasoningPreviewHeightPercent = $0 }),
+            .string("streaming_display_mode", label: NSLocalizedString("流式显示模式", comment: "向导设置字段"), allowedValues: ChatStreamingDisplayMode.allCases.map(\.rawValue), get: { appConfig.chatStreamingDisplayMode }, set: { appConfig.chatStreamingDisplayMode = $0 }),
+            .string("app_language", label: NSLocalizedString("App 语言", comment: "向导设置字段"), allowedValues: AppLanguagePreference.allCases.map(\.rawValue), get: { appConfig.appLanguage }, set: { appLanguageBinding.wrappedValue = $0 }),
+            .bool("colorful_settings_icons", label: NSLocalizedString("彩色设置图标", comment: "向导设置字段"), get: { appConfig.settingsColorfulIconsEnabled }, set: { appConfig.settingsColorfulIconsEnabled = $0 })
+        ]
+    }
+
+    @ViewBuilder
+    private var settingsIntroCard: some View {
+        // watchOS 没有 DisclosureGroup；按钮独占一行，避免说明文字触发误点。
+        Button {
+            showsUserMessagePreviewHelp.toggle()
+        } label: {
+            HStack {
+                Text(NSLocalizedString("进一步了解…", comment: ""))
+                Spacer()
+                Image(systemName: showsUserMessagePreviewHelp ? "chevron.up" : "chevron.down")
+            }
+            .etFont(.footnote)
+            .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        if showsUserMessagePreviewHelp {
+            Text(String(format: NSLocalizedString("超过设定字符数的用户消息会在气泡中截断，不限制行数。修改后会更新当前会话的预览，保存、发送给模型、复制和导出仍使用完整内容。默认值为 %ld 字符，可填写 1–100000。", comment: "长用户消息预览教程"), ChatUserMessagePreview.defaultCharacterLimit))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     private var normalizedBackgroundOpacity: Double {
         WatchBackgroundOpacitySetting.normalized(backgroundOpacity)
     }
@@ -179,6 +291,10 @@ struct DisplaySettingsView: View {
                 AppLanguageRuntime.apply(rawValue: newValue)
             }
         )
+    }
+
+    private var selectedBackgroundIsVideo: Bool {
+        ConfigLoader.isVideoBackgroundFile(currentBackgroundImage)
     }
 
     @ViewBuilder

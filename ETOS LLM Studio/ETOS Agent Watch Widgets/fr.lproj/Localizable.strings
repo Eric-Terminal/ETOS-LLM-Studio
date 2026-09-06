@@ -1,0 +1,11 @@
+// 由 scripts/sync-extension-localizations.py 生成，请在对应主 App 中维护翻译。
+// 仅打包本扩展及其共享入口代码需要的文案，保留全部支持语言。
+
+"Daily Pulse" = "Daily Pulse";
+"快速打开 ETOS Agent 任务入口。" = "Ouvrez rapidement la saisie d’une tâche ETOS Agent.";
+"整理本周资料" = "Organiser les fichiers de la semaine";
+"新建 Agent 任务" = "Nouvelle tâche Agent";
+"暂无最近任务" = "Aucune tâche récente";
+"最近任务" = "Tâches récentes";
+"查看最近 Agent 任务。" = "Affichez la dernière tâche Agent.";
+"查看每日脉冲摘要。" = "Affichez le résumé Daily Pulse.";

@@ -32,9 +32,14 @@ struct FontSettingsView: View {
         nonmutating set { appConfig.fontFallbackScope = newValue }
     }
 
-    private var customFontScale: Double {
+    private var fontScale: Double {
         get { appConfig.fontCustomScale }
         nonmutating set { appConfig.fontCustomScale = newValue }
+    }
+
+    private var lineSpacingEm: Double {
+        get { appConfig.fontLineSpacingEmIOS }
+        nonmutating set { appConfig.fontLineSpacingEmIOS = newValue }
     }
 
     var body: some View {
@@ -43,7 +48,7 @@ struct FontSettingsView: View {
                 settingsIntroCard(
                     title: NSLocalizedString("字体样式优先级", comment: "Font style priority intro title"),
                     summary: NSLocalizedString("管理每个样式槽位的字体候选链；越靠上优先级越高。", comment: "Font style priority intro summary"),
-                    details: NSLocalizedString("字体样式优先级说明正文", comment: "Font style priority intro details"),
+                    details: "\(NSLocalizedString("字体样式优先级说明正文", comment: "Font style priority intro details"))\n\n\(NSLocalizedString("点击右上角“编辑”后，可拖拽右侧把手调整优先级，并通过“添加字体到当前槽位”补入未加入的字体。对槽位内字体右滑可移除。越靠上优先级越高。", comment: "字体排序操作说明"))",
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -57,19 +62,27 @@ struct FontSettingsView: View {
             }
 
             fontScaleSection
+            lineSpacingSection
             fallbackScopeSection
 
             fontFilesSection
             stylePrioritySection
+            textFontRulesSection
             previewSection
         }
         .navigationTitle(NSLocalizedString("字体设置", comment: ""))
+        .guideSettingsPageContext(
+            id: "settings-fonts",
+            title: NSLocalizedString("字体设置", comment: "字体设置向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            settings: fontGuideSettings
+        )
         .toolbar {
             EditButton()
         }
         .onAppear {
             reloadData()
-            FontLibrary.registerAllFontsIfNeeded()
+            FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
         }
         .onReceive(
             NotificationCenter.default.publisher(for: .syncFontsUpdated)
@@ -79,7 +92,7 @@ struct FontSettingsView: View {
         }
         .onChange(of: isCustomFontEnabled) { _, isEnabled in
             if isEnabled {
-                FontLibrary.registerAllFontsIfNeeded()
+                FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             }
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
         }
@@ -87,10 +100,10 @@ struct FontSettingsView: View {
             FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
         }
-        .onChange(of: customFontScale) { _, newValue in
+        .onChange(of: fontScale) { _, newValue in
             let normalizedValue = FontLibrary.normalizedFontScale(newValue)
             if normalizedValue != newValue {
-                customFontScale = normalizedValue
+                fontScale = normalizedValue
                 return
             }
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
@@ -118,6 +131,69 @@ struct FontSettingsView: View {
         } message: {
             Text(deleteErrorMessage ?? NSLocalizedString("未知错误", comment: ""))
         }
+    }
+
+    private var fontGuideSettings: [GuidePageSetting] {
+        [
+            .bool("custom_fonts_enabled", label: NSLocalizedString("启用自定义字体", comment: "字体设置向导字段"), get: { customFontEnabledBinding.wrappedValue }, set: { customFontEnabledBinding.wrappedValue = $0 }),
+            .double("font_scale", label: NSLocalizedString("字号比例", comment: "字体设置向导字段"), range: FontLibrary.minimumFontScale...FontLibrary.maximumFontScale, get: { fontScaleBinding.wrappedValue }, set: { fontScaleBinding.wrappedValue = $0 }),
+            .double("line_spacing_em", label: NSLocalizedString("聊天正文行距", comment: "字体设置向导字段"), range: FontLibrary.minimumLineSpacingEm...FontLibrary.maximumLineSpacingEm, get: { lineSpacingBinding.wrappedValue }, set: { lineSpacingBinding.wrappedValue = $0 }),
+            .string("fallback_scope", label: NSLocalizedString("字体回退范围", comment: "字体设置向导字段"), allowedValues: FontFallbackScope.allCases.map(\.rawValue), get: { fallbackScope.rawValue }, set: { fallbackScopeRawValue = $0 }),
+            .string("selected_style_role", label: NSLocalizedString("样式槽位", comment: "字体设置向导字段"), allowedValues: FontSemanticRole.allCases.map(\.rawValue), get: { selectedRole.rawValue }, set: { selectedRole = FontSemanticRole(rawValue: $0) ?? selectedRole }),
+            .readOnly(
+                "font_assets",
+                label: NSLocalizedString("字体文件", comment: "字体设置向导字段"),
+                value: {
+                    .array(assets.map { asset in
+                        .dictionary([
+                            "id": .string(asset.id.uuidString.lowercased()),
+                            "display_name": .string(asset.displayName),
+                            "postscript_name": .string(asset.postScriptName)
+                        ])
+                    })
+                }
+            ),
+            selectedRoleChainGuideSetting,
+            .readOnly("custom_text_rule_count", label: NSLocalizedString("指定内容字体规则数量", comment: "字体设置向导字段"), value: { .int(routes.customTextRules.count) })
+        ]
+    }
+
+    private var selectedRoleChainGuideSetting: GuidePageSetting {
+        let allowedIDs = assets.map { $0.id.uuidString.lowercased() }
+        return .json(
+            "selected_style_font_chain",
+            label: NSLocalizedString("当前槽位字体优先级", comment: "字体设置向导字段"),
+            schema: .dictionary([
+                "type": .string("array"),
+                "items": .dictionary(["type": .string("string"), "enum": .array(allowedIDs.map(JSONValue.string))]),
+                "uniqueItems": .bool(true)
+            ]),
+            get: { .array(routes.chain(for: selectedRole).map { .string($0.uuidString.lowercased()) }) },
+            normalize: { value in
+                guard case .array(let items) = value else { throw GuideError.invalidToolArguments }
+                var seen = Set<UUID>()
+                let ids = try items.map { item -> UUID in
+                    guard case .string(let rawValue) = item,
+                          let id = UUID(uuidString: rawValue),
+                          assets.contains(where: { $0.id == id }),
+                          seen.insert(id).inserted else { throw GuideError.invalidToolArguments }
+                    return id
+                }
+                return .array(ids.map { .string($0.uuidString.lowercased()) })
+            },
+            set: { value in
+                guard case .array(let items) = value else { throw GuideError.invalidToolArguments }
+                let ids = try items.map { item -> UUID in
+                    guard case .string(let rawValue) = item, let id = UUID(uuidString: rawValue) else {
+                        throw GuideError.invalidToolArguments
+                    }
+                    return id
+                }
+                routes.setChain(ids, for: selectedRole)
+                FontLibrary.updateChain(ids, for: selectedRole)
+                NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+            }
+        )
     }
 
     private func settingsIntroCard(
@@ -193,8 +269,25 @@ struct FontSettingsView: View {
 
     private var fontScaleBinding: Binding<Double> {
         Binding(
-            get: { FontLibrary.normalizedFontScale(customFontScale) },
-            set: { customFontScale = FontLibrary.normalizedFontScale($0) }
+            get: { FontLibrary.normalizedFontScale(fontScale) },
+            set: { fontScale = FontLibrary.normalizedFontScale($0) }
+        )
+    }
+
+    private var lineSpacingBinding: Binding<Double> {
+        Binding(
+            get: {
+                FontLibrary.normalizedLineSpacingEm(
+                    lineSpacingEm,
+                    fallback: FontLibrary.defaultIOSLineSpacingEm
+                )
+            },
+            set: {
+                lineSpacingEm = FontLibrary.normalizedLineSpacingEm(
+                    $0,
+                    fallback: FontLibrary.defaultIOSLineSpacingEm
+                )
+            }
         )
     }
 
@@ -225,7 +318,41 @@ struct FontSettingsView: View {
         } header: {
             Text(NSLocalizedString("字体大小", comment: ""))
         } footer: {
-            Text(NSLocalizedString("仅调整自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。", comment: ""))
+            Text(NSLocalizedString("调整系统字体和自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。", comment: ""))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var lineSpacingSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(NSLocalizedString("聊天正文行距", comment: ""))
+                    Spacer(minLength: 8)
+                    Text(
+                        String(
+                            format: NSLocalizedString("%.3f em", comment: "Chat text line spacing value"),
+                            lineSpacingBinding.wrappedValue
+                        )
+                    )
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                Slider(
+                    value: lineSpacingBinding,
+                    in: FontLibrary.minimumLineSpacingEm...FontLibrary.maximumLineSpacingEm,
+                    step: FontLibrary.lineSpacingStepEm
+                )
+            }
+            Button(NSLocalizedString("恢复默认行距", comment: "")) {
+                lineSpacingBinding.wrappedValue = FontLibrary.defaultIOSLineSpacingEm
+            }
+            .disabled(abs(lineSpacingBinding.wrappedValue - FontLibrary.defaultIOSLineSpacingEm) < 0.001)
+        } header: {
+            Text(NSLocalizedString("行距", comment: ""))
+        } footer: {
+            Text(NSLocalizedString("控制聊天正文多行文字的额外行距，范围为 0.00 em 到 1.00 em；默认 0.20 em。", comment: ""))
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -285,7 +412,7 @@ struct FontSettingsView: View {
     private var stylePrioritySection: some View {
         Section(
             header: Text(NSLocalizedString("样式优先级", comment: "")),
-            footer: Text(NSLocalizedString("点击右上角“编辑”后，可拖拽右侧把手调整优先级，并通过“添加字体到当前槽位”补入未加入的字体。对槽位内字体右滑可移除。越靠上优先级越高。", comment: ""))
+            footer: Text(NSLocalizedString("越靠上的字体越优先；点“编辑”调整顺序。", comment: "字体排序简短提示"))
         ) {
             Picker(NSLocalizedString("样式槽位", comment: ""), selection: $selectedRole) {
                 ForEach(FontSemanticRole.allCases) { role in
@@ -344,10 +471,13 @@ struct FontSettingsView: View {
 
     private var previewSection: some View {
         Section(NSLocalizedString("预览", comment: "")) {
-            Text(NSLocalizedString("The quick brown fox jumps over the lazy dog.", comment: "Font preview sample"))
-                .font(FontRoutePreview.font(for: .body, sample: "The quick brown fox"))
-            Text(NSLocalizedString("中文：风来疏竹，风过而竹不留声。", comment: ""))
-                .font(FontRoutePreview.font(for: .body, sample: "风来疏竹，风过而竹不留声。"))
+            (
+                Text(NSLocalizedString("The quick brown fox jumps over the lazy dog.", comment: "Font preview sample"))
+                    + Text(verbatim: "\n")
+                    + Text(NSLocalizedString("中文：风来疏竹，风过而竹不留声。", comment: ""))
+            )
+                .font(FontRoutePreview.font(for: .body, sample: "The quick brown fox 风来疏竹"))
+                .lineSpacing(previewLineSpacing)
             Text(NSLocalizedString("斜体预览 / Emphasis", comment: ""))
                 .font(FontRoutePreview.font(for: .emphasis, sample: "斜体预览 Emphasis"))
                 .italic()
@@ -357,6 +487,49 @@ struct FontSettingsView: View {
             Text(NSLocalizedString("let message = \"Code Preview\"", comment: "Font preview code sample"))
                 .font(FontRoutePreview.font(for: .code, sample: "let message = \"Code Preview\""))
         }
+    }
+
+    private var textFontRulesSection: some View {
+        Section {
+            ForEach(routes.customTextRules) { rule in
+                NavigationLink {
+                    ChatTextFontRuleEditorView(
+                        initialRule: rule,
+                        assets: assets,
+                        onSave: saveTextFontRule
+                    )
+                } label: {
+                    ChatTextFontRuleRow(rule: rule, assets: assets)
+                }
+            }
+            .onDelete(perform: deleteTextFontRules)
+            .onMove(perform: moveTextFontRules)
+
+            Button {
+                addTextFontRule()
+            } label: {
+                Label(NSLocalizedString("添加字体规则", comment: ""), systemImage: "plus")
+            }
+            .disabled(assets.isEmpty)
+        } header: {
+            Text(NSLocalizedString("指定内容字体", comment: ""))
+        } footer: {
+            Text(NSLocalizedString("规则按从上到下的顺序匹配；靠前规则优先。命中内容使用规则内部的字体优先级，其他内容继续使用外层全局字体。", comment: ""))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var previewLineSpacing: CGFloat {
+        CGFloat(
+            FontLibrary.lineSpacingPoints(
+                basePointSize: 17,
+                lineSpacingEm: lineSpacingBinding.wrappedValue,
+                fontScale: fontScale,
+                isCustomFontEnabled: isCustomFontEnabled,
+                fallbackLineSpacingEm: FontLibrary.defaultIOSLineSpacingEm
+            )
+        )
     }
 
     private var supportedFontTypes: [UTType] {
@@ -424,6 +597,43 @@ struct FontSettingsView: View {
         routes.setChain(chain, for: selectedRole)
         FontLibrary.updateChain(chain, for: selectedRole)
         NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+    }
+
+    private func addTextFontRule() {
+        let assetIDs = Set(assets.map(\.id))
+        let inheritedChain = routes.body.filter { assetIDs.contains($0) }
+        routes.customTextRules.append(
+            ChatAppearanceTextFontRule(
+                fontAssetIDs: inheritedChain.isEmpty ? assets.map(\.id) : inheritedChain
+            )
+        )
+        persistTextFontRules()
+    }
+
+    private func saveTextFontRule(_ rule: ChatAppearanceTextFontRule) {
+        guard let index = routes.customTextRules.firstIndex(where: { $0.id == rule.id }) else {
+            return
+        }
+        routes.customTextRules[index] = rule
+        persistTextFontRules()
+    }
+
+    private func deleteTextFontRules(at offsets: IndexSet) {
+        routes.customTextRules.remove(atOffsets: offsets)
+        persistTextFontRules()
+    }
+
+    private func moveTextFontRules(from source: IndexSet, to destination: Int) {
+        routes.customTextRules.move(fromOffsets: source, toOffset: destination)
+        persistTextFontRules()
+    }
+
+    private func persistTextFontRules() {
+        let rules = routes.customTextRules
+        Task {
+            await FontLibrary.updateCustomTextRulesInBackground(rules)
+            NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+        }
     }
 
     private func deleteAssets(at offsets: IndexSet) {
@@ -508,6 +718,14 @@ private struct FontFallbackScopeSelectionView: View {
             }
         }
         .navigationTitle(NSLocalizedString("字体回退范围", comment: ""))
+        .guideSettingsPageContext(
+            id: "settings-font-fallback-scope",
+            title: NSLocalizedString("字体回退范围", comment: "字体回退范围向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            settings: [
+                .string("fallback_scope", label: NSLocalizedString("字体回退范围", comment: "字体回退范围向导字段"), allowedValues: allScopes.map(\.rawValue), get: { selectedScope.rawValue }, set: { selectedScope = FontFallbackScope(rawValue: $0) ?? selectedScope })
+            ]
+        )
     }
 }
 

@@ -27,6 +27,14 @@ struct MCPServerEditor: View {
     @State private var oauthAuthorizationCode: String
     @State private var oauthRedirectURI: String
     @State private var oauthCodeVerifier: String
+    @State private var localConfigurationJSON: String
+    @State private var localEnvironmentVariableIDs: Set<UUID>
+    @State private var localWorkspaceID: UUID?
+    @State private var localMountIDs: Set<UUID>
+    @State private var localStartupTimeoutSeconds: Double
+    @State private var localInheritEnvironment: Bool
+    @State private var localLaunchPolicy: MCPLocalStdioLaunchPolicy
+    @State private var localIdlePolicy: MCPLocalStdioIdlePolicy
     @State private var transportOption: TransportOption
     @State private var notes: String
     @State private var headerOverrideEntries: [HeaderOverrideEntry]
@@ -36,11 +44,43 @@ struct MCPServerEditor: View {
     init(existingServer: MCPServerConfiguration?, onSave: @escaping (MCPServerConfiguration) -> Void) {
         self.existingServer = existingServer
         self.onSave = onSave
+        _localConfigurationJSON = State(initialValue: MCPLocalStdioConfigurationJSON.example)
+        _localEnvironmentVariableIDs = State(initialValue: [])
+        _localWorkspaceID = State(initialValue: nil)
+        _localMountIDs = State(initialValue: [])
+        _localStartupTimeoutSeconds = State(initialValue: 30)
+        _localInheritEnvironment = State(initialValue: true)
+        _localLaunchPolicy = State(initialValue: .onDemand)
+        _localIdlePolicy = State(initialValue: .fiveMinutes)
 
         if let server = existingServer {
             _displayName = State(initialValue: server.displayName)
             _notes = State(initialValue: server.notes ?? "")
             switch server.transport {
+            case .localStdio(let configuration):
+                _endpoint = State(initialValue: "")
+                _sseEndpoint = State(initialValue: "")
+                _apiKey = State(initialValue: "")
+                _tokenEndpoint = State(initialValue: "")
+                _clientID = State(initialValue: "")
+                _clientSecret = State(initialValue: "")
+                _oauthScope = State(initialValue: "")
+                _oauthGrantType = State(initialValue: .clientCredentials)
+                _oauthAuthorizationCode = State(initialValue: "")
+                _oauthRedirectURI = State(initialValue: "")
+                _oauthCodeVerifier = State(initialValue: "")
+                _transportOption = State(initialValue: .localStdio)
+                _headerOverrideEntries = State(initialValue: [HeaderOverrideEntry(text: "")])
+                _localConfigurationJSON = State(
+                    initialValue: MCPLocalStdioConfigurationJSON.encode(configuration)
+                )
+                _localEnvironmentVariableIDs = State(initialValue: Set(configuration.environmentVariableIDs))
+                _localWorkspaceID = State(initialValue: configuration.workspaceID)
+                _localMountIDs = State(initialValue: Set(configuration.mountIDs))
+                _localStartupTimeoutSeconds = State(initialValue: configuration.startupTimeoutSeconds)
+                _localInheritEnvironment = State(initialValue: configuration.inheritLocalLinuxEnvironment)
+                _localLaunchPolicy = State(initialValue: configuration.launchPolicy)
+                _localIdlePolicy = State(initialValue: configuration.idlePolicy)
             case .http(let endpoint, let apiKey, let additionalHeaders):
                 let serializedHeaders = HeaderExpressionParser.serialize(headers: additionalHeaders)
                 _endpoint = State(initialValue: endpoint.absoluteString)
@@ -201,7 +241,7 @@ struct MCPServerEditor: View {
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                } else {
+                } else if transportOption != .localStdio {
                     TextField(NSLocalizedString("Streamable HTTP Endpoint", comment: "MCP streamable HTTP endpoint field"), text: $endpoint)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
@@ -244,6 +284,19 @@ struct MCPServerEditor: View {
                 TextEditor(text: $notes)
                     .frame(minHeight: 60)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2)))
+            }
+
+            if transportOption == .localStdio {
+                MCPLocalStdioEditorFields(
+                    configurationJSON: $localConfigurationJSON,
+                    environmentVariableIDs: $localEnvironmentVariableIDs,
+                    inheritEnvironment: $localInheritEnvironment,
+                    workspaceID: $localWorkspaceID,
+                    mountIDs: $localMountIDs,
+                    startupTimeoutSeconds: $localStartupTimeoutSeconds,
+                    launchPolicy: $localLaunchPolicy,
+                    idlePolicy: $localIdlePolicy
+                )
             }
 
             if transportOption.requiresAPIKey {
@@ -314,6 +367,169 @@ struct MCPServerEditor: View {
         } message: {
             Text(NSLocalizedString("要保存当前编辑内容，还是放弃更改并离开？", comment: "Generic unsaved changes alert message"))
         }
+        .guideSettingsPageContext(
+            id: guidePageID,
+            title: guidePageTitle,
+            documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
+            settings: guideSettings
+        )
+    }
+
+    private var guidePageID: GuidePageID {
+        GuidePageID(rawValue: "mcp-server-editor-\(existingServer?.id.uuidString.lowercased() ?? "new")")
+    }
+
+    private var guidePageTitle: String {
+        existingServer == nil
+            ? NSLocalizedString("新增 MCP Server", comment: "MCP 编辑器向导标题")
+            : NSLocalizedString("编辑 MCP Server", comment: "MCP 编辑器向导标题")
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        var settings: [GuidePageSetting] = [
+            .readOnly("editor_mode", label: NSLocalizedString("编辑模式", comment: "MCP 编辑器向导字段"), value: {
+                .string(existingServer == nil ? "create" : "edit")
+            }),
+            .readOnly("has_unsaved_changes", label: NSLocalizedString("存在未保存更改", comment: "MCP 编辑器向导字段"), value: {
+                .bool(hasUnsavedChanges)
+            }),
+            .string(
+                "display_name",
+                label: NSLocalizedString("显示名称", comment: "MCP 编辑器向导字段"),
+                allowsEmpty: false,
+                get: { displayName },
+                set: { displayName = $0 }
+            ),
+            .string(
+                "notes",
+                label: NSLocalizedString("备注", comment: "MCP 编辑器向导字段"),
+                get: { notes },
+                set: { notes = $0 }
+            )
+        ]
+
+        if transportOption.isBuiltIn {
+            settings.append(.readOnly(
+                "transport_type",
+                label: NSLocalizedString("传输类型", comment: "MCP 编辑器向导字段"),
+                value: { .string(transportOption.rawValue) }
+            ))
+            return settings
+        }
+
+        settings.append(.string(
+            "transport_type",
+            label: NSLocalizedString("传输类型", comment: "MCP 编辑器向导字段"),
+            allowedValues: TransportOption.editableCases.map(\.rawValue),
+            allowsEmpty: false,
+            get: { transportOption.rawValue },
+            set: { rawValue in
+                if let option = TransportOption(rawValue: rawValue) {
+                    transportOption = option
+                }
+            }
+        ))
+
+        // 手表打开二级向导后会固定本页声明，因此协议切换及对应草稿必须能在同一份提案中完成。
+        settings.append(contentsOf: [
+            .string(
+                "endpoint",
+                label: NSLocalizedString("Streamable HTTP Endpoint", comment: "MCP 编辑器向导字段"),
+                allowsEmpty: false,
+                get: { endpoint },
+                set: { endpoint = $0 }
+            ),
+            .string(
+                "sse_endpoint",
+                label: NSLocalizedString("SSE Endpoint", comment: "MCP 编辑器向导字段"),
+                allowsEmpty: false,
+                get: { sseEndpoint },
+                set: { sseEndpoint = $0 }
+            )
+        ])
+        appendHTTPSecretSettings(to: &settings)
+        settings.append(contentsOf: oauthGuideSettings)
+        settings.append(contentsOf: localStdioGuideSettings)
+        return settings
+    }
+
+    private func appendHTTPSecretSettings(to settings: inout [GuidePageSetting]) {
+        settings.append(.writeOnlyString(
+            "api_key",
+            label: NSLocalizedString("Bearer API Key（只能写入，不能读取）", comment: "MCP 编辑器向导字段"),
+            isConfigured: { !apiKey.isEmpty },
+            set: { apiKey = $0 }
+        ))
+        settings.append(.writeOnlyString(
+            "header_override_expressions",
+            label: NSLocalizedString("请求头表达式（每行一个，只能整体写入）", comment: "MCP 编辑器向导字段"),
+            isConfigured: { headerOverrideEntries.contains { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } },
+            set: { value in
+                let expressions = value.components(separatedBy: .newlines).filter {
+                    !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                }
+                headerOverrideEntries = expressions.isEmpty
+                    ? [HeaderOverrideEntry(text: "")]
+                    : expressions.map { HeaderOverrideEntry(text: $0) }
+            }
+        ))
+    }
+
+    private var oauthGuideSettings: [GuidePageSetting] {
+        [
+            .string("token_endpoint", label: NSLocalizedString("OAuth Token Endpoint", comment: "MCP 编辑器向导字段"), allowsEmpty: false, get: { tokenEndpoint }, set: { tokenEndpoint = $0 }),
+            .string("client_id", label: NSLocalizedString("Client ID", comment: "MCP 编辑器向导字段"), allowsEmpty: false, get: { clientID }, set: { clientID = $0 }),
+            .string("scope", label: NSLocalizedString("Scope", comment: "MCP 编辑器向导字段"), get: { oauthScope }, set: { oauthScope = $0 }),
+            .string(
+                "grant_type",
+                label: NSLocalizedString("授权类型", comment: "MCP 编辑器向导字段"),
+                allowedValues: MCPOAuthGrantType.allCases.map(\.rawValue),
+                allowsEmpty: false,
+                get: { oauthGrantType.rawValue },
+                set: { rawValue in
+                    if let grantType = MCPOAuthGrantType(rawValue: rawValue) {
+                        oauthGrantType = grantType
+                    }
+                }
+            ),
+            .writeOnlyString("client_secret", label: NSLocalizedString("Client Secret（只能写入，不能读取）", comment: "MCP 编辑器向导字段"), isConfigured: { !clientSecret.isEmpty }, set: { clientSecret = $0 }),
+            .writeOnlyString("authorization_code", label: NSLocalizedString("Authorization Code（只能写入，不能读取）", comment: "MCP 编辑器向导字段"), isConfigured: { !oauthAuthorizationCode.isEmpty }, set: { oauthAuthorizationCode = $0 }),
+            .string("redirect_uri", label: NSLocalizedString("Redirect URI", comment: "MCP 编辑器向导字段"), get: { oauthRedirectURI }, set: { oauthRedirectURI = $0 }),
+            .writeOnlyString("code_verifier", label: NSLocalizedString("PKCE Code Verifier（只能写入，不能读取）", comment: "MCP 编辑器向导字段"), isConfigured: { !oauthCodeVerifier.isEmpty }, set: { oauthCodeVerifier = $0 })
+        ]
+    }
+
+    private var localStdioGuideSettings: [GuidePageSetting] {
+        [
+            .writeOnlyString(
+                "local_configuration_json",
+                label: NSLocalizedString("stdio 配置 JSON（可能含环境变量，只能整体写入）", comment: "MCP 编辑器向导字段"),
+                isConfigured: { !localConfigurationJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty },
+                set: { localConfigurationJSON = $0 }
+            ),
+            .bool("inherit_local_linux_environment", label: NSLocalizedString("继承本地 Linux 环境", comment: "MCP 编辑器向导字段"), get: { localInheritEnvironment }, set: { localInheritEnvironment = $0 }),
+            .double("startup_timeout_seconds", label: NSLocalizedString("启动超时秒数", comment: "MCP 编辑器向导字段"), range: 0...3_600, get: { localStartupTimeoutSeconds }, set: { localStartupTimeoutSeconds = $0 }),
+            .string(
+                "launch_policy",
+                label: NSLocalizedString("启动策略", comment: "MCP 编辑器向导字段"),
+                allowedValues: MCPLocalStdioLaunchPolicy.allCases.map(\.rawValue),
+                allowsEmpty: false,
+                get: { localLaunchPolicy.rawValue },
+                set: { rawValue in
+                    if let policy = MCPLocalStdioLaunchPolicy(rawValue: rawValue) { localLaunchPolicy = policy }
+                }
+            ),
+            .string(
+                "idle_policy",
+                label: NSLocalizedString("空闲策略", comment: "MCP 编辑器向导字段"),
+                allowedValues: MCPLocalStdioIdlePolicy.allCases.map(\.rawValue),
+                allowsEmpty: false,
+                get: { localIdlePolicy.rawValue },
+                set: { rawValue in
+                    if let policy = MCPLocalStdioIdlePolicy(rawValue: rawValue) { localIdlePolicy = policy }
+                }
+            )
+        ]
     }
 
     private func saveServer() {
@@ -329,6 +545,23 @@ struct MCPServerEditor: View {
         let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let transport: MCPServerConfiguration.Transport
         switch transportOption {
+        case .localStdio:
+            do {
+                var configuration = try MCPLocalStdioConfigurationJSON.decode(localConfigurationJSON)
+                configuration.environmentVariableIDs = localEnvironmentVariableIDs.sorted {
+                    $0.uuidString < $1.uuidString
+                }
+                configuration.inheritLocalLinuxEnvironment = localInheritEnvironment
+                configuration.workspaceID = localWorkspaceID
+                configuration.mountIDs = localMountIDs.sorted { $0.uuidString < $1.uuidString }
+                configuration.startupTimeoutSeconds = max(0, localStartupTimeoutSeconds)
+                configuration.launchPolicy = localLaunchPolicy
+                configuration.idlePolicy = localIdlePolicy
+                transport = .localStdio(configuration: configuration)
+            } catch {
+                validationMessage = error.localizedDescription
+                return
+            }
         case .http:
             let trimmedEndpoint = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
             guard let url = URL(string: trimmedEndpoint),
@@ -436,6 +669,14 @@ struct MCPServerEditor: View {
             oauthAuthorizationCode: oauthAuthorizationCode,
             oauthRedirectURI: oauthRedirectURI,
             oauthCodeVerifier: oauthCodeVerifier,
+            localConfigurationJSON: localConfigurationJSON,
+            localEnvironmentVariableIDs: localEnvironmentVariableIDs,
+            localWorkspaceID: localWorkspaceID,
+            localMountIDs: localMountIDs,
+            localStartupTimeoutSeconds: localStartupTimeoutSeconds,
+            localInheritEnvironment: localInheritEnvironment,
+            localLaunchPolicy: localLaunchPolicy,
+            localIdlePolicy: localIdlePolicy,
             transportOption: transportOption,
             notes: notes,
             headerOverrideTexts: headerOverrideEntries.map(\.text)
@@ -465,6 +706,14 @@ struct MCPServerEditor: View {
                 oauthAuthorizationCode: "",
                 oauthRedirectURI: "",
                 oauthCodeVerifier: "",
+                localConfigurationJSON: MCPLocalStdioConfigurationJSON.example,
+                localEnvironmentVariableIDs: [],
+                localWorkspaceID: nil,
+                localMountIDs: [],
+                localStartupTimeoutSeconds: 30,
+                localInheritEnvironment: true,
+                localLaunchPolicy: .onDemand,
+                localIdlePolicy: .fiveMinutes,
                 transportOption: .http,
                 notes: "",
                 headerOverrideTexts: [""]
@@ -473,6 +722,32 @@ struct MCPServerEditor: View {
 
         let notes = server.notes ?? ""
         switch server.transport {
+        case .localStdio(let configuration):
+            return EditorSnapshot(
+                displayName: server.displayName,
+                endpoint: "",
+                sseEndpoint: "",
+                apiKey: "",
+                tokenEndpoint: "",
+                clientID: "",
+                clientSecret: "",
+                oauthScope: "",
+                oauthGrantType: .clientCredentials,
+                oauthAuthorizationCode: "",
+                oauthRedirectURI: "",
+                oauthCodeVerifier: "",
+                localConfigurationJSON: MCPLocalStdioConfigurationJSON.encode(configuration),
+                localEnvironmentVariableIDs: Set(configuration.environmentVariableIDs),
+                localWorkspaceID: configuration.workspaceID,
+                localMountIDs: Set(configuration.mountIDs),
+                localStartupTimeoutSeconds: configuration.startupTimeoutSeconds,
+                localInheritEnvironment: configuration.inheritLocalLinuxEnvironment,
+                localLaunchPolicy: configuration.launchPolicy,
+                localIdlePolicy: configuration.idlePolicy,
+                transportOption: .localStdio,
+                notes: notes,
+                headerOverrideTexts: [""]
+            )
         case .http(let endpoint, let apiKey, let additionalHeaders):
             return EditorSnapshot(
                 displayName: server.displayName,
@@ -632,6 +907,9 @@ struct MCPServerEditor: View {
         if transportOption.isBuiltIn {
             return false
         }
+        if transportOption == .localStdio {
+            return localConfigurationJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
         return (transportOption == .sse
                 ? sseEndpoint.trimmingCharacters(in: .whitespaces).isEmpty
                 : endpoint.trimmingCharacters(in: .whitespaces).isEmpty) ||
@@ -749,18 +1027,20 @@ struct MCPServerEditor: View {
         case http
         case sse
         case oauth
+        case localStdio
         case builtInSearch
         case builtInAppTool
         case builtInPersonalData
 
         var id: String { rawValue }
-        static var editableCases: [TransportOption] { [.http, .sse, .oauth] }
+        static var editableCases: [TransportOption] { [.http, .sse, .oauth, .localStdio] }
 
         var label: String {
             switch self {
             case .http: return "Streamable HTTP"
             case .sse: return "SSE"
             case .oauth: return "OAuth 2.0"
+            case .localStdio: return NSLocalizedString("本地 stdio", comment: "Local stdio MCP transport label")
             case .builtInSearch: return NSLocalizedString("内置搜索", comment: "Built-in MCP search transport label")
             case .builtInAppTool: return NSLocalizedString("内建本地工具", comment: "Built-in app tool MCP transport label")
             case .builtInPersonalData: return NSLocalizedString("内建个人数据", comment: "Built-in personal data MCP transport label")
@@ -771,7 +1051,7 @@ struct MCPServerEditor: View {
             switch self {
             case .builtInSearch, .builtInAppTool, .builtInPersonalData:
                 return true
-            case .http, .sse, .oauth:
+            case .http, .sse, .oauth, .localStdio:
                 return false
             }
         }
@@ -779,7 +1059,7 @@ struct MCPServerEditor: View {
         var requiresAPIKey: Bool {
             switch self {
             case .http, .sse: return true
-            case .oauth, .builtInSearch, .builtInAppTool, .builtInPersonalData: return false
+            case .oauth, .localStdio, .builtInSearch, .builtInAppTool, .builtInPersonalData: return false
             }
         }
     }
@@ -797,6 +1077,14 @@ struct MCPServerEditor: View {
         var oauthAuthorizationCode: String
         var oauthRedirectURI: String
         var oauthCodeVerifier: String
+        var localConfigurationJSON: String = MCPLocalStdioConfigurationJSON.example
+        var localEnvironmentVariableIDs: Set<UUID> = []
+        var localWorkspaceID: UUID?
+        var localMountIDs: Set<UUID> = []
+        var localStartupTimeoutSeconds: Double = 30
+        var localInheritEnvironment: Bool = true
+        var localLaunchPolicy: MCPLocalStdioLaunchPolicy = .onDemand
+        var localIdlePolicy: MCPLocalStdioIdlePolicy = .fiveMinutes
         var transportOption: TransportOption
         var notes: String
         var headerOverrideTexts: [String]

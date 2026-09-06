@@ -46,10 +46,17 @@ extension AppToolManager {
     static func runSandboxFileOperationOffMainThread<T>(
         _ operation: @escaping () throws -> T
     ) async throws -> T {
-        try await withCheckedThrowingContinuation { continuation in
+        let undoContext = SandboxFileToolSupport.undoContext
+        let fileSpace = SandboxFileToolSupport.fileSpace
+        return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
-                    continuation.resume(returning: try operation())
+                    let result = try SandboxFileToolSupport.$fileSpace.withValue(fileSpace) {
+                        try SandboxFileToolSupport.$undoContext.withValue(undoContext) {
+                            try operation()
+                        }
+                    }
+                    continuation.resume(returning: result)
                 } catch {
                     continuation.resume(throwing: error)
                 }
@@ -161,7 +168,10 @@ extension AppToolManager {
 
     func prettyPrintedJSONString(from payload: [String: Any]) -> String {
         do {
-            let data = try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
+            let data = try JSONSerialization.data(
+                withJSONObject: payload,
+                options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            )
             return String(data: data, encoding: .utf8)
                 ?? NSLocalizedString("错误：工具结果序列化失败。", comment: "App tool result serialization fallback")
         } catch {

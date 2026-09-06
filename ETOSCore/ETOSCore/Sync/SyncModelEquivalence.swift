@@ -49,6 +49,8 @@ extension Model {
     func isEquivalent(to other: Model) -> Bool {
         modelName == other.modelName &&
         displayName == other.displayName &&
+        Model.normalizedPickerGroupName(pickerGroupName) == Model.normalizedPickerGroupName(other.pickerGroupName) &&
+        Model.normalizedAPIFormatOverride(apiFormatOverride) == Model.normalizedAPIFormatOverride(other.apiFormatOverride) &&
         isActivated == other.isActivated &&
         overrideParameters == other.overrideParameters &&
         kind == other.kind &&
@@ -69,7 +71,9 @@ extension ChatSession {
         topicPrompt == other.topicPrompt &&
         enhancedPrompt == other.enhancedPrompt &&
         folderID == other.folderID &&
-        worldbookContextIsolationEnabled == other.worldbookContextIsolationEnabled &&
+        memoryContextIsolationEnabled == other.memoryContextIsolationEnabled &&
+        toolContextIsolationEnabled == other.toolContextIsolationEnabled &&
+        globalSystemPromptIsolationEnabled == other.globalSystemPromptIsolationEnabled &&
         Set(lorebookIDs) == Set(other.lorebookIDs) &&
         Set(tagIDs) == Set(other.tagIDs)
     }
@@ -86,7 +90,9 @@ extension ChatSession {
         topicPrompt == other.topicPrompt &&
         enhancedPrompt == other.enhancedPrompt &&
         folderID == other.folderID &&
-        worldbookContextIsolationEnabled == other.worldbookContextIsolationEnabled &&
+        memoryContextIsolationEnabled == other.memoryContextIsolationEnabled &&
+        toolContextIsolationEnabled == other.toolContextIsolationEnabled &&
+        globalSystemPromptIsolationEnabled == other.globalSystemPromptIsolationEnabled &&
         Set(lorebookIDs) == Set(other.lorebookIDs) &&
         Set(tagIDs) == Set(other.tagIDs)
     }

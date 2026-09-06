@@ -13,7 +13,9 @@ import ETOSCore
 
 struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
     let sourceText: String
+    let sourceUTF8Length: Int
     let normalizedText: String
+    let mathRenderText: String
     let markdownContent: MarkdownContent
     let nativeMathMarkdownContent: MarkdownContent?
     let mathSegments: [ETMathContentSegment]
@@ -35,7 +37,9 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
         let containsMermaid = containsMermaidFence(in: normalizedText)
         return ETPreparedMarkdownRenderPayload(
             sourceText: sourceText,
+            sourceUTF8Length: sourceText.utf8.count,
             normalizedText: normalizedText,
+            mathRenderText: ETMathContentParser.normalizedMathDelimiters(in: normalizedText),
             markdownContent: MarkdownContent(normalizedText),
             nativeMathMarkdownContent: buildNativeMathMarkdownContent(
                 mathSegments: mathSegments,
@@ -185,6 +189,12 @@ actor ETMarkdownPrecomputeWorker {
             return cached
         }
 
+        let signpost = TelemetrySignpost.begin(
+            TelemetrySignpost.markdownInterval(characterCount: source.count)
+        )
+        defer {
+            TelemetrySignpost.end(signpost)
+        }
         let prepared = await ETPreparedMarkdownRenderPayload.build(from: source)
         cache[source] = prepared
         keyOrder.append(source)

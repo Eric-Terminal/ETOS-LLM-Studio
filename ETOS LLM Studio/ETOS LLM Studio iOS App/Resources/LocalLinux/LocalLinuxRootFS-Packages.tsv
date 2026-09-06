@@ -1,0 +1,17 @@
+package	version	origin	license	aports_commit
+alpine-baselayout	3.7.2-r1	alpine-baselayout	GPL-2.0-only	60a7585bbab2fa0f762504eb617dbca90216e31f
+alpine-baselayout-data	3.7.2-r1	alpine-baselayout	GPL-2.0-only	60a7585bbab2fa0f762504eb617dbca90216e31f
+alpine-keys	2.6-r0	alpine-keys	MIT	b9f23becced4d7b3ccc0fa0f28530243ccd314a0
+alpine-release	3.24.1-r0	alpine-base	MIT	0934530484bbcde7498e2c694c710a49616a450e
+apk-tools	3.0.6-r0	apk-tools	GPL-2.0-only	1403ea7a8ae3fb8e5a11207ddb1ff536eb8de912
+busybox	1.37.0-r31	busybox	GPL-2.0-only	c3ef5d10e6ef6528852c51f0564963e2f8c1be19
+busybox-binsh	1.37.0-r31	busybox	GPL-2.0-only	c3ef5d10e6ef6528852c51f0564963e2f8c1be19
+ca-certificates-bundle	20260611-r0	ca-certificates	MPL-2.0 AND MIT	e41cbd2ae991adfe8df298ba8e8e777e90bd0e03
+libapk	3.0.6-r0	apk-tools	GPL-2.0-only	1403ea7a8ae3fb8e5a11207ddb1ff536eb8de912
+libcrypto3	3.5.7-r0	openssl	Apache-2.0	4a4352d83ab03720965454a8c7b30b1b6a996c84
+libssl3	3.5.7-r0	openssl	Apache-2.0	4a4352d83ab03720965454a8c7b30b1b6a996c84
+musl	1.2.6-r2	musl	MIT	f5640d3a10f664c9119720c60515265d3d6f6d01
+musl-utils	1.2.6-r2	musl	MIT AND BSD-2-Clause AND GPL-2.0-or-later	f5640d3a10f664c9119720c60515265d3d6f6d01
+scanelf	1.3.9-r1	pax-utils	GPL-2.0-only	c61801eeacb3ffcd9c2025b09e402153bb93fb39
+ssl_client	1.37.0-r31	busybox	GPL-2.0-only	c3ef5d10e6ef6528852c51f0564963e2f8c1be19
+zlib	1.3.2-r0	zlib	Zlib	f248b33b5943c7dc69bf691031d7612ab2e8ed93

@@ -8,7 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		0704B98E2FA542E60059A02A /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 0704B98D2FA542E60059A02A /* ZIPFoundation */; };
-		072CF2442E92C1B400A8E9D0 /* ETOSCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 073CA6A52E8CFCF3004516A0 /* ETOSCore.framework */; };
+		072CF2442E92C1B400A8E9D0 /* ETOSCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 073CA6A52E8CFCF3004516A0 /* ETOSCore.framework */; platformFilters = (ios, macos, watchos, ); };
+		0747621A30244B2C00C5E7FF /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = 0747621930244B2C00C5E7FF /* Markdown */; };
 		078573792FB0579500B35DB4 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 078573782FB0579500B35DB4 /* GRDB */; };
 		0793DFE72FB8C653001E6866 /* MCP in Frameworks */ = {isa = PBXBuildFile; productRef = 0793DFE62FB8C653001E6866 /* MCP */; };
 		07B5C2B22F6D3B3100A11AA1 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 07B5C2B12F6D3B3000A11AA1 /* AppIntents.framework */; };
@@ -72,6 +73,7 @@
 				078573792FB0579500B35DB4 /* GRDB in Frameworks */,
 				07B5C2B22F6D3B3100A11AA1 /* AppIntents.framework in Frameworks */,
 				0704B98E2FA542E60059A02A /* ZIPFoundation in Frameworks */,
+				0747621A30244B2C00C5E7FF /* Markdown in Frameworks */,
 				0793DFE72FB8C653001E6866 /* MCP in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -155,6 +157,7 @@
 				0704B98D2FA542E60059A02A /* ZIPFoundation */,
 				078573782FB0579500B35DB4 /* GRDB */,
 				0793DFE62FB8C653001E6866 /* MCP */,
+				0747621930244B2C00C5E7FF /* Markdown */,
 			);
 			productName = ETOSCore;
 			productReference = 073CA6A52E8CFCF3004516A0 /* ETOSCore.framework */;
@@ -191,6 +194,7 @@
 				0704B98C2FA542E60059A02A /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 				078573772FB0579500B35DB4 /* XCRemoteSwiftPackageReference "GRDB" */,
 				0793DFE52FB8C653001E6866 /* XCRemoteSwiftPackageReference "swift-sdk" */,
+				0747621830244B2C00C5E7FF /* XCRemoteSwiftPackageReference "swift-markdown" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 073CA6A62E8CFCF3004516A0 /* Products */;
@@ -240,6 +244,11 @@
 /* Begin PBXTargetDependency section */
 		072CF2462E92C1B400A8E9D0 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
+			platformFilters = (
+				ios,
+				macos,
+				watchos,
+			);
 			target = 073CA6A42E8CFCF3004516A0 /* ETOSCore */;
 			targetProxy = 072CF2452E92C1B400A8E9D0 /* PBXContainerItemProxy */;
 		};
@@ -252,18 +261,26 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = K9LDK6LF4H;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.etos.ETOSCoreTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = watchos;
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx watchos watchsimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+				TARGETED_DEVICE_FAMILY = "1,2,4";
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Debug;
 		};
@@ -274,18 +291,22 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = K9LDK6LF4H;
 				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.etos.ETOSCoreTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = watchos;
+				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx watchos watchsimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 4;
+				TARGETED_DEVICE_FAMILY = "1,2,4";
 				VALIDATE_PRODUCT = YES;
-				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Release;
 		};
@@ -742,6 +763,7 @@
 				SDKROOT = auto;
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				STRIP_STYLE = "non-global";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx watchos watchsimulator xros xrsimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -808,6 +830,14 @@
 				minimumVersion = 0.9.20;
 			};
 		};
+		0747621830244B2C00C5E7FF /* XCRemoteSwiftPackageReference "swift-markdown" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/swiftlang/swift-markdown.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.8.0;
+			};
+		};
 		078573772FB0579500B35DB4 /* XCRemoteSwiftPackageReference "GRDB" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/Eric-Terminal/GRDB.swift";
@@ -831,6 +861,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 0704B98C2FA542E60059A02A /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
 			productName = ZIPFoundation;
+		};
+		0747621930244B2C00C5E7FF /* Markdown */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0747621830244B2C00C5E7FF /* XCRemoteSwiftPackageReference "swift-markdown" */;
+			productName = Markdown;
 		};
 		078573782FB0579500B35DB4 /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;

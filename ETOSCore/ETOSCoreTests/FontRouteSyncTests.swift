@@ -10,9 +10,10 @@
 
 import Testing
 import Foundation
+import SwiftUI
 @testable import ETOSCore
 
-@Suite("字体路由与同步测试")
+@Suite("字体路由与同步测试", .serialized)
 struct FontRouteSyncTests {
 
     @Test("字体同步打包会携带字体文件与路由配置")
@@ -143,6 +144,15 @@ struct FontRouteSyncTests {
                         strong: [secondID, secondID],
                         code: []
                     )
+                ],
+                customTextRules: [
+                    ChatAppearanceTextFontRule(
+                        id: "quoted-dialogue",
+                        kind: .delimitedText,
+                        startDelimiter: "“",
+                        endDelimiter: "”",
+                        fontAssetIDs: [invalidID, secondID, secondID, firstID]
+                    )
                 ]
             )
             let encodedIncoming = try JSONEncoder().encode(incoming)
@@ -162,6 +172,7 @@ struct FontRouteSyncTests {
             #expect(merged.emphasis == [firstID])
             #expect(merged.strong.isEmpty)
             #expect(merged.code == [firstID, secondID])
+            #expect(merged.customTextRules.first?.fontAssetIDs == [secondID, firstID])
 
             guard let zhHans = merged.languageBuckets["zh-Hans"] else {
                 Issue.record("缺少语言桶配置")
@@ -197,12 +208,144 @@ struct FontRouteSyncTests {
                     strong: [bodySecond],
                     code: [codeOnly, bodyFirst]
                 )
+            ],
+            customTextRules: [
+                ChatAppearanceTextFontRule(
+                    id: "custom-font-rule",
+                    kind: .regularExpression,
+                    exactText: "[A-Z]+",
+                    fontAssetIDs: [bodySecond, bodyFirst]
+                )
             ]
         )
 
         let encoded = try JSONEncoder().encode(source)
         let decoded = try JSONDecoder().decode(FontRouteConfiguration.self, from: encoded)
         #expect(decoded == source)
+    }
+
+    @Test("旧字体路由配置缺少局部规则时回退为空数组")
+    func testLegacyFontRouteConfigurationDecodesWithoutCustomTextRules() throws {
+        let legacyJSON = """
+        {
+          "body": [],
+          "emphasis": [],
+          "strong": [],
+          "code": [],
+          "languageBuckets": {}
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(
+            FontRouteConfiguration.self,
+            from: Data(legacyJSON.utf8)
+        )
+
+        #expect(decoded.customTextRules.isEmpty)
+    }
+
+    @Test("局部字体规则沿用文字规则匹配方式与列表优先级")
+    func testCustomTextFontRulesUseSharedMatchingPriority() {
+        let firstFontID = UUID()
+        let secondFontID = UUID()
+        let exactRule = ChatAppearanceTextFontRule(
+            id: "exact",
+            kind: .exactText,
+            exactText: "你好",
+            fontAssetIDs: [firstFontID]
+        )
+        let delimitedRule = ChatAppearanceTextFontRule(
+            id: "dialogue",
+            kind: .delimitedText,
+            startDelimiter: "“",
+            endDelimiter: "”",
+            includesDelimiters: true,
+            fontAssetIDs: [secondFontID]
+        )
+
+        let spans = ChatAppearanceTextFontMatcher.spans(
+            in: "“你好”",
+            rules: [exactRule, delimitedRule]
+        )
+
+        #expect(spans.map(\.ruleID) == ["dialogue", "exact", "dialogue"])
+        #expect(spans.map(\.range) == [0..<1, 1..<3, 3..<4])
+    }
+
+    @Test("后台文字渲染会给命中范围应用规则字体")
+    func testAttributedRendererAppliesCustomTextFontRule() async throws {
+        let fontID = UUID()
+        let rule = ChatAppearanceTextFontRule(
+            id: "font-rule",
+            kind: .exactText,
+            exactText: "GPG",
+            fontAssetIDs: [fontID]
+        )
+        let request = ChatAppearanceTextRuleRenderRequest(
+            source: "前 GPG 后",
+            usesMarkdown: false,
+            styleColors: ChatAppearanceTextStyleColors(defaultHex: "000000FF"),
+            fontRules: [
+                ChatAppearanceResolvedTextFontRule(
+                    rule: rule,
+                    postScriptNames: ["Helvetica"]
+                )
+            ]
+        )
+
+        let rendered = try #require(
+            await ChatAppearanceTextRuleRenderer.shared.prepare(request: request)
+        )
+        let fontRuns = rendered.runs.filter { $0.font != nil }
+
+        #expect(fontRuns.contains { String(rendered[$0.range].characters) == "GPG" })
+    }
+
+    @Test("局部字体规则会按规则内部顺序解析已导入字体")
+    func testResolvedTextFontRulesPreserveInternalPriority() async throws {
+        try await withIsolatedFontStore {
+            let firstID = UUID()
+            let secondID = UUID()
+            #expect(FontLibrary.saveAssets([
+                FontAssetRecord(
+                    id: firstID,
+                    fileName: "first.ttf",
+                    checksum: "first",
+                    displayName: "第一字体",
+                    postScriptName: "FirstPS"
+                ),
+                FontAssetRecord(
+                    id: secondID,
+                    fileName: "second.ttf",
+                    checksum: "second",
+                    displayName: "第二字体",
+                    postScriptName: "SecondPS"
+                )
+            ]))
+            #expect(FontLibrary.saveRouteConfiguration(
+                FontRouteConfiguration(
+                    customTextRules: [
+                        ChatAppearanceTextFontRule(
+                            id: "priority",
+                            kind: .exactText,
+                            exactText: "你好",
+                            fontAssetIDs: [secondID, firstID]
+                        )
+                    ]
+                )
+            ))
+            FontLibrary.updateRuntimeSettings(
+                isCustomFontEnabled: true,
+                fallbackScope: .segment,
+                customFontScale: FontLibrary.defaultFontScale
+            )
+            FontLibrary.preloadRuntimeCache(forceReload: true)
+
+            let resolved = try #require(FontLibrary.resolvedTextFontRules().first)
+
+            #expect(resolved.rule.id == "priority")
+            #expect(resolved.postScriptNames == ["SecondPS", "FirstPS"])
+        }
     }
 
     @Test("当候选字体无法覆盖样本文本时返回 nil（系统字体兜底）")
@@ -263,6 +406,7 @@ struct FontRouteSyncTests {
             } else {
                 Persistence.deleteAppConfig(key: key.rawValue)
             }
+            reloadFontRuntimeCacheFromPersistence()
         }
 
         try await withIsolatedFontStore {
@@ -281,16 +425,18 @@ struct FontRouteSyncTests {
             #expect(FontLibrary.saveRouteConfiguration(.init(body: [assetID], emphasis: [], strong: [], code: [])))
 
             Persistence.writeAppConfig(key: key.rawValue, integer: 1, typeHint: key.typeHint)
+            reloadFontRuntimeCacheFromPersistence()
             #expect(FontLibrary.fallbackPostScriptNames(for: .body) == ["GlobalSwitchPS"])
 
             Persistence.writeAppConfig(key: key.rawValue, integer: 0, typeHint: key.typeHint)
+            reloadFontRuntimeCacheFromPersistence()
             #expect(FontLibrary.fallbackPostScriptNames(for: .body).isEmpty)
             #expect(FontLibrary.resolvePostScriptName(for: .body, sampleText: "The quick brown fox") == nil)
         }
     }
 
-    @Test("自定义字体字号比例会限制范围并刷新适配缓存标记")
-    func testCustomFontScaleIsClampedAndIncludedInAdapterCacheToken() async throws {
+    @Test("全局字号比例会限制范围并刷新适配缓存标记")
+    func testGlobalFontScaleIsClampedAndIncludedInAdapterCacheToken() async throws {
         let key = AppConfigKey.fontCustomScale
         let previousValue = Persistence.readAppConfigReal(key: key.rawValue)
         defer {
@@ -299,35 +445,145 @@ struct FontRouteSyncTests {
             } else {
                 Persistence.deleteAppConfig(key: key.rawValue)
             }
-            FontLibrary.preloadRuntimeCache(forceReload: true)
+            reloadFontRuntimeCacheFromPersistence()
         }
 
         try await withIsolatedFontStore {
             Persistence.deleteAppConfig(key: key.rawValue)
-            FontLibrary.preloadRuntimeCache(forceReload: true)
+            reloadFontRuntimeCacheFromPersistence()
             #expect(FontLibrary.customFontScale == FontLibrary.defaultFontScale)
             let defaultToken = FontLibrary.adapterCacheToken()
 
             Persistence.writeAppConfig(key: key.rawValue, real: 1.75, typeHint: key.typeHint)
+            reloadFontRuntimeCacheFromPersistence()
             #expect(FontLibrary.customFontScale == 1.75)
             #expect(FontLibrary.scaledPointSize(16) == 28)
             #expect(FontLibrary.effectiveFontScale(1.75, isCustomFontEnabled: true) == 1.75)
-            #expect(FontLibrary.effectiveFontScale(1.75, isCustomFontEnabled: false) == FontLibrary.defaultFontScale)
+            #expect(FontLibrary.effectiveFontScale(1.75, isCustomFontEnabled: false) == 1.75)
             #expect(FontLibrary.effectiveFontScale(isCustomFontEnabled: true) == 1.75)
-            #expect(FontLibrary.effectiveFontScale(isCustomFontEnabled: false) == FontLibrary.defaultFontScale)
+            #expect(FontLibrary.effectiveFontScale(isCustomFontEnabled: false) == 1.75)
             #expect(FontLibrary.scaledPointSize(16, scale: 1.75, isCustomFontEnabled: true) == 28)
-            #expect(FontLibrary.scaledPointSize(16, scale: 1.75, isCustomFontEnabled: false) == 16)
+            #expect(FontLibrary.scaledPointSize(16, scale: 1.75, isCustomFontEnabled: false) == 28)
             #expect(FontLibrary.scaledPointSize(16, isCustomFontEnabled: true) == 28)
-            #expect(FontLibrary.scaledPointSize(16, isCustomFontEnabled: false) == 16)
+            #expect(FontLibrary.scaledPointSize(16, isCustomFontEnabled: false) == 28)
             #expect(FontLibrary.adapterCacheToken() != defaultToken)
 
             Persistence.writeAppConfig(key: key.rawValue, real: 9.0, typeHint: key.typeHint)
+            reloadFontRuntimeCacheFromPersistence()
             #expect(FontLibrary.customFontScale == FontLibrary.maximumFontScale)
             #expect(FontLibrary.scaledPointSize(17) == 34)
 
             Persistence.writeAppConfig(key: key.rawValue, real: 0.1, typeHint: key.typeHint)
+            reloadFontRuntimeCacheFromPersistence()
             #expect(FontLibrary.customFontScale == FontLibrary.minimumFontScale)
             #expect(FontLibrary.scaledPointSize(20) == 10)
+        }
+    }
+
+    @Test("聊天正文行距按平台保留独立默认值与范围")
+    func testChatLineSpacingDefaultsAndClamping() {
+        #expect(AppConfigKey.fontLineSpacingEmIOS.defaultValue == .real(0.2))
+        #expect(AppConfigKey.fontLineSpacingEmWatchOS.defaultValue == .real(0.15))
+        #expect(
+            FontLibrary.normalizedLineSpacingEm(
+                .nan,
+                fallback: FontLibrary.defaultIOSLineSpacingEm
+            ) == FontLibrary.defaultIOSLineSpacingEm
+        )
+        #expect(
+            FontLibrary.normalizedLineSpacingEm(
+                .nan,
+                fallback: FontLibrary.defaultWatchLineSpacingEm
+            ) == FontLibrary.defaultWatchLineSpacingEm
+        )
+        #expect(
+            FontLibrary.normalizedLineSpacingEm(
+                -1,
+                fallback: FontLibrary.defaultIOSLineSpacingEm
+            ) == FontLibrary.minimumLineSpacingEm
+        )
+        #expect(
+            FontLibrary.normalizedLineSpacingEm(
+                0.225,
+                fallback: FontLibrary.defaultIOSLineSpacingEm
+            ) == 0.225
+        )
+        #expect(
+            FontLibrary.normalizedLineSpacingEm(
+                2,
+                fallback: FontLibrary.defaultIOSLineSpacingEm
+            ) == FontLibrary.maximumLineSpacingEm
+        )
+        let customFontSpacing = FontLibrary.lineSpacingPoints(
+            basePointSize: 17,
+            lineSpacingEm: 0.2,
+            fontScale: 1.5,
+            isCustomFontEnabled: true,
+            fallbackLineSpacingEm: FontLibrary.defaultIOSLineSpacingEm
+        )
+        let systemFontSpacing = FontLibrary.lineSpacingPoints(
+            basePointSize: 17,
+            lineSpacingEm: 0.2,
+            fontScale: 1.5,
+            isCustomFontEnabled: false,
+            fallbackLineSpacingEm: FontLibrary.defaultIOSLineSpacingEm
+        )
+        let compactMarkdownSpacing = FontLibrary.lineSpacingPoints(
+            basePointSize: 17,
+            lineSpacingEm: 0.025,
+            fontScale: 1,
+            isCustomFontEnabled: false,
+            fallbackLineSpacingEm: FontLibrary.defaultIOSLineSpacingEm
+        )
+        let spaciousMarkdownSpacing = FontLibrary.lineSpacingPoints(
+            basePointSize: 17,
+            lineSpacingEm: 0.425,
+            fontScale: 1,
+            isCustomFontEnabled: false,
+            fallbackLineSpacingEm: FontLibrary.defaultIOSLineSpacingEm
+        )
+        let maximumMarkdownSpacing = FontLibrary.lineSpacingPoints(
+            basePointSize: 17,
+            lineSpacingEm: 1,
+            fontScale: 1,
+            isCustomFontEnabled: false,
+            fallbackLineSpacingEm: FontLibrary.defaultIOSLineSpacingEm
+        )
+        #expect(abs(customFontSpacing - 5.1) < 0.000_1)
+        #expect(abs(systemFontSpacing - 5.1) < 0.000_1)
+        #expect(abs(compactMarkdownSpacing - 0.425) < 0.000_1)
+        #expect(abs(spaciousMarkdownSpacing - 7.225) < 0.000_1)
+        #expect(abs(maximumMarkdownSpacing - 17) < 0.000_1)
+        #expect(spaciousMarkdownSpacing - compactMarkdownSpacing > 6)
+    }
+
+    @Test("字体渲染读取只使用内存快照")
+    func testFontRenderingReadsOnlyRuntimeSnapshot() async throws {
+        let key = AppConfigKey.fontCustomScale
+        let previousValue = Persistence.readAppConfigReal(key: key.rawValue)
+        defer {
+            if let previousValue {
+                Persistence.writeAppConfig(key: key.rawValue, real: previousValue, typeHint: key.typeHint)
+            } else {
+                Persistence.deleteAppConfig(key: key.rawValue)
+            }
+            reloadFontRuntimeCacheFromPersistence()
+        }
+
+        try await withIsolatedFontStore {
+            Persistence.writeAppConfig(key: key.rawValue, real: 1.0, typeHint: key.typeHint)
+            reloadFontRuntimeCacheFromPersistence()
+            let initialToken = FontLibrary.adapterCacheToken()
+
+            Persistence.writeAppConfig(key: key.rawValue, real: 1.75, typeHint: key.typeHint)
+
+            #expect(FontLibrary.adapterCacheToken() == initialToken)
+            #expect(FontLibrary.customFontScale == 1.0)
+            #expect(FontLibrary.scaledPointSize(16) == 16)
+
+            reloadFontRuntimeCacheFromPersistence()
+            #expect(FontLibrary.adapterCacheToken() != initialToken)
+            #expect(FontLibrary.customFontScale == 1.75)
         }
     }
 
@@ -341,6 +597,7 @@ struct FontRouteSyncTests {
             } else {
                 Persistence.deleteAppConfig(key: key.rawValue)
             }
+            reloadFontRuntimeCacheFromPersistence()
         }
 
         try await withIsolatedFontStore {
@@ -354,9 +611,11 @@ struct FontRouteSyncTests {
             let mixedSample = "A\u{0378}"
 
             Persistence.writeAppConfig(key: key.rawValue, text: FontFallbackScope.segment.rawValue, typeHint: key.typeHint)
+            reloadFontRuntimeCacheFromPersistence()
             #expect(FontLibrary.resolvePostScriptName(for: .body, sampleText: mixedSample) == nil)
 
             Persistence.writeAppConfig(key: key.rawValue, text: FontFallbackScope.character.rawValue, typeHint: key.typeHint)
+            reloadFontRuntimeCacheFromPersistence()
             #expect(
                 FontLibrary.resolvePostScriptName(for: .body, sampleText: mixedSample) == imported.postScriptName
             )
@@ -373,6 +632,7 @@ struct FontRouteSyncTests {
             } else {
                 Persistence.deleteAppConfig(key: key.rawValue)
             }
+            reloadFontRuntimeCacheFromPersistence()
         }
 
         try await withIsolatedFontStore {
@@ -399,8 +659,9 @@ struct FontRouteSyncTests {
             FontLibrary.updateChain([invalidID, valid.id], for: .body)
 
             Persistence.writeAppConfig(key: key.rawValue, text: FontFallbackScope.segment.rawValue, typeHint: key.typeHint)
+            reloadFontRuntimeCacheFromPersistence()
             #expect(
-                FontLibrary.resolvePostScriptName(for: .body, sampleText: "The quick brown fox") == valid.postScriptName
+                FontLibrary.resolvePostScriptName(for: .body, sampleText: "∞∑") == valid.postScriptName
             )
         }
     }
@@ -437,6 +698,7 @@ struct FontRouteSyncTests {
 
         try? fileManager.removeItem(at: fontDirectory)
         try fileManager.createDirectory(at: fontDirectory, withIntermediateDirectories: true)
+        reloadFontRuntimeCacheFromPersistence()
 
         defer {
             try? fileManager.removeItem(at: fontDirectory)
@@ -444,9 +706,29 @@ struct FontRouteSyncTests {
                 try? fileManager.copyItem(at: backupDirectory, to: fontDirectory)
             }
             try? fileManager.removeItem(at: backupRoot)
+            reloadFontRuntimeCacheFromPersistence()
         }
 
         try await body()
+    }
+
+    private func reloadFontRuntimeCacheFromPersistence() {
+        let isCustomFontEnabled = Persistence.readAppConfigInteger(
+            key: AppConfigKey.fontUseCustomFonts.rawValue
+        ).map { $0 != 0 } ?? true
+        let fallbackScope = Persistence.readAppConfigText(
+            key: AppConfigKey.fontFallbackScope.rawValue
+        ).flatMap(FontFallbackScope.init(rawValue:)) ?? .segment
+        let customFontScale = Persistence.readAppConfigReal(
+            key: AppConfigKey.fontCustomScale.rawValue
+        ) ?? FontLibrary.defaultFontScale
+
+        FontLibrary.updateRuntimeSettings(
+            isCustomFontEnabled: isCustomFontEnabled,
+            fallbackScope: fallbackScope,
+            customFontScale: customFontScale
+        )
+        FontLibrary.preloadRuntimeCache(forceReload: true)
     }
 
     private func loadSystemFontFixture() throws -> (data: Data, fileName: String) {

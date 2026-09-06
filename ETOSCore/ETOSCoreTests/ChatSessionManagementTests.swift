@@ -43,6 +43,7 @@ extension ChatServiceTests {
         chatService.chatSessionsSubject.send([onlySession])
         chatService.setCurrentSession(onlySession)
         Persistence.saveChatSessions([onlySession])
+        #expect(Persistence.saveLocalAgentMode(.agent, sessionID: onlySession.id))
 
         chatService.createNewSession()
 
@@ -52,6 +53,29 @@ extension ChatServiceTests {
         #expect(temporarySessions.count == 1)
         #expect(sessions.first?.isTemporary == true)
         #expect(chatService.currentSessionSubject.value?.id == sessions.first?.id)
+        if let newSessionID = sessions.first?.id {
+            #expect(Persistence.localAgentMode(sessionID: newSessionID) == .agent)
+        }
+    }
+
+    @Test("新会话继承当前模式且历史会话保持独立")
+    func newSessionInheritsCurrentAgentModeWithoutChangingHistory() throws {
+        let reusableTemporary = try #require(chatService.chatSessionsSubject.value.first)
+        let source = chatService.createSavedSession(name: "Agent 来源会话")
+        #expect(Persistence.saveLocalAgentMode(.agent, sessionID: source.id))
+        #expect(Persistence.saveLocalAgentMode(.chat, sessionID: reusableTemporary.id))
+
+        chatService.createNewSession()
+
+        let inheritedSession = try #require(chatService.currentSessionSubject.value)
+        #expect(inheritedSession.id == reusableTemporary.id)
+        #expect(Persistence.localAgentMode(sessionID: inheritedSession.id) == .agent)
+
+        #expect(Persistence.saveLocalAgentMode(.chat, sessionID: inheritedSession.id))
+        chatService.setCurrentSession(source)
+        #expect(Persistence.localAgentMode(sessionID: source.id) == .agent)
+        chatService.setCurrentSession(inheritedSession)
+        #expect(Persistence.localAgentMode(sessionID: inheritedSession.id) == .chat)
     }
 
     @Test("Switch Session")
@@ -146,8 +170,9 @@ extension ChatServiceTests {
     }
 
     @Test("Branch Session With Message Copy")
-    func testBranchSession() {
+    func testBranchSession() throws {
         let sourceSession = chatService.currentSessionSubject.value!
+        #expect(Persistence.saveLocalAgentMode(.agent, sessionID: sourceSession.id))
         let message = ChatMessage(role: .user, content: "message to be copied")
         Persistence.saveMessages([message], for: sourceSession.id)
         let initialCount = chatService.chatSessionsSubject.value.count
@@ -163,6 +188,8 @@ extension ChatServiceTests {
         #expect(newCurrentSession?.name.contains("分支:") == true)
         #expect(newSessionMessages.count == 1)
         #expect(newSessionMessages.first?.content == message.content)
+        let branchSession = try #require(newCurrentSession)
+        #expect(Persistence.localAgentMode(sessionID: branchSession.id) == .agent)
     }
 
     @Test("复制历史创建分支会复用文件附件引用")

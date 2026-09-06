@@ -32,6 +32,9 @@ struct SessionMetaPayload: Codable {
     let lorebookIDs: [UUID]
     let tagIDs: [UUID]?
     let worldbookContextIsolationEnabled: Bool?
+    let memoryContextIsolationEnabled: Bool?
+    let toolContextIsolationEnabled: Bool?
+    let globalSystemPromptIsolationEnabled: Bool?
     let conversationSummary: String?
     let conversationSummaryUpdatedAt: String?
 }
@@ -47,6 +50,21 @@ struct SessionRecordFilePayload: Codable {
     let session: SessionMetaPayload
     let prompts: SessionPromptsPayload
     let messages: [ChatMessage]
+    let continuationContext: ConversationContinuationContext?
+
+    init(
+        schemaVersion: Int,
+        session: SessionMetaPayload,
+        prompts: SessionPromptsPayload,
+        messages: [ChatMessage],
+        continuationContext: ConversationContinuationContext? = nil
+    ) {
+        self.schemaVersion = schemaVersion
+        self.session = session
+        self.prompts = prompts
+        self.messages = messages
+        self.continuationContext = continuationContext
+    }
 }
 
 struct LegacyMessagesReadResult {

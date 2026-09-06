@@ -44,8 +44,14 @@ extension MCPIntegrationView {
 
     @ViewBuilder
     var moreSection: some View {
-        if !manager.restorableBuiltInServers.isEmpty {
-            Section(NSLocalizedString("更多", comment: "")) {
+        Section(NSLocalizedString("更多", comment: "")) {
+            NavigationLink {
+                MCPConfigurationTransferView()
+            } label: {
+                Label(NSLocalizedString("导入与导出配置", comment: "MCP configuration transfer link"), systemImage: "arrow.up.arrow.down.square")
+            }
+
+            if !manager.restorableBuiltInServers.isEmpty {
                 NavigationLink {
                     MCPBuiltInServerRestoreView()
                 } label: {
@@ -118,6 +124,8 @@ extension MCPIntegrationView {
             return (NSLocalizedString("HTTP", comment: "MCP server transport badge"), .blue)
         case .httpSSE:
             return (NSLocalizedString("SSE", comment: "MCP server transport badge"), .purple)
+        case .localStdio:
+            return (NSLocalizedString("本地", comment: "MCP server transport badge"), .green)
         case .oauth:
             return (NSLocalizedString("OAuth", comment: "MCP server transport badge"), .blue)
         }
@@ -286,7 +294,10 @@ extension MCPIntegrationView {
                         .etFont(.caption2)
                         .foregroundStyle(.tertiary)
                         Button(NSLocalizedString("取消调用", comment: ""), role: .destructive) {
-                            manager.cancelToolCall(callID: call.id, reason: "用户在 MCP 工具箱取消")
+                            manager.cancelToolCall(
+                                callID: call.id,
+                                reason: NSLocalizedString("用户在 MCP 工具箱取消", comment: "MCP toolbox cancellation reason")
+                            )
                         }
                         .buttonStyle(.bordered)
                     }
@@ -402,6 +413,56 @@ extension MCPIntegrationView {
             }
         }
         .navigationTitle(NSLocalizedString("日志", comment: ""))
+        .guideSettingsPageContext(
+            id: "mcp-logs",
+            title: NSLocalizedString("日志", comment: "MCP 日志向导上下文标题"),
+            documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
+            settings: mcpLogGuideSettings
+        )
+    }
+
+    private var mcpLogGuideSettings: [GuidePageSetting] {
+        [
+            .readOnly(
+                "server_logs",
+                label: NSLocalizedString("服务器日志", comment: "MCP 日志向导字段"),
+                value: {
+                    .array(manager.logEntries.suffix(20).map { entry in
+                        .dictionary([
+                            "level": .string(entry.level.rawValue),
+                            "logger": .string(entry.logger ?? ""),
+                            "data": GuideSecretRedactor.redact(entry.data ?? .null)
+                        ])
+                    })
+                }
+            ),
+            .readOnly(
+                "governance_logs",
+                label: NSLocalizedString("治理日志记录", comment: "MCP 日志向导字段"),
+                value: {
+                    .array(manager.governanceLogEntries.suffix(40).map { entry in
+                        .dictionary([
+                            "timestamp": .double(entry.timestamp.timeIntervalSince1970),
+                            "level": .string(entry.level.rawValue),
+                            "category": .string(entry.category.rawValue),
+                            "server_name": .string(entry.serverDisplayName ?? ""),
+                            "message": .string(entry.message),
+                            "payload": GuideSecretRedactor.redact(entry.payload ?? .null)
+                        ])
+                    })
+                }
+            ),
+            .readOnly(
+                "has_latest_output",
+                label: NSLocalizedString("存在最新响应", comment: "MCP 日志向导字段"),
+                value: { .bool(manager.lastOperationOutput != nil) }
+            ),
+            .readOnly(
+                "has_latest_error",
+                label: NSLocalizedString("存在最新错误", comment: "MCP 日志向导字段"),
+                value: { .bool(manager.lastOperationError != nil) }
+            )
+        ]
     }
 
     private var mcpLogEntryCount: Int {

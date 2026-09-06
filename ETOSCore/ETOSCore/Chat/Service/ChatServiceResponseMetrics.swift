@@ -30,7 +30,10 @@ extension ChatService {
             totalTokens: incoming.totalTokens ?? existing?.totalTokens,
             thinkingTokens: incoming.thinkingTokens ?? existing?.thinkingTokens,
             cacheWriteTokens: incoming.cacheWriteTokens ?? existing?.cacheWriteTokens,
-            cacheReadTokens: incoming.cacheReadTokens ?? existing?.cacheReadTokens
+            cacheWriteFiveMinuteTokens: incoming.cacheWriteFiveMinuteTokens ?? existing?.cacheWriteFiveMinuteTokens,
+            cacheWriteOneHourTokens: incoming.cacheWriteOneHourTokens ?? existing?.cacheWriteOneHourTokens,
+            cacheReadTokens: incoming.cacheReadTokens ?? existing?.cacheReadTokens,
+            uncachedInputTokens: incoming.uncachedInputTokens ?? existing?.uncachedInputTokens
         )
     }
 

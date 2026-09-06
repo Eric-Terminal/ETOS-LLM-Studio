@@ -372,6 +372,9 @@ extension ChatView {
                 viewModel.setCurrentSession(newSession)
                 dismissSessionPickerAfterSelection()
             },
+            onCompress: {
+                presentContextCompression(for: session)
+            },
             onDeleteLastMessage: {
                 viewModel.deleteLastMessage(for: session)
             },
@@ -383,11 +386,15 @@ extension ChatView {
                 sessionDraftName = session.name
             },
             onInfo: {
-                sessionInfo = SessionPickerInfoPayload(
-                    session: session,
-                    messageCount: viewModel.messageCount(for: session),
-                    isCurrent: isCurrent
-                )
+                Task { @MainActor in
+                    let messageCount = await viewModel.messageCount(for: session)
+                    guard !Task.isCancelled else { return }
+                    sessionInfo = SessionPickerInfoPayload(
+                        session: session,
+                        messageCount: messageCount,
+                        isCurrent: isCurrent
+                    )
+                }
             },
             onExport: { format, includeReasoning, includeSystemPrompt in
                 exportSession(
@@ -398,6 +405,16 @@ extension ChatView {
                 )
             }
         )
+    }
+
+    func presentContextCompression(for session: ChatSession) {
+        guard !session.isTemporary else { return }
+        if activeChatPickerSheet == .session {
+            pendingContextCompressionSourceSession = session
+            activeChatPickerSheet = nil
+        } else {
+            contextCompressionSourceSession = session
+        }
     }
 
     func sessionPickerSearchResultRow(_ result: SessionHistorySearchResult) -> some View {
@@ -452,6 +469,9 @@ extension ChatView {
     }
 
     func selectSessionFromPicker(_ session: ChatSession, messageOrdinal: Int? = nil) {
+        if messageOrdinal != nil {
+            awaitsChatPickerDismissalForMessageJump = !usesLandscapeSessionSidebar
+        }
         if session.isTemporary {
             editingSessionID = nil
             if let messageOrdinal {

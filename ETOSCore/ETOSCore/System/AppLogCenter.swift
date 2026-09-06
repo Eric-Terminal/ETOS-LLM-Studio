@@ -11,7 +11,6 @@
 
 import Foundation
 import Combine
-import os.log
 
 public enum AppLogChannel: String, Codable, CaseIterable, Sendable {
     case developer
@@ -56,6 +55,7 @@ public struct AppLogEvent: Identifiable, Codable, Hashable, Sendable {
     public let action: String
     public let message: String
     public let payload: [String: String]?
+    public let presentation: AppLogPresentation?
 
     public init(
         id: UUID = UUID(),
@@ -65,7 +65,8 @@ public struct AppLogEvent: Identifiable, Codable, Hashable, Sendable {
         category: String,
         action: String,
         message: String,
-        payload: [String: String]? = nil
+        payload: [String: String]? = nil,
+        presentation: AppLogPresentation? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -75,6 +76,7 @@ public struct AppLogEvent: Identifiable, Codable, Hashable, Sendable {
         self.action = action
         self.message = message
         self.payload = payload
+        self.presentation = presentation
     }
 }
 
@@ -337,14 +339,17 @@ public final class AppLogCenter: ObservableObject {
     @Published public private(set) var userLogs: [AppLogEvent] = []
     @Published public private(set) var logDayFolders: [AppLogDayFolder] = []
 
-    private let systemLogger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "AppLogCenter")
     private var mergedBuffer = AppLogRingBuffer(capacity: 2_000)
     private var developerBuffer = AppLogRingBuffer(capacity: 500)
     private var userBuffer = AppLogRingBuffer(capacity: 500)
     private let fileStore: AppLogFileStore
     private var didLoadPersistedLogs = false
+    private var appendRevision: UInt64 = 0
+    private var destructiveRevision: UInt64 = 0
+    // 所有落盘修改按用户操作顺序串行，避免清除后旧写入任务重新创建日志。
+    private var persistenceTask: Task<Void, Never>?
 
-    private init(fileStore: AppLogFileStore = AppLogFileStore(), shouldAutoLoad: Bool = true) {
+    init(fileStore: AppLogFileStore = AppLogFileStore(), shouldAutoLoad: Bool = true) {
         self.fileStore = fileStore
 
         if shouldAutoLoad {
@@ -372,7 +377,6 @@ public final class AppLogCenter: ObservableObject {
             payload: payload
         )
         append(event, persist: true)
-        mirrorToConsole(event)
     }
 
     public func logUserOperation(
@@ -394,26 +398,33 @@ public final class AppLogCenter: ObservableObject {
         append(event, persist: true)
     }
 
-    public func clear(channel: AppLogChannel) {
-        switch channel {
-        case .developer:
-            developerBuffer.removeAll()
-            developerLogs = []
-        case .user:
-            userBuffer.removeAll()
-            userLogs = []
-        }
-        let filteredMerged = mergedLogs.filter { $0.channel != channel }
-        mergedBuffer.replace(with: filteredMerged)
-        mergedLogs = mergedBuffer.values
+    func logRequestTransaction(_ snapshot: RequestTransactionLogSnapshot) {
+        let event = AppLogEvent(
+            channel: .developer,
+            level: snapshot.level,
+            category: "HTTP",
+            action: snapshot.action,
+            message: snapshot.message,
+            payload: snapshot.payload,
+            presentation: .requestTransaction
+        )
+        append(event, persist: true)
+    }
 
-        Task {
-            await fileStore.clear(channel: channel)
-            await refreshLogFolders()
+    public func clear(channel: AppLogChannel) {
+        destructiveRevision &+= 1
+        let filteredMerged = mergedLogs.compactMap { $0.removingVisibility(in: channel) }
+        applySnapshot(filteredMerged)
+
+        enqueuePersistenceOperation { [weak self] in
+            guard let self else { return }
+            await self.fileStore.clear(channel: channel)
+            await self.refreshLogFolders()
         }
     }
 
     public func clearAll() {
+        destructiveRevision &+= 1
         mergedBuffer.removeAll()
         developerBuffer.removeAll()
         userBuffer.removeAll()
@@ -422,9 +433,10 @@ public final class AppLogCenter: ObservableObject {
         userLogs = []
         logDayFolders = []
 
-        Task {
-            await fileStore.clearAll()
-            await refreshLogFolders()
+        enqueuePersistenceOperation { [weak self] in
+            guard let self else { return }
+            await self.fileStore.clearAll()
+            await self.refreshLogFolders()
         }
     }
 
@@ -449,7 +461,8 @@ public final class AppLogCenter: ObservableObject {
     }
 
     public func deleteDayFolder(_ dayFolder: AppLogDayFolder) {
-        Task { [weak self] in
+        destructiveRevision &+= 1
+        enqueuePersistenceOperation { [weak self] in
             guard let self else { return }
             await self.fileStore.deleteDayFolder(day: dayFolder.day)
             await self.reloadPersistedLogsSnapshot()
@@ -458,7 +471,8 @@ public final class AppLogCenter: ObservableObject {
     }
 
     public func deleteRunFile(_ runFile: AppLogRunFile) {
-        Task { [weak self] in
+        destructiveRevision &+= 1
+        enqueuePersistenceOperation { [weak self] in
             guard let self else { return }
             await self.fileStore.deleteRunFile(relativePath: runFile.relativePath)
             await self.reloadPersistedLogsSnapshot()
@@ -474,34 +488,56 @@ public final class AppLogCenter: ObservableObject {
         guard !didLoadPersistedLogs else { return }
         didLoadPersistedLogs = true
 
-        await reloadPersistedLogsSnapshot()
+        await reloadPersistedLogsSnapshot(preservingInMemoryEvents: true)
     }
 
     private func append(_ event: AppLogEvent, persist: Bool) {
+        appendRevision &+= 1
         mergedBuffer.append(event)
         mergedLogs = mergedBuffer.values
 
-        switch event.channel {
-        case .developer:
-            developerBuffer.append(event)
-            developerLogs = developerBuffer.values
-        case .user:
-            userBuffer.append(event)
-            userLogs = userBuffer.values
-        }
+        appendToPresentationBuffers(event)
+        developerLogs = developerBuffer.values
+        userLogs = userBuffer.values
 
         if persist {
-            Task { [weak self] in
+            enqueuePersistenceOperation { [weak self] in
                 guard let self else { return }
-                await self.fileStore.append(event)
-                await self.refreshLogFolders()
+                if let runSummary = await self.fileStore.append(event) {
+                    self.applyIncrementalRunSummary(runSummary)
+                }
             }
         }
     }
 
-    private func reloadPersistedLogsSnapshot() async {
+    private func enqueuePersistenceOperation(
+        _ operation: @escaping @MainActor () async -> Void
+    ) {
+        let precedingTask = persistenceTask
+        persistenceTask = Task { @MainActor in
+            await precedingTask?.value
+            await operation()
+        }
+    }
+
+    func waitForPendingPersistence() async {
+        await persistenceTask?.value
+    }
+
+    private func reloadPersistedLogsSnapshot(
+        preservingInMemoryEvents: Bool = false
+    ) async {
+        let startingAppendRevision = appendRevision
+        let startingDestructiveRevision = destructiveRevision
         let loaded = await fileStore.loadRecentEvents()
-        let sorted = loaded.sorted { lhs, rhs in
+        guard destructiveRevision == startingDestructiveRevision else { return }
+
+        var events = loaded
+        if preservingInMemoryEvents || appendRevision != startingAppendRevision {
+            let loadedIDs = Set(loaded.map(\.id))
+            events.append(contentsOf: mergedBuffer.values.filter { !loadedIDs.contains($0.id) })
+        }
+        let sorted = events.sorted { lhs, rhs in
             lhs.timestamp < rhs.timestamp
         }
         applySnapshot(sorted)
@@ -515,40 +551,44 @@ public final class AppLogCenter: ObservableObject {
         userBuffer.removeAll()
 
         for event in mergedBuffer.values {
-            switch event.channel {
-            case .developer:
-                developerBuffer.append(event)
-            case .user:
-                userBuffer.append(event)
-            }
+            appendToPresentationBuffers(event)
         }
 
         developerLogs = developerBuffer.values
         userLogs = userBuffer.values
     }
 
-    private func mirrorToConsole(_ event: AppLogEvent) {
-        guard event.channel == .developer else { return }
+    private func appendToPresentationBuffers(_ event: AppLogEvent) {
+        if let developerEvent = event.presented(in: .developer) {
+            developerBuffer.append(developerEvent)
+        }
+        if let userEvent = event.presented(in: .user) {
+            userBuffer.append(userEvent)
+        }
+    }
 
-        let payloadText: String
-        if let payload = event.payload, !payload.isEmpty {
-            payloadText = " payload=\(payload.description)"
+    private func applyIncrementalRunSummary(_ runSummary: AppLogRunFile) {
+        var folders = logDayFolders
+        if let dayIndex = folders.firstIndex(where: { $0.day == runSummary.day }) {
+            var runs = folders[dayIndex].runs
+            if let runIndex = runs.firstIndex(where: { $0.id == runSummary.id }) {
+                guard runs[runIndex].totalEventCount <= runSummary.totalEventCount else { return }
+                runs[runIndex] = runSummary
+            } else {
+                runs.append(runSummary)
+            }
+            runs.sort { lhs, rhs in
+                if lhs.createdAt == rhs.createdAt {
+                    return lhs.fileName > rhs.fileName
+                }
+                return lhs.createdAt > rhs.createdAt
+            }
+            folders[dayIndex] = AppLogDayFolder(day: runSummary.day, runs: runs)
         } else {
-            payloadText = ""
+            folders.append(AppLogDayFolder(day: runSummary.day, runs: [runSummary]))
         }
-
-        let merged = "[\(event.category)][\(event.action)] \(event.message)\(payloadText)"
-
-        switch event.level {
-        case .debug:
-            systemLogger.debug("\(merged, privacy: .public)")
-        case .info:
-            systemLogger.info("\(merged, privacy: .public)")
-        case .warning:
-            systemLogger.warning("\(merged, privacy: .public)")
-        case .error:
-            systemLogger.error("\(merged, privacy: .public)")
-        }
+        folders.sort { $0.day > $1.day }
+        logDayFolders = folders
     }
 }
 
@@ -581,6 +621,13 @@ enum AppLogRedactor {
         NSLocalizedString("[已隐藏]", comment: "App log redaction placeholder")
     }
 
+    static var streamingResponseNotRecordedToken: String {
+        NSLocalizedString(
+            "[流式响应原文未记录；请在发送前开启“记录请求明文消息”]",
+            comment: "Streaming response body was not retained for request logs"
+        )
+    }
+
     // 关键字段统一占位，避免持久化聊天敏感内容。
     private static let sensitiveFragments = [
         "message", "messages", "content", "prompt", "input", "output", "text"
@@ -593,14 +640,48 @@ enum AppLogRedactor {
         "input",
         "prompt",
         "system",
-        "system_instruction"
+        "system_instruction",
+        "text",
+        "arguments",
+        "tool_arguments",
+        "reasoning",
+        "reasoning_content",
+        "thinking"
     ]
     private static let requestBodyPlainMessageKeys: Set<String> = [
         "message",
         "messages",
         "content",
         "contents",
-        "input"
+        "input",
+        "prompt",
+        "system",
+        "system_instruction",
+        "text",
+        "arguments",
+        "tool_arguments",
+        "reasoning",
+        "reasoning_content",
+        "thinking"
+    ]
+    private static let responseBodySensitiveKeys: Set<String> = [
+        "message",
+        "messages",
+        "content",
+        "contents",
+        "text",
+        "output_text",
+        "input_text",
+        "reasoning",
+        "reasoning_content",
+        "thinking",
+        "thought",
+        "arguments",
+        "tool_arguments",
+        "prompt",
+        "delta",
+        "generated_text",
+        "revised_prompt"
     ]
     private static let sensitiveQueryFragments = [
         "key", "api_key", "token", "secret", "signature", "sig", "auth"
@@ -643,13 +724,45 @@ enum AppLogRedactor {
         exposesMessageFields: Bool? = nil
     ) -> String? {
         let shouldExposeMessages = exposesMessageFields ?? AppConfigStore.boolValue(for: .requestLogPlainMessageEnabled)
-        let sanitized = sanitizeJSONValue(payload, exposesMessageFields: shouldExposeMessages)
+        let sanitized = sanitizeJSONValue(
+            payload,
+            exposesMessageFields: shouldExposeMessages,
+            sensitiveKeys: requestBodySensitiveKeys,
+            plainMessageKeys: requestBodyPlainMessageKeys
+        )
         guard JSONSerialization.isValidJSONObject(sanitized),
               let data = try? JSONSerialization.data(withJSONObject: sanitized, options: [.prettyPrinted, .sortedKeys]),
               let text = String(data: data, encoding: .utf8) else {
             return nil
         }
         return text
+    }
+
+    static func sanitizeResponseBodyForLog(
+        _ body: String,
+        exposesMessageFields: Bool? = nil
+    ) -> String {
+        let shouldExposeMessages = exposesMessageFields ??
+            AppConfigStore.boolValue(for: .requestLogPlainMessageEnabled)
+        let lines = body.components(separatedBy: .newlines)
+        let containsServerSentEvents = lines.contains {
+            $0.trimmingCharacters(in: .whitespaces).hasPrefix("data:")
+        }
+        if containsServerSentEvents {
+            return sanitizeServerSentEvents(
+                lines,
+                exposesMessageFields: shouldExposeMessages
+            )
+        }
+
+        if let sanitized = sanitizeResponseJSONText(
+            body,
+            exposesMessageFields: shouldExposeMessages,
+            prettyPrinted: true
+        ) {
+            return sanitized
+        }
+        return shouldExposeMessages ? body : redactionPlaceholder(for: body)
     }
 
     static func sanitizeURLForLog(_ url: URL?) -> String {
@@ -688,34 +801,125 @@ enum AppLogRedactor {
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 
-    private static func sanitizeJSONValue(_ value: Any, exposesMessageFields: Bool) -> Any {
+    private static func sanitizeJSONValue(
+        _ value: Any,
+        exposesMessageFields: Bool,
+        sensitiveKeys: Set<String>,
+        plainMessageKeys: Set<String>
+    ) -> Any {
         if let dictionary = value as? [String: Any] {
             var result: [String: Any] = [:]
             for (key, rawValue) in dictionary {
                 if let text = rawValue as? String, shouldHideBinaryPayload(key: key, text: text) {
                     result[key] = binaryPayloadPlaceholder(for: text)
-                } else if shouldHideRequestBodyField(key, exposesMessageFields: exposesMessageFields) {
+                } else if shouldHideContentField(
+                    key,
+                    exposesMessageFields: exposesMessageFields,
+                    sensitiveKeys: sensitiveKeys,
+                    plainMessageKeys: plainMessageKeys
+                ) {
                     result[key] = redactionPlaceholder(for: rawValue)
                 } else {
-                    result[key] = sanitizeJSONValue(rawValue, exposesMessageFields: exposesMessageFields)
+                    result[key] = sanitizeJSONValue(
+                        rawValue,
+                        exposesMessageFields: exposesMessageFields,
+                        sensitiveKeys: sensitiveKeys,
+                        plainMessageKeys: plainMessageKeys
+                    )
                 }
             }
             return result
         }
 
         if let array = value as? [Any] {
-            return array.map { sanitizeJSONValue($0, exposesMessageFields: exposesMessageFields) }
+            return array.map {
+                sanitizeJSONValue(
+                    $0,
+                    exposesMessageFields: exposesMessageFields,
+                    sensitiveKeys: sensitiveKeys,
+                    plainMessageKeys: plainMessageKeys
+                )
+            }
         }
 
         return value
     }
 
-    private static func shouldHideRequestBodyField(_ key: String, exposesMessageFields: Bool) -> Bool {
+    private static func shouldHideContentField(
+        _ key: String,
+        exposesMessageFields: Bool,
+        sensitiveKeys: Set<String>,
+        plainMessageKeys: Set<String>
+    ) -> Bool {
         let normalized = key.lowercased()
-        if exposesMessageFields, requestBodyPlainMessageKeys.contains(normalized) {
+        if exposesMessageFields, plainMessageKeys.contains(normalized) {
             return false
         }
-        return requestBodySensitiveKeys.contains(normalized)
+        return sensitiveKeys.contains(normalized)
+    }
+
+    private static func sanitizeServerSentEvents(
+        _ lines: [String],
+        exposesMessageFields: Bool
+    ) -> String {
+        lines.map { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("data:") else {
+                if trimmed.isEmpty ||
+                    trimmed.hasPrefix("event:") ||
+                    trimmed.hasPrefix("id:") ||
+                    trimmed.hasPrefix("retry:") ||
+                    trimmed.hasPrefix(":") {
+                    return line
+                }
+                return exposesMessageFields ? line : redactionPlaceholder(for: line)
+            }
+
+            let rawData = String(trimmed.dropFirst("data:".count))
+                .trimmingCharacters(in: .whitespaces)
+            guard rawData != "[DONE]" else { return "data: [DONE]" }
+            if let sanitized = sanitizeResponseJSONText(
+                rawData,
+                exposesMessageFields: exposesMessageFields,
+                prettyPrinted: false
+            ) {
+                return "data: \(sanitized)"
+            }
+            return exposesMessageFields
+                ? line
+                : "data: \(redactionPlaceholder(for: rawData))"
+        }
+        .joined(separator: "\n")
+    }
+
+    private static func sanitizeResponseJSONText(
+        _ text: String,
+        exposesMessageFields: Bool,
+        prettyPrinted: Bool
+    ) -> String? {
+        guard let data = text.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) else {
+            return nil
+        }
+
+        if !exposesMessageFields, object is String {
+            return redactionPlaceholder(for: object)
+        }
+        let sanitized = sanitizeJSONValue(
+            object,
+            exposesMessageFields: exposesMessageFields,
+            sensitiveKeys: responseBodySensitiveKeys,
+            plainMessageKeys: responseBodySensitiveKeys
+        )
+        guard JSONSerialization.isValidJSONObject(sanitized) else { return nil }
+        var options: JSONSerialization.WritingOptions = [.sortedKeys, .withoutEscapingSlashes]
+        if prettyPrinted {
+            options.insert(.prettyPrinted)
+        }
+        guard let output = try? JSONSerialization.data(withJSONObject: sanitized, options: options) else {
+            return nil
+        }
+        return String(decoding: output, as: UTF8.self)
     }
 
     private static func shouldHideBinaryPayload(key: String, text: String) -> Bool {

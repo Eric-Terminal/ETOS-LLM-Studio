@@ -1,0 +1,30 @@
+{
+  "format": "etos-local-linux-compliance-v1",
+  "ishRevision": "9c1fa36c63bfcfa530d12f961e78498327ecebd7",
+  "resources": {
+    "LocalLinuxRootFS-Packages.tsv": {
+      "bytes": 1404,
+      "sha256": "ac755fe674724258b116b4eb62633a0ed899e55223154ef183b7b34dbe26783b"
+    },
+    "LocalLinuxRootFS-SBOM.spdx.json": {
+      "bytes": 17032,
+      "sha256": "20fd41479398143e1a222a4d588cce2f03be7095f42d97f0531dade8f956e476"
+    },
+    "LocalLinuxRootFS-Source-Assets.tsv": {
+      "bytes": 7908,
+      "sha256": "0b1589e0cc026c332e348035b2bbb9dcdcd6e272fce0a42a5a611688b3655826"
+    },
+    "LocalLinuxRootFS-Source-Offer.txt": {
+      "bytes": 1390,
+      "sha256": "e533f24892f96a4caf15f5726d55f443a35fb8e61d6aec034015d1967b0064c3"
+    },
+    "LocalLinuxRootFS-Third-Party-Notices.txt": {
+      "bytes": 199056,
+      "sha256": "5dcfc535ee6aeecd7500d4072a634f1bc9a0bd065d88130632e3f3d913757a72"
+    },
+    "iSH-PROJECT-LICENSES.txt": {
+      "bytes": 57705,
+      "sha256": "2693b037bc6f42520d61c77dd64bcafd8eeb7510ec776543eaddf64adfd2a2ac"
+    }
+  }
+}

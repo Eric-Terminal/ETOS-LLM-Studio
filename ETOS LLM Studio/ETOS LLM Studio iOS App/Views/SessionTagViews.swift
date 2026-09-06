@@ -74,10 +74,26 @@ struct SessionTagPill: View {
 struct SessionTagInlineList: View {
     let tags: [SessionTag]
 
+    private var systemColorTags: [SessionTag] {
+        tags.filter(\.isSystemColorTag)
+    }
+
+    private var customTags: [SessionTag] {
+        tags.filter { !$0.isSystemColorTag }
+    }
+
     var body: some View {
         if !tags.isEmpty {
             SessionTagFlowLayout(spacing: 6, rowSpacing: 4) {
-                ForEach(tags) { tag in
+                if !systemColorTags.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(systemColorTags) { tag in
+                            SessionTagPill(tag: tag)
+                        }
+                    }
+                }
+
+                ForEach(customTags) { tag in
                     SessionTagPill(tag: tag)
                 }
             }
@@ -629,19 +645,31 @@ struct SessionTagFlowLayout: Layout {
     var spacing: CGFloat = 8
     var rowSpacing: CGFloat = 6
 
+    /// SwiftUI 会用零宽度探测布局的最小尺寸，但容器不能比子视图本身更窄。
+    static func measurementWidth(
+        for proposedWidth: CGFloat?,
+        minimumSubviewWidth: CGFloat
+    ) -> CGFloat {
+        guard let proposedWidth else { return .infinity }
+        return max(proposedWidth, minimumSubviewWidth)
+    }
+
     func sizeThatFits(
         proposal: ProposedViewSize,
         subviews: Subviews,
         cache: inout ()
     ) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
+        let subviewSizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let maxWidth = Self.measurementWidth(
+            for: proposal.width,
+            minimumSubviewWidth: subviewSizes.map(\.width).max() ?? 0
+        )
         var currentX: CGFloat = 0
         var currentRowHeight: CGFloat = 0
         var totalHeight: CGFloat = 0
         var widestRow: CGFloat = 0
 
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
+        for size in subviewSizes {
             if currentX > 0, currentX + spacing + size.width > maxWidth {
                 widestRow = max(widestRow, currentX)
                 totalHeight += currentRowHeight + rowSpacing
@@ -654,7 +682,7 @@ struct SessionTagFlowLayout: Layout {
 
         widestRow = max(widestRow, currentX)
         totalHeight += currentRowHeight
-        return CGSize(width: min(widestRow, maxWidth), height: totalHeight)
+        return CGSize(width: widestRow, height: totalHeight)
     }
 
     func placeSubviews(

@@ -36,6 +36,13 @@ public struct MemorySettingsView: View {
     public var body: some View {
         memoryListView
             .navigationTitle(NSLocalizedString("记忆库管理", comment: ""))
+            .guideSettingsPageContext(
+                id: "watch-settings-memory-library",
+                title: NSLocalizedString("记忆库管理", comment: "记忆库向导上下文标题"),
+                documents: [GuideDocumentReference(id: "settings-memory", title: "Memory System")],
+                settings: guideSettings
+            )
+            .watchGuideEntry()
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: { isAddingMemory = true }) {
@@ -43,13 +50,35 @@ public struct MemorySettingsView: View {
                     }
                 }
             }
-            .sheet(isPresented: $isAddingMemory) {
+            .navigationDestination(isPresented: $isAddingMemory) {
                 AddMemorySheet()
                     .environmentObject(viewModel)
             }
             .task {
                 viewModel.reloadConversationMemoryState()
             }
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        let options = viewModel.embeddingModelOptions
+        return [
+            .string("embedding_model_id", label: NSLocalizedString("嵌入模型", comment: "向导设置字段"), allowedValues: [""] + options.map(\.id), get: { viewModel.selectedEmbeddingModel?.id ?? "" }, set: { id in viewModel.setSelectedEmbeddingModel(options.first(where: { $0.id == id })) }),
+            .integer("retrieval_top_k", label: NSLocalizedString("检索数量 (Top K)", comment: "向导设置字段"), range: 0...100, get: { appConfig.memoryTopK }, set: { appConfig.memoryTopK = $0 }),
+            .bool("send_update_time", label: NSLocalizedString("发送更新时间", comment: "向导设置字段"), get: { appConfig.memorySendUpdateTime }, set: { appConfig.memorySendUpdateTime = $0 }),
+            .bool("active_retrieval", label: NSLocalizedString("主动检索", comment: "向导设置字段"), get: { viewModel.enableMemoryActiveRetrieval }, set: { viewModel.enableMemoryActiveRetrieval = $0 }),
+            .bool("auto_consolidation", label: NSLocalizedString("低频自动整理", comment: "向导设置字段"), get: { appConfig.enableMemoryAutoConsolidation }, set: { appConfig.enableMemoryAutoConsolidation = $0 }),
+            .readOnly("embedding_models", label: NSLocalizedString("可用嵌入模型", comment: "向导设置字段"), value: {
+                .array(options.map { model in
+                    .dictionary([
+                        "id": .string(model.id),
+                        "name": .string(model.model.displayName),
+                        "provider": .string(model.provider.name)
+                    ])
+                })
+            }),
+            .readOnly("active_memory_count", label: NSLocalizedString("激活的记忆", comment: "向导设置字段"), value: { .int(viewModel.memories.lazy.filter { !$0.isArchived }.count) }),
+            .readOnly("archived_memory_count", label: NSLocalizedString("归档的记忆", comment: "向导设置字段"), value: { .int(viewModel.memories.lazy.filter(\.isArchived).count) })
+        ]
     }
 
     private var memoryListView: some View {
@@ -91,7 +120,7 @@ public struct MemorySettingsView: View {
                 settingsIntroCard(
                     title: NSLocalizedString("记忆检索", comment: "Memory retrieval intro title"),
                     summary: NSLocalizedString("控制记忆如何被选中，并决定发送给模型时附带哪些信息。", comment: "Memory retrieval intro summary"),
-                    details: NSLocalizedString("记忆检索说明正文", comment: "Memory retrieval intro details"),
+                    details: "\(NSLocalizedString("记忆检索说明正文", comment: "Memory retrieval intro details"))\n\n\(NSLocalizedString("长期记忆自动整理说明", comment: "记忆自动整理详细规则"))",
                     isExpanded: $isShowingRetrievalIntroDetails
                 )
                 HStack {
@@ -124,7 +153,7 @@ public struct MemorySettingsView: View {
 
             Section(
                 header: Text(NSLocalizedString("自动整理", comment: "Memory auto consolidation section title")),
-                footer: Text(NSLocalizedString("长期记忆自动整理说明", comment: "Memory auto consolidation footer"))
+                footer: Text(NSLocalizedString("自动归档重复记忆、标记过时信息，不删除记录。", comment: "自动整理简短提示"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
@@ -145,6 +174,11 @@ public struct MemorySettingsView: View {
                         .environmentObject(viewModel)
                 } label: {
                     Label(NSLocalizedString("数据维护", comment: ""), systemImage: "wrench.and.screwdriver")
+                }
+                NavigationLink {
+                    MemoryTransferView()
+                } label: {
+                    Label(NSLocalizedString("导入与导出", comment: "Memory transfer navigation title"), systemImage: "arrow.up.arrow.down.doc")
                 }
             }
 

@@ -88,13 +88,6 @@ public final class AppToolManager: ObservableObject {
         return builtInToolKinds.contains(kind)
     }
 
-    public var tools: [AppToolCatalogItem] {
-        AppToolKind.allCases
-            .filter { !Self.builtInToolKinds.contains($0) && $0.isAvailableOnCurrentPlatform }
-            .map { kind in
-            AppToolCatalogItem(kind: kind, isEnabled: enabledToolIDs.contains(kind.rawValue))
-        }
-    }
 
     internal var enabledToolKinds: Set<AppToolKind> {
         Set(enabledToolIDs.compactMap(AppToolKind.init(rawValue:)))
@@ -208,7 +201,12 @@ public final class AppToolManager: ObservableObject {
         return customJSTool(withToolName: toolName)?.displayName
     }
 
-    public func executeToolFromChat(toolName: String, argumentsJSON: String) async throws -> String {
+    public func executeToolFromChat(
+        toolName: String,
+        argumentsJSON: String,
+        sourceSessionID: UUID? = nil,
+        sourceMessageID: UUID? = nil
+    ) async throws -> String {
         if let kind = AppToolKind.resolve(from: toolName) {
             guard kind.isAvailableOnCurrentPlatform else {
                 throw AppToolExecutionError.toolDisabled(kind.displayName)
@@ -226,7 +224,9 @@ public final class AppToolManager: ObservableObject {
             return try await Self.executeResolvedTool(
                 kind: kind,
                 argumentsJSON: argumentsJSON,
-                current: self
+                current: self,
+                sourceSessionID: sourceSessionID,
+                sourceMessageID: sourceMessageID
             )
         }
 

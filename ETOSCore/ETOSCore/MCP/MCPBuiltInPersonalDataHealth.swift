@@ -24,6 +24,8 @@ actor MCPBuiltInPersonalDataHealthExecutor {
             return try await queryStatistics(arguments: arguments)
         case "health.write_quantity":
             return try await writeQuantity(arguments: arguments)
+        case "health.write_blood_pressure":
+            return try await writeBloodPressure(arguments: arguments)
         case "health.write_category":
             return try await writeCategory(arguments: arguments)
         default:
@@ -134,7 +136,7 @@ private extension MCPBuiltInPersonalDataHealthExecutor {
         let typeID = try arguments.personalDataRequiredString("type")
         let value = try arguments.personalDataRequiredDouble("value")
         let type = try HealthDataTypeRegistry.type(for: typeID)
-        guard type.kind == .quantity, type.canWrite else {
+        guard type.kind == .quantity, type.writeToolID == "health.write_quantity" else {
             throw MCPBuiltInPersonalDataError.invalidArgument(
                 String(format: NSLocalizedString("%@ 不支持通过此工具写入。", comment: "HealthKit type cannot be written"), type.id)
             )
@@ -157,6 +159,57 @@ private extension MCPBuiltInPersonalDataHealthExecutor {
         result["value"] = value
         result["unit"] = type.unitLabel
         result["sample_uuid"] = sample.uuid.uuidString
+        return result
+    }
+
+    func writeBloodPressure(arguments: [String: Any]) async throws -> [String: Any] {
+        let systolic = try arguments.personalDataRequiredDouble("systolic")
+        let diastolic = try arguments.personalDataRequiredDouble("diastolic")
+        let heartRate = arguments.personalDataDouble("heart_rate")
+        guard systolic.isFinite,
+              diastolic.isFinite,
+              heartRate?.isFinite != false,
+              systolic > 0,
+              diastolic > 0,
+              heartRate.map({ $0 > 0 }) ?? true else {
+            throw MCPBuiltInPersonalDataError.invalidArgument(
+                NSLocalizedString("收缩压、舒张压及可选心率必须是大于 0 的有限数值。", comment: "Invalid blood pressure measurement")
+            )
+        }
+
+        let startDate = try arguments.personalDataDate("start_date") ?? Date()
+        let endDate = try arguments.personalDataDate("end_date") ?? startDate
+        let note = arguments.personalDataString("note")
+        let samples = MCPBuiltInBloodPressureSampleBuilder.make(
+            systolic: systolic,
+            diastolic: diastolic,
+            heartRate: heartRate,
+            startDate: startDate,
+            endDate: endDate,
+            correlationMetadata: metadata(note: note),
+            heartRateMetadata: heartRate == nil ? nil : metadata(note: note)
+        )
+
+        try await requestAuthorization(read: [], share: samples.shareTypes)
+        try await store.save(samples.objectsToSave)
+
+        var result: [String: Any] = [
+            "provider": "etos_builtin_personal_data",
+            "tool_name": "health.write_blood_pressure",
+            "type": "blood_pressure",
+            "start_date": MCPBuiltInPersonalDataDateCodec.string(startDate) ?? "",
+            "end_date": MCPBuiltInPersonalDataDateCodec.string(endDate) ?? "",
+            "saved": true,
+            "systolic": systolic,
+            "diastolic": diastolic,
+            "unit": "mmHg",
+            "correlation_uuid": samples.correlation.uuid.uuidString
+        ]
+        if let heartRate, let heartRateSample = samples.heartRate {
+            result["heart_rate"] = heartRate
+            result["heart_rate_unit"] = "count/min"
+            result["heart_rate_sample_uuid"] = heartRateSample.uuid.uuidString
+        }
         return result
     }
 
@@ -389,6 +442,7 @@ private enum HealthDataTypeRegistry {
         let unitLabel: String
         let canRead: Bool
         let canWrite: Bool
+        let writeToolID: String?
         let defaultAggregation: DefaultAggregation
 
         var localizedTitle: String {
@@ -403,6 +457,7 @@ private enum HealthDataTypeRegistry {
                 "unit": unitLabel,
                 "can_read": canRead,
                 "can_write": canWrite,
+                "write_tool": writeToolID as Any? ?? NSNull(),
                 "default_aggregation": defaultAggregation.rawValue
             ]
         }
@@ -514,10 +569,12 @@ private enum HealthDataTypeRegistry {
     }
 
     static let all: [Entry] = [
-        quantity("heart_rate", "心率", .heartRate, unit: HKUnit.count().unitDivided(by: .minute()), unitLabel: "count/min", canWrite: false, aggregation: .average),
+        quantity("heart_rate", "心率", .heartRate, unit: HKUnit.count().unitDivided(by: .minute()), unitLabel: "count/min", canWrite: true, aggregation: .average),
         quantity("heart_rate_variability", "心率变异性 SDNN", .heartRateVariabilitySDNN, unit: .secondUnit(with: .milli), unitLabel: "ms", canWrite: false, aggregation: .average),
         quantity("resting_heart_rate", "静息心率", .restingHeartRate, unit: HKUnit.count().unitDivided(by: .minute()), unitLabel: "count/min", canWrite: false, aggregation: .average),
         quantity("walking_heart_rate_average", "步行心率均值", .walkingHeartRateAverage, unit: HKUnit.count().unitDivided(by: .minute()), unitLabel: "count/min", canWrite: false, aggregation: .average),
+        quantity("blood_pressure_systolic", "收缩压", .bloodPressureSystolic, unit: .millimeterOfMercury(), unitLabel: "mmHg", canWrite: true, aggregation: .average, writeToolID: "health.write_blood_pressure"),
+        quantity("blood_pressure_diastolic", "舒张压", .bloodPressureDiastolic, unit: .millimeterOfMercury(), unitLabel: "mmHg", canWrite: true, aggregation: .average, writeToolID: "health.write_blood_pressure"),
         quantity("oxygen_saturation", "血氧饱和度", .oxygenSaturation, unit: .percent(), unitLabel: "percent", canWrite: false, aggregation: .average),
         quantity("respiratory_rate", "呼吸频率", .respiratoryRate, unit: HKUnit.count().unitDivided(by: .minute()), unitLabel: "count/min", canWrite: false, aggregation: .average),
         quantity("body_temperature", "体温", .bodyTemperature, unit: .degreeCelsius(), unitLabel: "degC", canWrite: false, aggregation: .average),
@@ -549,6 +606,7 @@ private enum HealthDataTypeRegistry {
             unitLabel: "workout",
             canRead: true,
             canWrite: false,
+            writeToolID: nil,
             defaultAggregation: .sum
         )
     ]
@@ -569,7 +627,8 @@ private enum HealthDataTypeRegistry {
         unit: HKUnit,
         unitLabel: String,
         canWrite: Bool,
-        aggregation: DefaultAggregation
+        aggregation: DefaultAggregation,
+        writeToolID: String? = nil
     ) -> Entry {
         Entry(
             id: id,
@@ -581,6 +640,7 @@ private enum HealthDataTypeRegistry {
             unitLabel: unitLabel,
             canRead: true,
             canWrite: canWrite,
+            writeToolID: canWrite ? (writeToolID ?? "health.write_quantity") : nil,
             defaultAggregation: aggregation
         )
     }
@@ -601,7 +661,86 @@ private enum HealthDataTypeRegistry {
             unitLabel: "category",
             canRead: true,
             canWrite: canWrite,
+            writeToolID: canWrite ? "health.write_category" : nil,
             defaultAggregation: .sum
+        )
+    }
+}
+
+struct MCPBuiltInBloodPressureSamples {
+    let correlation: HKCorrelation
+    let systolic: HKQuantitySample
+    let diastolic: HKQuantitySample
+    let heartRate: HKQuantitySample?
+
+    var shareTypes: Set<HKSampleType> {
+        var types: Set<HKSampleType> = [
+            correlation.correlationType,
+            systolic.quantityType,
+            diastolic.quantityType
+        ]
+        if let heartRate {
+            types.insert(heartRate.quantityType)
+        }
+        return types
+    }
+
+    var objectsToSave: [HKObject] {
+        var objects: [HKObject] = [correlation]
+        if let heartRate {
+            objects.append(heartRate)
+        }
+        return objects
+    }
+}
+
+enum MCPBuiltInBloodPressureSampleBuilder {
+    static func make(
+        systolic: Double,
+        diastolic: Double,
+        heartRate: Double?,
+        startDate: Date,
+        endDate: Date,
+        correlationMetadata: [String: Any]?,
+        heartRateMetadata: [String: Any]?
+    ) -> MCPBuiltInBloodPressureSamples {
+        let pressureUnit = HKUnit.millimeterOfMercury()
+        let systolicSample = HKQuantitySample(
+            type: HKQuantityType(.bloodPressureSystolic),
+            quantity: HKQuantity(unit: pressureUnit, doubleValue: systolic),
+            start: startDate,
+            end: endDate
+        )
+        let diastolicSample = HKQuantitySample(
+            type: HKQuantityType(.bloodPressureDiastolic),
+            quantity: HKQuantity(unit: pressureUnit, doubleValue: diastolic),
+            start: startDate,
+            end: endDate
+        )
+        let correlation = HKCorrelation(
+            type: HKCorrelationType(.bloodPressure),
+            start: startDate,
+            end: endDate,
+            objects: Set<HKSample>([systolicSample, diastolicSample]),
+            metadata: correlationMetadata
+        )
+        let heartRateSample = heartRate.map { value in
+            HKQuantitySample(
+                type: HKQuantityType(.heartRate),
+                quantity: HKQuantity(
+                    unit: HKUnit.count().unitDivided(by: .minute()),
+                    doubleValue: value
+                ),
+                start: startDate,
+                end: endDate,
+                metadata: heartRateMetadata
+            )
+        }
+        return MCPBuiltInBloodPressureSamples(
+            correlation: correlation,
+            systolic: systolicSample,
+            diastolic: diastolicSample,
+            heartRate: heartRateSample
         )
     }
 }

@@ -77,6 +77,20 @@ struct WatchKeyboardSettingsView: View {
             #endif
         }
         .navigationTitle(NSLocalizedString("键盘", comment: "Keyboard settings title"))
+        .guideSettingsPageContext(
+            id: "settings-watch-keyboard",
+            title: NSLocalizedString("键盘", comment: "手表键盘向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-core", title: "Core Settings")],
+            settings: [
+                .bool(
+                    "third_party_keyboard_enabled",
+                    label: NSLocalizedString("第三方全键盘", comment: "手表键盘向导字段"),
+                    get: { thirdPartyKeyboardBinding.wrappedValue },
+                    set: { thirdPartyKeyboardBinding.wrappedValue = $0 }
+                )
+            ]
+        )
+        .watchGuideEntry()
     }
 
     private var thirdPartyKeyboardBinding: Binding<Bool> {

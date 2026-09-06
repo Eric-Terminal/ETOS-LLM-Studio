@@ -8,6 +8,7 @@
 
 import Foundation
 import Testing
+import SwiftUI
 @testable import ETOSCore
 
 @Suite("聊天颜色配置测试")

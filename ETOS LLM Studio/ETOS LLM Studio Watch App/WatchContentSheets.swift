@@ -157,16 +157,49 @@ struct WatchImportSourceView: View {
 // 独立的请求控制快速面板，供输入框左划快捷入口使用
 struct WatchQuickRequestControlsView: View {
     let runnableModel: RunnableModel
+    let sessionID: UUID?
+    let isLocked: Bool
     let onDone: () -> Void
 
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var state: ModelRequestBodyControlState?
     @State private var pendingSaveTask: Task<Void, Never>?
     @State private var sliderDescriptors: [String: ModelRequestBodyControlSliderDescriptor] = [:]
+    @State private var localAgentMode = LocalAgentMode.chat
+    @State private var localAgentModeSelectionRevision: UInt = 0
+    @State private var hasActiveRun = false
+    @State private var isLocalAgentModeReady = false
 
     var body: some View {
         let controls = runnableModel.model.requestBodyControls.filter(\.isEnabled)
         List {
-            if controls.isEmpty {
+            if appConfig.localLinuxEnabled, let sessionID {
+                Section(NSLocalizedString("会话模式", comment: "Watch local Agent mode section")) {
+                    Picker(NSLocalizedString("模式", comment: "Watch local Agent mode picker"), selection: Binding(
+                        get: { localAgentMode },
+                        set: { mode in
+                            guard localAgentMode != mode else { return }
+                            localAgentModeSelectionRevision &+= 1
+                            localAgentMode = mode
+                        }
+                    )) {
+                        ForEach(LocalAgentMode.allCases) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .disabled(isLocked || hasActiveRun || !isLocalAgentModeReady)
+                    .onChange(of: localAgentMode) { _, mode in
+                        _ = Persistence.saveLocalAgentMode(mode, sessionID: sessionID)
+                    }
+                    if hasActiveRun {
+                        Text(NSLocalizedString("当前 Agent Run 尚未结束；请先在任务页停止它，再切换会话模式。", comment: "Active Agent run mode switch guidance"))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            if controls.isEmpty && sessionID == nil {
                 Text(NSLocalizedString("当前模型没有可用请求控制。", comment: ""))
                     .foregroundStyle(.secondary)
             } else {
@@ -221,7 +254,32 @@ struct WatchQuickRequestControlsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .disabled(state == nil)
         .task(id: runnableModel.id) {
+            await ChatService.shared.waitForInitialPersistenceStateIfNeeded()
             await loadState()
+            if let sessionID {
+                let selectionRevision = localAgentModeSelectionRevision
+                let sessionState = await Task.detached(priority: .userInitiated) {
+                    let run = Persistence.loadLatestConversationRun(sessionID: sessionID)
+                    return (
+                        mode: Persistence.localAgentMode(sessionID: sessionID),
+                        hasActiveRun: run.map { !$0.status.isTerminal } ?? false
+                    )
+                }.value
+                if !Task.isCancelled,
+                   localAgentModeSelectionRevision == selectionRevision {
+                    localAgentMode = sessionState.mode
+                }
+                hasActiveRun = sessionState.hasActiveRun
+                isLocalAgentModeReady = !Task.isCancelled
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cloudSyncLocalDataDidChange)) { _ in
+            guard let sessionID else { return }
+            Task {
+                hasActiveRun = await Task.detached(priority: .utility) {
+                    Persistence.loadLatestConversationRun(sessionID: sessionID).map { !$0.status.isTerminal } ?? false
+                }.value
+            }
         }
     }
 
@@ -377,6 +435,10 @@ private struct WatchRequestBodyControlDetailView: View {
 
 struct WatchAskUserInputView: View {
     let request: AppToolAskUserInputRequest
+    let privacyNotice: String?
+    let navigationTitle: String
+    let dismissesAfterSubmit: Bool
+    let dismissesAfterCancel: Bool
     let onSubmit: ([AppToolAskUserInputQuestionAnswer]) -> Void
     let onCancel: () -> Void
 
@@ -385,6 +447,24 @@ struct WatchAskUserInputView: View {
     @State private var otherTextByQuestion: [String: String] = [:]
     @State private var currentQuestionIndex = 0
     @State private var hasHandledAction = false
+
+    init(
+        request: AppToolAskUserInputRequest,
+        privacyNotice: String? = nil,
+        navigationTitle: String = NSLocalizedString("结构化问答", comment: ""),
+        dismissesAfterSubmit: Bool = true,
+        dismissesAfterCancel: Bool = true,
+        onSubmit: @escaping ([AppToolAskUserInputQuestionAnswer]) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.request = request
+        self.privacyNotice = privacyNotice
+        self.navigationTitle = navigationTitle
+        self.dismissesAfterSubmit = dismissesAfterSubmit
+        self.dismissesAfterCancel = dismissesAfterCancel
+        self.onSubmit = onSubmit
+        self.onCancel = onCancel
+    }
 
     private var canSubmit: Bool {
         request.questions.allSatisfy { question in
@@ -416,6 +496,11 @@ struct WatchAskUserInputView: View {
                     }
                     if let description = request.description, !description.isEmpty {
                         Text(description)
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let privacyNotice, !privacyNotice.isEmpty {
+                        Text(privacyNotice)
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -463,21 +548,23 @@ struct WatchAskUserInputView: View {
                     }
 
                     Section {
-                        TextField(
-                            NSLocalizedString("请输入自定义偏好", comment: ""),
-                            text: Binding(
-                                get: { otherTextByQuestion[question.id, default: ""] },
-                                set: { newValue in
-                                    otherTextByQuestion[question.id] = newValue
-                                    if AppToolAskUserInputAnswerPolicy.shouldClearSelectedOptionsAfterTypingCustomText(
-                                        type: question.type,
-                                        customText: newValue
-                                    ) {
-                                        selectedOptionIDsByQuestion[question.id] = []
+                        if question.allowOther {
+                            TextField(
+                                NSLocalizedString("请输入自定义偏好", comment: ""),
+                                text: Binding(
+                                    get: { otherTextByQuestion[question.id, default: ""] },
+                                    set: { newValue in
+                                        otherTextByQuestion[question.id] = newValue
+                                        if AppToolAskUserInputAnswerPolicy.shouldClearSelectedOptionsAfterTypingCustomText(
+                                            type: question.type,
+                                            customText: newValue
+                                        ) {
+                                            selectedOptionIDsByQuestion[question.id] = []
+                                        }
                                     }
-                                }
+                                )
                             )
-                        )
+                        }
                         Button(skipButtonTitle(for: question)) {
                             handleSkipOrSubmit(for: question)
                         }
@@ -490,7 +577,7 @@ struct WatchAskUserInputView: View {
                     }
                 }
             }
-            .navigationTitle(NSLocalizedString("结构化问答", comment: ""))
+            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -595,6 +682,9 @@ struct WatchAskUserInputView: View {
     }
 
     private func canContinue(from question: AppToolAskUserInputQuestion) -> Bool {
+        if question.required && !isQuestionAnswered(question) {
+            return false
+        }
         if isLastQuestion(question) {
             return canSubmit
         }
@@ -634,13 +724,19 @@ struct WatchAskUserInputView: View {
         }
         hasHandledAction = true
         onSubmit(answers)
-        dismiss()
+        if dismissesAfterSubmit {
+            dismiss()
+        }
     }
 
     private func handleCancelAndDismiss() {
-        hasHandledAction = true
+        if dismissesAfterCancel {
+            hasHandledAction = true
+        }
         onCancel()
-        dismiss()
+        if dismissesAfterCancel {
+            dismiss()
+        }
     }
 
     private func resetSelectionState() {

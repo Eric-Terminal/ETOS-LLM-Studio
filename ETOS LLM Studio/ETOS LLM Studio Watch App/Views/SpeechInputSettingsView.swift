@@ -75,6 +75,36 @@ struct SpeechInputSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("语音输入", comment: ""))
+        .guideSettingsPageContext(
+            id: "watch-settings-speech-input",
+            title: NSLocalizedString("语音输入", comment: "语音输入向导标题"),
+            documents: [GuideDocumentReference(id: "speech-input", title: "Speech Input")],
+            settings: guideSettings
+        )
+        .watchGuideEntry()
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        [
+            .bool("enabled", label: NSLocalizedString("启用语音输入", comment: "语音输入向导字段"), get: { enableSpeechInput }, set: { enableSpeechInput = $0 }),
+            .bool("send_audio_when_supported", label: NSLocalizedString("模型支持时发送音频", comment: "语音输入向导字段"), get: { sendSpeechAsAudio }, set: { sendSpeechAsAudio = $0 }),
+            .string("recording_format", label: NSLocalizedString("录制格式", comment: "语音输入向导字段"), allowedValues: AudioRecordingFormat.allCases.map(\.rawValue), allowsEmpty: false, get: { audioRecordingFormat.rawValue }, set: { rawValue in
+                if let format = AudioRecordingFormat(rawValue: rawValue) { audioRecordingFormat = format }
+            }),
+            .string("speech_model_id", label: NSLocalizedString("语音模型", comment: "语音输入向导字段"), allowedValues: [""] + speechModels.map(\.id), get: { selectedSpeechModel?.id ?? "" }, set: { modelID in
+                selectedSpeechModel = speechModels.first(where: { $0.id == modelID })
+            }),
+            .readOnly("available_speech_models", label: NSLocalizedString("可用语音模型", comment: "语音输入向导字段"), value: {
+                .array(speechModels.map { model in
+                    .dictionary([
+                        "id": .string(model.id),
+                        "display_name": .string(model.model.displayName),
+                        "model_id": .string(model.model.modelName),
+                        "provider": .string(model.provider.name)
+                    ])
+                })
+            })
+        ]
     }
     
     private var selectedSpeechModelLabel: String {
@@ -147,6 +177,27 @@ private struct SpeechModelSelectionView: View {
             }
         }
         .navigationTitle(NSLocalizedString("语音模型", comment: ""))
+        .guideSettingsPageContext(
+            id: "watch-settings-speech-model-selection",
+            title: NSLocalizedString("语音模型", comment: "语音模型选择向导标题"),
+            documents: [GuideDocumentReference(id: "speech-input", title: "Speech Input")],
+            settings: [
+                .string("selected_model_id", label: NSLocalizedString("当前语音模型", comment: "语音模型选择向导字段"), allowedValues: [""] + speechModels.map(\.id), get: { selectedSpeechModel?.id ?? "" }, set: { modelID in
+                    selectedSpeechModel = speechModels.first(where: { $0.id == modelID })
+                }),
+                .readOnly("available_models", label: NSLocalizedString("可用模型", comment: "语音模型选择向导字段"), value: {
+                    .array(speechModels.map { model in
+                        .dictionary([
+                            "id": .string(model.id),
+                            "display_name": .string(model.model.displayName),
+                            "model_id": .string(model.model.modelName),
+                            "provider": .string(model.provider.name)
+                        ])
+                    })
+                })
+            ]
+        )
+        .watchGuideEntry()
     }
     
     private func select(_ model: RunnableModel?) {

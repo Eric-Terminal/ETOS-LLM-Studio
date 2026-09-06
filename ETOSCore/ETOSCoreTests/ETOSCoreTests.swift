@@ -12,7 +12,7 @@ import Foundation
 import SQLite3
 @testable import ETOSCore
 
-@Suite("ChatService Integration Tests")
+@Suite("ChatService Integration Tests", .serialized)
 struct ChatServiceTests {
     var memoryManager: MemoryManager!
     var mockAdapter: MockAPIAdapter!
@@ -20,6 +20,12 @@ struct ChatServiceTests {
     var dummyModel: RunnableModel!
 
     init() async {
+        let existingSessions = Persistence.loadChatSessions()
+        for session in existingSessions {
+            Persistence.deleteSessionArtifacts(sessionID: session.id)
+        }
+        Persistence.saveChatSessions([])
+
         for provider in ConfigLoader.loadProviders() {
             ConfigLoader.deleteProvider(provider)
         }
@@ -77,6 +83,7 @@ struct ChatServiceTests {
         }
         Persistence.clearRequestLogs()
         Persistence.deleteAppConfig(key: AppConfigKey.requestLogEnabled.rawValue)
+        Persistence.deleteAppConfig(key: AppConfigKey.requestLogPlainMessageEnabled.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.enableReasoningSummary.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.speechModelIdentifier.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.ttsModelIdentifier.rawValue)
@@ -107,6 +114,8 @@ struct ChatServiceTests {
         mockAdapter.receivedReasoningSummaryMessages = nil
         mockAdapter.receivedConversationSummaryMessages = nil
         mockAdapter.receivedConversationProfileMessages = nil
+        mockAdapter.receivedContextCompressionMessages = nil
+        mockAdapter.contextCompressionRequestCount = 0
         mockAdapter.receivedTools = nil
         mockAdapter.receivedAudioAttachments = nil
         mockAdapter.receivedImageAttachments = nil
@@ -158,9 +167,13 @@ struct ChatServiceTests {
     func activatedChatModels() -> [RunnableModel] {
         chatService.activatedRunnableModels.filter { $0.model.isChatModel }
     }
+
+    func messagesExcludingConversationRuntime(_ messages: [ChatMessage]) -> [ChatMessage] {
+        messages.filter { !$0.content.contains("<conversation_runtime>") }
+    }
 }
 
-@Suite("Persistence Tests")
+@Suite("Persistence Tests", .serialized)
 struct PersistenceTests {
     var chatsDirectory: URL {
         Persistence.getChatsDirectory()
@@ -207,7 +220,7 @@ struct PersistenceTests {
     }
 
     var documentsDirectory: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        StorageUtility.documentsDirectory
     }
 
     var configDirectory: URL {
@@ -420,6 +433,8 @@ struct PersistenceTests {
         for session in sessions {
             Persistence.deleteSessionArtifacts(sessionID: session.id)
         }
+        // 先关闭数据库连接再删除文件，避免 SQLite 继续操作已解除链接的旧文件。
+        Persistence.resetGRDBStoreForTests()
         removeIfExists(currentIndexFileURL)
         removeIfExists(foldersFileURL)
         removeIfExists(currentSessionsDirectory)
@@ -458,6 +473,29 @@ struct PersistenceTests {
         removeIfExists(legacyMemoryStoreSQLiteURL)
         removeIfExists(legacyMemoryStoreSQLiteWALURL)
         removeIfExists(legacyMemoryStoreSQLiteSHMURL)
+        Persistence.resetGRDBStoreForTests()
+    }
+
+    func enableLaunchBackupForTest() -> Int? {
+        let previousValue = Persistence.readAppConfigInteger(key: Persistence.launchBackupEnabledKey)
+        _ = Persistence.writeAppConfig(
+            key: Persistence.launchBackupEnabledKey,
+            integer: 1,
+            typeHint: AppConfigKey.syncBackupCreateOnLaunch.typeHint
+        )
+        return previousValue
+    }
+
+    func restoreLaunchBackupAfterTest(_ previousValue: Int?) {
+        if let previousValue {
+            _ = Persistence.writeAppConfig(
+                key: Persistence.launchBackupEnabledKey,
+                integer: previousValue,
+                typeHint: AppConfigKey.syncBackupCreateOnLaunch.typeHint
+            )
+        } else {
+            _ = Persistence.deleteAppConfig(key: Persistence.launchBackupEnabledKey)
+        }
     }
 }
 

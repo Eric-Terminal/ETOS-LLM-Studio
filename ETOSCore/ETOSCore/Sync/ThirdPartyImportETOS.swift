@@ -23,7 +23,8 @@ extension ThirdPartyImportService {
         }
 
         if isETOSSnapshotFile(rootURL) {
-            return try ETOSSnapshotPackageImporter.buildPackage(from: rootURL)
+            let request = try SnapshotRestoreRequest(copying: rootURL)
+            throw request
         }
 
         if isLikelyCompressedBackup(rootURL) {

@@ -15,6 +15,24 @@ public enum ETMathContentSegment: Equatable, Sendable {
 }
 
 public enum ETMathContentParser {
+    private static let bareTeXCommands: Set<String> = [
+        "alpha", "beta", "gamma", "delta", "epsilon", "varepsilon", "zeta", "eta", "theta", "vartheta",
+        "iota", "kappa", "lambda", "mu", "nu", "xi", "pi", "varpi", "rho", "varrho", "sigma",
+        "varsigma", "tau", "upsilon", "phi", "varphi", "chi", "psi", "omega",
+        "Gamma", "Delta", "Theta", "Lambda", "Xi", "Pi", "Sigma", "Upsilon", "Phi", "Psi", "Omega",
+        "frac", "dfrac", "tfrac", "sqrt", "binom", "dbinom", "tbinom",
+        "sum", "prod", "coprod", "int", "iint", "iiint", "oint", "lim", "limsup", "liminf",
+        "sin", "cos", "tan", "cot", "sec", "csc", "arcsin", "arccos", "arctan", "log", "ln", "exp",
+        "min", "max", "sup", "inf", "det", "gcd",
+        "vec", "hat", "bar", "overline", "underline", "dot", "ddot", "widehat", "widetilde",
+        "mathbf", "mathrm", "mathit", "mathsf", "mathtt", "mathbb", "mathcal", "mathfrak", "operatorname",
+        "text", "boxed", "left", "right", "begin", "end",
+        "infty", "partial", "nabla", "pm", "mp", "times", "div", "cdot", "le", "leq", "ge", "geq",
+        "ne", "neq", "approx", "equiv", "propto", "to", "rightarrow", "leftarrow", "leftrightarrow",
+        "Rightarrow", "Leftarrow", "Leftrightarrow", "in", "notin", "subset", "subseteq", "supset",
+        "supseteq", "cup", "cap", "forall", "exists", "neg", "land", "lor"
+    ]
+
     public static func containsMath(in source: String) -> Bool {
         cachedSegments(for: source).contains { segment in
             switch segment {
@@ -28,6 +46,21 @@ public enum ETMathContentParser {
 
     public static func parseSegments(in source: String) -> [ETMathContentSegment] {
         cachedSegments(for: source)
+    }
+
+    public static func normalizedMathDelimiters(in source: String) -> String {
+        var result = ""
+        for segment in cachedSegments(for: source) {
+            switch segment {
+            case .text(let text):
+                result.append(text)
+            case .inlineMath(let latex):
+                result.append("\\(\(latex)\\)")
+            case .blockMath(let latex):
+                result.append("\\[\(latex)\\]")
+            }
+        }
+        return result
     }
 
     private static func cachedSegments(for source: String) -> [ETMathContentSegment] {
@@ -86,6 +119,15 @@ public enum ETMathContentParser {
                 continue
             }
 
+            if source[index] == "\\",
+               !isEscaped(source, at: index),
+               let end = findBareTeXEnd(source, from: index) {
+                flushText()
+                segments.append(.inlineMath(String(source[index..<end])))
+                index = end
+                continue
+            }
+
             buffer.append(source[index])
             index = source.index(after: index)
         }
@@ -132,6 +174,54 @@ public enum ETMathContentParser {
             cursor = source.index(after: cursor)
         }
         return nil
+    }
+
+    private static func findBareTeXEnd(_ source: String, from index: String.Index) -> String.Index? {
+        let commandStart = source.index(after: index)
+        var cursor = commandStart
+        while cursor < source.endIndex, source[cursor].isASCII, source[cursor].isLetter {
+            cursor = source.index(after: cursor)
+        }
+        guard cursor > commandStart else { return nil }
+
+        let command = String(source[commandStart..<cursor])
+        let hasAttachedArgument = cursor < source.endIndex
+            && (source[cursor] == "{" || source[cursor] == "[")
+        guard bareTeXCommands.contains(command) || hasAttachedArgument else {
+            return nil
+        }
+
+        var groupClosings: [Character] = []
+        var expressionEnd = cursor
+        while cursor < source.endIndex {
+            let character = source[cursor]
+            if character == "{" || character == "[" {
+                groupClosings.append(character == "{" ? "}" : "]")
+            } else if let expectedClosing = groupClosings.last, character == expectedClosing {
+                groupClosings.removeLast()
+            } else if groupClosings.isEmpty, !isBareTeXContinuation(character) {
+                break
+            }
+
+            cursor = source.index(after: cursor)
+            expressionEnd = cursor
+        }
+
+        guard groupClosings.isEmpty else { return nil }
+        return expressionEnd
+    }
+
+    private static func isBareTeXContinuation(_ character: Character) -> Bool {
+        if character.isASCII, character.isLetter || character.isNumber {
+            return true
+        }
+        switch character {
+        case "\\", "_", "^", "(", ")", "+", "-", "=", "*", "/", "<", ">", "|", "!", ".", ":", "&", "'", "~",
+             "−", "±", "×", "÷", "·", "≤", "≥", "≠", "≈", "∞":
+            return true
+        default:
+            return false
+        }
     }
 }
 

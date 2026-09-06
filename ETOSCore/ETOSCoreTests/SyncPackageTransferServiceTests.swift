@@ -147,8 +147,8 @@ struct SyncPackageTransferServiceTests {
         #expect(FileManager.default.fileExists(atPath: unrelatedURL.path))
     }
 
-    @Test("旧版纯 SyncPackage JSON 会被拒绝")
-    func testDecodeLegacyRawSyncPackageJSONThrowsInvalidEnvelope() throws {
+    @Test("旧版纯 SyncPackage JSON 仍可兼容导入")
+    func testDecodeLegacyRawSyncPackageJSON() throws {
         let session = ChatSession(
             id: UUID(),
             name: "旧版会话",
@@ -165,18 +165,9 @@ struct SyncPackageTransferServiceTests {
         )
 
         let legacyData = try JSONEncoder().encode(package)
-        do {
-            _ = try SyncPackageTransferService.decodePackage(from: legacyData)
-            Issue.record("旧版纯 SyncPackage JSON 应该被拒绝")
-        } catch let error as SyncPackageTransferError {
-            switch error {
-            case .invalidEnvelope:
-                #expect(Bool(true))
-            default:
-                Issue.record("抛出了错误类型，但不是 invalidEnvelope：\(error.localizedDescription)")
-            }
-        } catch {
-            Issue.record("抛出了非预期错误：\(error.localizedDescription)")
-        }
+        let decoded = try SyncPackageTransferService.decodePackage(from: legacyData)
+
+        #expect(decoded.sessions.first?.session.id == session.id)
+        #expect(decoded.sessions.first?.messages.first?.id == message.id)
     }
 }

@@ -14,6 +14,7 @@ struct WatchRoleplayHTMLCardView: View {
     let sessionID: UUID
     let messageID: UUID
     let versionIndex: Int
+    let chatMessages: [ChatMessage]
     let onOpenDocument: (WatchWebHTMLPageItem) -> Void
 
     @State private var documents: [WatchPreparedRoleplayHTMLDocument] = []
@@ -54,10 +55,10 @@ struct WatchRoleplayHTMLCardView: View {
             let sessionID = sessionID
             let messageID = messageID
             let versionIndex = versionIndex
+            let chatMessages = chatMessages
             let prepared = await Task.detached(priority: .utility) {
                 let store = RoleplayStore.shared
                 let snapshot = store.variableSnapshot(sessionID: sessionID)
-                let chatMessages = Persistence.loadMessages(for: sessionID)
                 let worldbooks = ChatService.shared.loadWorldbooks()
                 let variables = snapshot.mergedVariables(messageID: messageID, versionIndex: versionIndex)
                 let binding = store.binding(sessionID: sessionID)
@@ -117,6 +118,7 @@ struct WatchRoleplaySessionScriptHost: View {
     let sessionID: UUID?
     let messageID: UUID?
     let versionIndex: Int
+    let chatMessages: [ChatMessage]
 
     @State private var documents: [WatchPreparedRoleplayScriptDocument] = []
     @State private var revision = 0
@@ -141,13 +143,13 @@ struct WatchRoleplaySessionScriptHost: View {
                 documents = []
                 return
             }
+            let chatMessages = chatMessages
             documents = await Task.detached(priority: .utility) {
                 let store = RoleplayStore.shared
                 guard let binding = store.binding(sessionID: sessionID), binding.helperScriptsEnabled else { return [] }
                 let characters = binding.characterIDs.compactMap(store.character(id:))
                 let persona = binding.personaID.flatMap(store.persona(id:))
                 let snapshot = store.variableSnapshot(sessionID: sessionID)
-                let chatMessages = Persistence.loadMessages(for: sessionID)
                 let worldbooks = ChatService.shared.loadWorldbooks()
                 let additionalWorldbookNames = binding.additionalWorldbookIDs.compactMap { id in
                     worldbooks.first(where: { $0.id == id })?.name

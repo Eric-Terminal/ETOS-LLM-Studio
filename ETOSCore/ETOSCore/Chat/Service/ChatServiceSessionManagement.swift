@@ -10,6 +10,48 @@ import Foundation
 import Combine
 import os.log
 
+public enum TemporaryChatMemoryMode: Equatable, Sendable {
+    case enabled
+    case isolated
+
+    public var isMemoryEnabled: Bool {
+        self == .enabled
+    }
+
+    var toggled: TemporaryChatMemoryMode {
+        self == .enabled ? .isolated : .enabled
+    }
+}
+
+public enum TemporaryChatTapOutcome: Equatable, Sendable {
+    case enabled(TemporaryChatMemoryMode)
+    case memoryModeChanged(TemporaryChatMemoryMode)
+    case disabled
+    case unavailable
+}
+
+struct TemporaryChatRuntimeState {
+    var memoryMode: TemporaryChatMemoryMode
+    let enabledAt: Date
+    var didSwitchMemoryMode: Bool
+}
+
+public extension Notification.Name {
+    static let temporaryChatStateDidChange = Notification.Name("com.ETOS.temporaryChat.stateDidChange")
+}
+
+public enum TemporaryChatToggleAvailability {
+    public static let memoryModeSwitchInterval: TimeInterval = 2
+
+    /// 已开启的临时对话始终允许关闭；新的临时对话只能在对话开始前开启。
+    public static func isAvailable(
+        isTemporaryChatEnabled: Bool,
+        hasConversationStarted: Bool
+    ) -> Bool {
+        isTemporaryChatEnabled || !hasConversationStarted
+    }
+}
+
 extension ChatService {
     // MARK: - 公开方法 (会话管理)
 
@@ -17,7 +59,18 @@ extension ChatService {
         guard let sessionID else { return false }
         ephemeralSessionLock.lock()
         defer { ephemeralSessionLock.unlock() }
-        return ephemeralSessionIDs.contains(sessionID)
+        return ephemeralSessionStates[sessionID] != nil
+    }
+
+    public func temporaryChatMemoryMode(for sessionID: UUID?) -> TemporaryChatMemoryMode? {
+        guard let sessionID else { return nil }
+        ephemeralSessionLock.lock()
+        defer { ephemeralSessionLock.unlock() }
+        return ephemeralSessionStates[sessionID]?.memoryMode
+    }
+
+    public func isTemporaryChatMemoryIsolated(for sessionID: UUID?) -> Bool {
+        temporaryChatMemoryMode(for: sessionID) == .isolated
     }
 
     public func temporaryChatMessageCount(for sessionID: UUID) -> Int? {
@@ -26,12 +79,55 @@ extension ChatService {
     }
 
     /// 切换到唯一的运行期临时会话；其消息在关闭临时模式前不会写入会话数据库。
-    public func enableTemporaryChat() {
+    public func enableTemporaryChat(
+        memoryMode: TemporaryChatMemoryMode = .enabled,
+        now: Date = Date()
+    ) {
         createNewSession()
         guard let sessionID = currentSessionSubject.value?.id else { return }
         ephemeralSessionLock.lock()
-        ephemeralSessionIDs.insert(sessionID)
+        ephemeralSessionStates[sessionID] = TemporaryChatRuntimeState(
+            memoryMode: memoryMode,
+            enabledAt: now,
+            didSwitchMemoryMode: false
+        )
         ephemeralSessionLock.unlock()
+        notifyTemporaryChatStateDidChange(sessionID: sessionID)
+    }
+
+    /// 首次轻点立即开启；开启后两秒内再次轻点切换记忆模式，之后再点关闭。
+    public func performTemporaryChatTap(
+        preferredMemoryMode: TemporaryChatMemoryMode,
+        canEnable: Bool,
+        now: Date = Date()
+    ) -> TemporaryChatTapOutcome {
+        if let sessionID = currentSessionSubject.value?.id {
+            ephemeralSessionLock.lock()
+            let state = ephemeralSessionStates[sessionID]
+            ephemeralSessionLock.unlock()
+
+            if var state {
+                let elapsed = now.timeIntervalSince(state.enabledAt)
+                if !state.didSwitchMemoryMode,
+                   elapsed >= 0,
+                   elapsed <= TemporaryChatToggleAvailability.memoryModeSwitchInterval {
+                    state.memoryMode = state.memoryMode.toggled
+                    state.didSwitchMemoryMode = true
+                    ephemeralSessionLock.lock()
+                    ephemeralSessionStates[sessionID] = state
+                    ephemeralSessionLock.unlock()
+                    notifyTemporaryChatStateDidChange(sessionID: sessionID)
+                    return .memoryModeChanged(state.memoryMode)
+                }
+
+                _ = saveCurrentTemporaryChat()
+                return .disabled
+            }
+        }
+
+        guard canEnable else { return .unavailable }
+        enableTemporaryChat(memoryMode: preferredMemoryMode, now: now)
+        return .enabled(preferredMemoryMode)
     }
 
     /// 将当前临时对话转为正式会话，并一次性写入完整消息快照。
@@ -43,8 +139,9 @@ extension ChatService {
         }
 
         ephemeralSessionLock.lock()
-        ephemeralSessionIDs.remove(currentSession.id)
+        ephemeralSessionStates.removeValue(forKey: currentSession.id)
         ephemeralSessionLock.unlock()
+        notifyTemporaryChatStateDidChange(sessionID: currentSession.id)
 
         let messages = messagesSnapshot(for: currentSession.id)
         guard !messages.isEmpty else {
@@ -76,6 +173,7 @@ extension ChatService {
     }
 
     public func createNewSession() {
+        let sourceSessionID = currentSessionSubject.value?.id
         var updatedSessions = chatSessionsSubject.value
 
         // 约束：最多只保留一个临时会话，重复点击“新建对话”时复用现有临时会话。
@@ -108,6 +206,7 @@ extension ChatService {
 
             // 始终切换到复用的临时会话，并刷新其消息列表（通常为空）。
             if let target = updatedSessions.first(where: { $0.id == reusableTemporary.id }) {
+                inheritLocalAgentMode(from: sourceSessionID, to: target.id)
                 if currentSessionSubject.value?.id == target.id {
                     let messages = messagesForSessionActivation(target.id)
                     storeRuntimeMessagesSnapshot(messages, for: target.id)
@@ -116,11 +215,6 @@ extension ChatService {
                     setCurrentSession(target)
                 }
                 logger.info("复用了已有临时会话。")
-                AppLog.userOperation(
-                    category: NSLocalizedString("会话", comment: "App log category"),
-                    action: NSLocalizedString("复用临时会话", comment: "App log action"),
-                    payload: ["sessionID": target.id.uuidString]
-                )
             }
             return
         }
@@ -132,15 +226,11 @@ extension ChatService {
         )
         updatedSessions.insert(newSession, at: 0)
         chatSessionsSubject.send(updatedSessions)
+        inheritLocalAgentMode(from: sourceSessionID, to: newSession.id)
         currentSessionSubject.send(newSession)
         storeRuntimeMessagesSnapshot([], for: newSession.id)
         publishMessages([])
         logger.info("创建了新的临时会话。")
-        AppLog.userOperation(
-            category: NSLocalizedString("会话", comment: "App log category"),
-            action: NSLocalizedString("创建新会话", comment: "App log action"),
-            payload: ["sessionID": newSession.id.uuidString]
-        )
     }
 
     /// 创建一个带初始消息的正式会话，并切换到该会话。
@@ -148,11 +238,16 @@ extension ChatService {
     public func createSavedSession(
         name: String,
         initialMessages: [ChatMessage] = [],
+        systemPrompt: String? = nil,
         topicPrompt: String? = nil,
         enhancedPrompt: String? = nil,
+        preferredModelIdentifier: String? = nil,
         lorebookIDs: [UUID] = [],
-        worldbookContextIsolationEnabled: Bool = false,
-        folderID: UUID? = nil
+        memoryContextIsolationEnabled: Bool = false,
+        toolContextIsolationEnabled: Bool = false,
+        globalSystemPromptIsolationEnabled: Bool = false,
+        folderID: UUID? = nil,
+        activate: Bool = true
     ) -> ChatSession {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let sessionName = trimmedName.isEmpty
@@ -161,10 +256,14 @@ extension ChatService {
         let newSession = ChatSession(
             id: UUID(),
             name: sessionName,
+            systemPrompt: systemPrompt,
             topicPrompt: topicPrompt,
             enhancedPrompt: enhancedPrompt,
+            preferredModelIdentifier: preferredModelIdentifier,
             lorebookIDs: lorebookIDs,
-            worldbookContextIsolationEnabled: worldbookContextIsolationEnabled,
+            memoryContextIsolationEnabled: memoryContextIsolationEnabled,
+            toolContextIsolationEnabled: toolContextIsolationEnabled,
+            globalSystemPromptIsolationEnabled: globalSystemPromptIsolationEnabled,
             folderID: folderID,
             isTemporary: false
         )
@@ -172,34 +271,46 @@ extension ChatService {
         var updatedSessions = chatSessionsSubject.value
         updatedSessions.insert(newSession, at: 0)
         chatSessionsSubject.send(updatedSessions)
-        currentSessionSubject.send(newSession)
         storeRuntimeMessagesSnapshot(initialMessages, for: newSession.id)
-        publishMessages(initialMessages)
+        if activate {
+            currentSessionSubject.send(newSession)
+            publishMessages(initialMessages)
+        }
         persistMessages(initialMessages, for: newSession.id)
         Persistence.saveChatSessions(updatedSessions)
         logger.info("创建了正式会话并写入初始消息: \(newSession.name)")
-        AppLog.userOperation(
-            category: NSLocalizedString("会话", comment: "App log category"),
-            action: NSLocalizedString("创建正式会话", comment: "App log action"),
-            payload: [
-                "sessionID": newSession.id.uuidString,
-                "messageCount": "\(initialMessages.count)"
-            ]
-        )
         return newSession
     }
 
     public func deleteSessions(_ sessionsToDelete: [ChatSession]) {
         var currentSessions = chatSessionsSubject.value
+        let currentModeBeforeDeletion = currentSessionSubject.value.map {
+            Persistence.localAgentMode(sessionID: $0.id)
+        }
         let existingPermanentSessionIDs = Set(currentSessions.filter { !$0.isTemporary }.map(\.id))
-        let deletingSessionIDs = Set(sessionsToDelete.map(\.id))
+        let containedSessionIDs = Set(sessionsToDelete.flatMap { session in
+            Persistence.loadEmbeddedSubagentSessionIDs(containerSessionID: session.id)
+        })
+        let deletingSessionIDs = Set(sessionsToDelete.map(\.id)).union(containedSessionIDs)
         let isClearingAllConversationRecords = !existingPermanentSessionIDs.isEmpty
             && existingPermanentSessionIDs.isSubset(of: deletingSessionIDs)
         var deletedSessionMessages: [ChatMessage] = []
         for session in sessionsToDelete {
+            for containedSessionID in Persistence.loadEmbeddedSubagentSessionIDs(containerSessionID: session.id) {
+                cancelRequestForSessionDeletion(containedSessionID)
+                prepareConversationRuntimeForSessionDeletion(containedSessionID)
+                clearRuntimeMessagesSnapshot(for: containedSessionID)
+                clearLocalLLMKVCache(for: containedSessionID)
+                deletedSessionMessages.append(contentsOf: Persistence.loadMessages(for: containedSessionID))
+            }
+            cancelRequestForSessionDeletion(session.id)
+            prepareConversationRuntimeForSessionDeletion(session.id)
             ephemeralSessionLock.lock()
-            ephemeralSessionIDs.remove(session.id)
+            let removedTemporaryState = ephemeralSessionStates.removeValue(forKey: session.id)
             ephemeralSessionLock.unlock()
+            if removedTemporaryState != nil {
+                notifyTemporaryChatStateDidChange(sessionID: session.id)
+            }
             clearRuntimeMessagesSnapshot(for: session.id)
             let messages = Persistence.loadMessages(for: session.id)
             deletedSessionMessages.append(contentsOf: messages)
@@ -225,6 +336,12 @@ extension ChatService {
                 )
                 currentSessions.append(newSession)
                 newCurrentSession = newSession
+                if let currentModeBeforeDeletion {
+                    _ = Persistence.saveLocalAgentMode(
+                        currentModeBeforeDeletion,
+                        sessionID: newSession.id
+                    )
+                }
             }
         }
         chatSessionsSubject.send(currentSessions)
@@ -233,14 +350,17 @@ extension ChatService {
         }
         Persistence.saveChatSessions(currentSessions)
         logger.info("删除后已保存会话列表。")
-        AppLog.userOperation(
-            category: NSLocalizedString("会话", comment: "App log category"),
-            action: NSLocalizedString("删除会话", comment: "App log action"),
-            payload: ["count": "\(sessionsToDelete.count)"]
-        )
         if isClearingAllConversationRecords {
             scheduleAchievementUnlockIfNeeded(.memoryPurge)
         }
+    }
+
+    private func notifyTemporaryChatStateDidChange(sessionID: UUID) {
+        NotificationCenter.default.post(
+            name: .temporaryChatStateDidChange,
+            object: self,
+            userInfo: ["sessionID": sessionID]
+        )
     }
 
     @discardableResult
@@ -255,7 +375,9 @@ extension ChatService {
             enhancedPrompt: sourceSession.enhancedPrompt,
             lorebookIDs: sourceSession.lorebookIDs,
             tagIDs: sourceSession.tagIDs,
-            worldbookContextIsolationEnabled: sourceSession.worldbookContextIsolationEnabled,
+            memoryContextIsolationEnabled: sourceSession.memoryContextIsolationEnabled,
+            toolContextIsolationEnabled: sourceSession.toolContextIsolationEnabled,
+            globalSystemPromptIsolationEnabled: sourceSession.globalSystemPromptIsolationEnabled,
             folderID: sourceSession.folderID,
             isTemporary: false
         )
@@ -285,6 +407,7 @@ extension ChatService {
         var updatedSessions = chatSessionsSubject.value
         updatedSessions.insert(newSession, at: 0)
         chatSessionsSubject.send(updatedSessions)
+        inheritLocalAgentMode(from: sourceSession.id, to: newSession.id)
         setCurrentSession(newSession)
         Persistence.saveChatSessions(updatedSessions)
         logger.info("保存了会话列表。")
@@ -309,7 +432,9 @@ extension ChatService {
             enhancedPrompt: copyPrompts ? sourceSession.enhancedPrompt : nil,
             lorebookIDs: sourceSession.lorebookIDs,
             tagIDs: sourceSession.tagIDs,
-            worldbookContextIsolationEnabled: sourceSession.worldbookContextIsolationEnabled,
+            memoryContextIsolationEnabled: sourceSession.memoryContextIsolationEnabled,
+            toolContextIsolationEnabled: sourceSession.toolContextIsolationEnabled,
+            globalSystemPromptIsolationEnabled: sourceSession.globalSystemPromptIsolationEnabled,
             folderID: sourceSession.folderID,
             isTemporary: false
         )
@@ -332,18 +457,23 @@ extension ChatService {
 
                 if let originalImageFileNames = messagesToCopy[i].imageFileNames, !originalImageFileNames.isEmpty {
                     var newImageFileNames: [String] = []
+                    var copiedImageNamesByOriginal: [String: String] = [:]
                     for originalImageFileName in originalImageFileNames {
                         if let imageData = Persistence.loadImage(fileName: originalImageFileName) {
                             let ext = (originalImageFileName as NSString).pathExtension
                             let newImageFileName = "\(UUID().uuidString).\(ext)"
                             if Persistence.saveImage(imageData, fileName: newImageFileName) != nil {
                                 newImageFileNames.append(newImageFileName)
+                                copiedImageNamesByOriginal[originalImageFileName] = newImageFileName
                                 logger.info("  - 复制了图片文件: \(originalImageFileName) -> \(newImageFileName)")
                             }
                         }
                     }
                     if !newImageFileNames.isEmpty {
                         messagesToCopy[i].imageFileNames = newImageFileNames
+                        let excludedNames = (messagesToCopy[i].modelExcludedImageFileNames ?? [])
+                            .compactMap { copiedImageNamesByOriginal[$0] }
+                        messagesToCopy[i].modelExcludedImageFileNames = excludedNames.isEmpty ? nil : excludedNames
                     }
                 }
 
@@ -362,10 +492,20 @@ extension ChatService {
         var updatedSessions = chatSessionsSubject.value
         updatedSessions.insert(newSession, at: 0)
         chatSessionsSubject.send(updatedSessions)
+        inheritLocalAgentMode(from: sourceSession.id, to: newSession.id)
         setCurrentSession(newSession)
         Persistence.saveChatSessions(updatedSessions)
         logger.info("保存了会话列表。")
         return newSession
+    }
+
+    /// 新会话只在创建时复制一次来源模式；后续切换始终读取各自的会话记录。
+    private func inheritLocalAgentMode(from sourceSessionID: UUID?, to targetSessionID: UUID) {
+        guard let sourceSessionID, sourceSessionID != targetSessionID else { return }
+        _ = Persistence.saveLocalAgentMode(
+            Persistence.localAgentMode(sessionID: sourceSessionID),
+            sessionID: targetSessionID
+        )
     }
 
     public func deleteLastMessage(for session: ChatSession) {
@@ -391,13 +531,15 @@ extension ChatService {
         var messages = messagesForSessionSubject.value
         guard let messageIndex = messages.firstIndex(where: { $0.id == message.id }) else { return }
         let targetMessage = messages[messageIndex]
-        let relatedToolMessageIDs = relatedToolResultMessageIDs(for: targetMessage, at: messageIndex, in: messages)
-        let deletedMessageIDs = Set([targetMessage.id]).union(relatedToolMessageIDs)
-        let deletedMessages = messages.filter { deletedMessageIDs.contains($0.id) }
+        let deletedMessages = [targetMessage]
         for deletedMessage in deletedMessages {
             invalidateAttachmentCache(for: deletedMessage)
         }
-        messages.removeAll { deletedMessageIDs.contains($0.id) }
+        reanchorResponseGroupsAfterDeletingUsers(
+            in: &messages,
+            deletingMessageIDs: [targetMessage.id]
+        )
+        messages.remove(at: messageIndex)
         repairSelectedResponseAttempts(in: &messages, affectedBy: deletedMessages)
 
         publishMessages(messages)
@@ -410,18 +552,26 @@ extension ChatService {
         logger.info("已删除消息: \(targetMessage.id.uuidString)")
     }
 
-    /// 仅删除明确选中的消息，不扩展到相邻工具结果或同组回复版本。
+    /// 删除明确选中的消息，并清理已经合并进所选气泡的隐藏工具结果记录。
     public func deleteMessages(withIDs messageIDs: Set<UUID>) {
         guard !messageIDs.isEmpty,
               let currentSession = currentSessionSubject.value else { return }
         var messages = messagesForSessionSubject.value
-        let deletedMessages = messages.filter { messageIDs.contains($0.id) }
+        let resolvedMessageIDs = BatchSelectionSupport.deletionIDs(
+            selectedIDs: messageIDs,
+            in: messages
+        )
+        let deletedMessages = messages.filter { resolvedMessageIDs.contains($0.id) }
         guard !deletedMessages.isEmpty else { return }
 
         for deletedMessage in deletedMessages {
             invalidateAttachmentCache(for: deletedMessage)
         }
-        messages.removeAll { messageIDs.contains($0.id) }
+        reanchorResponseGroupsAfterDeletingUsers(
+            in: &messages,
+            deletingMessageIDs: resolvedMessageIDs
+        )
+        messages.removeAll { resolvedMessageIDs.contains($0.id) }
         repairSelectedResponseAttempts(in: &messages, affectedBy: deletedMessages)
 
         publishMessages(messages)
@@ -440,8 +590,9 @@ extension ChatService {
         guard let messageIndex = messages.firstIndex(where: { $0.id == message.id }) else { return }
         let targetMessage = messages[messageIndex]
 
-        if let groupID = targetMessage.responseGroupID,
-           targetMessage.responseAttemptID != nil,
+        if let groupID = ChatResponseAttemptSupport
+            .versionInfo(for: targetMessage, in: messages)?
+            .responseGroupID,
            ChatResponseAttemptSupport.orderedAttemptIDs(for: groupID, in: messages).count > 1 {
             let deletedMessages = messages.filter { $0.responseGroupID == groupID }
             guard !deletedMessages.isEmpty else { return }
@@ -482,7 +633,10 @@ extension ChatService {
         guard let currentSession = currentSessionSubject.value else { return }
         var messages = messagesForSessionSubject.value
         guard let index = messages.firstIndex(where: { $0.id == updatedMessage.id }) else { return }
-        messages[index] = updatedMessage
+        messages.replaceSubrange(
+            index...index,
+            with: ChatMessageAtomicContentSupport.atomized(updatedMessage)
+        )
         publishMessages(messages)
         persistMessages(messages, for: currentSession.id)
         logger.info("已更新消息: \(updatedMessage.id.uuidString)")
@@ -519,37 +673,35 @@ extension ChatService {
         logger.info("已强制保存所有会话。")
     }
 
-    private func relatedToolResultMessageIDs(for message: ChatMessage, at messageIndex: Int, in messages: [ChatMessage]) -> Set<UUID> {
-        guard message.role == .assistant,
-              let toolCalls = message.toolCalls,
-              !toolCalls.isEmpty else {
-            return []
-        }
-
-        let toolCallIDs = Set(toolCalls.map(\.id))
-        var relatedIDs = Set<UUID>()
-        var cursor = messages.index(after: messageIndex)
-        while cursor < messages.endIndex {
-            let candidate = messages[cursor]
-            guard candidate.role == .tool else { break }
-            if isSameResponseAttempt(candidate, message),
-               let candidateToolCalls = candidate.toolCalls,
-               candidateToolCalls.contains(where: { toolCallIDs.contains($0.id) }) {
-                relatedIDs.insert(candidate.id)
+    /// 一次发送的最后一条 user 消息是回复组锚点。删除它时，将版本组迁移到同次输入中剩余的最后一条消息。
+    private func reanchorResponseGroupsAfterDeletingUsers(
+        in messages: inout [ChatMessage],
+        deletingMessageIDs: Set<UUID>
+    ) {
+        let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: messages)
+        for turn in ChatConversationTurnSupport.turns(in: visibleMessages) {
+            guard let userRange = turn.userRange else { continue }
+            let oldAnchorID = visibleMessages[userRange.index(before: userRange.endIndex)].id
+            guard deletingMessageIDs.contains(oldAnchorID),
+                  let newAnchorID = visibleMessages[userRange]
+                    .reversed()
+                    .first(where: { !deletingMessageIDs.contains($0.id) })?
+                    .id else {
+                continue
             }
-            cursor = messages.index(after: cursor)
-        }
-        return relatedIDs
-    }
 
-    private func isSameResponseAttempt(_ lhs: ChatMessage, _ rhs: ChatMessage) -> Bool {
-        switch (lhs.responseAttemptID, rhs.responseAttemptID) {
-        case let (lhsAttemptID?, rhsAttemptID?):
-            return lhsAttemptID == rhsAttemptID
-        case (nil, nil):
-            return true
-        default:
-            return false
+            let selectedAttemptID = ChatResponseAttemptSupport.selectedAttemptID(
+                for: oldAnchorID,
+                in: messages
+            )
+            for index in messages.indices {
+                if messages[index].responseGroupID == oldAnchorID {
+                    messages[index].responseGroupID = newAnchorID
+                }
+                if messages[index].id == newAnchorID {
+                    messages[index].selectedResponseAttemptID = selectedAttemptID
+                }
+            }
         }
     }
 

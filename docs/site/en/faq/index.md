@@ -132,7 +132,7 @@ Identify which layer is broken:
 | No model connects | Network / proxy |
 | Some models don't connect | That provider's key / Base URL |
 | Models connect but reply is off | System prompt / memory / worldbook interference |
-| Tools can't be called | Approval policy / Tool Center master switch / worldbook isolation |
+| Tools can't be called | Approval policy / Tool Center master switch / per-session tool blocking |
 | Sync down | Both ends on same network? / iCloud status |
 
 Then jump to the relevant tutorial. See [Debug & Feedback](/en/modules/debug-feedback).

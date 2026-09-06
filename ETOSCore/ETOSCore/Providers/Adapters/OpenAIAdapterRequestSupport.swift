@@ -52,6 +52,7 @@ extension OpenAIAdapter {
         fileAttachments: [UUID: [FileAttachment]]
     ) -> URLRequest? {
         let reasoningContentEchoMode = Self.reasoningContentEchoMode(from: commonPayload)
+        let suppressesRequestLog = boolValue(from: commonPayload[requestLogSuppressionControlKey]) ?? false
         guard let baseURL = URL(string: model.provider.baseURL) else {
             logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
@@ -178,6 +179,7 @@ extension OpenAIAdapter {
         var finalPayload = mergedRequestPayload(commonPayload, with: overrides)
         finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
         finalPayload.removeValue(forKey: Self.reasoningContentEchoModeControlKey)
+        finalPayload.removeValue(forKey: requestLogSuppressionControlKey)
         finalPayload["model"] = resolvedRequestModelName(for: model, overrides: overrides)
         finalPayload["messages"] = apiMessages
 
@@ -216,16 +218,10 @@ extension OpenAIAdapter {
 
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: [.sortedKeys])
-            if let httpBody = request.httpBody {
-                let sanitizedPayload = sanitizedPayloadForDebug(finalPayload)
-                if let sanitizedData = try? JSONSerialization.data(withJSONObject: sanitizedPayload, options: [.sortedKeys]),
-                   let sanitizedString = String(data: sanitizedData, encoding: .utf8) {
-                    logger.debug("构建的聊天请求体:\n---\n\(sanitizedString)\n---")
-                } else if let jsonString = String(data: httpBody, encoding: .utf8) {
-                    logger.debug("构建的聊天请求体 (无法完全隐藏媒体，输出原始体的 hash): \(jsonString.hashValue)")
-                }
+            logger.debug("已构建聊天请求体，共 \(request.httpBody?.count ?? 0) 字节。")
+            if !suppressesRequestLog {
+                logChatRequestSnapshot(adapterName: "OpenAI兼容", request: request, payload: finalPayload)
             }
-            logChatRequestSnapshot(adapterName: "OpenAI兼容", request: request, payload: finalPayload)
         } catch {
             logger.error("构建聊天请求失败: JSON 序列化错误 - \(error.localizedDescription)")
             return nil
@@ -245,6 +241,7 @@ extension OpenAIAdapter {
         fileAttachments: [UUID: [FileAttachment]]
     ) -> URLRequest? {
         let reasoningContentEchoMode = Self.reasoningContentEchoMode(from: commonPayload)
+        let suppressesRequestLog = boolValue(from: commonPayload[requestLogSuppressionControlKey]) ?? false
         if !audioAttachments.isEmpty {
             logger.error("构建 Responses 请求失败: OpenAI Responses API 暂不支持音频附件。")
             return nil
@@ -283,6 +280,7 @@ extension OpenAIAdapter {
         finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
         finalPayload.removeValue(forKey: Self.reasoningContentEchoModeControlKey)
         finalPayload.removeValue(forKey: Self.responsesForceFullInputControlKey)
+        finalPayload.removeValue(forKey: requestLogSuppressionControlKey)
         finalPayload["model"] = resolvedRequestModelName(for: model, overrides: overrides)
         finalPayload["input"] = inputAssembly.items
         if forceFullInput {
@@ -307,8 +305,30 @@ extension OpenAIAdapter {
             }
         }
 
+        var responsesTools = (finalPayload["tools"] as? [Any])?.compactMap { $0 as? [String: Any] } ?? []
+        if model.model.outputModalities.contains(.image),
+           !responsesTools.contains(where: { ($0["type"] as? String) == "image_generation" }) {
+            responsesTools.append(["type": "image_generation"])
+        }
+
         if let tools, !tools.isEmpty {
-            let apiTools = stableToolDefinitions(tools) { self.sanitizedToolName($0) }.map { tool -> [String: Any] in
+            if let localShell = tools.first(where: { $0.kind == .openAIResponsesLocalShell }) {
+                var environment: [String: Any] = ["type": "local"]
+                if let rawSkills = localShell.providerSpecificFields?[OpenAIResponsesLocalShellProtocol.skillsField],
+                   case let .array(skills) = rawSkills,
+                   !skills.isEmpty {
+                    environment["skills"] = skills.map { $0.toAny() }
+                }
+                responsesTools.removeAll { ($0["type"] as? String) == "shell" }
+                responsesTools.append([
+                    "type": "shell",
+                    "environment": environment
+                ])
+            }
+
+            let functionTools = stableToolDefinitions(tools.filter { $0.kind == nil }) {
+                self.sanitizedToolName($0)
+            }.map { tool -> [String: Any] in
                 let rawParams = tool.parameters.toAny() as? [String: Any] ?? [:]
                 let functionParams = normalizedOpenAIToolParameters(rawParams)
                 return [
@@ -319,7 +339,20 @@ extension OpenAIAdapter {
                     "strict": false
                 ]
             }
-            finalPayload = mergedRequestPayload(finalPayload, with: ["tools": apiTools])
+            for functionTool in functionTools {
+                let name = functionTool["name"] as? String
+                let alreadyIncluded = responsesTools.contains {
+                    ($0["type"] as? String) == "function"
+                        && ($0["name"] as? String) == name
+                }
+                if !alreadyIncluded {
+                    responsesTools.append(functionTool)
+                }
+            }
+        }
+
+        if !responsesTools.isEmpty {
+            finalPayload["tools"] = responsesTools
             if finalPayload["tool_choice"] == nil {
                 finalPayload["tool_choice"] = "auto"
             } else if let normalizedChoice = makeResponsesToolChoicePayload(finalPayload["tool_choice"]) {
@@ -345,16 +378,10 @@ extension OpenAIAdapter {
 
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: [.sortedKeys])
-            if let httpBody = request.httpBody {
-                let sanitizedPayload = sanitizedPayloadForDebug(finalPayload)
-                if let sanitizedData = try? JSONSerialization.data(withJSONObject: sanitizedPayload, options: [.sortedKeys]),
-                   let sanitizedString = String(data: sanitizedData, encoding: .utf8) {
-                    logger.debug("构建的 Responses 请求体:\n---\n\(sanitizedString)\n---")
-                } else if let jsonString = String(data: httpBody, encoding: .utf8) {
-                    logger.debug("构建的 Responses 请求体 (无法完全隐藏媒体，输出原始体的 hash): \(jsonString.hashValue)")
-                }
+            logger.debug("已构建 Responses 请求体，共 \(request.httpBody?.count ?? 0) 字节。")
+            if !suppressesRequestLog {
+                logChatRequestSnapshot(adapterName: "OpenAI兼容 (Responses)", request: request, payload: finalPayload)
             }
-            logChatRequestSnapshot(adapterName: "OpenAI兼容 (Responses)", request: request, payload: finalPayload)
         } catch {
             logger.error("构建 Responses 请求失败: JSON 序列化错误 - \(error.localizedDescription)")
             return nil
@@ -444,7 +471,7 @@ extension OpenAIAdapter {
         
         if dataString == "[DONE]" {
             logger.info("流式传输结束信号 [DONE] 已收到。")
-            return nil
+            return ChatMessagePart(streamTermination: .completed)
         }
         
         guard !dataString.isEmpty, let data = dataString.data(using: .utf8) else {
@@ -452,19 +479,33 @@ extension OpenAIAdapter {
         }
 
         if let object = try? JSONSerialization.jsonObject(with: data, options: []),
-           let payload = object as? [String: Any],
-           let eventType = payload["type"] as? String,
-           eventType.hasPrefix("response.") {
-            return parseResponsesStreamingEvent(payload)
+           let payload = object as? [String: Any] {
+            if let eventType = payload["type"] as? String,
+               eventType.hasPrefix("response.") || eventType == "error" {
+                return parseResponsesStreamingEvent(payload)
+            }
+            if let error = payload["error"] as? [String: Any] {
+                return ChatMessagePart(
+                    streamTermination: .failed(reason: error["message"] as? String)
+                )
+            }
         }
         
         do {
             let chunk = try JSONDecoder().decode(OpenAIResponse.self, from: data)
             let tokenUsage = makeTokenUsage(from: chunk.usage)
+            let streamTermination: ChatMessagePart.StreamTermination? = {
+                guard let finishReason = chunk.choices.first?.finish_reason,
+                      !finishReason.isEmpty else { return nil }
+                return .completed
+            }()
 
             guard let delta = chunk.choices.first?.delta else {
-                if tokenUsage != nil {
-                    return ChatMessagePart(tokenUsage: tokenUsage)
+                if tokenUsage != nil || streamTermination != nil {
+                    return ChatMessagePart(
+                        tokenUsage: tokenUsage,
+                        streamTermination: streamTermination
+                    )
                 }
                 return nil
             }
@@ -488,7 +529,8 @@ extension OpenAIAdapter {
                 content: delta.content,
                 reasoningContent: delta.reasoning_content,
                 toolCallDeltas: toolCallDeltas,
-                tokenUsage: tokenUsage
+                tokenUsage: tokenUsage,
+                streamTermination: streamTermination
             )
         } catch {
             logger.warning("流式 JSON 解析失败: \(error.localizedDescription) - 原始数据: '\(dataString)'")

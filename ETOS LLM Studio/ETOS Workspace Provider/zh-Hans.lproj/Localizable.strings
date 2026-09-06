@@ -1,0 +1,4 @@
+// 由 scripts/sync-extension-localizations.py 生成，请在对应主 App 中维护翻译。
+// 仅打包本扩展及其共享入口代码需要的文案，保留全部支持语言。
+
+"ETOS 工作区" = "ETOS 工作区";

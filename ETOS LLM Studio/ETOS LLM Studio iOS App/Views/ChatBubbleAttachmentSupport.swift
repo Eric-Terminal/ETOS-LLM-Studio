@@ -35,6 +35,10 @@ extension ChatBubble {
                         cornerRadius: 16
                     ) { image in
                         imagePreview = ImagePreviewPayload(image: image)
+                    } onDownload: {
+                        onDownloadImageAttachment?(fileName)
+                    } onDelete: {
+                        onDeleteImageAttachment?(fileName)
                     }
                 }
             }
@@ -56,11 +60,10 @@ extension ChatBubble {
 
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(fileNames, id: \.self) { fileName in
-                    Button {
-                        loadFilePreview(fileName)
-                    } label: {
+                    let isVideo = VideoAttachmentSupport.isVideo(fileName: fileName)
+                    if isVideo {
                         HStack(spacing: 8) {
-                            Image(systemName: "doc")
+                            Image(systemName: "video")
                                 .etFont(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(fileAttachmentSecondaryColor)
                             Text(fileName)
@@ -68,9 +71,6 @@ extension ChatBubble {
                                 .lineLimit(1)
                                 .foregroundStyle(fileAttachmentTextColor)
                             Spacer(minLength: 8)
-                            Image(systemName: "eye")
-                                .etFont(.caption)
-                                .foregroundStyle(fileAttachmentSecondaryColor)
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
@@ -79,9 +79,34 @@ extension ChatBubble {
                             RoundedRectangle(cornerRadius: 12)
                                 .fill(fileAttachmentBackgroundColor)
                         )
+                    } else {
+                        Button {
+                            loadFilePreview(fileName)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "doc")
+                                    .etFont(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(fileAttachmentSecondaryColor)
+                                Text(fileName)
+                                    .etFont(.system(size: 13, weight: .medium))
+                                    .lineLimit(1)
+                                    .foregroundStyle(fileAttachmentTextColor)
+                                Spacer(minLength: 8)
+                                Image(systemName: "eye")
+                                    .etFont(.caption)
+                                    .foregroundStyle(fileAttachmentSecondaryColor)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(fileAttachmentBackgroundColor)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(NSLocalizedString("预览", comment: ""))
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(NSLocalizedString("预览", comment: ""))
                 }
             }
             .frame(maxWidth: attachmentMaxWidth, alignment: isOutgoing ? .trailing : .leading)
@@ -129,7 +154,18 @@ extension ChatBubble {
     @ViewBuilder
     func renderContent(_ content: String) -> some View {
         let shouldRenderAsOutgoing = isOutgoing || isError
-        if let extraction = messageState.roleplayHTML,
+        if messageState.isUserContentTruncated {
+            VStack(alignment: .leading) {
+                Text(content)
+                if let openMoreAction, !isSelectionMode {
+                    Button(action: openMoreAction) {
+                        Text(NSLocalizedString("更多", comment: ""))
+                            .etFont(.caption)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        } else if let extraction = messageState.roleplayHTML,
            let roleplaySessionID,
            extraction.containsHTML {
             VStack(alignment: .leading) {
@@ -143,14 +179,16 @@ extension ChatBubble {
                         enableMathRendering: enableMathRendering,
                         customTextColor: customTextColorOverride,
                         customTextStyleColors: customTextStyleColors,
-                        isStreaming: showsStreamingIndicators
+                        isStreaming: showsStreamingIndicators,
+                        streamingState: messageState.streamingMarkdownState
                     )
                 }
                 RoleplayHTMLCardView(
                     extraction: extraction,
                     sessionID: roleplaySessionID,
                     messageID: message.id,
-                    versionIndex: message.getCurrentVersionIndex()
+                    versionIndex: message.getCurrentVersionIndex(),
+                    chatMessages: roleplayMessages
                 )
             }
         } else {
@@ -163,7 +201,8 @@ extension ChatBubble {
                 enableMathRendering: enableMathRendering,
                 customTextColor: customTextColorOverride,
                 customTextStyleColors: customTextStyleColors,
-                isStreaming: showsStreamingIndicators
+                isStreaming: showsStreamingIndicators,
+                streamingState: messageState.streamingMarkdownState
             )
         }
     }

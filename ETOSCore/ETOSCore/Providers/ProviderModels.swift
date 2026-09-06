@@ -209,9 +209,25 @@ public enum ModelKind: String, Codable, Hashable, CaseIterable, Sendable {
     case chat
     case image
     case embedding
+    // 重排与 TTS 仅保留原始值用于读取旧配置，不再作为通用模型用途提供。
     case rerank
-    case speechToText
     case textToSpeech
+
+    /// 模型配置只呈现通用模型链路能够直接分配的用途。
+    public static let allCases: [ModelKind] = [
+        .chat,
+        .image,
+        .embedding
+    ]
+
+    public var supportsConnectivityTest: Bool {
+        switch self {
+        case .chat, .image, .embedding:
+            return true
+        case .rerank, .textToSpeech:
+            return false
+        }
+    }
 
     public var localizedName: String {
         switch self {
@@ -223,8 +239,6 @@ public enum ModelKind: String, Codable, Hashable, CaseIterable, Sendable {
             return NSLocalizedString("嵌入", comment: "模型主用途：嵌入")
         case .rerank:
             return NSLocalizedString("重排", comment: "模型主用途：重排")
-        case .speechToText:
-            return NSLocalizedString("语音转文字", comment: "模型主用途：语音转文字")
         case .textToSpeech:
             return NSLocalizedString("文字转语音", comment: "模型主用途：文字转语音")
         }
@@ -235,6 +249,7 @@ public enum ModelModality: String, Codable, Hashable, CaseIterable, Sendable {
     case text
     case image
     case audio
+    case video
     case file
 
     public static let outputCases: [ModelModality] = [.text, .image, .audio]
@@ -247,6 +262,8 @@ public enum ModelModality: String, Codable, Hashable, CaseIterable, Sendable {
             return NSLocalizedString("图像", comment: "模型模态：图像")
         case .audio:
             return NSLocalizedString("音频", comment: "模型模态：音频")
+        case .video:
+            return NSLocalizedString("视频", comment: "模型模态：视频")
         case .file:
             return NSLocalizedString("文件", comment: "模型模态：文件")
         }
@@ -256,15 +273,17 @@ public enum ModelModality: String, Codable, Hashable, CaseIterable, Sendable {
 public enum ModelCapability: String, Codable, Hashable, CaseIterable, Sendable {
     case toolCalling
     case reasoning
+    case promptCaching
     case streaming
     case jsonMode
     case embedding
-    case speechToText
     case textToSpeech
 
     public static let editableCases: [ModelCapability] = [
         .toolCalling,
-        .embedding
+        .reasoning,
+        .promptCaching,
+        .textToSpeech
     ]
 
     public var localizedName: String {
@@ -273,14 +292,14 @@ public enum ModelCapability: String, Codable, Hashable, CaseIterable, Sendable {
             return NSLocalizedString("工具调用", comment: "模型协议能力：工具调用")
         case .reasoning:
             return NSLocalizedString("推理", comment: "模型协议能力：推理")
+        case .promptCaching:
+            return NSLocalizedString("提示缓存", comment: "模型协议能力：提示缓存")
         case .streaming:
             return NSLocalizedString("流式输出", comment: "模型协议能力：流式输出")
         case .jsonMode:
             return NSLocalizedString("JSON 模式", comment: "模型协议能力：JSON 模式")
         case .embedding:
             return NSLocalizedString("嵌入", comment: "模型兼容能力：嵌入")
-        case .speechToText:
-            return NSLocalizedString("语音转文字", comment: "模型兼容能力：语音转文字")
         case .textToSpeech:
             return NSLocalizedString("文字转语音", comment: "模型兼容能力：文字转语音")
         }
@@ -292,7 +311,6 @@ public struct Model: Codable, Identifiable, Hashable {
     public enum Capability: String, Codable, Hashable, Sendable {
         case chat
         case toolCalling
-        case speechToText
         case textToSpeech
         case embedding
         case imageGeneration
@@ -309,6 +327,9 @@ public struct Model: Codable, Identifiable, Hashable {
     public var id: UUID
     public var modelName: String // 模型ID，例如: "deepseek-chat"
     public var displayName: String
+    public var pickerGroupName: String?
+    /// 单个模型使用的 API 格式覆盖；为空时跟随所属提供商。
+    public var apiFormatOverride: String?
     public var isActivated: Bool
     public var overrideParameters: [String: JSONValue]
     public var kind: ModelKind
@@ -324,6 +345,8 @@ public struct Model: Codable, Identifiable, Hashable {
         id: UUID = UUID(),
         modelName: String,
         displayName: String? = nil,
+        pickerGroupName: String? = nil,
+        apiFormatOverride: String? = nil,
         isActivated: Bool = false,
         overrideParameters: [String: JSONValue] = [:],
         kind: ModelKind? = .chat,
@@ -346,6 +369,8 @@ public struct Model: Codable, Identifiable, Hashable {
         self.id = id
         self.modelName = modelName
         self.displayName = displayName ?? modelName
+        self.pickerGroupName = Self.normalizedPickerGroupName(pickerGroupName)
+        self.apiFormatOverride = Self.normalizedAPIFormatOverride(apiFormatOverride)
         self.isActivated = isActivated
         self.overrideParameters = overrideParameters
         self.kind = normalized.kind
@@ -363,6 +388,8 @@ public struct Model: Codable, Identifiable, Hashable {
         id: UUID = UUID(),
         modelName: String,
         displayName: String? = nil,
+        pickerGroupName: String? = nil,
+        apiFormatOverride: String? = nil,
         isActivated: Bool = false,
         overrideParameters: [String: JSONValue] = [:],
         capabilities legacyCapabilities: [Capability],
@@ -375,6 +402,8 @@ public struct Model: Codable, Identifiable, Hashable {
             id: id,
             modelName: modelName,
             displayName: displayName,
+            pickerGroupName: pickerGroupName,
+            apiFormatOverride: apiFormatOverride,
             isActivated: isActivated,
             overrideParameters: overrideParameters,
             kind: nil,
@@ -387,7 +416,7 @@ public struct Model: Codable, Identifiable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, modelName, displayName, isActivated, overrideParameters
+        case id, modelName, displayName, pickerGroupName, apiFormatOverride, isActivated, overrideParameters
         case kind, inputModalities, outputModalities, capabilities
         case requestBodyOverrideMode
         case rawRequestBodyJSON
@@ -400,9 +429,16 @@ public struct Model: Codable, Identifiable, Hashable {
         self.id = try container.decode(UUID.self, forKey: .id)
         self.modelName = try container.decode(String.self, forKey: .modelName)
         self.displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? modelName
+        self.pickerGroupName = Self.normalizedPickerGroupName(
+            try container.decodeIfPresent(String.self, forKey: .pickerGroupName)
+        )
+        self.apiFormatOverride = Self.normalizedAPIFormatOverride(
+            try container.decodeIfPresent(String.self, forKey: .apiFormatOverride)
+        )
         self.isActivated = try container.decodeIfPresent(Bool.self, forKey: .isActivated) ?? false
         self.overrideParameters = try container.decodeIfPresent([String: JSONValue].self, forKey: .overrideParameters) ?? [:]
-        let decodedKind = try container.decodeIfPresent(ModelKind.self, forKey: .kind)
+        let decodedKind = try container.decodeIfPresent(String.self, forKey: .kind)
+            .flatMap(ModelKind.init(rawValue:))
         let decodedInputModalities = try container.decodeIfPresent([String].self, forKey: .inputModalities)
             .map { Self.orderedModalities($0.compactMap(ModelModality.init(rawValue:))) }
         let decodedOutputModalities = try container.decodeIfPresent([String].self, forKey: .outputModalities)
@@ -435,6 +471,12 @@ public struct Model: Codable, Identifiable, Hashable {
         if displayName != modelName {
             try container.encode(displayName, forKey: .displayName)
         }
+        if let pickerGroupName = Self.normalizedPickerGroupName(pickerGroupName) {
+            try container.encode(pickerGroupName, forKey: .pickerGroupName)
+        }
+        if let apiFormatOverride = Self.normalizedAPIFormatOverride(apiFormatOverride) {
+            try container.encode(apiFormatOverride, forKey: .apiFormatOverride)
+        }
         try container.encode(isActivated, forKey: .isActivated)
         if !overrideParameters.isEmpty {
             try container.encode(overrideParameters, forKey: .overrideParameters)
@@ -463,5 +505,26 @@ public struct Model: Codable, Identifiable, Hashable {
         if let pricing = pricing?.normalized, !pricing.isEffectivelyEmpty {
             try container.encode(pricing, forKey: .pricing)
         }
+    }
+
+    public static func normalizedPickerGroupName(_ groupName: String?) -> String? {
+        guard let trimmed = groupName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
+    }
+
+    public static func normalizedAPIFormatOverride(_ apiFormat: String?) -> String? {
+        guard let trimmed = apiFormat?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed.lowercased()
+    }
+
+    public func effectiveAPIFormat(providerAPIFormat: String) -> String {
+        Self.normalizedAPIFormatOverride(apiFormatOverride)
+            ?? providerAPIFormat.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }

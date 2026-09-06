@@ -31,9 +31,14 @@ struct WatchFontSettingsView: View {
         nonmutating set { appConfig.fontFallbackScope = newValue }
     }
 
-    private var customFontScale: Double {
+    private var fontScale: Double {
         get { appConfig.fontCustomScale }
         nonmutating set { appConfig.fontCustomScale = newValue }
+    }
+
+    private var lineSpacingEm: Double {
+        get { appConfig.fontLineSpacingEmWatchOS }
+        nonmutating set { appConfig.fontLineSpacingEmWatchOS = newValue }
     }
 
     var body: some View {
@@ -56,6 +61,7 @@ struct WatchFontSettingsView: View {
             }
 
             fontScaleSection
+            lineSpacingSection
 
             Section(NSLocalizedString("回退范围", comment: "")) {
                 Picker(NSLocalizedString("字体回退范围", comment: ""), selection: fallbackScopeBinding) {
@@ -159,9 +165,16 @@ struct WatchFontSettingsView: View {
                 }
             }
 
+            textFontRulesSection
+
             Section(NSLocalizedString("预览", comment: "")) {
-                Text(NSLocalizedString("风来疏竹，风过而竹不留声。", comment: ""))
-                    .font(FontRoutePreview.font(for: .body, sample: "风来疏竹，风过而竹不留声。", size: 14))
+                (
+                    Text(NSLocalizedString("The quick brown fox jumps over the lazy dog.", comment: "Font preview sample"))
+                        + Text(verbatim: "\n")
+                        + Text(NSLocalizedString("风来疏竹，风过而竹不留声。", comment: ""))
+                )
+                    .font(FontRoutePreview.font(for: .body, sample: "The quick brown fox 风来疏竹", size: 14))
+                    .lineSpacing(previewLineSpacing)
                 Text(NSLocalizedString("Emphasis", comment: "Font preview emphasis sample"))
                     .font(FontRoutePreview.font(for: .emphasis, sample: "Emphasis", size: 14))
                     .italic()
@@ -173,8 +186,15 @@ struct WatchFontSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("字体设置", comment: ""))
+        .guideSettingsPageContext(
+            id: "settings-fonts",
+            title: NSLocalizedString("字体设置", comment: "字体设置向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            settings: fontGuideSettings
+        )
+        .watchGuideEntry()
         .onAppear {
-            FontLibrary.registerAllFontsIfNeeded()
+            FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             reloadData()
         }
         .onReceive(
@@ -185,7 +205,7 @@ struct WatchFontSettingsView: View {
         }
         .onChange(of: isCustomFontEnabled) { _, isEnabled in
             if isEnabled {
-                FontLibrary.registerAllFontsIfNeeded()
+                FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             }
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
         }
@@ -193,10 +213,10 @@ struct WatchFontSettingsView: View {
             FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
         }
-        .onChange(of: customFontScale) { _, newValue in
+        .onChange(of: fontScale) { _, newValue in
             let normalizedValue = FontLibrary.normalizedFontScale(newValue)
             if normalizedValue != newValue {
-                customFontScale = normalizedValue
+                fontScale = normalizedValue
                 return
             }
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
@@ -212,6 +232,71 @@ struct WatchFontSettingsView: View {
             }
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
         }
+    }
+
+    private var fontGuideSettings: [GuidePageSetting] {
+        [
+            .bool("custom_fonts_enabled", label: NSLocalizedString("启用自定义字体", comment: "字体设置向导字段"), get: { customFontEnabledBinding.wrappedValue }, set: { customFontEnabledBinding.wrappedValue = $0 }),
+            .double("font_scale", label: NSLocalizedString("字号比例", comment: "字体设置向导字段"), range: FontLibrary.minimumFontScale...FontLibrary.maximumFontScale, get: { fontScaleBinding.wrappedValue }, set: { fontScaleBinding.wrappedValue = $0 }),
+            .double("line_spacing_em", label: NSLocalizedString("聊天正文行距", comment: "字体设置向导字段"), range: FontLibrary.minimumLineSpacingEm...FontLibrary.maximumLineSpacingEm, get: { lineSpacingBinding.wrappedValue }, set: { lineSpacingBinding.wrappedValue = $0 }),
+            .string("fallback_scope", label: NSLocalizedString("字体回退范围", comment: "字体设置向导字段"), allowedValues: FontFallbackScope.allCases.map(\.rawValue), get: { fallbackScope.rawValue }, set: { fallbackScopeRawValue = $0 }),
+            .string("selected_style_role", label: NSLocalizedString("样式槽位", comment: "字体设置向导字段"), allowedValues: FontSemanticRole.allCases.map(\.rawValue), get: { selectedRole.rawValue }, set: { selectedRole = FontSemanticRole(rawValue: $0) ?? selectedRole }),
+            .string("import_url", label: NSLocalizedString("字体文件链接", comment: "字体设置向导字段"), get: { importURLText }, set: { importURLText = $0 }),
+            .readOnly("import_method", label: NSLocalizedString("导入方式", comment: "字体设置向导字段"), value: { .string(NSLocalizedString("填写链接后需要点击从链接导入", comment: "字体导入应用方式")) }),
+            .readOnly(
+                "font_assets",
+                label: NSLocalizedString("字体文件", comment: "字体设置向导字段"),
+                value: {
+                    .array(assets.map { asset in
+                        .dictionary([
+                            "id": .string(asset.id.uuidString.lowercased()),
+                            "display_name": .string(asset.displayName),
+                            "postscript_name": .string(asset.postScriptName)
+                        ])
+                    })
+                }
+            ),
+            selectedRoleChainGuideSetting,
+            .readOnly("custom_text_rule_count", label: NSLocalizedString("指定内容字体规则数量", comment: "字体设置向导字段"), value: { .int(routes.customTextRules.count) })
+        ]
+    }
+
+    private var selectedRoleChainGuideSetting: GuidePageSetting {
+        let allowedIDs = assets.map { $0.id.uuidString.lowercased() }
+        return .json(
+            "selected_style_font_chain",
+            label: NSLocalizedString("当前槽位字体优先级", comment: "字体设置向导字段"),
+            schema: .dictionary([
+                "type": .string("array"),
+                "items": .dictionary(["type": .string("string"), "enum": .array(allowedIDs.map(JSONValue.string))]),
+                "uniqueItems": .bool(true)
+            ]),
+            get: { .array(routes.chain(for: selectedRole).map { .string($0.uuidString.lowercased()) }) },
+            normalize: { value in
+                guard case .array(let items) = value else { throw GuideError.invalidToolArguments }
+                var seen = Set<UUID>()
+                let ids = try items.map { item -> UUID in
+                    guard case .string(let rawValue) = item,
+                          let id = UUID(uuidString: rawValue),
+                          assets.contains(where: { $0.id == id }),
+                          seen.insert(id).inserted else { throw GuideError.invalidToolArguments }
+                    return id
+                }
+                return .array(ids.map { .string($0.uuidString.lowercased()) })
+            },
+            set: { value in
+                guard case .array(let items) = value else { throw GuideError.invalidToolArguments }
+                let ids = try items.map { item -> UUID in
+                    guard case .string(let rawValue) = item, let id = UUID(uuidString: rawValue) else {
+                        throw GuideError.invalidToolArguments
+                    }
+                    return id
+                }
+                routes.setChain(ids, for: selectedRole)
+                FontLibrary.updateChain(ids, for: selectedRole)
+                NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+            }
+        )
     }
 
     private func settingsIntroCard(
@@ -303,8 +388,25 @@ struct WatchFontSettingsView: View {
 
     private var fontScaleBinding: Binding<Double> {
         Binding(
-            get: { FontLibrary.normalizedFontScale(customFontScale) },
-            set: { customFontScale = FontLibrary.normalizedFontScale($0) }
+            get: { FontLibrary.normalizedFontScale(fontScale) },
+            set: { fontScale = FontLibrary.normalizedFontScale($0) }
+        )
+    }
+
+    private var lineSpacingBinding: Binding<Double> {
+        Binding(
+            get: {
+                FontLibrary.normalizedLineSpacingEm(
+                    lineSpacingEm,
+                    fallback: FontLibrary.defaultWatchLineSpacingEm
+                )
+            },
+            set: {
+                lineSpacingEm = FontLibrary.normalizedLineSpacingEm(
+                    $0,
+                    fallback: FontLibrary.defaultWatchLineSpacingEm
+                )
+            }
         )
     }
 
@@ -331,16 +433,98 @@ struct WatchFontSettingsView: View {
         } header: {
             Text(NSLocalizedString("字体大小", comment: ""))
         } footer: {
-            Text(NSLocalizedString("仅调整自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。", comment: ""))
+            Text(NSLocalizedString("调整系统字体和自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。", comment: ""))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private var lineSpacingSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(NSLocalizedString("聊天正文行距", comment: ""))
+                    Spacer(minLength: 8)
+                    Text(
+                        String(
+                            format: NSLocalizedString("%.3f em", comment: "Chat text line spacing value"),
+                            lineSpacingBinding.wrappedValue
+                        )
+                    )
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                Slider(
+                    value: lineSpacingBinding,
+                    in: FontLibrary.minimumLineSpacingEm...FontLibrary.maximumLineSpacingEm,
+                    step: FontLibrary.lineSpacingStepEm
+                )
+            }
+            Button(NSLocalizedString("恢复默认行距", comment: "")) {
+                lineSpacingBinding.wrappedValue = FontLibrary.defaultWatchLineSpacingEm
+            }
+            .disabled(abs(lineSpacingBinding.wrappedValue - FontLibrary.defaultWatchLineSpacingEm) < 0.001)
+        } header: {
+            Text(NSLocalizedString("行距", comment: ""))
+        } footer: {
+            Text(NSLocalizedString("控制聊天正文多行文字的额外行距，范围为 0.00 em 到 1.00 em；默认 0.15 em。", comment: ""))
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var previewLineSpacing: CGFloat {
+        CGFloat(
+            FontLibrary.lineSpacingPoints(
+                basePointSize: 14,
+                lineSpacingEm: lineSpacingBinding.wrappedValue,
+                fontScale: fontScale,
+                isCustomFontEnabled: isCustomFontEnabled,
+                fallbackLineSpacingEm: FontLibrary.defaultWatchLineSpacingEm
+            )
+        )
     }
 
     private func updateSelectedRoleChain(_ chain: [UUID]) {
         routes.setChain(chain, for: selectedRole)
         FontLibrary.updateChain(chain, for: selectedRole)
         NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+    }
+
+    private var textFontRulesSection: some View {
+        Section {
+            ForEach(textFontRulesBinding, id: \.id, editActions: .move) { $rule in
+                NavigationLink {
+                    WatchChatTextFontRuleEditorView(
+                        initialRule: rule,
+                        assets: assets,
+                        onSave: saveTextFontRule
+                    )
+                } label: {
+                    WatchChatTextFontRuleRow(rule: rule, assets: assets)
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        deleteTextFontRule(id: rule.id)
+                    } label: {
+                        Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+                    }
+                }
+            }
+
+            Button {
+                addTextFontRule()
+            } label: {
+                Label(NSLocalizedString("添加字体规则", comment: ""), systemImage: "plus")
+            }
+            .disabled(assets.isEmpty)
+        } header: {
+            Text(NSLocalizedString("指定内容字体", comment: ""))
+        } footer: {
+            Text(NSLocalizedString("规则从上到下匹配；命中内容使用规则内部的字体优先级，其他内容继续使用外层全局字体。", comment: ""))
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private func addAssetToSelectedRole(_ assetID: UUID) {
@@ -359,6 +543,48 @@ struct WatchFontSettingsView: View {
         routes.setChain(chain, for: selectedRole)
         FontLibrary.updateChain(chain, for: selectedRole)
         NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+    }
+
+    private func addTextFontRule() {
+        let assetIDs = Set(assets.map(\.id))
+        let inheritedChain = routes.body.filter { assetIDs.contains($0) }
+        routes.customTextRules.append(
+            ChatAppearanceTextFontRule(
+                fontAssetIDs: inheritedChain.isEmpty ? assets.map(\.id) : inheritedChain
+            )
+        )
+        persistTextFontRules()
+    }
+
+    private func saveTextFontRule(_ rule: ChatAppearanceTextFontRule) {
+        guard let index = routes.customTextRules.firstIndex(where: { $0.id == rule.id }) else {
+            return
+        }
+        routes.customTextRules[index] = rule
+        persistTextFontRules()
+    }
+
+    private var textFontRulesBinding: Binding<[ChatAppearanceTextFontRule]> {
+        Binding(
+            get: { routes.customTextRules },
+            set: {
+                routes.customTextRules = $0
+                persistTextFontRules()
+            }
+        )
+    }
+
+    private func deleteTextFontRule(id: String) {
+        routes.customTextRules.removeAll { $0.id == id }
+        persistTextFontRules()
+    }
+
+    private func persistTextFontRules() {
+        let rules = routes.customTextRules
+        Task {
+            await FontLibrary.updateCustomTextRulesInBackground(rules)
+            NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+        }
     }
 
     private func importFontsFromURL() {

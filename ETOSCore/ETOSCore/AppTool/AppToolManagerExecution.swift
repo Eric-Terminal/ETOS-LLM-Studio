@@ -12,7 +12,9 @@ extension AppToolManager {
     static func executeResolvedTool(
         kind: AppToolKind,
         argumentsJSON: String,
-        current: AppToolManager
+        current: AppToolManager,
+        sourceSessionID: UUID?,
+        sourceMessageID: UUID?
     ) async throws -> String {
         switch kind {
         case .showWidget:
@@ -20,11 +22,19 @@ extension AppToolManager {
         case .getSystemTime:
             return SystemTimeContextFormatter.description()
         case .askUserInput:
-            return try current.executeAskUserInput(argumentsJSON: argumentsJSON)
+            return try current.executeAskUserInput(
+                argumentsJSON: argumentsJSON,
+                sourceSessionID: sourceSessionID,
+                sourceMessageID: sourceMessageID
+            )
         case .echoText:
             return try current.executeEchoText(argumentsJSON: argumentsJSON)
         case .fillUserInput:
-            return try current.executeFillUserInput(argumentsJSON: argumentsJSON)
+            return try current.executeFillUserInput(
+                argumentsJSON: argumentsJSON,
+                sourceSessionID: sourceSessionID,
+                sourceMessageID: sourceMessageID
+            )
         case .executeJSCJavaScript:
             return try await current.executeJavaScript(argumentsJSON: argumentsJSON, engine: .javaScriptCore)
         case .createCustomJSCJSTool:
@@ -34,7 +44,15 @@ extension AppToolManager {
         case .createCustomWebKitJSTool:
             return try await current.executeCreateCustomJSTool(argumentsJSON: argumentsJSON, engine: .webKitBridge)
         case .editMemory:
-            return try await current.executeEditMemory(argumentsJSON: argumentsJSON)
+            return try await current.executeEditMemory(
+                argumentsJSON: argumentsJSON,
+                context: MemoryMutationContext(
+                    origin: .tool,
+                    sourceSessionID: sourceSessionID,
+                    sourceMessageID: sourceMessageID,
+                    sourceToolName: kind.toolName
+                )
+            )
         case .submitFeedbackTicket:
             return try await current.executeSubmitFeedbackTicket(argumentsJSON: argumentsJSON)
         case .listSandboxDirectory:

@@ -18,9 +18,11 @@ struct LocalModelStoreTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         let source = root.appendingPathComponent("source.gguf")
-        try Data([1, 2, 3, 4]).write(to: source)
+        try writeMinimalGGUF(to: source)
         let projector = root.appendingPathComponent("mmproj.gguf")
         try Data([5, 6, 7]).write(to: projector)
+        let lora = root.appendingPathComponent("style-lora.gguf")
+        try writeMinimalLoRAGGUF(to: lora)
         let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
 
         var record = try store.importModel(from: source, displayName: "  小模型  ", mmprojURL: projector)
@@ -30,8 +32,13 @@ struct LocalModelStoreTests {
         #expect(record.mmprojFileName == "mmproj.gguf")
         #expect(record.mmprojFileSize == 3)
         #expect(store.mmprojFileExists(for: record))
+        _ = try store.copyLoRAAdapter(from: lora, into: &record)
+        #expect(record.loraFileName == "style-lora.gguf")
+        #expect(record.loraScale == LocalModelRecord.defaultLoRAScale)
+        #expect(store.loraFileExists(for: record))
 
         record.displayName = "新名字"
+        record.loraScale = 0.65
         record.contextSize = 0
         record.maxOutputTokens = 0
         record.gpuLayers = 7
@@ -52,13 +59,43 @@ struct LocalModelStoreTests {
         #expect(updatedRecord.imageMinTokens == -1)
         #expect(updatedRecord.imageMaxTokens == 1_048_576)
         #expect(reloaded.mmprojFileExists(for: updatedRecord))
+        #expect(updatedRecord.loraFileName == "style-lora.gguf")
+        #expect(updatedRecord.loraScale == 0.65)
+        #expect(reloaded.loraFileExists(for: updatedRecord))
 
         if let saved = reloaded.models.first {
             reloaded.delete(saved)
             #expect(reloaded.models.isEmpty)
             #expect(!reloaded.fileExists(for: saved))
             #expect(!reloaded.mmprojFileExists(for: saved))
+            #expect(!reloaded.loraFileExists(for: saved))
         }
+    }
+
+    @Test("LoRA 必须是与基础模型架构匹配的 Adapter GGUF")
+    func loraAdapterValidationRejectsMismatchedArchitecture() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let lora = root.appendingPathComponent("mismatched.gguf")
+        try writeMinimalLoRAGGUF(to: lora, architecture: "qwen3")
+        let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
+        var record = LocalModelRecord(
+            displayName: "Llama",
+            fileName: "llama.gguf",
+            relativePath: "llama.gguf",
+            fileSize: 8,
+            ggufArchitecture: "llama"
+        )
+
+        #expect(throws: LocalLLMEngineError.self) {
+            _ = try store.copyLoRAAdapter(from: lora, into: &record)
+        }
+        #expect(!record.hasLoRAAdapter)
+        let storedFiles = try FileManager.default.contentsOfDirectory(
+            at: store.directoryURL,
+            includingPropertiesForKeys: nil
+        )
+        #expect(storedFiles.isEmpty)
     }
 
     @Test("下载落盘文件会移动登记为本地模型")
@@ -67,8 +104,8 @@ struct LocalModelStoreTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         let downloadedFile = root.appendingPathComponent("downloaded.tmp")
-        let payload = Data([9, 8, 7, 6])
-        try payload.write(to: downloadedFile)
+        try writeMinimalGGUF(to: downloadedFile)
+        let payload = try Data(contentsOf: downloadedFile)
         let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
 
         let record = try store.registerDownloadedModel(
@@ -152,6 +189,85 @@ struct LocalModelStoreTests {
         #expect(model.supportsVisionInput)
         #expect(model.overrideParameters["image_min_tokens"] == .int(1000))
         #expect(model.overrideParameters["image_max_tokens"] == .int(1120))
+    }
+
+    @Test("本地语音 GGUF 不写入通用模型能力标记")
+    func localSpeechModelsKeepRuntimeMetadataWithoutCapabilityMarkers() throws {
+        let architectures: [LocalSpeechModelArchitecture] = [
+            .senseVoiceSmall,
+            .paraformer,
+            .funASRNanoEncoder
+        ]
+        let records = architectures.map { architecture in
+            LocalModelRecord(
+                displayName: architecture.localizedTitle,
+                fileName: "\(architecture.rawValue).gguf",
+                relativePath: "\(architecture.rawValue).gguf",
+                fileSize: 8,
+                ggufArchitecture: architecture.rawValue
+            )
+        }
+        let vad = LocalModelRecord(
+            displayName: "FSMN-VAD",
+            fileName: "fsmn-vad.gguf",
+            relativePath: "fsmn-vad.gguf",
+            fileSize: 8,
+            ggufArchitecture: LocalSpeechModelArchitecture.fsmnVAD.rawValue
+        )
+
+        for record in records {
+            let model = LocalModelProviderBridge.model(for: record)
+            #expect(model.kind == .chat)
+            #expect(model.inputModalities == [.text])
+            #expect(model.outputModalities == [.text])
+            #expect(model.capabilities == [.streaming])
+        }
+
+        let provider = LocalModelProviderBridge.provider(records: records + [vad])
+        #expect(provider.models.count == architectures.count)
+        #expect(!provider.models.contains(where: { $0.id == vad.id }))
+    }
+
+    @Test("语音模型关联会持久化并在辅助模型删除后清理")
+    func localSpeechAssociationsPersistAndClearOnDelete() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
+        let decoder = LocalModelRecord(
+            displayName: "Qwen3",
+            fileName: "qwen3.gguf",
+            relativePath: "qwen3.gguf",
+            fileSize: 8,
+            ggufArchitecture: "qwen3"
+        )
+        let vad = LocalModelRecord(
+            displayName: "FSMN-VAD",
+            fileName: "fsmn-vad.gguf",
+            relativePath: "fsmn-vad.gguf",
+            fileSize: 8,
+            ggufArchitecture: LocalSpeechModelArchitecture.fsmnVAD.rawValue
+        )
+        let encoder = LocalModelRecord(
+            displayName: "Fun-ASR-Nano",
+            fileName: "encoder.gguf",
+            relativePath: "encoder.gguf",
+            fileSize: 8,
+            ggufArchitecture: LocalSpeechModelArchitecture.funASRNanoEncoder.rawValue,
+            speechDecoderModelID: decoder.id,
+            speechVADModelID: vad.id
+        )
+        store.update(decoder)
+        store.update(vad)
+        store.update(encoder)
+
+        let reloaded = LocalModelStore(directoryURL: store.directoryURL)
+        let persistedEncoder = try #require(reloaded.models.first(where: { $0.id == encoder.id }))
+        #expect(persistedEncoder.speechDecoderModelID == decoder.id)
+        #expect(persistedEncoder.speechVADModelID == vad.id)
+
+        reloaded.delete(vad, deleteFile: false)
+        #expect(reloaded.models.first(where: { $0.id == encoder.id })?.speechVADModelID == nil)
+        #expect(reloaded.models.first(where: { $0.id == encoder.id })?.speechDecoderModelID == decoder.id)
     }
 
     @Test("本地模型开关决定虚拟提供商是否出现")
@@ -272,7 +388,7 @@ struct LocalModelStoreTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         let source = root.appendingPathComponent("source.gguf")
-        try Data([1, 2, 3, 4]).write(to: source)
+        try writeMinimalGGUF(to: source)
         let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
         let record = try store.importModel(from: source, displayName: "原名")
         var model = LocalModelProviderBridge.model(for: record)
@@ -439,10 +555,259 @@ struct LocalModelStoreTests {
         }
     }
 
+    @Test("本地语音转写不会退回远端适配器")
+    func localSpeechTranscriptionRoutesBeforeAdapterLookup() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
+        let record = LocalModelRecord(
+            displayName: "SenseVoiceSmall",
+            fileName: "missing-sensevoice.gguf",
+            relativePath: "missing-sensevoice.gguf",
+            fileSize: 0,
+            ggufArchitecture: LocalSpeechModelArchitecture.senseVoiceSmall.rawValue
+        )
+        store.update(record)
+        let service = ChatService(adapters: [:], localModelStore: store)
+        service.providers = LocalModelProviderBridge.applyingLocalProvider(
+            to: [],
+            records: store.models,
+            isEnabled: true,
+            preferRecordBasics: true
+        )
+        let runnableModel = LocalModelProviderBridge.runnableModel(for: record)
+
+        #expect(service.activatedSpeechModels.contains(where: { $0.id == runnableModel.id }))
+        #expect(!service.activatedConversationModels.contains(where: { $0.id == runnableModel.id }))
+
+        do {
+            _ = try await service.transcribeAudio(
+                using: runnableModel,
+                audioData: Data([1, 2, 3]),
+                fileName: "recording.m4a",
+                mimeType: "audio/m4a"
+            )
+            Issue.record("缺失本地语音模型文件时不应转写成功。")
+        } catch let error as LocalSpeechEngineError {
+            guard case .modelFileMissing(let fileName) = error else {
+                Issue.record("错误类型不符合预期：\(error.localizedDescription)")
+                return
+            }
+            #expect(fileName == "missing-sensevoice.gguf")
+        } catch {
+            Issue.record("抛出了非预期错误：\(error.localizedDescription)")
+        }
+    }
+
+    @Test("专用语音设置选择任意本地模型都会进入本地转写")
+    func selectedLocalModelRoutesToLocalSpeechWithoutCapabilityMarker() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
+        let record = LocalModelRecord(
+            displayName: "未标记的本地模型",
+            fileName: "missing-local.gguf",
+            relativePath: "missing-local.gguf",
+            fileSize: 0,
+            ggufArchitecture: "unknown-speech-architecture"
+        )
+        store.update(record)
+        let service = ChatService(adapters: [:], localModelStore: store)
+
+        do {
+            _ = try await service.transcribeAudio(
+                using: LocalModelProviderBridge.runnableModel(for: record),
+                audioData: Data([1, 2, 3]),
+                fileName: "recording.m4a",
+                mimeType: "audio/m4a"
+            )
+            Issue.record("缺失本地模型文件时不应转写成功。")
+        } catch let error as LocalSpeechEngineError {
+            guard case .modelFileMissing(let fileName) = error else {
+                Issue.record("错误类型不符合预期：\(error.localizedDescription)")
+                return
+            }
+            #expect(fileName == "missing-local.gguf")
+        } catch {
+            Issue.record("本地模型不应退回远端适配器：\(error.localizedDescription)")
+        }
+    }
+
+    @Test("导入损坏文件会报告错误并清理副本")
+    func invalidGGUFImportLeavesNoOrphanedFile() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("broken.gguf")
+        try Data([0x00, 0x01, 0x02]).write(to: source)
+        let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
+
+        do {
+            _ = try store.importModel(from: source)
+            Issue.record("损坏的 GGUF 文件不应导入成功。")
+        } catch {
+            #expect(!error.localizedDescription.isEmpty)
+        }
+
+        #expect(store.models.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: store.directoryURL.appendingPathComponent("broken.gguf").path))
+    }
+
+    @Test("导入缺少后续文件的 GGUF 分片会指出具体文件")
+    func splitGGUFImportReportsMissingShard() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let firstShard = root.appendingPathComponent("tiny-00001-of-00002.gguf")
+        try writeMinimalGGUF(
+            to: firstShard,
+            splitCount: 2,
+            splitNumber: 0
+        )
+        let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
+
+        do {
+            _ = try store.importModel(from: firstShard)
+            Issue.record("缺少后续分片的 GGUF 文件不应导入成功。")
+        } catch let error as LocalLLMEngineError {
+            guard case .modelFileMissing(let fileName) = error else {
+                Issue.record("错误类型不符合预期：\(error.localizedDescription)")
+                return
+            }
+            #expect(fileName == "tiny-00002-of-00002.gguf")
+        } catch {
+            Issue.record("抛出了非预期错误：\(error.localizedDescription)")
+        }
+
+        #expect(store.models.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: store.directoryURL.appendingPathComponent(firstShard.lastPathComponent).path))
+    }
+
+    @Test("导入张量数据被截断的 GGUF 会报告所需大小并清理副本")
+    func truncatedGGUFTensorDataReportsRequiredSize() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("truncated.gguf")
+        try writeMinimalGGUF(
+            to: source,
+            declaredTensorByteCount: 32,
+            writtenTensorByteCount: 16
+        )
+        let actualSize = try #require(
+            FileManager.default.attributesOfItem(atPath: source.path)[.size] as? NSNumber
+        ).uint64Value
+        let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
+
+        do {
+            _ = try store.importModel(from: source)
+            Issue.record("张量数据被截断的 GGUF 文件不应导入成功。")
+        } catch let error as LocalLLMEngineError {
+            guard case .modelFileIncomplete(let fileName, let reportedSize, let requiredSize) = error else {
+                Issue.record("错误类型不符合预期：\(error.localizedDescription)")
+                return
+            }
+            #expect(fileName == source.lastPathComponent)
+            #expect(reportedSize == actualSize)
+            #expect(requiredSize == actualSize + 16)
+        } catch {
+            Issue.record("抛出了非预期错误：\(error.localizedDescription)")
+        }
+
+        #expect(store.models.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: store.directoryURL.appendingPathComponent(source.lastPathComponent).path))
+    }
+
     private func temporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("LocalModelStoreTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
+    }
+
+    private func writeMinimalGGUF(
+        to url: URL,
+        architecture: String = "llama",
+        splitCount: UInt16? = nil,
+        splitNumber: UInt16? = nil,
+        declaredTensorByteCount: Int? = nil,
+        writtenTensorByteCount: Int? = nil
+    ) throws {
+        precondition(declaredTensorByteCount.map { $0 > 0 && $0.isMultiple(of: 4) } ?? true)
+        let splitPairCount = splitCount == nil ? 0 : (splitNumber == nil ? 1 : 2)
+        var data = Data([0x47, 0x47, 0x55, 0x46])
+        appendLittleEndian(UInt32(3), to: &data)
+        appendLittleEndian(UInt64(declaredTensorByteCount == nil ? 0 : 1), to: &data)
+        appendLittleEndian(UInt64(1 + splitPairCount), to: &data)
+        appendGGUFString("general.architecture", to: &data)
+        appendLittleEndian(Int32(8), to: &data)
+        appendGGUFString(architecture, to: &data)
+        if let splitCount {
+            appendGGUFString("split.count", to: &data)
+            appendLittleEndian(Int32(2), to: &data)
+            appendLittleEndian(splitCount, to: &data)
+        }
+        if let splitNumber {
+            appendGGUFString("split.no", to: &data)
+            appendLittleEndian(Int32(2), to: &data)
+            appendLittleEndian(splitNumber, to: &data)
+        }
+        if let declaredTensorByteCount {
+            appendGGUFString("test.weight", to: &data)
+            appendLittleEndian(UInt32(1), to: &data)
+            appendLittleEndian(UInt64(declaredTensorByteCount / 4), to: &data)
+            appendLittleEndian(Int32(0), to: &data)
+            appendLittleEndian(UInt64(0), to: &data)
+            while !data.count.isMultiple(of: 32) {
+                data.append(0)
+            }
+            data.append(Data(
+                repeating: 0,
+                count: writtenTensorByteCount ?? declaredTensorByteCount
+            ))
+        }
+        try data.write(to: url)
+    }
+
+    private func writeMinimalLoRAGGUF(to url: URL, architecture: String = "llama") throws {
+        var data = Data([0x47, 0x47, 0x55, 0x46])
+        appendLittleEndian(UInt32(3), to: &data)
+        appendLittleEndian(UInt64(2), to: &data)
+        appendLittleEndian(UInt64(3), to: &data)
+        for (key, value) in [
+            ("general.architecture", architecture),
+            ("general.type", "adapter"),
+            ("adapter.type", "lora")
+        ] {
+            appendGGUFString(key, to: &data)
+            appendLittleEndian(Int32(8), to: &data)
+            appendGGUFString(value, to: &data)
+        }
+        for (name, offset) in [
+            ("blk.0.attn_q.weight.lora_a", UInt64(0)),
+            ("blk.0.attn_q.weight.lora_b", UInt64(32))
+        ] {
+            appendGGUFString(name, to: &data)
+            appendLittleEndian(UInt32(2), to: &data)
+            appendLittleEndian(UInt64(1), to: &data)
+            appendLittleEndian(UInt64(1), to: &data)
+            appendLittleEndian(Int32(0), to: &data)
+            appendLittleEndian(offset, to: &data)
+        }
+        while !data.count.isMultiple(of: 32) {
+            data.append(0)
+        }
+        data.append(Data(repeating: 0, count: 36))
+        try data.write(to: url)
+    }
+
+    private func appendGGUFString(_ value: String, to data: inout Data) {
+        let bytes = Array(value.utf8)
+        appendLittleEndian(UInt64(bytes.count), to: &data)
+        data.append(contentsOf: bytes)
+    }
+
+    private func appendLittleEndian<Integer: FixedWidthInteger>(_ value: Integer, to data: inout Data) {
+        var littleEndianValue = value.littleEndian
+        Swift.withUnsafeBytes(of: &littleEndianValue) {
+            data.append(contentsOf: $0)
+        }
     }
 }

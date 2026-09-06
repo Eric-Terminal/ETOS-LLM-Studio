@@ -102,7 +102,17 @@ extension ChatViewModel {
     }
 
     func deleteAllVersions(of message: ChatMessage) {
-        chatService.deleteAllVersions(of: message)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if let sessionID = currentSession?.id {
+                await chatService.cancelRequestIfGenerating(
+                    messageID: message.id,
+                    in: sessionID
+                )
+            }
+            guard let currentMessage = findMessage(by: message.id) else { return }
+            chatService.deleteAllVersions(of: currentMessage)
+        }
     }
 
     func addVersionToMessage(_ message: ChatMessage, newContent: String) {
@@ -128,8 +138,7 @@ extension ChatViewModel {
     }
 
     private func deleteResponseAttemptVersion(at index: Int, of message: ChatMessage) -> Bool {
-        guard let groupID = message.responseGroupID,
-              message.responseAttemptID != nil else {
+        guard let groupID = responseAttemptVersionInfo(for: message)?.responseGroupID else {
             return false
         }
 
@@ -179,6 +188,29 @@ extension ChatViewModel {
         chatService.createNewSession()
     }
 
+    func isTemporaryChatEnabled(for sessionID: UUID?) -> Bool {
+        chatService.isTemporaryChatEnabled(for: sessionID)
+    }
+
+    func temporaryChatMemoryMode(for sessionID: UUID?) -> TemporaryChatMemoryMode? {
+        chatService.temporaryChatMemoryMode(for: sessionID)
+    }
+
+    func performTemporaryChatTap(
+        preferredMemoryMode: TemporaryChatMemoryMode,
+        canEnable: Bool
+    ) -> TemporaryChatTapOutcome {
+        chatService.performTemporaryChatTap(
+            preferredMemoryMode: preferredMemoryMode,
+            canEnable: canEnable
+        )
+    }
+
+    @discardableResult
+    func saveCurrentTemporarySession() -> Bool {
+        chatService.saveCurrentTemporaryChat()
+    }
+
     func reloadPersistedDataAfterLegacyJSONMigration() {
         chatService.reloadSessionStateFromPersistenceAfterMigration()
     }
@@ -191,8 +223,7 @@ extension ChatViewModel {
         let coordinator = DailyPulseDeliveryCoordinator.shared
         await DailyPulseManager.shared.generateForScheduledDeliveryIfNeeded(
             reminderEnabled: coordinator.reminderEnabled,
-            reminderHour: coordinator.reminderHour,
-            reminderMinute: coordinator.reminderMinute,
+            deliveryTimes: coordinator.deliveryTimes,
             referenceDate: referenceDate
         )
     }
@@ -291,8 +322,15 @@ extension ChatViewModel {
     }
 
     func reloadConversationMemoryState() {
-        conversationSessionSummaries = ConversationMemoryManager.loadAllSessionSummaries()
-        conversationUserProfile = ConversationMemoryManager.loadUserProfile()
+        conversationMemoryReloadTask?.cancel()
+        conversationMemoryReloadTask = Task { [weak self] in
+            guard !Task.isCancelled else { return }
+            let snapshot = await ConversationMemoryManager.loadStateSnapshotAsync()
+            guard let self, !Task.isCancelled else { return }
+            conversationSessionSummaries = snapshot.sessionSummaries
+            conversationUserProfile = snapshot.userProfile
+            conversationMemoryReloadTask = nil
+        }
     }
 
     func deleteConversationSummary(for sessionID: UUID) {

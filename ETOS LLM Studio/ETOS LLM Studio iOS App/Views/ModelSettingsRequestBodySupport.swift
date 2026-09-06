@@ -95,6 +95,8 @@ extension ModelSettingsView {
     }
 
     func saveEditorState() {
+        model.pickerGroupName = Model.normalizedPickerGroupName(model.pickerGroupName)
+        model.apiFormatOverride = Model.normalizedAPIFormatOverride(model.apiFormatOverride)
         model.requestBodyOverrideMode = requestBodyMode
         model.rawRequestBodyJSON = rawJSONInput
 
@@ -157,7 +159,7 @@ extension ModelSettingsView {
             state: model.defaultRequestBodyControlState
         )
         let payload = buildRequestPreviewPayload(
-            apiFormat: provider.apiFormat,
+            apiFormat: model.effectiveAPIFormat(providerAPIFormat: provider.apiFormat),
             model: model,
             overrides: effectiveOverrides
         )
@@ -310,7 +312,10 @@ extension ModelSettingsView {
                     NavigationLink {
                         RequestBodyControlDetailView(
                             control: $control,
-                            payloadDisplayMode: requestBodyMode
+                            payloadDisplayMode: requestBodyMode,
+                            onSplit: { splitControls in
+                                replaceRequestBodyControl(withID: controlID, with: splitControls)
+                            }
                         )
                     } label: {
                         RequestBodyControlRow(control: control)
@@ -380,7 +385,7 @@ extension ModelSettingsView {
         model.requestBodyControls.append(
             ModelRequestBodyControlDefaults.initialOptionGroupControl(
                 existingControls: model.requestBodyControls,
-                apiFormat: provider.apiFormat
+                apiFormat: model.effectiveAPIFormat(providerAPIFormat: provider.apiFormat)
             )
         )
     }
@@ -388,6 +393,14 @@ extension ModelSettingsView {
     private func deleteRequestBodyControl(withID controlID: String) {
         guard let index = model.requestBodyControls.firstIndex(where: { $0.id == controlID }) else { return }
         model.requestBodyControls.remove(at: index)
+    }
+
+    private func replaceRequestBodyControl(
+        withID controlID: String,
+        with splitControls: [ModelRequestBodyControl]
+    ) {
+        guard let index = model.requestBodyControls.firstIndex(where: { $0.id == controlID }) else { return }
+        model.requestBodyControls.replaceSubrange(index...index, with: splitControls)
     }
 
     private func buildRequestPreviewPayload(

@@ -67,6 +67,31 @@ struct WatchRequestBodySliderColorSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("滑块颜色", comment: ""))
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "settings-request-body-slider-colors-\(control.id)"),
+            title: NSLocalizedString("滑块颜色", comment: "结构化控制滑块颜色向导上下文标题"),
+            documents: [GuideDocumentReference(id: "model-request-body", title: "Request Body Controls")],
+            settings: [
+                .json(
+                    "low_value_color",
+                    label: NSLocalizedString("低值颜色", comment: "结构化控制滑块颜色向导字段"),
+                    schema: GuideRequestBodyControlSettingsSupport.optionalColorSchema,
+                    get: { .string(control.sliderStartColorHex ?? "") },
+                    normalize: GuideRequestBodyControlSettingsSupport.normalizeOptionalColor,
+                    set: { control.sliderStartColorHex = try GuideRequestBodyControlSettingsSupport.optionalColor(from: $0) }
+                ),
+                .json(
+                    "high_value_color",
+                    label: NSLocalizedString("高值颜色", comment: "结构化控制滑块颜色向导字段"),
+                    schema: GuideRequestBodyControlSettingsSupport.optionalColorSchema,
+                    get: { .string(control.sliderEndColorHex ?? "") },
+                    normalize: GuideRequestBodyControlSettingsSupport.normalizeOptionalColor,
+                    set: { control.sliderEndColorHex = try GuideRequestBodyControlSettingsSupport.optionalColor(from: $0) }
+                ),
+                .readOnly("requires_save", label: NSLocalizedString("应用方式", comment: "向导设置字段"), value: { .string(NSLocalizedString("修改后需要保存模型", comment: "模型草稿应用方式")) })
+            ]
+        )
+        .watchGuideEntry()
     }
 
     private var defaultPalette: WatchRequestBodySliderPalette {

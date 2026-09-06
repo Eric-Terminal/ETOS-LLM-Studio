@@ -303,7 +303,13 @@ extension SyncEngine {
         var skipped = 0
         var localContentHashes = Set(local.map { computeMCPServerContentHash($0) })
 
-        for var server in incoming {
+        for incomingServer in incoming {
+            guard var server = MCPServerConfigurationTransferService.materializeEnvironmentReferences(
+                in: incomingServer
+            ) else {
+                skipped += 1
+                continue
+            }
             let incomingHash = computeMCPServerContentHash(server)
             if localContentHashes.contains(incomingHash) {
                 skipped += 1
@@ -420,6 +426,11 @@ extension SyncEngine {
                     let mappedImageFileNames = imageFileNames.map { imageMapping[$0] ?? $0 }
                     messages[index].imageFileNames = mappedImageFileNames
                 }
+                if let excludedImageFileNames = messages[index].modelExcludedImageFileNames {
+                    messages[index].modelExcludedImageFileNames = excludedImageFileNames.map {
+                        imageMapping[$0] ?? $0
+                    }
+                }
             }
             return SyncedSession(session: payload.session, messages: messages)
         }
@@ -531,7 +542,16 @@ extension SyncEngine {
             emphasis: normalizeRouteIDs(incoming.emphasis, idMapping: idMapping, validIDs: existingIDs),
             strong: normalizeRouteIDs(incoming.strong, idMapping: idMapping, validIDs: existingIDs),
             code: normalizeRouteIDs(incoming.code, idMapping: idMapping, validIDs: existingIDs),
-            languageBuckets: [:]
+            languageBuckets: [:],
+            customTextRules: incoming.customTextRules.map { rule in
+                var normalizedRule = rule
+                normalizedRule.fontAssetIDs = normalizeRouteIDs(
+                    rule.fontAssetIDs,
+                    idMapping: idMapping,
+                    validIDs: existingIDs
+                )
+                return normalizedRule
+            }
         )
 
         for (bucketKey, bucketValue) in incoming.languageBuckets {

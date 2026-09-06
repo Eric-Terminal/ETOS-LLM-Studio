@@ -8,6 +8,9 @@
 
 import Foundation
 
+/// 向导对话只在内存中存在，因此即使用户开启了普通请求日志也不能暂存向导请求体。
+let requestLogSuppressionControlKey = "etos.request_log.suppressed"
+
 // MARK: - 流式响应的数据片段
 
 func appendSegment(_ segment: String, to target: inout String?, separator: String = "\n\n") {
@@ -171,32 +174,16 @@ func logChatRequestSnapshot(
 ) {
     guard AppConfigStore.boolValue(for: .requestLogEnabled) else { return }
 
-    var detailPayload: [String: String] = [
-        NSLocalizedString("适配器", comment: "App log payload key"): adapterName,
-        NSLocalizedString("方法", comment: "App log payload key"): request.httpMethod ?? "POST",
-        NSLocalizedString("地址", comment: "App log payload key"): AppLogRedactor.sanitizeURLForLog(request.url),
-        NSLocalizedString("请求体字节数", comment: "App log payload key"): "\(request.httpBody?.count ?? 0)"
-    ]
-
-    if let headers = AppLogRedactor.sanitizeHeadersForLog(request.allHTTPHeaderFields) {
-        detailPayload[NSLocalizedString("请求头", comment: "App log payload key")] = headers
-    }
     let exposesMessageFields = AppConfigStore.boolValue(for: .requestLogPlainMessageEnabled)
-    if let body = AppLogRedactor.sanitizeRequestBodyForLog(payload, exposesMessageFields: exposesMessageFields) {
-        let bodyKey = exposesMessageFields
-            ? NSLocalizedString("请求体(含明文消息)", comment: "App log payload key")
-            : NSLocalizedString("请求体(不含消息字段)", comment: "App log payload key")
-        detailPayload[bodyKey] = body
-    } else {
-        detailPayload[NSLocalizedString("请求体(不含消息字段)", comment: "App log payload key")] = NSLocalizedString("[无法序列化]", comment: "App log payload value")
-    }
-
-    AppLog.developer(
-        level: .debug,
-        category: NSLocalizedString("请求", comment: "App log category"),
-        action: String(format: NSLocalizedString("构建%@请求", comment: "App log action"), adapterName),
-        message: String(format: NSLocalizedString("%@ 请求体已生成", comment: "App log message"), adapterName),
-        payload: detailPayload
+    let body = AppLogRedactor.sanitizeRequestBodyForLog(
+        payload,
+        exposesMessageFields: exposesMessageFields
+    ) ?? NSLocalizedString("[无法序列化]", comment: "App log payload value")
+    RequestTransactionLogRegistry.stageRequest(
+        adapter: adapterName,
+        request: request,
+        sanitizedBody: body,
+        sanitizedHeaders: AppLogRedactor.sanitizeHeadersForLog(request.allHTTPHeaderFields)
     )
 }
 
@@ -209,45 +196,43 @@ func logImageGenerationRequestSnapshot(
 ) {
     guard AppConfigStore.boolValue(for: .requestLogEnabled) else { return }
 
-    var detailPayload: [String: String] = [
-        NSLocalizedString("适配器", comment: "App log payload key"): adapterName,
-        NSLocalizedString("方法", comment: "App log payload key"): request.httpMethod ?? "POST",
-        NSLocalizedString("地址", comment: "App log payload key"): AppLogRedactor.sanitizeURLForLog(request.url),
-        NSLocalizedString("请求体字节数", comment: "App log payload key"): "\(request.httpBody?.count ?? 0)",
-        NSLocalizedString("参考图数量", comment: "App log payload key"): "\(referenceImageCount)"
-    ]
-
-    if let headers = AppLogRedactor.sanitizeHeadersForLog(request.allHTTPHeaderFields) {
-        detailPayload[NSLocalizedString("请求头", comment: "App log payload key")] = headers
-    }
-
     let exposesMessageFields = AppConfigStore.boolValue(for: .requestLogPlainMessageEnabled)
+    let body: String
     if let payload {
-        if let body = AppLogRedactor.sanitizeRequestBodyForLog(payload, exposesMessageFields: exposesMessageFields) {
-            let bodyKey = exposesMessageFields
-                ? NSLocalizedString("请求体(含明文消息)", comment: "App log payload key")
-                : NSLocalizedString("请求体(不含消息字段)", comment: "App log payload key")
-            detailPayload[bodyKey] = body
-        } else {
-            detailPayload[NSLocalizedString("请求体(不含消息字段)", comment: "App log payload key")] = NSLocalizedString("[无法序列化]", comment: "App log payload value")
-        }
+        body = AppLogRedactor.sanitizeRequestBodyForLog(
+            payload,
+            exposesMessageFields: exposesMessageFields
+        ) ?? NSLocalizedString("[无法序列化]", comment: "App log payload value")
     } else if let prompt {
-        detailPayload[NSLocalizedString("提示词", comment: "App log payload key")] = exposesMessageFields
-            ? prompt
-            : NSLocalizedString("[已隐藏]", comment: "App log payload value")
+        body = AppLogRedactor.sanitizeRequestBodyForLog(
+            [
+                "prompt": prompt,
+                "reference_image_count": referenceImageCount
+            ],
+            exposesMessageFields: exposesMessageFields
+        ) ?? NSLocalizedString("[无法序列化]", comment: "App log payload value")
+    } else {
+        body = AppLogRedactor.sanitizeRequestBodyForLog(
+            ["reference_image_count": referenceImageCount],
+            exposesMessageFields: exposesMessageFields
+        ) ?? NSLocalizedString("[无法序列化]", comment: "App log payload value")
     }
 
-    AppLog.developer(
-        level: .debug,
-        category: NSLocalizedString("请求", comment: "App log category"),
-        action: String(format: NSLocalizedString("构建%@请求", comment: "App log action"), adapterName),
-        message: String(format: NSLocalizedString("%@ 请求体已生成", comment: "App log message"), adapterName),
-        payload: detailPayload
+    RequestTransactionLogRegistry.stageRequest(
+        adapter: adapterName,
+        request: request,
+        sanitizedBody: body,
+        sanitizedHeaders: AppLogRedactor.sanitizeHeadersForLog(request.allHTTPHeaderFields)
     )
 }
 
 /// 代表从流式 API 响应中解析出的单个数据片段。
 public struct ChatMessagePart {
+    public enum StreamTermination: Equatable, Sendable {
+        case completed
+        case failed(reason: String?)
+    }
+
     public struct ToolCallDelta {
         public var id: String?
         public var index: Int?
@@ -263,6 +248,7 @@ public struct ChatMessagePart {
     public var providerResponseMetadata: [String: JSONValue]?
     public var toolCallDeltas: [ToolCallDelta]?
     public var tokenUsage: MessageTokenUsage?
+    public var streamTermination: StreamTermination? = nil
 }
 
 /// 生图响应中的单张图片结果。
@@ -285,6 +271,9 @@ public struct GeneratedImageResult: Sendable {
 /// `APIAdapter` 协议定义了一个标准接口，用于处理不同 LLM 提供商的 API 请求构建和响应解析。
 /// 这使得 `ChatService` 无需关心特定 API 的细节，从而轻松支持多种后端。
 public protocol APIAdapter {
+    /// 流式响应必须由适配器明确确认结束，不能把传输层 EOF 当成模型正常完成。
+    var requiresExplicitStreamingTermination: Bool { get }
+
     func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest?
     func buildModelListRequest(for provider: Provider) -> URLRequest?
     func parseModelListResponse(data: Data) throws -> [Model]

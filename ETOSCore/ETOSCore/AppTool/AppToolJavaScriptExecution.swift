@@ -342,6 +342,14 @@ extension AppToolManager {
                 NSLocalizedString("错误：JavaScript input 不是有效 UTF-8 JSON。", comment: "JavaScript input encoding error")
             )
         }
+        let missingMainMessageData = try JSONEncoder().encode(
+            NSLocalizedString("JavaScript 工具必须声明同步 function main(input)。", comment: "JavaScript tool main function missing")
+        )
+        let promiseMessageData = try JSONEncoder().encode(
+            NSLocalizedString("JavaScript 工具暂不支持返回 Promise，请使用同步算法。", comment: "JavaScript tool Promise result unsupported")
+        )
+        let missingMainMessageJSON = String(decoding: missingMainMessageData, as: UTF8.self)
+        let promiseMessageJSON = String(decoding: promiseMessageData, as: UTF8.self)
 
         return """
         (() => {
@@ -360,11 +368,11 @@ extension AppToolManager {
           };
           \(code)
           if (typeof main !== "function") {
-            throw new Error("JavaScript 工具必须声明同步 function main(input)。");
+            throw new Error(\(missingMainMessageJSON));
           }
           const __etosResult = main(__etosInput);
           if (__etosResult && typeof __etosResult.then === "function") {
-            throw new Error("JavaScript 工具暂不支持返回 Promise，请使用同步算法。");
+            throw new Error(\(promiseMessageJSON));
           }
           return JSON.stringify({
             result: typeof __etosResult === "undefined" ? null : __etosResult,

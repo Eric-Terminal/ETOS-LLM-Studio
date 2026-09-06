@@ -12,6 +12,8 @@ import ETOSCore
 extension ChatView {
     func applyPresentationModifiers<Content: View>(to content: Content) -> some View {
         content
+            // 取消 Sheet 压暗后仍阻止底层聊天控件误触。
+            .allowsHitTesting(messageActionSheetPayload == nil)
             .navigationDestination(item: $navigationDestination) { destination in
                 quickActionDestinationView(for: destination)
             }
@@ -27,6 +29,7 @@ extension ChatView {
                 NavigationStack {
                     RewriteMessageView(
                         message: payload.message,
+                        selectionTarget: payload.selectionTarget,
                         referenceVersions: MessageRewriteReferenceSupport.referenceVersions(
                             for: payload.message,
                             in: viewModel.allMessagesForSession
@@ -35,13 +38,17 @@ extension ChatView {
                         viewModel.rewriteMessage(
                             payload.message,
                             instruction: instruction,
-                            referenceVersions: referenceVersions
+                            referenceVersions: referenceVersions,
+                            selectionTarget: payload.selectionTarget
                         )
                     }
                 }
                 .presentationDetents([.medium, .large])
             }
-            .sheet(item: $messageActionSheetPayload) { payload in
+            .sheet(
+                item: $messageActionSheetPayload,
+                onDismiss: performPendingMessageActionJumpIfNeeded
+            ) { payload in
                 MessageActionSheet(
                     payload: payload,
                     hasDisplayVersions: viewModel.hasDisplayVersions(for: payload.message),
@@ -105,11 +112,52 @@ extension ChatView {
                             messageToDelete = message
                         }
                     },
-                    onDownloadImages: { fileNames in
+                    onDownloadImages: { message in
                         dismissMessageActionSheet {
                             Task {
-                                await downloadImagesToPhotoLibrary(fileNames: fileNames)
+                                await downloadMessageImagesToPhotoLibrary(message)
                             }
+                        }
+                    },
+                    onConvertMarkdownImages: { message in
+                        dismissMessageActionSheet {
+                            Task {
+                                let convertedCount = await viewModel.convertMarkdownImagesToDisplayAttachments(
+                                    in: message
+                                )
+                                imageDownloadAlertMessage = convertedCount > 0
+                                    ? String(
+                                        format: NSLocalizedString("已转换 %d 张图片为附件。", comment: "Converted Markdown image count"),
+                                        convertedCount
+                                    )
+                                    : NSLocalizedString("没有可转换的 Markdown 图片。", comment: "No convertible Markdown images")
+                            }
+                        }
+                    },
+                    onRetryVideoAnalysis: { message, fileName in
+                        try await viewModel.retryVideoAnalysis(message, fileName: fileName)
+                    },
+                    onAskAI: { selectedText, message in
+                        dismissMessageActionSheet {
+                            Task { @MainActor in
+                                let attachment = await Task.detached(priority: .userInitiated) {
+                                    MessageExcerptAttachmentSupport.makeAttachment(
+                                        selectedText: selectedText,
+                                        sourceMessage: message
+                                    )
+                                }.value
+                                guard let attachment else { return }
+                                viewModel.addFileAttachment(attachment)
+                                composerFocused = true
+                            }
+                        }
+                    },
+                    onRewriteSelection: { target, message in
+                        dismissMessageActionSheet {
+                            viewModel.messageRewritePayload = ChatViewModel.MessageRewritePayload(
+                                message: message,
+                                selectionTarget: target
+                            )
                         }
                     },
                     onSelectMultiple: { message in
@@ -118,11 +166,13 @@ extension ChatView {
                         }
                     },
                     onJumpToMessage: { displayIndex in
-                        jumpToMessage(displayIndex: displayIndex)
+                        queueMessageActionJumpAfterDismiss(displayIndex: displayIndex)
                     }
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+                .presentationBackground(Color.clear)
+                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
             }
             .sheet(isPresented: $isSelectedMessagesExportPresented) {
                 SelectedMessagesExportSheet(selectionCount: selectedMessageIDs.count) { format, includeReasoning, includeSystemPrompt in
@@ -142,6 +192,38 @@ extension ChatView {
             }
             .sheet(item: $sessionInfo) { info in
                 SessionPickerInfoSheet(payload: info)
+            }
+            .sheet(item: $contextCompressionSourceSession) { session in
+                ContextCompressionOptionsView(
+                    session: session,
+                    models: viewModel.activatedChatModels,
+                    selectedModelID: viewModel.selectedModel?.id,
+                    onCompress: { options, progress in
+                        try await viewModel.createCompressedContinuation(
+                            from: session.id,
+                            options: options,
+                            progress: progress
+                        )
+                    }
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(item: $contextCompressionReminderSourceSession) { session in
+                ContextCompressionOneTapView(
+                    session: session,
+                    onCompress: { progress in
+                        try await viewModel.createCompressedContinuation(
+                            from: session.id,
+                            options: ContextCompressionOptions(
+                                compressionModelIdentifier: viewModel.selectedModel?.id
+                            ),
+                            progress: progress
+                        )
+                    }
+                )
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.hidden)
             }
             .sheet(item: $exportSharePayload) { payload in
                 ActivityShareSheet(activityItems: [payload.fileURL])
@@ -174,10 +256,17 @@ extension ChatView {
                     Text(String(format: NSLocalizedString("将从第 %d 条消息处创建新的分支会话。", comment: ""), index + 1))
                 }
             }
-            .alert(NSLocalizedString("确认删除消息", comment: ""), isPresented: messageDeleteAlertPresented) {
+            .alert(
+                Text(
+                    (messageToDelete?.imageFileNames?.isEmpty == false)
+                        ? NSLocalizedString("确认删除气泡", comment: "Confirm deleting text bubble only")
+                        : NSLocalizedString("确认删除消息", comment: "")
+                ),
+                isPresented: messageDeleteAlertPresented
+            ) {
                 Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                     if let message = messageToDelete {
-                        viewModel.deleteAllVersions(of: message)
+                        viewModel.deleteTextBubbleOrMessage(message)
                     }
                     messageToDelete = nil
                 }
@@ -185,9 +274,13 @@ extension ChatView {
                     messageToDelete = nil
                 }
             } message: {
-                Text(messageToDelete.map { viewModel.hasDisplayVersions(for: $0) } == true
-                     ? NSLocalizedString("删除后将无法恢复这条消息的所有版本。", comment: "")
-                     : NSLocalizedString("删除后无法恢复这条消息。", comment: ""))
+                if messageToDelete?.imageFileNames?.isEmpty == false {
+                    Text(NSLocalizedString("只会删除正文气泡，图片附件将继续保留。", comment: "Delete bubble while preserving images explanation"))
+                } else {
+                    Text(messageToDelete.map { viewModel.hasDisplayVersions(for: $0) } == true
+                         ? NSLocalizedString("删除后将无法恢复这条消息的所有版本。", comment: "")
+                         : NSLocalizedString("删除后无法恢复这条消息。", comment: ""))
+                }
             }
             .alert(NSLocalizedString("确认删除所选消息", comment: "Selected messages delete confirmation title"), isPresented: $showSelectedMessagesDeleteConfirm) {
                 Button(NSLocalizedString("删除", comment: ""), role: .destructive) {

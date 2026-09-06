@@ -11,25 +11,39 @@ import Foundation
 import ETOSCore
 import AVKit
 import AVFoundation
+import WatchKit
+
+struct WatchChatTransientNotice {
+    let message: String
+    let systemImage: String
+    let tint: Color
+
+    static var copyCompleted: WatchChatTransientNotice {
+        WatchChatTransientNotice(
+            message: NSLocalizedString("已复制", comment: "Copy completion notice"),
+            systemImage: "checkmark.circle.fill",
+            tint: .green
+        )
+    }
+}
 
 extension ContentView {
     var legacyChatRootView: some View {
-        ScrollViewReader { proxy in
-            ZStack(alignment: .bottom) {
-                chatList(proxy: proxy)
-
-                WatchRoleplaySessionScriptHost(
-                    sessionID: viewModel.currentSession?.id,
-                    messageID: viewModel.displayMessages.last?.message.id,
-                    versionIndex: viewModel.displayMessages.last?.message.getCurrentVersionIndex() ?? 0
-                )
-
-                if showScrollToBottomButton {
-                    scrollToBottomButton(proxy: proxy)
-                }
+        watchChatPageContainer
+        .navigationTitle(watchChatNavigationTitle)
+        .onChange(of: watchChatPage) { oldPage, newPage in
+            guard oldPage != newPage else { return }
+            WKInterfaceDevice.current().play(newPage.terminalID == nil ? .directionUp : .directionDown)
+        }
+        .task(id: appConfig.localLinuxEnabled) {
+            await observeActiveUserTerminalForWatchChat()
+        }
+        .onChange(of: activeUserTerminalJobIDs) { _, terminalIDs in
+            if let selectedID = watchChatPage.terminalID,
+               !terminalIDs.contains(selectedID) {
+                watchChatPage = .chat
             }
         }
-        .navigationTitle(viewModel.currentSession?.name ?? NSLocalizedString("新对话", comment: ""))
         .sheet(isPresented: $isSettingsPresented) {
             SettingsView(viewModel: viewModel, requestedDestination: $settingsDestination)
                 .appLockOverlayLayer()
@@ -37,6 +51,48 @@ extension ContentView {
         .sheet(isPresented: $isSessionListPresented) {
             NavigationStack {
                 sessionListView
+            }
+            .appLockOverlayLayer()
+        }
+        .sheet(isPresented: $isContextCompressionPresented) {
+            if let session = viewModel.currentSession {
+                NavigationStack {
+                    WatchContextCompressionOptionsView(
+                        session: session,
+                        models: viewModel.activatedChatModels,
+                        selectedModelID: viewModel.selectedModel?.id,
+                        onCompress: { options, progress in
+                            try await viewModel.createCompressedContinuation(
+                                from: session.id,
+                                options: options,
+                                progress: progress
+                            )
+                        }
+                    )
+                }
+                .appLockOverlayLayer()
+            }
+        }
+        .sheet(item: $watchInputQuickActionDestination) { action in
+            NavigationStack {
+                watchInputQuickActionDestinationView(for: action)
+            }
+            .appLockOverlayLayer()
+        }
+        .sheet(item: $contextCompressionReminderSourceSession) { session in
+            NavigationStack {
+                WatchContextCompressionOneTapView(
+                    session: session,
+                    onCompress: { progress in
+                        try await viewModel.createCompressedContinuation(
+                            from: session.id,
+                            options: ContextCompressionOptions(
+                                compressionModelIdentifier: viewModel.selectedModel?.id
+                            ),
+                            progress: progress
+                        )
+                    }
+                )
             }
             .appLockOverlayLayer()
         }
@@ -68,7 +124,7 @@ extension ContentView {
         }
         .sheet(item: watchGlobalToolPermissionRequestBinding) { request in
             WatchGlobalToolPermissionView(request: request) { decision in
-                toolPermissionCenter.resolveActiveRequest(with: decision)
+                toolPermissionCenter.resolveRequest(withID: request.id, decision: decision)
             }
             .interactiveDismissDisabled(true)
             .appLockOverlayLayer()
@@ -86,7 +142,7 @@ extension ContentView {
         }
         .sheet(item: $messageRewriteTarget) { target in
             NavigationStack {
-                rewriteMessageView(for: target.id)
+                rewriteMessageView(for: target)
             }
             .appLockOverlayLayer()
         }
@@ -158,10 +214,17 @@ extension ContentView {
                 .appLockOverlayLayer()
             }
         }
+        .sheet(isPresented: watchSurveyPresentationBinding) {
+            if let survey = surveyManager.currentSurvey {
+                WatchSurveyResponseView(survey: survey, manager: surveyManager)
+                    .appLockOverlayLayer()
+            }
+        }
         .task {
             launchRecoveryRequest = Persistence.currentLaunchRecoveryRequest()
             launchRecoveryNoticeMessage = Persistence.consumeLaunchRecoveryNotice()
             await announcementManager.checkAnnouncement()
+            await surveyManager.checkSurveys(canPresent: !announcementManager.shouldShowAlert)
             scheduleDailyPulsePreparation(after: 1_500_000_000)
             if applyDailyPulseContinuationIfNeeded() {
                 return
@@ -174,6 +237,8 @@ extension ContentView {
                     openFeedbackFromNotification()
                 case .chatSession:
                     openChatSessionFromNotification()
+                case .contextCompression:
+                    openContextCompressionFromNotification()
                 case .achievementJournal:
                     openAchievementJournalFromNotification()
                 case .updateTimeline:
@@ -193,6 +258,14 @@ extension ContentView {
         .onChange(of: watchModalBlocksAskUserInputPresentation) { _, _ in
             presentPendingAskUserInputIfPossible()
         }
+        .onChange(of: announcementManager.shouldShowAlert) { _, isPresented in
+            guard !isPresented else { return }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                guard !announcementManager.shouldShowAlert else { return }
+                surveyManager.presentPendingSurveyIfPossible()
+            }
+        }
         .onChange(of: viewModel.activeAskUserInputRequest?.requestID) { _, _ in
             syncPresentedAskUserInputRequest()
             refreshWatchPresentationPriorities()
@@ -211,9 +284,86 @@ extension ContentView {
         }
     }
 
+    @ViewBuilder
+    private var watchChatPageContainer: some View {
+        if appConfig.localLinuxEnabled, !activeUserTerminalJobIDs.isEmpty {
+            TabView(selection: $watchChatPage) {
+                watchChatConversationPage
+                    .tag(WatchChatPage.chat)
+
+                ForEach(activeUserTerminalJobIDs, id: \.self) { terminalID in
+                    LocalLinuxWatchTerminalView(
+                        initialJobID: terminalID,
+                        isPresentationActive: watchChatPage == .terminal(terminalID),
+                        showsTerminalManagement: false
+                    )
+                    .tag(WatchChatPage.terminal(terminalID))
+                }
+            }
+            .tabViewStyle(.verticalPage(transitionStyle: .blur))
+        } else {
+            watchChatConversationPage
+        }
+    }
+
+    private var watchChatConversationPage: some View {
+        ScrollViewReader { proxy in
+            ZStack(alignment: .bottom) {
+                chatList(proxy: proxy)
+
+                WatchRoleplaySessionScriptHost(
+                    sessionID: viewModel.currentSession?.id,
+                    messageID: viewModel.displayMessages.last?.message.id,
+                    versionIndex: viewModel.displayMessages.last?.message.getCurrentVersionIndex() ?? 0,
+                    chatMessages: viewModel.allMessagesForSession
+                )
+
+                if showScrollToBottomButton {
+                    scrollToBottomButton(proxy: proxy)
+                }
+            }
+        }
+    }
+
+    private func observeActiveUserTerminalForWatchChat() async {
+        guard appConfig.localLinuxEnabled else {
+            activeUserTerminalJobIDs = []
+            watchChatPage = .chat
+            return
+        }
+
+        let updates = await LocalLinuxRuntimeController.shared.updates()
+        for await snapshot in updates {
+            guard !Task.isCancelled else { return }
+            if snapshot.activeTerminalCount == 0 {
+                activeUserTerminalJobIDs = []
+                watchChatPage = .chat
+                continue
+            }
+            let terminals = await LocalLinuxJobScheduler.shared.activeStandaloneUserTerminals()
+            activeUserTerminalJobIDs = terminals.map(\.id)
+            if activeUserTerminalJobIDs.isEmpty {
+                watchChatPage = .chat
+            }
+        }
+    }
+
+    private var watchChatNavigationTitle: String {
+        guard let terminalID = watchChatPage.terminalID else {
+            return viewModel.currentSession?.name ?? NSLocalizedString("新对话", comment: "")
+        }
+        return String(
+            format: NSLocalizedString("终端 %@", comment: "Watch Linux terminal page title"),
+            String(terminalID.uuidString.prefix(4))
+        )
+    }
+
     var watchModalBlocksAskUserInputPresentation: Bool {
         isSettingsPresented
             || isSessionListPresented
+            || isContextCompressionPresented
+            || watchInputQuickActionDestination != nil
+            || contextCompressionReminderSourceSession != nil
             || viewModel.activeSheet != nil
             || fullErrorContent != nil
             || messageActionsTarget != nil
@@ -221,6 +371,7 @@ extension ContentView {
             || selectedMessagesExportTarget != nil
             || isMessageSelectionMode
             || announcementManager.shouldShowAlert
+            || surveyManager.shouldShowSurvey
             || launchRecoveryNoticeMessage != nil
             || launchRecoveryRequest != nil
             || launchRecoveryErrorMessage != nil
@@ -242,6 +393,17 @@ extension ContentView {
     var watchToolPermissionAutoPresentationBlocked: Bool {
         watchModalBlocksAskUserInputPresentation
             || presentedAskUserInputRequest != nil
+    }
+
+    var watchSurveyPresentationBinding: Binding<Bool> {
+        Binding(
+            get: { surveyManager.shouldShowSurvey },
+            set: { isPresented in
+                if !isPresented {
+                    surveyManager.dismissCurrentSurvey()
+                }
+            }
+        )
     }
 
     var watchGlobalToolPermissionRequestBinding: Binding<ToolPermissionRequest?> {
@@ -372,6 +534,62 @@ extension ContentView {
         )
     }
 
+    func showChatTransientNotice(
+        _ notice: WatchChatTransientNotice,
+        duration: Duration = .seconds(2)
+    ) {
+        chatTransientNoticeDismissTask?.cancel()
+
+        if accessibilityReduceMotion {
+            chatTransientNotice = notice
+        } else {
+            withAnimation(.easeOut(duration: 0.18)) {
+                chatTransientNotice = notice
+            }
+        }
+
+        chatTransientNoticeDismissTask = Task { @MainActor in
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled else { return }
+
+            if accessibilityReduceMotion {
+                chatTransientNotice = nil
+            } else {
+                withAnimation(.easeIn(duration: 0.18)) {
+                    chatTransientNotice = nil
+                }
+            }
+            chatTransientNoticeDismissTask = nil
+        }
+    }
+
+    func chatTransientNoticeBanner(_ notice: WatchChatTransientNotice) -> some View {
+        let shape = Capsule()
+
+        return HStack(spacing: 6) {
+            Image(systemName: notice.systemImage)
+                .foregroundStyle(notice.tint)
+                .symbolRenderingMode(.hierarchical)
+
+            Text(notice.message)
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+        }
+        .etFont(.footnote.weight(.semibold))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background {
+            if #available(watchOS 26.0, *), isLiquidGlassEnabled {
+                shape
+                    .fill(Color.primary.opacity(0.04))
+                    .glassEffect(.clear, in: shape)
+            } else {
+                shape.fill(.ultraThinMaterial)
+            }
+        }
+        .overlay(shape.stroke(notice.tint.opacity(0.25), lineWidth: 0.5))
+    }
+
     @ViewBuilder
     func sheetView(for item: ActiveSheet) -> some View {
         switch item {
@@ -395,6 +613,7 @@ extension ContentView {
             tags: viewModel.sessionTags,
             currentSession: $viewModel.currentSession,
             runningSessionIDs: viewModel.runningSessionIDs,
+            conversationRuntimeStates: viewModel.conversationRuntimeStates,
             deleteSessionAction: { session in
                 viewModel.deleteSessions([session])
             },
@@ -529,8 +748,17 @@ extension ContentView {
                 onRewrite: {
                     messageRewriteTarget = WatchMessageRewriteNavigationTarget(id: message.id)
                 },
+                onRewriteSelection: { target in
+                    messageRewriteTarget = WatchMessageRewriteNavigationTarget(
+                        id: message.id,
+                        selectionTarget: target
+                    )
+                },
                 onRetry: { message in
                     viewModel.retryMessage(message)
+                },
+                onRetryVideoAnalysis: { message, fileName in
+                    try await viewModel.retryVideoAnalysis(message, fileName: fileName)
                 },
                 onSpeak: { message in
                     viewModel.speakMessage(message)
@@ -561,7 +789,7 @@ extension ContentView {
                 onToggleMathRendering: {
                     viewModel.toggleMathRendering(for: message.id)
                 },
-                mathRenderContent: viewModel.preparedMarkdownByMessageID[message.id]?.normalizedText ?? message.content,
+                mathRenderContent: viewModel.preparedMarkdownByMessageID[message.id]?.mathRenderText ?? message.content,
                 onJumpToMessageIndex: { displayIndex in
                     jumpToMessage(displayIndex: displayIndex)
                 },
@@ -577,10 +805,11 @@ extension ContentView {
     }
 
     @ViewBuilder
-    func rewriteMessageView(for messageID: UUID) -> some View {
-        if let message = viewModel.allMessagesForSession.first(where: { $0.id == messageID }) {
+    func rewriteMessageView(for target: WatchMessageRewriteNavigationTarget) -> some View {
+        if let message = viewModel.allMessagesForSession.first(where: { $0.id == target.id }) {
             RewriteMessageView(
                 message: message,
+                selectionTarget: target.selectionTarget,
                 referenceVersions: MessageRewriteReferenceSupport.referenceVersions(
                     for: message,
                     in: viewModel.allMessagesForSession
@@ -589,7 +818,8 @@ extension ContentView {
                 viewModel.rewriteMessage(
                     message,
                     instruction: instruction,
-                    referenceVersions: referenceVersions
+                    referenceVersions: referenceVersions,
+                    selectionTarget: target.selectionTarget
                 )
             }
         } else {
@@ -619,23 +849,34 @@ extension ContentView {
 private struct WatchLoopingBackgroundVideoView: View {
     let url: URL
 
+    @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var player = AVPlayer()
     @State private var endObserver: NSObjectProtocol?
     @State private var currentURL: URL?
+    @State private var isVisible = false
 
     var body: some View {
         VideoPlayer(player: player)
             .disabled(true)
             .onAppear {
+                isVisible = true
                 configurePlayerIfNeeded()
-                player.play()
+                updatePlayback()
             }
             .onDisappear {
-                player.pause()
+                isVisible = false
+                updatePlayback()
             }
             .onChange(of: url) { _, _ in
                 configurePlayerIfNeeded()
-                player.play()
+                updatePlayback()
+            }
+            .onChange(of: scenePhase) { _, _ in
+                updatePlayback()
+            }
+            .onChange(of: appConfig.continueVideoBackgroundPlaybackWhenChatHidden) { _, _ in
+                updatePlayback()
             }
     }
 
@@ -658,5 +899,15 @@ private struct WatchLoopingBackgroundVideoView: View {
         player.isMuted = true
         player.actionAtItemEnd = .none
         currentURL = url
+    }
+
+    private func updatePlayback() {
+        let shouldPlay = scenePhase == .active
+            && (isVisible || appConfig.continueVideoBackgroundPlaybackWhenChatHidden)
+        if shouldPlay {
+            player.play()
+        } else {
+            player.pause()
+        }
     }
 }

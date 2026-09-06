@@ -1,0 +1,6 @@
+"NSLocationWhenInUseUsageDescription" = "在你明確呼叫位置工具時讀取目前位置；亦可在你開啟背景持續生成後維持回覆活動。";
+"NSHealthShareUsageDescription" = "AI 工具在你明確呼叫健康功能時，需要讀取你授權的健康、睡眠與運動資料。";
+"NSHealthUpdateUsageDescription" = "AI 工具在你明確呼叫健康功能時，需要寫入你授權的健康記錄。";
+"NSBluetoothAlwaysUsageDescription" = "只在你明確呼叫藍牙工具時，掃描並連接你附近所選的藍牙裝置。";
+"NSHomeKitUsageDescription" = "只在你明確呼叫家庭工具時，讀取和控制你授權的家庭與配件。";
+"NSContactsUsageDescription" = "只在你明確呼叫聯絡人工具時，讀取你授權的聯絡人。";

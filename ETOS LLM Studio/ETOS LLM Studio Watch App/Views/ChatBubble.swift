@@ -22,6 +22,7 @@ struct ChatBubble: View {
 
     @ObservedObject var messageState: ChatMessageRenderState
     let roleplaySessionID: UUID?
+    let roleplayMessages: [ChatMessage]
     let preparedMarkdownPayload: ETPreparedMarkdownRenderPayload?
     let preparedReasoningMarkdownPayload: ETPreparedMarkdownRenderPayload?
     let reasoningThinkingTitle: String?
@@ -56,6 +57,9 @@ struct ChatBubble: View {
     let isSelected: Bool
     let onToggleSelection: () -> Void
     let onOpenMore: (() -> Void)?
+    let sourceConversationName: String?
+    let onOpenSourceConversation: (() -> Void)?
+    let onOpenConversation: ((UUID) -> Void)?
     let providers: [Provider]
 
     @StateObject var audioPlayer = WatchAudioPlayerManager()
@@ -74,6 +78,7 @@ struct ChatBubble: View {
     init(
         messageState: ChatMessageRenderState,
         roleplaySessionID: UUID? = nil,
+        roleplayMessages: [ChatMessage] = [],
         preparedMarkdownPayload: ETPreparedMarkdownRenderPayload? = nil,
         preparedReasoningMarkdownPayload: ETPreparedMarkdownRenderPayload? = nil,
         reasoningThinkingTitle: String? = nil,
@@ -107,10 +112,14 @@ struct ChatBubble: View {
         isSelected: Bool = false,
         onToggleSelection: @escaping () -> Void = {},
         onOpenMore: (() -> Void)? = nil,
+        sourceConversationName: String? = nil,
+        onOpenSourceConversation: (() -> Void)? = nil,
+        onOpenConversation: ((UUID) -> Void)? = nil,
         providers: [Provider] = []
     ) {
         self.messageState = messageState
         self.roleplaySessionID = roleplaySessionID
+        self.roleplayMessages = roleplayMessages
         self.preparedMarkdownPayload = preparedMarkdownPayload
         self.preparedReasoningMarkdownPayload = preparedReasoningMarkdownPayload
         self.reasoningThinkingTitle = reasoningThinkingTitle
@@ -144,6 +153,9 @@ struct ChatBubble: View {
         self.isSelected = isSelected
         self.onToggleSelection = onToggleSelection
         self.onOpenMore = onOpenMore
+        self.sourceConversationName = sourceConversationName
+        self.onOpenSourceConversation = onOpenSourceConversation
+        self.onOpenConversation = onOpenConversation
         self.providers = providers
     }
 
@@ -173,7 +185,7 @@ struct ChatBubble: View {
         let slot: ChatAppearanceColorSlot
         let fallback: Color
         // watchOS 不区分白天与夜览文字配色，统一使用可跨端同步的白天槽位。
-        if message.role == .user {
+        if isOutgoing {
             slot = activeAppearanceProfile.userLightText
             fallback = .white
         } else {
@@ -185,9 +197,13 @@ struct ChatBubble: View {
     }
 
     var customTextStyleColors: ChatAppearanceTextStyleColors {
-        message.role == .user
+        isOutgoing
             ? activeAppearanceProfile.userLightTextStyles
             : activeAppearanceProfile.assistantLightTextStyles
+    }
+
+    var isOutgoing: Bool {
+        message.role == .user && message.authorKind == .user
     }
 
     func resolvedTextColor(default defaultColor: Color) -> Color {
@@ -214,12 +230,26 @@ struct ChatBubble: View {
     // MARK: - 视图主体
 
     var body: some View {
-        HStack {
+        VStack(alignment: isOutgoing ? .trailing : .leading) {
+            sourceConversationLabel
+            HStack {
             // 重构: 使用 MessageRole 枚举进行判断
             switch message.role {
             case .user:
-                Spacer()
-                userBubble
+                if isOutgoing {
+                    Spacer()
+                    userBubble
+                } else {
+                    if usesNoBubbleStyle {
+                        Spacer(minLength: 0)
+                    }
+                    assistantBubble
+                    if usesNoBubbleStyle {
+                        Spacer(minLength: 0)
+                    } else {
+                        Spacer()
+                    }
+                }
             case .error:
                 errorBubble
                 Spacer()
@@ -236,6 +266,7 @@ struct ChatBubble: View {
             @unknown default:
                 // 为未来可能增加的 role 类型提供一个默认的回退，防止编译错误
                 Spacer()
+            }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -306,6 +337,29 @@ struct ChatBubble: View {
         }
         .onChange(of: toolCallAutoPresentationSignature) { _, _ in
             autoPresentPendingToolCallIfNeeded()
+        }
+    }
+
+    @ViewBuilder
+    private var sourceConversationLabel: some View {
+        if message.authorKind == .conversation,
+           let sourceSessionID = message.sourceSessionID {
+            let sourceName = sourceConversationName ?? String(sourceSessionID.uuidString.prefix(8))
+            Button {
+                onOpenSourceConversation?()
+            } label: {
+                Label(
+                    String(
+                        format: NSLocalizedString("来自“%@”", comment: "Cross-conversation message source"),
+                        sourceName
+                    ),
+                    systemImage: "bubble.left.and.bubble.right"
+                )
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(onOpenSourceConversation == nil)
         }
     }
 
@@ -423,8 +477,7 @@ struct ChatBubble: View {
     @ViewBuilder
     private var separatedAssistantBubbles: some View {
         let hasReasoning = message.reasoningContent != nil && !((message.reasoningContent ?? "").isEmpty)
-        let retryFailedPrefix = NSLocalizedString("重试失败", comment: "Retry failed error message prefix")
-        let isErrorVersion = message.content.hasPrefix(retryFailedPrefix) || message.content.hasPrefix("重试失败")
+        let isErrorVersion = message.role == .error
         let toolCalls = message.toolCalls ?? []
         let hasMainBubble = hasMainContentWhenToolCallsSeparated
         let totalBubbleCount = toolCalls.count + (hasMainBubble ? 1 : 0)
@@ -445,7 +498,7 @@ struct ChatBubble: View {
                             .foregroundColor(
                                 isErrorVersion
                                     ? resolvedTextColor(default: usesNoBubbleStyle ? .red : .white)
-                                    : resolvedTextColor(default: message.role == .user ? .white : .primary)
+                                    : resolvedTextColor(default: isOutgoing ? .white : .primary)
                             )
                     }
                 }
@@ -497,8 +550,7 @@ struct ChatBubble: View {
             .contentShape(Rectangle())
         } else {
             let hasReasoning = message.reasoningContent != nil && !message.reasoningContent!.isEmpty
-            let retryFailedPrefix = NSLocalizedString("重试失败", comment: "Retry failed error message prefix")
-            let isErrorVersion = message.content.hasPrefix(retryFailedPrefix) || message.content.hasPrefix("重试失败")
+            let isErrorVersion = message.role == .error
             let toolCalls = message.toolCalls ?? []
             let reasoning = message.reasoningContent?.trimmingCharacters(in: .whitespacesAndNewlines)
             let canUseTimeline = shouldRenderReasoningToolTimeline
@@ -532,7 +584,7 @@ struct ChatBubble: View {
                         .foregroundColor(
                             isErrorVersion
                                 ? resolvedTextColor(default: usesNoBubbleStyle ? .red : .white)
-                                : resolvedTextColor(default: message.role == .user ? .white : .primary)
+                                : resolvedTextColor(default: isOutgoing ? .white : .primary)
                         )
                 }
 

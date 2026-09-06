@@ -4,7 +4,9 @@ import ETOSCore
 struct TTSFloatingController: View {
     @ObservedObject private var ttsManager = TTSManager.shared
     @ObservedObject private var settingsStore = TTSSettingsStore.shared
-    @State private var keepVisibleAfterFinished: Bool = false
+    @State private var presentation = TTSFloatingPanelPresentation()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
 
     private let speedSteps: [Float] = [0.8, 1.0, 1.2, 1.5]
     private let panelCornerRadius: CGFloat = 12
@@ -12,42 +14,54 @@ struct TTSFloatingController: View {
     private let panelBottomPadding: CGFloat = 14
 
     private var isPlaybackActive: Bool {
-        ttsManager.isSpeaking || ttsManager.playbackState.status == .paused || ttsManager.playbackState.status == .buffering
-    }
-
-    private var shouldShow: Bool {
-        isPlaybackActive || keepVisibleAfterFinished
+        ttsManager.isSpeaking || ttsManager.playbackState.status == .playing
+            || ttsManager.playbackState.status == .paused || ttsManager.playbackState.status == .buffering
     }
 
     var body: some View {
-        if shouldShow {
-            VStack(spacing: 6) {
-                if isPlaybackActive {
-                    activePanel
-                } else {
-                    finishedPanel
+        ZStack {
+            if presentation.isVisible {
+                VStack(spacing: 6) {
+                    if isPlaybackActive {
+                        activePanel
+                    } else {
+                        finishedPanel
+                    }
                 }
-            }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 6)
-            .frame(maxWidth: panelMaxWidth)
-            .background {
-                RoundedRectangle(cornerRadius: panelCornerRadius, style: .continuous)
-                    .fill(Color.black)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: panelCornerRadius, style: .continuous)
-                    .stroke(Color.white.opacity(0.18), lineWidth: 0.8)
-            }
-            .padding(.bottom, panelBottomPadding)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-            .onAppear {
-                updateVisibilityState(isActive: isPlaybackActive)
-            }
-            .onChange(of: isPlaybackActive) { _, isActive in
-                updateVisibilityState(isActive: isActive)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 6)
+                .frame(maxWidth: panelMaxWidth)
+                .background {
+                    RoundedRectangle(cornerRadius: panelCornerRadius, style: .continuous)
+                        .fill(Color.black)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: panelCornerRadius, style: .continuous)
+                        .stroke(Color.white.opacity(0.18), lineWidth: 0.8)
+                }
+                .padding(.bottom, panelBottomPadding)
+                .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.3, dampingFraction: 1), value: presentation.isVisible)
+        .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.3, dampingFraction: 1), value: isPlaybackActive)
+        .allowsHitTesting(presentation.isVisible)
+        .onAppear {
+            presentation.setDismissalSuspended(voiceOverEnabled)
+            updateVisibilityState()
+        }
+        .onChange(of: isPlaybackActive) { _, _ in updateVisibilityState() }
+        .onChange(of: ttsManager.playbackState.status) { _, _ in updateVisibilityState() }
+        .onChange(of: voiceOverEnabled) { _, enabled in presentation.setDismissalSuspended(enabled) }
+        .task(id: presentation.dismissalID) {
+            guard let id = presentation.dismissalID else { return }
+            do {
+                try await Task.sleep(nanoseconds: TTSFloatingPanelPresentation.dismissalDelayNanoseconds)
+            } catch { return }
+            guard !Task.isCancelled else { return }
+            presentation.dismiss(ifMatching: id)
+        }
+        .onDisappear { presentation.dismiss() }
     }
 
     private var activePanel: some View {
@@ -64,6 +78,9 @@ struct TTSFloatingController: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
+                .accessibilityLabel((ttsManager.playbackState.status == .playing || ttsManager.playbackState.status == .buffering)
+                    ? NSLocalizedString("暂停朗读", value: "Pause Reading", comment: "暂停朗读控件")
+                    : NSLocalizedString("继续朗读", value: "Resume Reading", comment: "继续朗读控件"))
 
                 Button {
                     ttsManager.seekBy(seconds: 5)
@@ -72,17 +89,19 @@ struct TTSFloatingController: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityLabel(NSLocalizedString("快进 5 秒", value: "Forward 5 Seconds", comment: "朗读快进控件"))
 
                 speedButton
 
                 Button {
                     ttsManager.stop()
-                    dismissImmediately()
+                    presentation.dismiss()
                 } label: {
                     Image(systemName: "stop.fill")
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityLabel(NSLocalizedString("停止朗读", comment: "停止朗读控件"))
             }
 
             ProgressView(value: progressValue)
@@ -105,23 +124,26 @@ struct TTSFloatingController: View {
             Text(statusText)
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
+                .lineLimit(2)
 
             Spacer(minLength: 2)
 
             if ttsManager.canReplayLastRequest {
                 Button {
+                    presentation.cancelPendingDismissal()
                     ttsManager.replayLastRequest()
-                    keepVisibleAfterFinished = true
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    Image(systemName: "arrow.counterclockwise")
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .accessibilityLabel(NSLocalizedString("重试朗读", comment: ""))
+                .accessibilityLabel(ttsManager.playbackState.status == .error
+                    ? NSLocalizedString("重试朗读", comment: "失败后重试朗读")
+                    : NSLocalizedString("重新朗读", value: "Read Again", comment: "完成后重新朗读"))
             }
 
             Button {
-                dismissImmediately()
+                presentation.dismiss()
             } label: {
                 Image(systemName: "xmark")
             }
@@ -141,6 +163,8 @@ struct TTSFloatingController: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
+        .accessibilityLabel(NSLocalizedString("朗读速度", value: "Reading Speed", comment: "朗读倍速控件"))
+        .accessibilityValue(String(format: "%.1fx", settingsStore.playbackSpeed))
     }
 
     private var progressValue: Double {
@@ -218,25 +242,7 @@ struct TTSFloatingController: View {
         }
     }
 
-    private func dismissImmediately() {
-        keepVisibleAfterFinished = false
-    }
-
-    private func updateVisibilityState(isActive: Bool) {
-        guard !isActive else {
-            keepVisibleAfterFinished = true
-            return
-        }
-
-        switch ttsManager.playbackState.status {
-        case .ended, .error:
-            keepVisibleAfterFinished = true
-        case .idle:
-            keepVisibleAfterFinished = false
-        case .paused, .buffering, .playing:
-            keepVisibleAfterFinished = true
-        @unknown default:
-            keepVisibleAfterFinished = false
-        }
+    private func updateVisibilityState() {
+        presentation.updatePlayback(isSpeaking: ttsManager.isSpeaking, status: ttsManager.playbackState.status)
     }
 }

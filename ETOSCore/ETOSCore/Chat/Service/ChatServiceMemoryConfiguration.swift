@@ -83,6 +83,10 @@ extension ChatService {
                 "count": .dictionary([
                     "type": .string("integer"),
                     "description": .string(NSLocalizedString("返回条数；不填则使用系统默认 Top K。", comment: "Search memory count description"))
+                ]),
+                "include_explanation": .dictionary([
+                    "type": .string("boolean"),
+                    "description": .string(NSLocalizedString("是否返回语义、关键词、实体、时间和重要度等命中分项；不会返回内部向量。", comment: "Search memory explanation parameter description"))
                 ])
             ]),
             "required": .array([.string("mode"), .string("query")])

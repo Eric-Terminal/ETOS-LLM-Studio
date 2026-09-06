@@ -1,0 +1,332 @@
+// ============================================================================
+// PerformanceTelemetryCenter.swift
+// ============================================================================
+// ETOS LLM Studio
+//
+// iOS MetricKit 订阅、启动快照上传与用户可见状态的唯一协调入口。
+// ============================================================================
+
+#if os(iOS) && canImport(MetricKit)
+import Foundation
+import Combine
+import MetricKit
+import os.log
+
+@MainActor
+public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
+    private enum StateTransition: Sendable {
+        case configure(Bool)
+        case clearPending
+    }
+
+    private struct ReceivedPayload: Sendable {
+        let kind: TelemetryPayloadKind
+        let data: Data
+        let periodStart: Date?
+        let periodEnd: Date?
+    }
+
+    public static let shared = PerformanceTelemetryCenter()
+
+    @Published public private(set) var isEnabled = false
+    @Published public private(set) var pendingRecords: [TelemetryLogRecord] = []
+    @Published public private(set) var sentThisLaunchRecords: [TelemetryLogRecord] = []
+    @Published public private(set) var pendingBytes: Int64 = 0
+    @Published public private(set) var isUploading = false
+    @Published public private(set) var lastUploadError: String?
+
+    private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "PerformanceTelemetry")
+    private let store: TelemetryStore
+    private let uploader: any TelemetryUploading
+    private let appMetadata: TelemetryAppMetadata
+    private let platformMetadata: TelemetryPlatformMetadata
+    private let uploadDelayNanoseconds: UInt64
+    private let subscribesToMetricKit: Bool
+    private var isSubscribed = false
+    private var uploadTask: Task<Void, Never>?
+    private var uploadGeneration: UInt64 = 0
+    private var launchSignpost: TelemetrySignpostToken?
+    // 串行化启停与清理，避免 MainActor 在 await 期间重入并交错执行。
+    private var stateTransitionTask: Task<Void, Never>?
+
+    public override init() {
+        self.store = TelemetryStore()
+        self.uploader = TelemetryUploader()
+        self.appMetadata = .current
+        self.platformMetadata = .currentIOS
+        self.uploadDelayNanoseconds = 2_000_000_000
+        self.subscribesToMetricKit = true
+        super.init()
+    }
+
+    init(
+        store: TelemetryStore,
+        uploader: any TelemetryUploading,
+        appMetadata: TelemetryAppMetadata,
+        platformMetadata: TelemetryPlatformMetadata,
+        uploadDelayNanoseconds: UInt64 = 2_000_000_000,
+        subscribesToMetricKit: Bool = true
+    ) {
+        self.store = store
+        self.uploader = uploader
+        self.appMetadata = appMetadata
+        self.platformMetadata = platformMetadata
+        self.uploadDelayNanoseconds = uploadDelayNanoseconds
+        self.subscribesToMetricKit = subscribesToMetricKit
+        super.init()
+    }
+
+    public static func resolveLaunchEnabled(
+        requiresManualUnlock: Bool,
+        configuredValue: () -> Bool
+    ) -> Bool {
+        // 锁库期间不能用配置默认值代替用户选择，解锁并重载持久化配置后再恢复遥测。
+        guard !requiresManualUnlock else { return false }
+        return configuredValue()
+    }
+
+    public func configure(enabled: Bool) async {
+        await enqueueStateTransition(.configure(enabled))
+    }
+
+    public func refreshVisibleRecords() async {
+        let snapshot = await store.loadCurrentSnapshot()
+        applyPendingSnapshot(snapshot)
+    }
+
+    public func clearPendingData() async {
+        await enqueueStateTransition(.clearPending)
+    }
+
+    private func enqueueStateTransition(_ transition: StateTransition) async {
+        let precedingTask = stateTransitionTask
+        let transitionTask = Task { @MainActor [weak self] in
+            await precedingTask?.value
+            guard let self else { return }
+
+            switch transition {
+            case .configure(true):
+                await self.startIfNeeded()
+            case .configure(false):
+                await self.stopAndClear()
+            case .clearPending:
+                await self.performClearPendingData()
+            }
+        }
+        stateTransitionTask = transitionTask
+        await transitionTask.value
+    }
+
+    private func performClearPendingData() async {
+        let invalidatedTask = invalidateUpload()
+        isUploading = false
+        await invalidatedTask?.value
+        await store.clearPending()
+        await refreshVisibleRecords()
+    }
+
+    public func prepareLaunchMeasurement(enabled: Bool) {
+        guard enabled else { return }
+        TelemetrySignpost.setEnabled(true)
+        if launchSignpost == nil {
+            launchSignpost = TelemetrySignpost.begin(.appLaunch)
+        }
+    }
+
+    public func markFirstInterfaceReady() {
+        guard let launchSignpost else { return }
+        TelemetrySignpost.end(launchSignpost)
+        self.launchSignpost = nil
+    }
+
+    var hasActiveLaunchMeasurement: Bool {
+        launchSignpost != nil
+    }
+
+    private func startIfNeeded() async {
+        guard !isSubscribed else {
+            isEnabled = true
+            return
+        }
+
+        isEnabled = true
+        // 运行中重新开启遥测只恢复后续区间，不能把开关操作误记成 App 启动。
+        TelemetrySignpost.setEnabled(true)
+        let generation = beginUpload()
+
+        // 先冻结本次启动可上传的文件，再订阅新的回调，保证新 Payload 留到下次启动。
+        let launchSnapshot = await store.prepareLaunchSnapshot()
+        guard isEnabled else { return }
+
+        if subscribesToMetricKit {
+            MXMetricManager.shared.add(self)
+        }
+        isSubscribed = true
+
+        // 用户可能在快照读取期间主动清理；这种情况下只保留订阅，不再上传旧快照。
+        guard isCurrentUpload(generation) else { return }
+        applyPendingSnapshot(launchSnapshot)
+        uploadTask = Task(priority: .utility) { [weak self] in
+            guard let self else { return }
+            do {
+                try await Task.sleep(nanoseconds: self.uploadDelayNanoseconds)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await self.uploadLaunchSnapshot(
+                launchSnapshot.files,
+                generation: generation
+            )
+        }
+    }
+
+    private func stopAndClear() async {
+        isEnabled = false
+        TelemetrySignpost.setEnabled(false)
+        if let launchSignpost {
+            TelemetrySignpost.end(launchSignpost)
+            self.launchSignpost = nil
+        }
+
+        let invalidatedTask = invalidateUpload()
+        if isSubscribed {
+            if subscribesToMetricKit {
+                MXMetricManager.shared.remove(self)
+            }
+            isSubscribed = false
+        }
+
+        await invalidatedTask?.value
+        await store.clearPending()
+        pendingRecords = []
+        sentThisLaunchRecords = []
+        pendingBytes = 0
+        lastUploadError = nil
+        isUploading = false
+    }
+
+    private func uploadLaunchSnapshot(
+        _ files: [TelemetryStoredFile],
+        generation: UInt64
+    ) async {
+        guard isCurrentUpload(generation), !files.isEmpty else { return }
+        let uploadableFiles = files.filter {
+            $0.fileSizeBytes <= TelemetryStore.defaultMaxUploadFileBytes
+        }
+        guard !uploadableFiles.isEmpty else { return }
+
+        isUploading = true
+        defer {
+            if uploadGeneration == generation {
+                isUploading = false
+                uploadTask = nil
+            }
+        }
+
+        let outcome = await uploader.upload(uploadableFiles)
+        guard isCurrentUpload(generation) else { return }
+
+        let confirmed = outcome.confirmedPayloadIDs
+        if !confirmed.isEmpty {
+            await store.deleteConfirmed(payloadIDs: confirmed)
+            guard isCurrentUpload(generation) else { return }
+            let sent = uploadableFiles
+                .filter { confirmed.contains($0.envelope.payloadID) }
+                .map {
+                    $0.makeLogRecord(
+                        state: .sentThisLaunch,
+                        maxUploadFileBytes: TelemetryStore.defaultMaxUploadFileBytes
+                    )
+                }
+            sentThisLaunchRecords = Array((sentThisLaunchRecords + sent).suffix(32))
+        }
+
+        lastUploadError = outcome.errorDescription
+        await store.recordUploadAttempt(
+            error: outcome.errorDescription,
+            succeeded: !confirmed.isEmpty
+        )
+        guard isCurrentUpload(generation) else { return }
+        let snapshot = await store.loadCurrentSnapshot()
+        guard isCurrentUpload(generation) else { return }
+        applyPendingSnapshot(snapshot)
+    }
+
+    private func beginUpload() -> UInt64 {
+        uploadTask?.cancel()
+        uploadGeneration &+= 1
+        return uploadGeneration
+    }
+
+    private func invalidateUpload() -> Task<Void, Never>? {
+        uploadGeneration &+= 1
+        let invalidatedTask = uploadTask
+        invalidatedTask?.cancel()
+        uploadTask = nil
+        return invalidatedTask
+    }
+
+    private func isCurrentUpload(_ generation: UInt64) -> Bool {
+        isEnabled && uploadGeneration == generation && !Task.isCancelled
+    }
+
+    private func receivePayloads(_ payloads: [ReceivedPayload]) async {
+        guard isEnabled, !payloads.isEmpty else { return }
+        let capturedAt = Date()
+        for payload in payloads {
+            _ = await store.save(
+                kind: payload.kind,
+                rawPayloadData: payload.data,
+                capturedAt: capturedAt,
+                periodStart: payload.periodStart,
+                periodEnd: payload.periodEnd,
+                app: appMetadata,
+                platform: platformMetadata
+            )
+        }
+        // MetricKit 可能一次回调多个 Payload，全部落盘后只刷新一次可见快照。
+        await refreshVisibleRecords()
+    }
+
+    private func applyPendingSnapshot(_ snapshot: TelemetryStoreSnapshot) {
+        pendingBytes = snapshot.totalBytes
+        pendingRecords = snapshot.files.map {
+            $0.makeLogRecord(
+                state: .pending,
+                maxUploadFileBytes: TelemetryStore.defaultMaxUploadFileBytes
+            )
+        }
+    }
+}
+
+extension PerformanceTelemetryCenter: MXMetricManagerSubscriber {
+    public nonisolated func didReceive(_ payloads: [MXMetricPayload]) {
+        let received = payloads.map {
+            ReceivedPayload(
+                kind: .metric,
+                data: $0.jsonRepresentation(),
+                periodStart: $0.timeStampBegin,
+                periodEnd: $0.timeStampEnd
+            )
+        }
+        Task { @MainActor [weak self] in
+            await self?.receivePayloads(received)
+        }
+    }
+
+    public nonisolated func didReceive(_ payloads: [MXDiagnosticPayload]) {
+        let received = payloads.map {
+            ReceivedPayload(
+                kind: .diagnostic,
+                data: $0.jsonRepresentation(),
+                periodStart: $0.timeStampBegin,
+                periodEnd: $0.timeStampEnd
+            )
+        }
+        Task { @MainActor [weak self] in
+            await self?.receivePayloads(received)
+        }
+    }
+}
+#endif

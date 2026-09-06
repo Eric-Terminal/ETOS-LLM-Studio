@@ -63,6 +63,9 @@ extension Persistence {
                 lorebookIDs: baseRecord.session.lorebookIDs,
                 tagIDs: baseRecord.session.tagIDs,
                 worldbookContextIsolationEnabled: baseRecord.session.worldbookContextIsolationEnabled,
+                memoryContextIsolationEnabled: baseRecord.session.memoryContextIsolationEnabled,
+                toolContextIsolationEnabled: baseRecord.session.toolContextIsolationEnabled,
+                globalSystemPromptIsolationEnabled: baseRecord.session.globalSystemPromptIsolationEnabled,
                 conversationSummary: finalSummary,
                 conversationSummaryUpdatedAt: finalUpdatedAt
             )
@@ -70,7 +73,8 @@ extension Persistence {
                 schemaVersion: sessionStoreSchemaVersion,
                 session: updatedMeta,
                 prompts: baseRecord.prompts,
-                messages: baseRecord.messages
+                messages: baseRecord.messages,
+                continuationContext: baseRecord.continuationContext
             )
             try writeSessionRecordFile(updatedRecord, for: sessionID)
         } catch {
@@ -206,7 +210,8 @@ extension Persistence {
                     schemaVersion: sessionStoreSchemaVersion,
                     session: record.session,
                     prompts: record.prompts,
-                    messages: normalized.messages
+                    messages: normalized.messages,
+                    continuationContext: record.continuationContext
                 )
                 try writeSessionRecordFile(rewritten, for: sessionID)
                 logger.info("\(migrationLogPrefix) 会话 \(sessionID.uuidString) 的消息文件已规范化。")
@@ -270,6 +275,7 @@ extension Persistence {
 
     static func makeSessionRecordPayload(session: ChatSession, messages: [ChatMessage]) -> SessionRecordFilePayload {
         let preservedSummary = (try? loadSessionSummaryFile(for: session.id))?.session
+        let preservedContinuationContext = (try? loadSessionRecordFile(for: session.id))?.continuationContext
         return SessionRecordFilePayload(
             schemaVersion: sessionStoreSchemaVersion,
             session: SessionMetaPayload(
@@ -278,7 +284,10 @@ extension Persistence {
                 folderID: session.folderID,
                 lorebookIDs: session.lorebookIDs,
                 tagIDs: session.tagIDs,
-                worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled ? true : nil,
+                worldbookContextIsolationEnabled: session.memoryContextIsolationEnabled || session.toolContextIsolationEnabled ? true : nil,
+                memoryContextIsolationEnabled: session.memoryContextIsolationEnabled,
+                toolContextIsolationEnabled: session.toolContextIsolationEnabled,
+                globalSystemPromptIsolationEnabled: session.globalSystemPromptIsolationEnabled,
                 conversationSummary: preservedSummary?.conversationSummary,
                 conversationSummaryUpdatedAt: preservedSummary?.conversationSummaryUpdatedAt
             ),
@@ -286,7 +295,8 @@ extension Persistence {
                 topicPrompt: session.topicPrompt,
                 enhancedPrompt: session.enhancedPrompt
             ),
-            messages: messages
+            messages: messages,
+            continuationContext: preservedContinuationContext
         )
     }
 
@@ -299,6 +309,9 @@ extension Persistence {
             lorebookIDs: summary.session.lorebookIDs,
             tagIDs: summary.session.tagIDs ?? [],
             worldbookContextIsolationEnabled: summary.session.worldbookContextIsolationEnabled ?? false,
+            memoryContextIsolationEnabled: summary.session.memoryContextIsolationEnabled,
+            toolContextIsolationEnabled: summary.session.toolContextIsolationEnabled,
+            globalSystemPromptIsolationEnabled: summary.session.globalSystemPromptIsolationEnabled ?? false,
             folderID: summary.session.folderID,
             isTemporary: false
         )
@@ -328,7 +341,13 @@ extension Persistence {
         summary.session.folderID == session.folderID &&
         summary.session.lorebookIDs == session.lorebookIDs &&
         (summary.session.tagIDs ?? []) == session.tagIDs &&
-        (summary.session.worldbookContextIsolationEnabled ?? false) == session.worldbookContextIsolationEnabled &&
+        (summary.session.memoryContextIsolationEnabled
+            ?? summary.session.worldbookContextIsolationEnabled
+            ?? false) == session.memoryContextIsolationEnabled &&
+        (summary.session.toolContextIsolationEnabled
+            ?? summary.session.worldbookContextIsolationEnabled
+            ?? false) == session.toolContextIsolationEnabled &&
+        (summary.session.globalSystemPromptIsolationEnabled ?? false) == session.globalSystemPromptIsolationEnabled &&
         summary.prompts.topicPrompt == session.topicPrompt &&
         summary.prompts.enhancedPrompt == session.enhancedPrompt
     }
@@ -344,7 +363,9 @@ extension Persistence {
             uniqueFolders.append(
                 SessionFolder(
                     id: folder.id,
-                    name: normalizedName.isEmpty ? "未命名文件夹" : normalizedName,
+                    name: normalizedName.isEmpty
+                        ? NSLocalizedString("未命名文件夹", comment: "Unnamed session folder fallback")
+                        : normalizedName,
                     parentID: folder.parentID,
                     updatedAt: folder.updatedAt
                 )
@@ -375,7 +396,9 @@ extension Persistence {
             uniqueTags.append(
                 SessionTag(
                     id: tag.id,
-                    name: normalizedName.isEmpty ? "未命名标签" : normalizedName,
+                    name: normalizedName.isEmpty
+                        ? NSLocalizedString("未命名标签", comment: "Unnamed session tag fallback")
+                        : normalizedName,
                     color: tag.color,
                     updatedAt: tag.updatedAt
                 )
@@ -417,6 +440,16 @@ extension Persistence {
 
     static func accumulateRequestTokens(_ usage: MessageTokenUsage?, to totals: inout RequestLogTokenTotals) {
         guard let usage else { return }
+        if totals.uncachedInputTokens != nil || usage.uncachedInputTokens != nil {
+            totals.uncachedInputTokens = (totals.uncachedInputTokens ?? max(0, totals.sentTokens - totals.cacheReadTokens))
+                + ModelCostCalculator.billableInputTokens(for: usage)
+        }
+        if totals.cacheWriteFiveMinuteTokens != nil || usage.cacheWriteFiveMinuteTokens != nil {
+            totals.cacheWriteFiveMinuteTokens = (totals.cacheWriteFiveMinuteTokens ?? 0) + (usage.cacheWriteFiveMinuteTokens ?? 0)
+        }
+        if totals.cacheWriteOneHourTokens != nil || usage.cacheWriteOneHourTokens != nil {
+            totals.cacheWriteOneHourTokens = (totals.cacheWriteOneHourTokens ?? 0) + (usage.cacheWriteOneHourTokens ?? 0)
+        }
         totals.sentTokens += usage.promptTokens ?? 0
         totals.receivedTokens += usage.completionTokens ?? 0
         totals.thinkingTokens += usage.thinkingTokens ?? 0

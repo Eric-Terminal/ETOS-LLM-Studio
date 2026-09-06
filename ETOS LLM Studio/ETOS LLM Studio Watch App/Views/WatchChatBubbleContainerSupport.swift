@@ -204,7 +204,9 @@ extension ChatBubble {
                             reasoningStartedAt: reasoningStartedAt,
                             reasoningCompletedAt: reasoningCompletedAt,
                             fallbackReasoningDuration: fallbackReasoningDuration,
-                            reasoningSummary: reasoningSummaryText
+                            reasoningSummary: reasoningSummaryText,
+                            streamingMarkdownState: messageState.streamingMarkdownState,
+                            isStreaming: showsStreamingIndicators
                         )
                     }
                 }
@@ -353,7 +355,13 @@ extension ChatBubble {
         if let payload = showWidgetPayload(for: call) {
             widgetInlineSummaryView(payload: payload)
         } else {
-            toolCallSummaryRow(for: call)
+            VStack(alignment: .leading) {
+                toolCallSummaryRow(for: call)
+                ConversationToolRuntimeCard(
+                    toolCall: call,
+                    onOpenConversation: onOpenConversation
+                )
+            }
         }
     }
 

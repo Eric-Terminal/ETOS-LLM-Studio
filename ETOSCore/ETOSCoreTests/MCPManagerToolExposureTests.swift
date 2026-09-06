@@ -10,8 +10,48 @@ import Testing
 import Foundation
 @testable import ETOSCore
 
-@Suite("MCP 管理器工具暴露测试")
+@Suite("MCP 管理器工具暴露测试", .serialized)
 struct MCPManagerToolExposureTests {
+
+    @MainActor
+    @Test("旧原生目录缓存不会恢复本机不支持的工具")
+    func testNativeCachedToolsRespectPlatformAvailability() {
+        let manager = MCPManager.shared
+        let server = MCPServerConfiguration(
+            id: UUID(),
+            displayName: "原生媒体目录缓存回归",
+            transport: .builtInAppTool(category: .mediaEnvironment),
+            isSelectedForChat: true
+        )
+        let originalServers = manager.servers
+        defer {
+            manager.servers = originalServers
+            manager.serverStatuses.removeValue(forKey: server.id)
+            manager.rebuildAggregates()
+        }
+        manager.servers.append(server)
+        var status = MCPServerStatus()
+        status.connectionState = .ready
+        status.isSelectedForChat = true
+        status.tools = MCPNativeMediaToolDefinitions.descriptions
+        manager.serverStatuses[server.id] = status
+        manager.rebuildAggregates()
+
+        let visibleIDs = Set(manager.status(for: server).tools.map(\.toolId))
+        #expect(visibleIDs.contains("weather.current"))
+        #expect(visibleIDs.contains("home.list_homes"))
+        #if os(watchOS)
+        #expect(visibleIDs.isDisjoint(with: ["speech.transcribe_file", "nfc.scan", "nfc.read_ndef", "nfc.write_ndef"]))
+        #else
+        #expect(visibleIDs.contains("speech.transcribe_file"))
+        #endif
+        #if targetEnvironment(simulator)
+        #expect(!visibleIDs.contains("nfc.scan"))
+        #endif
+
+        let routedIDs = Set(manager.routedTools.values.filter { $0.server.id == server.id }.map { $0.tool.toolId })
+        #expect(routedIDs == visibleIDs)
+    }
 
     @Test("MCP 默认超时为三分钟且最多重试三次")
     func testMCPRuntimeDefaultsUseThreeMinutesAndThreeRetries() {
@@ -101,6 +141,9 @@ struct MCPManagerToolExposureTests {
     @MainActor
     @Test("MCP 管理器可按绑定回写服务器顺序")
     func testSetServerOrderReordersManagerAndPersists() {
+        let previousPersistenceOverride = enableRelationalPersistence()
+        defer { restorePersistenceOverride(previousPersistenceOverride) }
+
         let manager = MCPManager.shared
         manager.reloadServers()
         let originalOrder = manager.servers.map(\.id)
@@ -157,13 +200,17 @@ struct MCPManagerToolExposureTests {
 
     @MainActor
     @Test("MCP 聊天总开关关闭时 chatToolsForLLM 返回空数组")
-    func testChatToolsForLLMReturnsEmptyWhenGlobalSwitchDisabled() {
+    func testChatToolsForLLMReturnsEmptyWhenGlobalSwitchDisabled() throws {
+        let previousPersistenceOverride = enableRelationalPersistence()
+        defer { restorePersistenceOverride(previousPersistenceOverride) }
+
         let manager = MCPManager.shared
         let originalServers = MCPServerStore.loadServers()
         let originalMetadata = Dictionary(uniqueKeysWithValues: originalServers.map { server in
             (server.id, MCPServerStore.loadMetadata(for: server.id))
         })
         let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalTitleSwitch = manager.toolCallTitleEnabled
 
         defer {
             for server in MCPServerStore.loadServers() {
@@ -176,7 +223,9 @@ struct MCPManagerToolExposureTests {
                 }
             }
             manager.chatToolsEnabled = originalGlobalSwitch
+            manager.toolCallTitleEnabled = originalTitleSwitch
             AppConfigStore.persistSynchronously(.bool(originalGlobalSwitch), for: .mcpChatToolsEnabled)
+            AppConfigStore.persistSynchronously(.bool(originalTitleSwitch), for: .mcpToolCallTitleEnabled)
             manager.reloadServers()
         }
 
@@ -185,6 +234,7 @@ struct MCPManagerToolExposureTests {
         }
         manager.reloadServers()
         manager.setChatToolsEnabled(true)
+        manager.setToolCallTitleEnabled(true)
 
         let server = MCPServerConfiguration(
             displayName: "Test MCP Server",
@@ -217,17 +267,226 @@ struct MCPManagerToolExposureTests {
 
         manager.reloadServers()
         let exposedTools = manager.chatToolsForLLM()
-        #expect(exposedTools.count == 1)
-        #expect(exposedTools[0].name == "mcp_tool_alpha")
+        let exposedTool = try #require(exposedTools.first(where: { $0.name == "mcp_tool_alpha" }))
+        #expect(exposedTool.name == "mcp_tool_alpha")
+        guard case .dictionary(let titledSchema) = exposedTool.parameters,
+              case .dictionary(let titledProperties) = titledSchema["properties"],
+              case .array(let titledRequired) = titledSchema["required"] else {
+            Issue.record("开启标题后应把 ETOS 保留字段加入 MCP Schema")
+            return
+        }
+        #expect(titledProperties[MCPToolCallTitleMetadata.argumentKey] != nil)
+        #expect(titledRequired.contains(.string(MCPToolCallTitleMetadata.argumentKey)))
+
+        manager.setToolCallTitleEnabled(false)
+        let untitledTool = try #require(manager.chatToolsForLLM().first(where: { $0.name == "mcp_tool_alpha" }))
+        if case .dictionary(let untitledSchema) = untitledTool.parameters,
+           case .dictionary(let untitledProperties) = untitledSchema["properties"] {
+            #expect(untitledProperties[MCPToolCallTitleMetadata.argumentKey] == nil)
+        }
 
         manager.setChatToolsEnabled(false)
         #expect(manager.chatToolsForLLM().isEmpty)
-        #expect(manager.approvalPolicy(for: exposedTools[0].name) == .alwaysDeny)
+        #expect(manager.approvalPolicy(for: exposedTool.name) == .alwaysDeny)
+    }
+
+    @Test("MCP 标题元数据只保留在 ETOS 并从执行参数移除")
+    func testToolCallTitleMetadataIsRemovedFromExecutionArguments() throws {
+        #expect(AppConfigKey.mcpToolCallTitleEnabled.defaultValue == .bool(true))
+
+        let parsed = MCPToolCallTitleMetadata.parse(
+            argumentsJSON: #"{"__etos_tool_title":"  搜索相关问题  ","query":"Linux"}"#
+        )
+        #expect(parsed.title == "搜索相关问题")
+
+        let data = try #require(parsed.argumentsJSON.data(using: .utf8))
+        let dictionary = try #require(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        #expect(dictionary[MCPToolCallTitleMetadata.argumentKey] == nil)
+        #expect(dictionary["query"] as? String == "Linux")
+    }
+
+    @MainActor
+    @Test("本地 stdio MCP 仅在 Agent 启用本地 Linux 时暴露")
+    func testLocalStdioToolsRequireLocalLinuxCapability() async throws {
+        let previousPersistenceOverride = enableRelationalPersistence()
+        defer { restorePersistenceOverride(previousPersistenceOverride) }
+
+        let manager = MCPManager.shared
+        let originalServers = MCPServerStore.loadServers()
+        let originalMetadata = Dictionary(uniqueKeysWithValues: originalServers.map { server in
+            (server.id, MCPServerStore.loadMetadata(for: server.id))
+        })
+        let originalGlobalSwitch = manager.chatToolsEnabled
+
+        defer {
+            for server in MCPServerStore.loadServers() {
+                MCPServerStore.delete(server)
+            }
+            for server in originalServers {
+                MCPServerStore.save(server)
+                if let metadata = originalMetadata[server.id] {
+                    MCPServerStore.saveMetadata(metadata, for: server.id)
+                }
+            }
+            manager.chatToolsEnabled = originalGlobalSwitch
+            AppConfigStore.persistSynchronously(.bool(originalGlobalSwitch), for: .mcpChatToolsEnabled)
+            manager.reloadServers()
+        }
+
+        for server in MCPServerStore.loadServers() {
+            MCPServerStore.delete(server)
+        }
+        manager.reloadServers()
+        manager.setChatToolsEnabled(true)
+
+        let remoteServer = MCPServerConfiguration(
+            displayName: "Remote MCP Server",
+            transport: .http(
+                endpoint: URL(string: "https://example.com/mcp")!,
+                apiKey: nil,
+                additionalHeaders: [:]
+            ),
+            isSelectedForChat: true
+        )
+        let localServer = MCPServerConfiguration(
+            displayName: "Local MCP Server",
+            transport: .localStdio(
+                configuration: MCPLocalStdioConfiguration(
+                    command: "mcp-server-test",
+                    launchPolicy: .manual
+                )
+            ),
+            isSelectedForChat: true
+        )
+        let metadata = MCPServerMetadataCache(
+            info: nil,
+            tools: [
+                MCPToolDescription(
+                    toolId: "tool.alpha",
+                    description: "用于测试模式隔离的 MCP 工具",
+                    inputSchema: .dictionary(["type": .string("object")]),
+                    examples: nil
+                )
+            ],
+            resources: [],
+            resourceTemplates: [],
+            prompts: [],
+            roots: []
+        )
+        for server in [remoteServer, localServer] {
+            MCPServerStore.save(server)
+            MCPServerStore.saveMetadata(metadata, for: server.id)
+        }
+
+        manager.reloadServers()
+        let chatToolDescriptions = manager.chatToolsForLLM().map(\.description)
+        #expect(chatToolDescriptions.contains(where: { $0.contains("Remote MCP Server") }))
+        #expect(!chatToolDescriptions.contains(where: { $0.contains("Local MCP Server") }))
+
+        let agentTools = manager.chatToolsForLLM(includeLocalLinuxTools: true)
+        let agentToolDescriptions = agentTools.map(\.description)
+        #expect(agentToolDescriptions.contains(where: { $0.contains("Remote MCP Server") }))
+        #expect(agentToolDescriptions.contains(where: { $0.contains("Local MCP Server") }))
+
+        let localTool = try #require(
+            agentTools.first(where: { $0.description.contains("Local MCP Server") })
+        )
+        await #expect(throws: LocalLinuxRuntimeError.self) {
+            try await manager.executeToolFromChat(
+                toolName: localTool.name,
+                argumentsJSON: "{}",
+                sourceSessionID: UUID(),
+                sourceToolCallID: "chat-local-mcp",
+                sourceAgentRunID: UUID()
+            )
+        }
+    }
+
+    @MainActor
+    @Test("Chat 保留普通工具但不暴露本地 Linux 工具")
+    func testNonLinuxBuiltInsRemainChatTools() throws {
+        let previousPersistenceOverride = enableRelationalPersistence()
+        defer { restorePersistenceOverride(previousPersistenceOverride) }
+
+        let manager = MCPManager.shared
+        let originalServers = MCPServerStore.loadServers()
+        let originalMetadata = Dictionary(uniqueKeysWithValues: originalServers.map { server in
+            (server.id, MCPServerStore.loadMetadata(for: server.id))
+        })
+        let originalGlobalSwitch = manager.chatToolsEnabled
+
+        defer {
+            for server in MCPServerStore.loadServers() {
+                MCPServerStore.delete(server)
+            }
+            for server in originalServers {
+                MCPServerStore.save(server)
+                if let metadata = originalMetadata[server.id] {
+                    MCPServerStore.saveMetadata(metadata, for: server.id)
+                }
+            }
+            manager.chatToolsEnabled = originalGlobalSwitch
+            AppConfigStore.persistSynchronously(.bool(originalGlobalSwitch), for: .mcpChatToolsEnabled)
+            manager.reloadServers()
+        }
+
+        for server in MCPServerStore.loadServers() {
+            MCPServerStore.delete(server)
+        }
+        manager.reloadServers()
+        manager.setChatToolsEnabled(true)
+
+        let browserServer = MCPBuiltInAppToolServer.defaultConfiguration(for: .browser)
+        let conversationServer = MCPBuiltInAppToolServer.defaultConfiguration(for: .conversation)
+        let linuxServer = MCPBuiltInAppToolServer.defaultConfiguration(for: .linux)
+        for server in [browserServer, conversationServer, linuxServer] {
+            let category = try #require(MCPBuiltInAppToolServer.category(for: server.id))
+            MCPServerStore.save(server)
+            MCPServerStore.saveMetadata(
+                MCPServerMetadataCache(
+                    info: nil,
+                    tools: MCPBuiltInAppToolServer.appToolDescriptions(for: category),
+                    resources: [],
+                    resourceTemplates: [],
+                    prompts: [],
+                    roots: []
+                ),
+                for: server.id
+            )
+        }
+
+        manager.reloadServers()
+        let chatTools = manager.chatToolsForLLM(
+            includeConversationAgentTools: true,
+            includeBrowserAgentTools: true
+        )
+        #expect(chatTools.contains(where: { $0.description.contains(browserServer.displayName) }))
+        #expect(chatTools.contains(where: { $0.description.contains(conversationServer.displayName) }))
+        #expect(!chatTools.contains(where: { $0.description.contains(linuxServer.displayName) }))
+
+        let agentTools = manager.chatToolsForLLM(
+            includeConversationAgentTools: true,
+            includeLocalLinuxTools: true,
+            includeBrowserAgentTools: true
+        )
+        #expect(agentTools.contains(where: { $0.description.contains(linuxServer.displayName) }))
+
+        manager.setChatToolsEnabled(false)
+        let disabledTools = manager.chatToolsForLLM(
+            includeConversationAgentTools: true,
+            includeBrowserAgentTools: true
+        )
+        #expect(disabledTools.isEmpty)
     }
 
     @MainActor
     @Test("MCP 聊天总开关关闭时不会按缓存乐观恢复并自动连接")
     func testDisabledGlobalSwitchSkipsLaunchAutoConnect() {
+        let previousPersistenceOverride = enableRelationalPersistence()
+        defer { restorePersistenceOverride(previousPersistenceOverride) }
+
         let manager = MCPManager.shared
         let originalServers = MCPServerStore.loadServers()
         let originalMetadata = Dictionary(uniqueKeysWithValues: originalServers.map { server in
@@ -292,5 +551,17 @@ struct MCPManagerToolExposureTests {
         #expect(manager.inFlightConnections[server.id] == nil)
         #expect(manager.clients[server.id] == nil)
         #expect(manager.status(for: server).connectionState == .idle)
+    }
+
+    private func enableRelationalPersistence() -> Bool? {
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        return previousOverride
+    }
+
+    private func restorePersistenceOverride(_ previousOverride: Bool?) {
+        Persistence.grdbEnabledOverrideForTests = previousOverride
+        Persistence.resetGRDBStoreForTests()
     }
 }

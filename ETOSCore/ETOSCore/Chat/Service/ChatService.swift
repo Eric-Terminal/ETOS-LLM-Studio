@@ -43,8 +43,7 @@ public class ChatService {
             id: systemSpeechRecognizerModelID,
             modelName: "sf-speech-recognizer",
             displayName: "SFSpeechRecognizer",
-            isActivated: true,
-            kind: .speechToText
+            isActivated: true
         )
         return RunnableModel(provider: provider, model: model)
     }()
@@ -95,6 +94,7 @@ public class ChatService {
     public let requestStatusSubject = PassthroughSubject<RequestStatus, Never>()
     public let imageGenerationStatusSubject = PassthroughSubject<ImageGenerationStatus, Never>()
     public let runningSessionIDsSubject = CurrentValueSubject<Set<UUID>, Never>([])
+    public let conversationRuntimeStatesSubject = CurrentValueSubject<[UUID: ConversationRuntimeSessionState], Never>([:])
     public let sessionRequestStatusSubject = PassthroughSubject<SessionRequestStatusEvent, Never>()
     
     public enum RequestStatus {
@@ -132,6 +132,7 @@ public class ChatService {
         case noAvailableModel
         case unsupportedAdapter
         case buildRequestFailed
+        case unsupportedAttachments
 
         public var errorDescription: String? {
             switch self {
@@ -141,6 +142,8 @@ public class ChatService {
                 return NSLocalizedString("当前模型对应的适配器不可用，无法执行 Detached Completion。", comment: "Detached completion adapter unavailable error")
             case .buildRequestFailed:
                 return NSLocalizedString("Detached Completion 请求构建失败。", comment: "Detached completion build request error")
+            case .unsupportedAttachments:
+                return NSLocalizedString("当前 Detached Completion 模型不支持这组附件。", comment: "Detached completion attachments unsupported error")
             }
         }
     }
@@ -166,14 +169,10 @@ public class ChatService {
     private var runtimeMessagesBySessionID: [UUID: [ChatMessage]] = [:]
     private let runtimeMessagesLock = NSRecursiveLock()
     /// 显式临时对话只保留运行期消息，和“尚未发送首条消息”的占位会话语义分开。
-    var ephemeralSessionIDs: Set<UUID> = []
+    var ephemeralSessionStates: [UUID: TemporaryChatRuntimeState] = [:]
     let ephemeralSessionLock = NSLock()
     /// 记录每个会话上一次注入周期性时间路标的时间，保证路标按周期出现且不会过于频繁。
     var periodicTimeLandmarkLastInjectedAtBySessionID: [UUID: Date] = [:]
-    /// 重试时要添加新版本的assistant消息ID（如果有）
-    var retryTargetMessageID: UUID?
-    /// 重试 assistant 时保留原始消息快照，便于失败或取消时恢复，避免把错误写入版本历史。
-    var retryTargetOriginalAssistantMessage: ChatMessage?
     var providers: [Provider]
     let localModelStore: LocalModelStore
     let startupTemporarySession: ChatSession
@@ -208,6 +207,7 @@ public class ChatService {
         cache.totalCostLimit = 64 * 1024 * 1024
         return cache
     }()
+    let geminiVideoUploadCache = GeminiVideoUploadCache()
 
     struct ImageGenerationContext {
         let sessionID: UUID
@@ -220,6 +220,8 @@ public class ChatService {
         var task: Task<Void, Error>?
         var loadingMessageID: UUID?
         var imageGenerationContext: ImageGenerationContext?
+        var conversationRunID: UUID? = nil
+        var rootConversationRunID: UUID? = nil
     }
 
     struct ImageOCRPreprocessingResult {
@@ -231,6 +233,14 @@ public class ChatService {
     struct FileAttachmentTextPreprocessingResult {
         let messages: [ChatMessage]
         let fileAttachments: [UUID: [FileAttachment]]
+        let errorMessage: String?
+    }
+
+    struct VideoAttachmentPreprocessingResult {
+        let messages: [ChatMessage]
+        let imageAttachments: [UUID: [ImageAttachment]]
+        let nativeVideoAttachments: [UUID: [FileAttachment]]
+        let documentAttachments: [UUID: [FileAttachment]]
         let errorMessage: String?
     }
 
@@ -281,6 +291,15 @@ public class ChatService {
         return Persistence.loadMessages(for: sessionID)
     }
 
+    /// 常规列表只持有可见会话；会话运行时还需要按 ID 定点访问内嵌子代理。
+    func conversationSession(withID sessionID: UUID) -> ChatSession? {
+        if let current = currentSessionSubject.value, current.id == sessionID {
+            return current
+        }
+        return chatSessionsSubject.value.first(where: { $0.id == sessionID })
+            ?? Persistence.loadChatSession(id: sessionID)
+    }
+
     func messagesForSessionActivation(_ sessionID: UUID) -> [ChatMessage] {
         if isTemporaryChatEnabled(for: sessionID) {
             return runtimeMessagesSnapshot(for: sessionID) ?? []
@@ -311,15 +330,158 @@ public class ChatService {
         runtimeMessagesLock.unlock()
     }
 
+    @discardableResult
+    func appendConversationMessage(
+        _ message: ChatMessage,
+        to sessionID: UUID
+    ) async throws -> ChatMessage {
+        try await upsertConversationMessage(message, to: sessionID)
+    }
+
+    @discardableResult
+    func upsertConversationMessage(
+        _ message: ChatMessage,
+        to sessionID: UUID,
+        afterMessageID: UUID? = nil,
+        keepingSpeedSamplesFor preferredMessageID: UUID? = nil
+    ) async throws -> ChatMessage {
+        let cachedMessages = runtimeMessagesLock.withLock {
+            runtimeMessagesBySessionID[sessionID]
+        }
+
+        let writeResult = try await Task.detached(priority: .userInitiated) {
+            let storedMessage = try Persistence.upsertConversationMessage(
+                message,
+                to: sessionID,
+                afterMessageID: afterMessageID
+            )
+            let persistedMessages = cachedMessages == nil ? Persistence.loadMessages(for: sessionID) : nil
+            return (storedMessage, persistedMessages)
+        }.value
+
+        let storedMessage = writeResult.0
+        let messages = runtimeMessagesLock.withLock {
+            var messages = runtimeMessagesBySessionID[sessionID]
+                ?? writeResult.1
+                ?? cachedMessages
+                ?? []
+            if let index = messages.firstIndex(where: { $0.id == storedMessage.id }) {
+                messages[index] = storedMessage
+            } else if let afterMessageID,
+                      let anchorIndex = messages.firstIndex(where: { $0.id == afterMessageID }) {
+                messages.insert(storedMessage, at: messages.index(after: anchorIndex))
+            } else {
+                messages.append(storedMessage)
+            }
+            runtimeMessagesBySessionID[sessionID] = messages
+            return messages
+        }
+        publishMessagesIfCurrentSession(
+            messages,
+            for: sessionID,
+            keepingSpeedSamplesFor: preferredMessageID
+        )
+        promoteSessionToTopIfNeeded(sessionID: sessionID)
+        return storedMessage
+    }
+
+    @discardableResult
+    func deleteConversationMessage(
+        id messageID: UUID,
+        from sessionID: UUID
+    ) async throws -> Bool {
+        let cachedMessages = runtimeMessagesSnapshot(for: sessionID)
+        let writeResult = try await Task.detached(priority: .userInitiated) {
+            let deleted = try Persistence.deleteConversationMessage(id: messageID, from: sessionID)
+            let persistedMessages = cachedMessages == nil ? Persistence.loadMessages(for: sessionID) : nil
+            return (deleted, persistedMessages)
+        }.value
+        guard writeResult.0 else { return false }
+
+        let messages = runtimeMessagesLock.withLock {
+            var messages = runtimeMessagesBySessionID[sessionID]
+                ?? writeResult.1
+                ?? cachedMessages
+                ?? []
+            messages.removeAll { $0.id == messageID }
+            runtimeMessagesBySessionID[sessionID] = messages
+            return messages
+        }
+        publishMessagesIfCurrentSession(messages, for: sessionID)
+        return true
+    }
+
+    func insertConversationResponseAttemptMessagesAtomically(
+        _ additions: [ChatMessage],
+        afterAttemptOf referenceMessageID: UUID,
+        in sessionID: UUID
+    ) async throws -> [ChatMessage] {
+        guard !additions.isEmpty else { return messagesSnapshot(for: sessionID) }
+        let currentMessages = messagesSnapshot(for: sessionID)
+        let referenceAttemptID = currentMessages.first(where: { $0.id == referenceMessageID })?.responseAttemptID
+        var anchorMessageID = referenceAttemptID.flatMap { attemptID in
+            currentMessages.last(where: { $0.responseAttemptID == attemptID })?.id
+        } ?? referenceMessageID
+
+        for message in additions {
+            _ = try await upsertConversationMessage(
+                message,
+                to: sessionID,
+                afterMessageID: anchorMessageID
+            )
+            anchorMessageID = message.id
+        }
+        return messagesSnapshot(for: sessionID)
+    }
+
+    func consumePendingUserSteeringEvents(
+        in sessionID: UUID,
+        includedMessageIDs: Set<UUID>
+    ) async {
+        await Task.detached(priority: .utility) {
+            let events = Persistence.loadPendingConversationEvents(destinationSessionID: sessionID).filter { event in
+                event.kind == .incomingMessage
+                    && event.deliveryPolicy == .respondWhenIdle
+                    && event.sourceSessionID == nil
+                    && event.sourceRunID == nil
+                    && event.messageID.map(includedMessageIDs.contains) == true
+            }
+            for event in events {
+                if let steeringRun = Persistence.loadConversationRun(triggerEventID: event.id),
+                   !steeringRun.status.isTerminal {
+                    _ = Persistence.updateConversationRunStatus(id: steeringRun.id, status: .cancelled)
+                }
+                _ = Persistence.updateConversationEventState(id: event.id, state: .processed)
+            }
+        }.value
+    }
+
     func loadingMessageID(for sessionID: UUID) -> UUID? {
         withRequestStateLock {
             requestContextBySessionID[sessionID]?.loadingMessageID
         }
     }
 
+    func conversationRunIDs(for sessionID: UUID) -> (runID: UUID, rootRunID: UUID)? {
+        withRequestStateLock {
+            guard let context = requestContextBySessionID[sessionID],
+                  let runID = context.conversationRunID,
+                  let rootRunID = context.rootConversationRunID else {
+                return nil
+            }
+            return (runID, rootRunID)
+        }
+    }
+
     func hasActiveRequestContext(for sessionID: UUID) -> Bool {
         withRequestStateLock {
             requestContextBySessionID[sessionID] != nil
+        }
+    }
+
+    func activeRequestSessionIDs() -> Set<UUID> {
+        withRequestStateLock {
+            Set(requestContextBySessionID.keys)
         }
     }
 
@@ -355,6 +517,18 @@ public class ChatService {
         setSessionRunning(sessionID, isRunning: true)
     }
 
+    func reserveRequestContextIfIdle(_ context: RequestExecutionContext, for sessionID: UUID) -> Bool {
+        let reserved = withRequestStateLock { () -> Bool in
+            guard requestContextBySessionID[sessionID] == nil else { return false }
+            requestContextBySessionID[sessionID] = context
+            return true
+        }
+        if reserved {
+            setSessionRunning(sessionID, isRunning: true)
+        }
+        return reserved
+    }
+
     func updateRequestTask(_ task: Task<Void, Error>, for sessionID: UUID, token: UUID) {
         withRequestStateLock {
             guard var context = requestContextBySessionID[sessionID], context.token == token else { return }
@@ -364,10 +538,18 @@ public class ChatService {
     }
 
     func updateRequestLoadingMessageID(_ loadingMessageID: UUID, for sessionID: UUID) {
-        withRequestStateLock {
-            guard var context = requestContextBySessionID[sessionID] else { return }
+        let runID = withRequestStateLock { () -> UUID? in
+            guard var context = requestContextBySessionID[sessionID] else { return nil }
             context.loadingMessageID = loadingMessageID
             requestContextBySessionID[sessionID] = context
+            return context.conversationRunID
+        }
+        if let runID {
+            _ = Persistence.updateConversationRunStatus(
+                id: runID,
+                status: .running,
+                loadingMessageID: loadingMessageID
+            )
         }
     }
 
@@ -381,6 +563,21 @@ public class ChatService {
         setSessionRunning(sessionID, isRunning: false)
         Persistence.flushPendingMessageWritesForSyncSnapshot()
         clearRuntimeMessagesSnapshot(for: sessionID)
+        Task {
+            await ConversationRunCoordinator.shared.signal()
+        }
+    }
+
+    /// 会话删除是同步操作，先移除并取消请求上下文，避免已删除会话继续接收异步回写。
+    func cancelRequestForSessionDeletion(_ sessionID: UUID) {
+        let task = withRequestStateLock {
+            requestContextBySessionID.removeValue(forKey: sessionID)?.task
+        }
+        task?.cancel()
+        Task {
+            await LocalLinuxJobScheduler.shared.cancel(sessionID: sessionID)
+        }
+        setSessionRunning(sessionID, isRunning: false)
     }
 
     private func setSessionRunning(_ sessionID: UUID, isRunning: Bool) {
@@ -398,6 +595,47 @@ public class ChatService {
     }
 
     func emitSessionRequestStatus(_ status: SessionRequestStatus, sessionID: UUID) {
+        if let runIDs = conversationRunIDs(for: sessionID) {
+            switch status {
+            case .started:
+                _ = Persistence.updateConversationRunStatus(id: runIDs.runID, status: .running)
+            case .finished:
+                let persistedStatus = Persistence.loadConversationRun(id: runIDs.runID)?.status
+                if persistedStatus != .waitingConversation,
+                   persistedStatus != .waitingUser,
+                   persistedStatus != .pausedByBudget {
+                    _ = Persistence.updateConversationRunStatus(id: runIDs.runID, status: .completed)
+                }
+            case .error:
+                _ = Persistence.updateConversationRunStatus(id: runIDs.runID, status: .failed)
+            case .cancelled:
+                _ = Persistence.updateConversationRunStatus(id: runIDs.runID, status: .cancelled)
+            }
+
+            // Agent Run 与聊天运行记录使用同一个稳定 runID。成功态需要等最后一轮
+            // 无工具回复再结束；失败和取消则可在统一请求出口立即准确收尾。
+            switch status {
+            case .error:
+                Task {
+                    await LocalAgentRuntimeContextManager.shared.finishRun(
+                        id: runIDs.runID,
+                        state: .failed
+                    )
+                }
+            case .cancelled:
+                Task {
+                    await LocalAgentRuntimeContextManager.shared.finishRun(
+                        id: runIDs.runID,
+                        state: .cancelled
+                    )
+                }
+            case .started, .finished:
+                break
+            }
+        }
+
+        // 终态事件对外可见时，会话必须已经离开运行集合；实时活动和通知订阅者
+        // 会在收到事件后持有各自的短后台任务，完成快照与通知收尾。
         switch status {
         case .started:
             break
@@ -407,16 +645,20 @@ public class ChatService {
             }
         }
 
-        sessionRequestStatusSubject.send(SessionRequestStatusEvent(sessionID: sessionID, status: status))
-        switch status {
-        case .started:
-            requestStatusSubject.send(.started)
-        case .finished:
-            requestStatusSubject.send(.finished)
-        case .error:
-            requestStatusSubject.send(.error)
-        case .cancelled:
-            requestStatusSubject.send(.cancelled)
+        let isVisibleSession = currentSessionSubject.value?.id == sessionID
+            || chatSessionsSubject.value.contains(where: { $0.id == sessionID })
+        if isVisibleSession {
+            sessionRequestStatusSubject.send(SessionRequestStatusEvent(sessionID: sessionID, status: status))
+            switch status {
+            case .started:
+                requestStatusSubject.send(.started)
+            case .finished:
+                requestStatusSubject.send(.finished)
+            case .error:
+                requestStatusSubject.send(.error)
+            case .cancelled:
+                requestStatusSubject.send(.cancelled)
+            }
         }
     }
 
@@ -464,7 +706,17 @@ public class ChatService {
         }
 
         let fileExtension = (fileName as NSString).pathExtension.lowercased()
-        let mimeType = fileExtension == "png" ? "image/png" : "image/jpeg"
+        let mimeType: String
+        switch fileExtension {
+        case "png":
+            mimeType = "image/png"
+        case "webp":
+            mimeType = "image/webp"
+        case "gif":
+            mimeType = "image/gif"
+        default:
+            mimeType = "image/jpeg"
+        }
         return ImageAttachment(data: imageData, mimeType: mimeType, fileName: fileName)
     }
 
@@ -576,6 +828,12 @@ public class ChatService {
                 self?.reloadProviders()
             }
             .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: .officialDataDidUpdate)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.reloadProviders()
+            }
+            .store(in: &cancellables)
 
         let savedModelID = AppConfigStore.textValue(
             for: .selectedRunnableModelID,
@@ -588,29 +846,18 @@ public class ChatService {
         }
         self.selectedModelSubject.send(initialModel)
 
-        ConfigLoader.fetchDownloadOnceConfigsIfNeeded { [weak self] in
-            self?.reloadProviders()
-        }
+        ConfigLoader.fetchDownloadOnceConfigsIfNeeded()
 
         logger.info("  - 初始选中模型为: \(initialModel?.model.displayName ?? "无")")
         if !Self.isRunningUnitTests {
             logger.info("  - 已切换为启动后异步加载持久化会话状态。")
+            Task { [weak self] in
+                guard let self else { return }
+                await self.waitForInitialPersistenceStateIfNeeded(priority: .utility)
+                await ConversationRunCoordinator.shared.start(chatService: self)
+            }
         }
         logger.info("  - 初始化完成。")
-        AppLog.developer(
-            category: "chat_service",
-            action: "initialize",
-            message: NSLocalizedString("ChatService 初始化完成", comment: "App log message"),
-            payload: [
-                "providerCount": "\(self.providers.count)",
-                "selectedModel": initialModel?.model.displayName ?? NSLocalizedString("无", comment: "App log empty value")
-            ]
-        )
-        AppLog.userOperation(
-            category: NSLocalizedString("应用", comment: "App log category"),
-            action: NSLocalizedString("初始化聊天服务", comment: "App log action"),
-            payload: ["providerCount": "\(self.providers.count)"]
-        )
     }
 
     public func fetchModels(for provider: Provider) async throws -> [Model] {
@@ -670,10 +917,60 @@ public class ChatService {
             return transcript
         }
 
+        if LocalModelProviderBridge.isLocalRunnableModel(model) {
+            guard let record = localModelRecord(for: model, requiresExistingFile: false) else {
+                throw LocalSpeechEngineError.modelFileMissing(model.model.modelName)
+            }
+            let decoderRecord = record.speechDecoderModelID.flatMap { decoderID in
+                localModelStore.models.first {
+                    $0.id == decoderID && localModelStore.fileExists(for: $0)
+                }
+            }
+            if record.speechArchitecture?.requiresDecoderModel == true,
+               decoderRecord == nil {
+                throw LocalSpeechEngineError.transcriptionFailed(
+                    NSLocalizedString("Fun-ASR-Nano 尚未关联可用的本地 Qwen 解码模型。", comment: "Fun-ASR-Nano decoder not configured")
+                )
+            }
+            let vadRecord = record.speechVADModelID.flatMap { vadID in
+                localModelStore.models.first {
+                    $0.id == vadID
+                        && $0.speechArchitecture == .fsmnVAD
+                        && localModelStore.fileExists(for: $0)
+                }
+            }
+            let extensionFromName = URL(fileURLWithPath: fileName).pathExtension
+            let fallbackExtension = mimeType.lowercased().contains("wav") ? "wav" : "m4a"
+            let localModelCacheEnabled = await MainActor.run {
+                AppConfigStore.shared.localModelCacheEnabled
+            }
+            #if os(watchOS)
+            let gpuLayers = 0
+            #else
+            let gpuLayers = record.effectiveGPULayers
+            #endif
+            let transcript = try await LocalSpeechEngine.transcribe(
+                audioData: audioData,
+                fileExtension: extensionFromName.isEmpty ? fallbackExtension : extensionFromName,
+                modelURL: localModelStore.fileURL(for: record),
+                decoderModelURL: decoderRecord.map(localModelStore.fileURL(for:)),
+                vadModelURL: vadRecord.map(localModelStore.fileURL(for:)),
+                options: LocalSpeechTranscriptionOptions(
+                    contextSize: record.effectiveContextSize,
+                    maxOutputTokens: record.effectiveMaxOutputTokens,
+                    gpuLayers: gpuLayers,
+                    useModelCache: localModelCacheEnabled
+                )
+            )
+            logger.info("本地语音识别完成，长度 \(transcript.count) 字符。")
+            return transcript
+        }
+
         logger.info("正在向 \(model.provider.name) 的语音模型 \(model.model.displayName) 发起转写请求...")
         
-        guard let adapter = adapters[model.provider.apiFormat] else {
-            throw NetworkError.adapterNotFound(format: model.provider.apiFormat)
+        // 专用语音选择允许任意远端模型，但转写端点统一遵循 OpenAI Audio Transcriptions 协议。
+        guard let adapter = adapters["openai-compatible"] else {
+            throw NetworkError.adapterNotFound(format: "openai-compatible")
         }
         
         guard let request = adapter.buildTranscriptionRequest(
@@ -697,11 +994,23 @@ public class ChatService {
         }
     }
 
+    /// 删除正在生成的占位消息前先终止对应请求，避免后续 Token
+    /// 持续与消息列表删除竞争。
+    public func cancelRequestIfGenerating(messageID: UUID, in sessionID: UUID) async {
+        guard loadingMessageID(for: sessionID) == messageID else { return }
+        await cancelRequest(for: sessionID)
+    }
+
     /// 取消指定会话正在进行的请求，并进行必要的状态恢复。
     public func cancelRequest(for sessionID: UUID) async {
         guard let activeContext = withRequestStateLock({ requestContextBySessionID[sessionID] }),
               let task = activeContext.task else { return }
         task.cancel()
+        if let runID = activeContext.conversationRunID {
+            await LocalLinuxJobScheduler.shared.cancel(runID: runID)
+        } else {
+            await LocalLinuxJobScheduler.shared.cancel(sessionID: sessionID)
+        }
         emitSessionRequestStatus(.cancelled, sessionID: sessionID)
 
         if let imageContext = activeContext.imageGenerationContext {
@@ -729,15 +1038,9 @@ public class ChatService {
         }
 
         if let loadingID = activeContext.loadingMessageID {
-            finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingID, in: sessionID)
-            if restoreRetryTargetMessageIfNeeded(loadingMessageID: loadingID, in: sessionID) {
-                logger.info("已恢复被取消重试的原始 assistant 消息: \(loadingID.uuidString)")
-            } else if shouldRemoveLoadingMessageOnCancel(loadingMessageID: loadingID, in: sessionID) {
-                removeMessage(withID: loadingID, in: sessionID)
-            }
-            if retryTargetMessageID == loadingID {
-                retryTargetMessageID = nil
-                retryTargetOriginalAssistantMessage = nil
+            await finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingID, in: sessionID)
+            if shouldRemoveLoadingMessageOnCancel(loadingMessageID: loadingID, in: sessionID) {
+                await removeMessage(withID: loadingID, in: sessionID)
             }
         }
 

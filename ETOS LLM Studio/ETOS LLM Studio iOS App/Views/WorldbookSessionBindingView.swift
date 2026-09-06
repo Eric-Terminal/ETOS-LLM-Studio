@@ -109,7 +109,9 @@ struct WorldbookSessionBindingView: View {
         ChatService.shared.updateWorldbookSessionSettings(
             sessionID: session.id,
             worldbookIDs: session.lorebookIDs,
-            worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled
+            memoryContextIsolationEnabled: session.memoryContextIsolationEnabled,
+            toolContextIsolationEnabled: session.toolContextIsolationEnabled,
+            globalSystemPromptIsolationEnabled: session.globalSystemPromptIsolationEnabled
         )
     }
 }

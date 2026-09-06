@@ -1,0 +1,178 @@
+// ============================================================================
+// AgentToolExecutionPreviewTests.swift
+// ============================================================================
+// ETOS LLM Studio
+//
+// 验证聊天缩略图设置归一化，以及工具执行缩略图的选择和输出边界。
+// ============================================================================
+
+import Foundation
+import Testing
+@testable import ETOSCore
+
+struct AgentToolExecutionPreviewTests {
+    @Test("工具结果中的拒绝字样不会伪造审批终态")
+    func derivesRejectionOnlyFromStructuredDisposition() throws {
+        let successfulRead = InternalToolCall(
+            id: "read-skill",
+            toolName: "use_skill",
+            arguments: #"{"action":"read_resource","path":"SKILL.md"}"#,
+            result: "读取成功：必须拒绝未经授权的操作。",
+            resultDisposition: .completed
+        )
+        let rejectedCall = InternalToolCall(
+            id: "denied-call",
+            toolName: "dangerous_tool",
+            arguments: "{}",
+            result: "调用已被用户拒绝。",
+            resultDisposition: .rejected
+        )
+
+        #expect(!successfulRead.wasRejected)
+        #expect(rejectedCall.wasRejected)
+
+        let restored = try JSONDecoder().decode(
+            InternalToolCall.self,
+            from: JSONEncoder().encode(rejectedCall)
+        )
+        #expect(restored.resultDisposition == .rejected)
+        #expect(restored.wasRejected)
+    }
+
+    @Test("工具执行失败使用独立结构化终态")
+    func preservesFailedDisposition() throws {
+        let failedCall = InternalToolCall(
+            id: "failed-call",
+            toolName: "mcp_search_web",
+            arguments: "{}",
+            result: #"{"isError":true}"#,
+            resultDisposition: .failed
+        )
+
+        #expect(failedCall.executionFailed)
+        #expect(!failedCall.wasRejected)
+
+        let restored = try JSONDecoder().decode(
+            InternalToolCall.self,
+            from: JSONEncoder().encode(failedCall)
+        )
+        #expect(restored.resultDisposition == .failed)
+        #expect(restored.executionFailed)
+    }
+
+    @Test("旧工具记录缺少结构化终态时保持可解码")
+    func decodesLegacyToolCallWithoutDisposition() throws {
+        let legacyJSON = #"{"id":"legacy","toolName":"read_file","arguments":"{}","result":"permission denied 示例"}"#
+        let restored = try JSONDecoder().decode(
+            InternalToolCall.self,
+            from: try #require(legacyJSON.data(using: .utf8))
+        )
+
+        #expect(restored.resultDisposition == nil)
+        #expect(!restored.wasRejected)
+    }
+
+    @Test("聊天缩略图默认显示 Agent 工具，并能修复未知配置值")
+    func normalizesPreviewMode() {
+        #expect(LocalLinuxChatPreviewMode.defaultMode == .agentTools)
+        #expect(LocalLinuxChatPreviewMode.normalized("user_terminal") == .userTerminal)
+        #expect(LocalLinuxChatPreviewMode.normalized("unknown") == .agentTools)
+        #expect(AppConfigKey.localLinuxChatPreviewMode.defaultValue == .text("agent_tools"))
+
+        #expect(LocalLinuxChatPreviewMode.agentTools.resolved(for: .chat) == .off)
+        #expect(LocalLinuxChatPreviewMode.agentTools.resolved(for: .agent) == .agentTools)
+        #expect(LocalLinuxChatPreviewMode.userTerminal.resolved(for: .chat) == .userTerminal)
+
+        #expect(LocalLinuxChatPreviewPlacement.defaultPlacement == .floating)
+        #expect(LocalLinuxChatPreviewPlacement.normalized("above_input") == .aboveInput)
+        #expect(LocalLinuxChatPreviewPlacement.normalized("unknown") == .floating)
+        #expect(AppConfigKey.localLinuxChatPreviewPlacement.defaultValue == .text("floating"))
+    }
+
+    @Test("仍在执行的工具优先于之后完成的工具")
+    func prefersRunningTool() throws {
+        var accumulator = AgentToolExecutionPreviewAccumulator()
+        accumulator.append(ChatMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [InternalToolCall(
+                id: "running",
+                toolName: "linux_shell",
+                arguments: #"{"script":"make"}"#
+            )]
+        ))
+        accumulator.append(ChatMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [InternalToolCall(
+                id: "completed",
+                toolName: "browser_control",
+                arguments: #"{"action":"snapshot"}"#,
+                result: "完成"
+            )]
+        ))
+
+        let preview = try #require(accumulator.preferred)
+        #expect(preview.toolCallID == "running")
+        #expect(preview.state == .running)
+    }
+
+    @Test("没有运行项时显示最近完成的工具并限制缩略文本")
+    func usesLatestCompletedToolWithBoundedPreview() throws {
+        var accumulator = AgentToolExecutionPreviewAccumulator()
+        accumulator.append(ChatMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [
+                InternalToolCall(id: "first", toolName: "read_file", arguments: "{}", result: "旧结果"),
+                InternalToolCall(
+                    id: "latest",
+                    toolName: "linux_run",
+                    arguments: "{}",
+                    result: String(repeating: "新", count: 7_000)
+                )
+            ]
+        ))
+
+        let preview = try #require(accumulator.preferred)
+        #expect(preview.toolCallID == "latest")
+        #expect(preview.state == .completed)
+        #expect(preview.previewText.count == 720)
+        #expect(preview.result?.count == 6_000)
+        #expect(preview.resultWasTruncated)
+    }
+
+    @Test("MCP 工具标题用于缩略图且不会混入展示参数")
+    func usesMCPToolDisplayTitle() throws {
+        let snapshot = AgentToolExecutionPreviewSnapshot(
+            messageID: UUID(),
+            toolCall: InternalToolCall(
+                id: "mcp-running",
+                toolName: "mcp_search_issues",
+                arguments: #"{"__etos_tool_title":"搜索相关问题","query":"Linux"}"#
+            )
+        )
+
+        #expect(snapshot.displayTitle == "搜索相关问题")
+        #expect(snapshot.arguments.contains(#""query":"Linux""#))
+        #expect(!snapshot.arguments.contains(MCPToolCallTitleMetadata.argumentKey))
+    }
+
+    @Test("旧 MCP 历史缺少标题时继续使用原参数预览")
+    func preservesLegacyMCPPreviewWithoutTitle() {
+        let legacyArguments = #"{"query":"历史记录"}"#
+        let snapshot = AgentToolExecutionPreviewSnapshot(
+            messageID: UUID(),
+            toolCall: InternalToolCall(
+                id: "legacy-mcp-call",
+                toolName: "mcp_search_issues",
+                arguments: legacyArguments,
+                result: "完成"
+            )
+        )
+
+        #expect(snapshot.displayTitle == nil)
+        #expect(snapshot.arguments == legacyArguments)
+        #expect(snapshot.previewText == "完成")
+    }
+}

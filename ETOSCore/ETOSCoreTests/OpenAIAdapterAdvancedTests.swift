@@ -58,7 +58,7 @@ struct OpenAIAdapterAdvancedTests {
     @Test("OpenAI 流式工具参数片段允许省略 type")
     func testStreamingToolArgumentDeltaAllowsMissingType() throws {
         let line = """
-        data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{"}}]}}}]}
+        data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{"}}]}}]}
         """
 
         let part = adapter.parseStreamingResponse(line: line)
@@ -81,6 +81,22 @@ struct OpenAIAdapterAdvancedTests {
         #expect(usage.thinkingTokens == 3)
         #expect(part.content == nil)
         #expect(part.reasoningContent == nil)
+    }
+
+    @Test("OpenAI 流式结束标记和 finish_reason 会确认请求完成")
+    func testOpenAIStreamingTerminationSignalsCompleteRequest() throws {
+        let donePart = try #require(adapter.parseStreamingResponse(line: "data: [DONE]"))
+        let finishReasonLine = """
+        data: {"choices":[{"delta":{},"finish_reason":"stop"}]}
+        """
+        let finishReasonPart = try #require(adapter.parseStreamingResponse(line: finishReasonLine))
+        let failedPart = try #require(adapter.parseStreamingResponse(
+            line: #"data: {"error":{"message":"上游服务不可用"}}"#
+        ))
+
+        #expect(donePart.streamTermination == .completed)
+        #expect(finishReasonPart.streamTermination == .completed)
+        #expect(failedPart.streamTermination == .failed(reason: "上游服务不可用"))
     }
 
     @Test("OpenAI 流式 usage-only 片段可解析 DeepSeek prompt cache 字段")
@@ -289,16 +305,124 @@ struct OpenAIAdapterAdvancedTests {
         #expect(firstTool["strict"] as? Bool == false)
     }
 
+    @Test("OpenAI Responses 使用原生本地 Shell 挂载 Skills")
+    func testResponsesRequestUsesNativeLocalShellSkills() throws {
+        let localShell = InternalToolDefinition(
+            name: OpenAIResponsesLocalShellProtocol.toolName,
+            description: "Local shell",
+            parameters: .dictionary([:]),
+            kind: .openAIResponsesLocalShell,
+            providerSpecificFields: [
+                OpenAIResponsesLocalShellProtocol.skillsField: .array([
+                    .dictionary([
+                        "name": .string("demo-skill"),
+                        "description": .string("Demo skill"),
+                        "path": .string("/mnt/etos/skills/demo-skill/version")
+                    ])
+                ])
+            ]
+        )
+
+        let request = try #require(responsesAdapter.buildChatRequest(
+            for: responsesDummyModel,
+            commonPayload: [:],
+            messages: [ChatMessage(role: .user, content: "运行技能")],
+            tools: [saveMemoryToolDefinition(), localShell],
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let body = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let tools = try #require(payload["tools"] as? [[String: Any]])
+        let shell = try #require(tools.first { $0["type"] as? String == "shell" })
+        let environment = try #require(shell["environment"] as? [String: Any])
+        let skills = try #require(environment["skills"] as? [[String: Any]])
+
+        #expect(environment["type"] as? String == "local")
+        #expect(skills.first?["name"] as? String == "demo-skill")
+        #expect(skills.first?["path"] as? String == "/mnt/etos/skills/demo-skill/version")
+        #expect(tools.contains { $0["type"] as? String == "function" && $0["name"] as? String == "save_memory" })
+        #expect(!tools.contains { $0["type"] as? String == "function" && $0["name"] as? String == OpenAIResponsesLocalShellProtocol.toolName })
+    }
+
+    @Test("OpenAI Responses 原生 Shell 调用与结果按原协议续接")
+    func testResponsesNativeShellCallRoundTrip() throws {
+        let response = Data("""
+        {
+          "id": "resp_shell_1",
+          "output": [
+            {
+              "type": "shell_call",
+              "id": "sh_item_1",
+              "call_id": "call_shell_1",
+              "status": "completed",
+              "action": {
+                "commands": ["/mnt/etos/skills/demo/version/scripts/run.sh"],
+                "timeout_ms": 30000,
+                "max_output_length": 4096
+              }
+            }
+          ]
+        }
+        """.utf8)
+        let assistant = try responsesAdapter.parseResponse(data: response)
+        let toolCall = try #require(assistant.toolCalls?.first)
+        let argumentsData = try #require(toolCall.arguments.data(using: .utf8))
+        let arguments = try #require(JSONSerialization.jsonObject(with: argumentsData) as? [String: Any])
+        let toolMessage = ChatMessage(
+            role: .tool,
+            content: #"{"max_output_length":4096,"output":[{"outcome":{"exit_code":0,"type":"exit"},"stderr":"","stdout":"ok\n"}]}"#,
+            toolCalls: [toolCall]
+        )
+
+        #expect(toolCall.id == "call_shell_1")
+        #expect(toolCall.toolName == OpenAIResponsesLocalShellProtocol.toolName)
+        #expect((arguments["commands"] as? [String]) == ["/mnt/etos/skills/demo/version/scripts/run.sh"])
+        #expect(toolCall.providerSpecificFields?[OpenAIAdapter.responsesOutputItemIDKey] == .string("sh_item_1"))
+
+        let request = try #require(responsesAdapter.buildChatRequest(
+            for: responsesDummyModel,
+            commonPayload: [:],
+            messages: [
+                ChatMessage(role: .user, content: "运行技能"),
+                assistant,
+                toolMessage
+            ],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let body = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let input = try #require(payload["input"] as? [[String: Any]])
+        let shellCall = try #require(input.first { $0["type"] as? String == "shell_call" })
+        let shellOutput = try #require(input.first { $0["type"] as? String == "shell_call_output" })
+        let output = try #require(shellOutput["output"] as? [[String: Any]])
+        let outcome = try #require(output.first?["outcome"] as? [String: Any])
+
+        #expect(shellCall["call_id"] as? String == "call_shell_1")
+        #expect(shellOutput["call_id"] as? String == "call_shell_1")
+        #expect(shellOutput["max_output_length"] as? Int == 4096)
+        #expect(output.first?["stdout"] as? String == "ok\n")
+        #expect(outcome["type"] as? String == "exit")
+        #expect(outcome["exit_code"] as? Int == 0)
+    }
+
     @Test("OpenAI Responses 独立适配器默认使用 Responses 请求体")
     func testOpenAIResponsesAdapterBuildsResponsesPayloadByDefault() throws {
+        var thinkingControl = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "openai-responses")
+        thinkingControl.defaultOptionID = "max"
         let model = RunnableModel(
             provider: responsesDummyModel.provider,
             model: Model(
-                modelName: "gpt-5.4",
+                modelName: "adapter-only-model",
                 overrideParameters: [
                     "max_tokens": .int(512),
                     "messages": .array([.dictionary(["role": .string("user")])])
-                ]
+                ],
+                requestBodyControls: [thinkingControl]
             )
         )
         let messages = [ChatMessage(role: .user, content: "你好")]
@@ -325,6 +449,8 @@ struct OpenAIAdapterAdvancedTests {
         #expect(jsonPayload["messages"] == nil)
         #expect(jsonPayload["max_tokens"] == nil)
         #expect(jsonPayload["max_output_tokens"] as? Int == 512)
+        #expect((jsonPayload["reasoning"] as? [String: Any])?["effort"] as? String == "max")
+        #expect(jsonPayload["reasoning_effort"] == nil)
         #expect(inputItems.first?["role"] as? String == "user")
         #expect(firstTool["type"] as? String == "function")
         #expect(firstTool["name"] as? String == "save_memory")
@@ -1255,6 +1381,17 @@ struct OpenAIAdapterAdvancedTests {
         #expect(usage.thinkingTokens == 2)
         #expect(usage.cacheReadTokens == 4)
         #expect(usage.totalTokens == 16)
+        #expect(completedPart.streamTermination == .completed)
+    }
+
+    @Test("OpenAI Responses 未完成事件会报告流式失败")
+    func testParseResponsesIncompleteEventReportsFailure() throws {
+        let line = """
+        data: {"type":"response.incomplete","response":{"incomplete_details":{"reason":"max_output_tokens"}}}
+        """
+
+        let part = try #require(adapter.parseStreamingResponse(line: line))
+        #expect(part.streamTermination == .failed(reason: "max_output_tokens"))
     }
 
     @Test("OpenAI Responses 流式工具参数完成事件可从 item 补齐工具信息")
@@ -1329,14 +1466,90 @@ struct OpenAIAdapterAdvancedTests {
         )
         let contentType = try #require(request.value(forHTTPHeaderField: "Content-Type"))
         let bodyData = try #require(request.httpBody)
-        let bodyString = String(data: bodyData, encoding: .utf8) ?? ""
-
         #expect(request.url?.absoluteString == "https://api.test.com/v1/images/edits")
         #expect(request.httpMethod == "POST")
         #expect(contentType.contains("multipart/form-data; boundary="))
-        #expect(bodyString.contains("name=\"model\""))
-        #expect(bodyString.contains("name=\"prompt\""))
-        #expect(bodyString.contains("name=\"image\""))
-        #expect(bodyString.contains("filename=\"ref.png\""))
+        #expect(bodyData.range(of: Data(#"name="model""#.utf8)) != nil)
+        #expect(bodyData.range(of: Data(#"name="prompt""#.utf8)) != nil)
+        #expect(bodyData.range(of: Data(#"name="image""#.utf8)) != nil)
+        #expect(bodyData.range(of: Data(#"filename="ref.png""#.utf8)) != nil)
+    }
+
+    @Test("OpenAI Responses 图片输出模型自动启用内置生图工具")
+    func testResponsesImageOutputModelAddsImageGenerationTool() throws {
+        var imageOutputModel = responsesDummyModel.model
+        imageOutputModel.outputModalities = [.text, .image]
+        let runnableModel = RunnableModel(
+            provider: responsesDummyModel.provider,
+            model: imageOutputModel
+        )
+
+        let request = try #require(
+            responsesAdapter.buildChatRequest(
+                for: runnableModel,
+                commonPayload: ["stream": false],
+                messages: [ChatMessage(role: .user, content: "画一只猫")],
+                tools: [saveMemoryToolDefinition()],
+                audioAttachments: [:],
+                imageAttachments: [:],
+                fileAttachments: [:]
+            )
+        )
+        let body = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let tools = try #require(payload["tools"] as? [[String: Any]])
+
+        #expect(tools.contains { ($0["type"] as? String) == "image_generation" })
+        #expect(tools.contains {
+            ($0["type"] as? String) == "function"
+                && ($0["name"] as? String) == "save_memory"
+        })
+        #expect(payload["tool_choice"] as? String == "auto")
+    }
+
+    @Test("OpenAI Responses 完整历史仅回传图片生成调用 ID")
+    func testResponsesImageGenerationHistoryReplaysCallIDOnly() throws {
+        let assistantMessage = ChatMessage(
+            role: .assistant,
+            content: "",
+            providerResponseMetadata: [
+                OpenAIAdapter.responsesOutputItemsKey: .array([
+                    .dictionary([
+                        "type": .string("image_generation_call"),
+                        "id": .string("ig_history_1"),
+                        "status": .string("completed"),
+                        "result": .string("large-base64-payload")
+                    ])
+                ])
+            ]
+        )
+        let request = try #require(
+            responsesAdapter.buildChatRequest(
+                for: responsesDummyModel,
+                commonPayload: [
+                    "stream": false,
+                    OpenAIAdapter.responsesForceFullInputControlKey: true
+                ],
+                messages: [
+                    assistantMessage,
+                    ChatMessage(role: .user, content: "把它改成写实风格")
+                ],
+                tools: nil,
+                audioAttachments: [:],
+                imageAttachments: [:],
+                fileAttachments: [:]
+            )
+        )
+        let body = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let input = try #require(payload["input"] as? [[String: Any]])
+        let imageCall = try #require(
+            input.first(where: { ($0["type"] as? String) == "image_generation_call" })
+        )
+
+        #expect(imageCall["id"] as? String == "ig_history_1")
+        #expect(imageCall["result"] == nil)
+        #expect(imageCall["status"] == nil)
+        #expect(Set(imageCall.keys) == Set(["type", "id"]))
     }
 }

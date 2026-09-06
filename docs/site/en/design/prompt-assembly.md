@@ -35,12 +35,82 @@ User message
   → Compose final system prompt (concatenate the eight context blocks)
   → Truncate chat history
   → Inject time landmarks + depth-based worldbook entries as needed
-  → Append enhancement prompt as a separate system message
+  → Append enhancement prompt at the tail (system / user according to the API)
   → Decide which tools to expose this turn
   → Send to the selected model
 ```
 
-The eight context blocks below — when each appears, when each is skipped, what each is good for.
+## Prompt Macros
+
+Global system prompts, conversation system prompts, topic prompts, enhancement prompts and chat input all support macros. The **Prompt macros** introduction card below the editors explains the syntax and includes an expandable list of available macros.
+
+Double braces, `{{model_name}}`, expand dynamically; single braces, `{model_name}`, also expand. Names are case-insensitive and may have surrounding spaces. Triple braces send literal macro text: `{{{battery_level}}}` becomes `{{battery_level}}`, without reading the battery or expanding it again during subsequent roleplay template processing. For example, with a battery level of 90%:
+
+| Input | Content sent to the model |
+| --- | --- |
+| `Battery: {{battery_level}}%` | `Battery: 90%` |
+| `Explain {{{battery_level}}}` | `Explain {{battery_level}}` |
+
+Once the request's actual model is selected, ETOS takes one environment snapshot shared by all four prompt types and the user messages sent with that request. Saved settings, messages and their displayed text keep the originals. Dynamic macros in historical user messages are evaluated again on later requests; they do not retain the value from the first send. Assistant replies and tool results do not participate in this environment macro expansion. Unknown macros remain unchanged. Replacement values are not recursively expanded by this layer; roleplay macros and advanced templates retain their own processing paths.
+
+| Category | Macro names |
+| --- | --- |
+| Date and time | `cur_date`, `cur_time`, `cur_datetime`, `utc_datetime`, `weekday`, `timestamp`, `timezone`, `timezone_offset` |
+| Model and provider | `model_id`, `model_name`, `provider_id`, `provider_name`, `api_format` |
+| Names and conversation | `nickname`, `user`, `char`, `assistant_name`, `chat_id`, `chat_name`, `message_count` |
+| Language and app | `locale`, `language`, `system_locale`, `app_name`, `app_version`, `app_build` |
+| Device information | `platform`, `system_version`, `device_info`, `device_model`, `device_name` |
+| Battery and status | `battery_level`, `battery_state`, `is_charging`, `low_power_mode`, `thermal_state`, `system_uptime` |
+| Volume and audio | `volume_level`, `audio_output_type`, `audio_output_name`, `audio_input_type`, `audio_input_name`, `other_audio_playing` |
+| Screen information | `screen_brightness`, `screen_width`, `screen_height`, `screen_scale` |
+| Storage and hardware | `storage_free_bytes`, `storage_total_bytes`, `storage_free_gb`, `storage_total_gb`, `storage_free_percent`, `physical_memory_bytes`, `physical_memory_gb`, `processor_count`, `active_processor_count` |
+
+There are **56 supported general macro names, including aliases**.
+
+`nickname` and `user` are aliases for the user's name from the bound or default Persona (user identity), falling back to the localized word for “User”. `char` and `assistant_name` are aliases for the first bound character's name, falling back to the request's model display name. These names come from the identities and characters configured in the app.
+
+For example, with a Persona named Eric and a character named Banki, `You are {{char}}. Please call me {{user}}.` becomes `You are Banki. Please call me Eric.`. `message_count` counts prepared user and assistant messages, excluding system and tool messages.
+
+`cur_date` uses Gregorian `yyyy-MM-dd`, `cur_time` uses `HH:mm:ss`, and `cur_datetime` combines them. `utc_datetime` uses ISO 8601. Both `timestamp` and `system_uptime` use seconds. `locale` follows the app's language preference; `system_locale` identifies the system locale.
+
+Device values come from **the device sending the request**. A watch reads its own battery. `battery_level` is an integer from 0 to 100 without `%`. `battery_state` is `unplugged`, `charging`, `full` or `unknown`. `is_charging` is `true`, `false` or `unknown`; a full battery means `false`. `low_power_mode` is `true` or `false`. `thermal_state` is `nominal`, `fair`, `serious`, `critical` or `unknown`. Battery monitoring is briefly enabled only when a battery macro is referenced, then restored to its previous state, without background polling. Unavailable readings return `unknown`.
+
+### Volume, Screen and Capacity
+
+| Macro | Value and unit |
+| --- | --- |
+| `volume_level` | Reported output volume, an integer from 0 to 100 without `%` |
+| `audio_output_type` / `audio_input_type` | Current output/input route types: common values include `speaker`, `receiver`, `headphones`, `microphone`, `headset_microphone`, `bluetooth`, `airplay`, `usb`, `hdmi`, `line_in`, `line_out`, `car_audio`; other types retain their system identifiers |
+| `audio_output_name` / `audio_input_name` | Current route device names; `unknown` if the system provides no name |
+| `other_audio_playing` | Whether the system reports another app playing audio, `true` or `false` |
+| `screen_brightness` | Brightness, an integer from 0 to 100 without `%`; iOS only, `unknown` on watchOS |
+| `screen_width` / `screen_height` | Screen width and height in points |
+| `screen_scale` | Pixels per point, such as `2.0` or `3.0` |
+| `storage_free_bytes` / `storage_total_bytes` | Free/total capacity of the volume containing the app's documents, in bytes |
+| `storage_free_gb` / `storage_total_gb` | Free/total capacity of that volume, in decimal GB with two decimal places |
+| `storage_free_percent` | Free capacity percentage, an integer from 0 to 100 without `%` |
+| `physical_memory_bytes` / `physical_memory_gb` | Total physical memory, in bytes or decimal GB; not currently available RAM |
+| `processor_count` / `active_processor_count` | Logical processor count/currently active count |
+
+Audio macros read system-reported snapshots. If no route is reported, its type and name both return `none`; multiple ports are comma-separated in the same order. A Bluetooth route does not necessarily mean headphones. Output volume, ringer volume and silent mode describe different information; zero volume does not mean silent mode is enabled. Macro collection does not change the audio category, activate the audio session, play audio or request recording permission. System readings may update late after returning to the app or changing audio devices.
+
+On iOS, screen values come from an associated app scene and return `unknown` if no scene is available. watchOS reads the watch's screen dimensions and scale. Storage, audio, screen and hardware data are collected by group only when referenced; disk reads run in the background. GB uses `1,000,000,000` bytes and decimals always use `.`.
+
+### Changing Values and Caching
+
+Changing values such as time and battery level can be used anywhere macros are supported. For example:
+
+```text
+Current time: {{cur_datetime}} ({{timezone}})
+Battery (%): {{battery_level}}
+Volume (%): {{volume_level}}
+Audio output: {{audio_output_type}} ({{audio_output_name}})
+Free storage: {{storage_free_gb}} GB / {{storage_total_gb}} GB
+```
+
+Macros keep the placement of their source text. Enhancement prompts retain their tail placement and protocol role settings without being merged into the earlier global or topic prompt. Changing values in system prompts, topic prompts or historical user messages may reduce prefix cache reuse from that position onward. You choose where to use macros; actual cache support and coverage depend on the provider and API format.
+
+**Inject System Time** supports a beginning or end position, while time macros can appear anywhere macros are supported. These options work independently; using both adds time in both places.
 
 ## The Eight Context Blocks
 
@@ -143,7 +213,7 @@ This makes worldbook **more than "attach some lore"** — it can target precisel
 
 ### 8. Enhancement Prompt `<enhanced_prompt>`
 
-**Note: the enhancement prompt is not merged into the main system prompt**. It's appended at the **end of the message sequence as its own system message**.
+**The enhancement prompt is not merged into the main system prompt**. It stays in the tail context. OpenAI adapters use `system` or `user` according to “Send using System role”; local models use `system`. Anthropic and Gemini use `user` so their adapters do not move it into the system prefix. It is merged with a user message when needed.
 
 Deliberate, for two reasons:
 
@@ -168,27 +238,17 @@ The two have **different goals**:
 - **Landmark / depth injection** is for **structural completion**, not length filling
 :::
 
-## Worldbook Isolation Rewrites the Whole Pipeline
+## Session Switches Can Trim Context Independently
 
-When the current session has a worldbook bound and **isolation mode** enabled, ETOS switches to a **stricter** context model.
+Roleplay sessions can enable **Block Memory**, **Block Tools**, and **Block Global System Prompt** independently, with no worldbook binding required.
 
-**Sent**:
+| Switch | Effect on the outgoing request |
+| --- | --- |
+| Block Memory | Skip long-term memory, cross-session summaries, user profile, and memory tools |
+| Block Tools | Skip all tool definitions and remove historical tool calls and results |
+| Block Global System Prompt | Omit the global system prompt while retaining session prompts, character cards, and lorebooks |
 
-- Global prompt
-- Topic prompt
-- Enhancement prompt
-- Worldbook
-
-**Not sent**:
-
-- Long-term memory
-- Cross-session summary
-- User profile
-- MCP tools
-- Shortcut tools
-- Other external tool context
-
-That's why Tool Center sometimes shows "**configured-on but not available in this session**" — because this session has worldbook isolation enabled.
+That's why Tool Center can show "**configured-on but not available in this session**": the session may block tools, while memory tools can also be unavailable because memory is blocked.
 
 See [Worldbook & Tool Governance](/en/design/worldbook-and-tools).
 

@@ -32,6 +32,10 @@ struct ModelSettingsView: View {
         let preview = requestBodyPreview
 
         Form {
+            Section {
+                ModelConfigurationIntroCard()
+            }
+
             Section(
                 header: Text(NSLocalizedString("基础信息", comment: "")),
                 footer: Text(NSLocalizedString("模型ID是 API 调用时使用的真实标识，模型名称是 App 内展示给用户的别名。", comment: ""))
@@ -42,7 +46,17 @@ struct ModelSettingsView: View {
                     .autocorrectionDisabled()
             }
 
-            if model.isChatModel && !LocalModelProviderBridge.isLocalProvider(provider) {
+            Section(
+                header: Text(NSLocalizedString("模型分组", comment: "模型选择器分组设置区块")),
+                footer: Text(NSLocalizedString("同一提供商内使用相同分组名称的模型会折叠在一起；留空则归入未分类模型。", comment: "模型选择器分组设置说明"))
+            ) {
+                TextField(
+                    NSLocalizedString("分组名称（可选）", comment: "模型选择器分组名称输入框"),
+                    text: pickerGroupNameBinding
+                )
+            }
+
+            if model.kind.supportsConnectivityTest && !LocalModelProviderBridge.isLocalProvider(provider) {
                 Section {
                     NavigationLink {
                         SingleModelConnectivityTestView(provider: provider, model: model)
@@ -50,26 +64,26 @@ struct ModelSettingsView: View {
                         Label(NSLocalizedString("模型测试", comment: "Model connectivity test title"), systemImage: "checkmark.seal")
                     }
                 } footer: {
-                    Text(NSLocalizedString("测试该模型的非流式、流式和工具调用能力。", comment: "Single model connectivity test entry footer"))
+                    Text(modelConnectivityTestFooter)
                 }
             }
 
             Section(
-                header: Text(NSLocalizedString("用途", comment: "模型用途区块标题")),
+                header: Text(NSLocalizedString("模型类型", comment: "模型类型区块标题")),
                 footer: Text(kindFooterText)
             ) {
-                Picker(NSLocalizedString("用途", comment: "模型用途选择器标题"), selection: kindBinding) {
-                    ForEach(ModelKind.allCases, id: \.self) { kind in
-                        Text(kind.localizedName).tag(kind)
-                    }
-                }
+                modelKindSelector
             }
 
-            Section(
-                header: Text(NSLocalizedString("模型能力", comment: "模型能力区块标题")),
-                footer: Text(capabilityFooterText)
-            ) {
-                modelCapabilityRows
+            if model.kind == .chat {
+                chatModelCapabilitySections
+            } else {
+                Section(
+                    header: Text(NSLocalizedString("能力", comment: "模型能力区块标题")),
+                    footer: Text(capabilityFooterText)
+                ) {
+                    specializedModelCapabilityRows
+                }
             }
 
             Section(
@@ -77,7 +91,7 @@ struct ModelSettingsView: View {
                 footer: Text(NSLocalizedString("用于在消息详情中估算本地费用，仅供参考，实际扣费以服务商为准。", comment: "Model pricing section footer"))
             ) {
                 NavigationLink {
-                    ModelPricingSettingsView(pricing: $model.pricing)
+                    ModelPricingSettingsView(pricing: $model.pricing, apiFormat: effectiveAPIFormat)
                 } label: {
                     LabeledContent(NSLocalizedString("价格设置", comment: "Model pricing settings row title")) {
                         Text(modelPricingSummary)
@@ -161,6 +175,10 @@ struct ModelSettingsView: View {
             Section(NSLocalizedString("请求体预览", comment: "")) {
                 RequestBodyPreviewInlineView(preview: preview)
             }
+
+            if !LocalModelProviderBridge.isLocalProvider(provider) {
+                modelAdapterSection
+            }
         }
         .navigationDestination(isPresented: $isRequestBodyControlImportPresented) {
             RequestBodyControlImportView(sources: requestBodyControlImportSources) { source in
@@ -170,6 +188,291 @@ struct ModelSettingsView: View {
         .navigationTitle(NSLocalizedString("模型信息", comment: ""))
         .onAppear(perform: loadEditorState)
         .onDisappear(perform: saveEditorState)
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: modelGuidePageID,
+                title: NSLocalizedString("模型信息", comment: "模型设置向导上下文标题"),
+                documents: [
+                    GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics"),
+                    GuideDocumentReference(id: "model-request-body", title: "Model Request Body")
+                ],
+                tools: [
+                    GuidePageTool(definition: GuideToolCatalog.updateModelConfiguration, access: .proposeChange),
+                    GuidePageTool(definition: GuideToolCatalog.replaceModelRequestBody, access: .proposeChange),
+                    GuidePageTool(definition: GuideModelRequestBodyControls.toolDefinition, access: .proposeChange)
+                ]
+            ),
+            snapshot: modelGuideSnapshot,
+            buildProposal: buildModelGuideProposal,
+            execute: executeModelGuideProposal
+        )
+    }
+
+    private var modelGuidePageID: GuidePageID {
+        GuidePageID(rawValue: "model-configuration-\(provider.id)-\(model.id)")
+    }
+
+    private func modelGuideSnapshot() async -> GuidePageSnapshot {
+        let controls = model.requestBodyControls
+        let base = model.overrideParameters
+        let modelKey = RunnableModel(provider: provider, model: model).id
+        var fields = await Task.detached(priority: .userInitiated) {
+            let state = ModelRequestBodyControlRuntimeStore.state(forModelKey: modelKey, controls: controls)
+            return GuideModelRequestBodyControls.snapshotFields(controls: controls, state: state, base: base)
+        }.value
+        fields["provider_name"] = GuideSnapshotField(label: NSLocalizedString("提供商", comment: "模型向导提供商"), value: .string(provider.name), access: .readOnly)
+        fields["provider_id"] = GuideSnapshotField(label: NSLocalizedString("提供商 ID", value: "Provider ID", comment: "模型向导提供商标识"), value: .string(provider.id.uuidString), access: .readOnly)
+        fields["effective_api_format"] = GuideSnapshotField(label: NSLocalizedString("API 格式", comment: "模型向导实际协议"), value: .string(effectiveAPIFormat), access: .readOnly)
+        fields.merge([
+            "display_name": GuideSnapshotField(
+                label: NSLocalizedString("模型名称", comment: "模型向导快照字段"),
+                value: .string(model.displayName)
+            ),
+            "model_id": GuideSnapshotField(
+                label: NSLocalizedString("模型ID", comment: "模型向导快照字段"),
+                value: .string(model.modelName)
+            ),
+            "picker_group": GuideSnapshotField(
+                label: NSLocalizedString("分组名称", comment: "模型向导快照字段"),
+                value: .string(model.pickerGroupName ?? "")
+            ),
+            "api_format_override": GuideSnapshotField(
+                label: NSLocalizedString("API 格式覆盖", comment: "模型向导快照字段"),
+                value: .string(model.apiFormatOverride ?? "")
+            ),
+            "supports_tool_calling": GuideSnapshotField(
+                label: NSLocalizedString("支持工具调用", comment: "模型向导快照字段"),
+                value: .bool(model.supportsToolCalling)
+            ),
+            "model_kind": GuideSnapshotField(
+                label: NSLocalizedString("模型类型", comment: "模型向导快照字段"),
+                value: .string(model.kind.rawValue),
+                access: .readOnly
+            ),
+            "request_body_mode": GuideSnapshotField(
+                label: NSLocalizedString("自定义请求体编辑方式", comment: "模型向导快照字段"),
+                value: .string(requestBodyMode.rawValue),
+                access: .readOnly
+            ),
+            "request_body_json": GuideSnapshotField(
+                label: NSLocalizedString("自定义请求体", comment: "模型向导快照字段"),
+                value: .dictionary(model.overrideParameters)
+            )
+        ]) { _, new in new }
+        return GuidePageSnapshot(fields: fields)
+    }
+
+    private func buildModelGuideProposal(
+        call: InternalToolCall,
+        snapshot: GuidePageSnapshot
+    ) throws -> GuideActionProposal {
+        let arguments = try GuideToolArguments.decode(call.arguments)
+        switch call.toolName {
+        case GuideModelRequestBodyControls.toolDefinition.name:
+            return try GuideModelRequestBodyControls.buildProposal(
+                call: call, pageID: modelGuidePageID, controls: model.requestBodyControls, snapshot: snapshot
+            )
+        case GuideToolCatalog.updateModelConfiguration.name:
+            if let format = try GuideToolArguments.optionalString("api_format_override", in: arguments),
+               !["", "openai-compatible", "openai-responses", "gemini", "anthropic"].contains(format) {
+                throw GuideError.invalidToolArguments
+            }
+            let labels: [String: String] = [
+                "display_name": NSLocalizedString("模型名称", comment: "模型向导修改字段"),
+                "model_id": NSLocalizedString("模型ID", comment: "模型向导修改字段"),
+                "picker_group": NSLocalizedString("分组名称", comment: "模型向导修改字段"),
+                "api_format_override": NSLocalizedString("API 格式覆盖", comment: "模型向导修改字段"),
+                "supports_tool_calling": NSLocalizedString("支持工具调用", comment: "模型向导修改字段")
+            ]
+            try GuideToolArguments.requireOnlyKeys(Set(labels.keys), in: arguments)
+            _ = try GuideToolArguments.optionalString("display_name", in: arguments)
+            _ = try GuideToolArguments.optionalString("model_id", in: arguments)
+            _ = try GuideToolArguments.optionalString("picker_group", in: arguments)
+            _ = try GuideToolArguments.optionalString("api_format_override", in: arguments)
+            _ = try GuideToolArguments.optionalBool("supports_tool_calling", in: arguments)
+            let mutations = labels.compactMap { key, label -> GuideSettingMutation? in
+                guard let newValue = arguments[key], snapshot.fields[key]?.value != newValue else { return nil }
+                return GuideSettingMutation(
+                    path: key,
+                    label: label,
+                    oldValue: snapshot.fields[key]?.value,
+                    newValue: newValue
+                )
+            }
+            guard !mutations.isEmpty else { throw GuideError.invalidToolArguments }
+            return GuideActionProposal(
+                pageID: modelGuidePageID,
+                toolCallID: call.id,
+                toolName: call.toolName,
+                summary: NSLocalizedString("修改模型配置", comment: "模型向导提案摘要"),
+                mutations: mutations,
+                arguments: arguments
+            )
+
+        case GuideToolCatalog.replaceModelRequestBody.name:
+            try GuideToolArguments.requireOnlyKeys(["json"], in: arguments)
+            guard case .dictionary(let body)? = arguments["json"] else { throw GuideError.invalidToolArguments }
+            let newValue = JSONValue.dictionary(body)
+            let containsSensitiveFields = GuideSecretRedactor.containsSensitiveField(newValue)
+            guard snapshot.fields["request_body_json"]?.value != newValue else { throw GuideError.invalidToolArguments }
+            return GuideActionProposal(
+                pageID: modelGuidePageID,
+                toolCallID: call.id,
+                toolName: call.toolName,
+                summary: containsSensitiveFields
+                    ? NSLocalizedString("替换模型自定义请求体（包含疑似认证字段，请仔细确认）", comment: "模型敏感请求体向导提案摘要")
+                    : NSLocalizedString("替换模型自定义请求体", comment: "模型请求体向导提案摘要"),
+                mutations: [GuideSettingMutation(
+                    path: "request_body_json",
+                    label: NSLocalizedString("自定义请求体", comment: "模型向导修改字段"),
+                    oldValue: snapshot.fields["request_body_json"]?.value,
+                    newValue: GuideSecretRedactor.redact(newValue)
+                )],
+                arguments: arguments
+            )
+
+        default:
+            throw GuideError.unsupportedTool(call.toolName)
+        }
+    }
+
+    private func executeModelGuideProposal(_ proposal: GuideActionProposal) async throws -> GuideActionExecution {
+        if proposal.toolName == GuideModelRequestBodyControls.toolDefinition.name || proposal.toolName == GuideModelRequestBodyControls.restoreToolName {
+            let controls = model.requestBodyControls
+            let modelKey = RunnableModel(provider: provider, model: model).id
+            let application = try await Task.detached(priority: .userInitiated) {
+                let state = ModelRequestBodyControlRuntimeStore.state(forModelKey: modelKey, controls: controls)
+                return try GuideModelRequestBodyControls.apply(proposal, controls: controls, state: state)
+            }.value
+            try Task.checkCancellation()
+            guard model.requestBodyControls == controls else { throw GuideError.pageChanged }
+            model.requestBodyControls = application.controls
+            // 只保存控制列表，不把其他尚未确认的请求体编辑草稿一并写入。
+            onSave()
+            await Task.detached(priority: .userInitiated) {
+                ModelRequestBodyControlRuntimeStore.save(application.state, forModelKey: modelKey, controls: application.controls)
+            }.value
+            return GuideActionExecution(
+                message: NSLocalizedString("已保存结构化控制，后续请求将使用更新后的配置。", value: "Structured controls saved. Future requests will use the updated configuration.", comment: "向导控制保存结果"),
+                undoProposal: application.undoProposal
+            )
+        }
+        let oldArguments: [String: JSONValue]
+        switch proposal.toolName {
+        case GuideToolCatalog.updateModelConfiguration.name:
+            oldArguments = currentModelGuideArguments(for: proposal.arguments.keys)
+            if let value = try GuideToolArguments.optionalString("display_name", in: proposal.arguments) { model.displayName = value }
+            if let value = try GuideToolArguments.optionalString("model_id", in: proposal.arguments) { model.modelName = value }
+            if let value = try GuideToolArguments.optionalString("picker_group", in: proposal.arguments) {
+                model.pickerGroupName = Model.normalizedPickerGroupName(value)
+            }
+            if let value = try GuideToolArguments.optionalString("api_format_override", in: proposal.arguments) {
+                model.apiFormatOverride = Model.normalizedAPIFormatOverride(value)
+            }
+            if let value = try GuideToolArguments.optionalBool("supports_tool_calling", in: proposal.arguments) {
+                capabilityBinding(.toolCalling).wrappedValue = value
+            }
+
+        case GuideToolCatalog.replaceModelRequestBody.name:
+            oldArguments = ["json": .dictionary(model.overrideParameters)]
+            guard case .dictionary(let body)? = proposal.arguments["json"] else {
+                throw GuideError.invalidToolArguments
+            }
+            requestBodyMode = .rawJSON
+            rawJSONInput = JSONValue.dictionary(body).prettyPrintedCompact()
+            validateRawJSON(rawJSONInput)
+            guard rawJSONError == nil else { throw GuideError.invalidToolArguments }
+
+        default:
+            throw GuideError.unsupportedTool(proposal.toolName)
+        }
+
+        saveEditorState()
+        let undoSnapshot = await modelGuideSnapshot()
+        let undoCall = InternalToolCall(
+            id: UUID().uuidString,
+            toolName: proposal.toolName,
+            arguments: GuideToolArguments.encodedResult(.dictionary(oldArguments))
+        )
+        return GuideActionExecution(
+            message: NSLocalizedString("已保存模型配置。", comment: "模型向导执行结果"),
+            undoProposal: try buildModelGuideProposal(call: undoCall, snapshot: undoSnapshot)
+        )
+    }
+
+    private func currentModelGuideArguments(for keys: Dictionary<String, JSONValue>.Keys) -> [String: JSONValue] {
+        var values: [String: JSONValue] = [:]
+        for key in keys {
+            switch key {
+            case "display_name": values[key] = .string(model.displayName)
+            case "model_id": values[key] = .string(model.modelName)
+            case "picker_group": values[key] = .string(model.pickerGroupName ?? "")
+            case "api_format_override": values[key] = .string(model.apiFormatOverride ?? "")
+            case "supports_tool_calling": values[key] = .bool(model.supportsToolCalling)
+            default: break
+            }
+        }
+        return values
+    }
+
+    private var modelConnectivityTestFooter: String {
+        switch model.kind {
+        case .chat:
+            return NSLocalizedString("测试该模型的非流式、流式和工具调用能力。", comment: "Single model connectivity test entry footer")
+        case .embedding:
+            return NSLocalizedString("测试该模型能否返回有效的嵌入向量。", comment: "Embedding model connectivity test entry footer")
+        case .image:
+            return NSLocalizedString("测试该模型能否返回有效图片，可能产生费用。", comment: "Image model connectivity test entry footer")
+        case .rerank, .textToSpeech:
+            return ""
+        }
+    }
+
+    private var pickerGroupNameBinding: Binding<String> {
+        Binding(
+            get: { model.pickerGroupName ?? "" },
+            set: { model.pickerGroupName = $0 }
+        )
+    }
+
+    private var effectiveAPIFormat: String {
+        model.effectiveAPIFormat(providerAPIFormat: provider.apiFormat)
+    }
+
+    private var apiFormatOverrideBinding: Binding<String> {
+        Binding(
+            get: { Model.normalizedAPIFormatOverride(model.apiFormatOverride) ?? "" },
+            set: {
+                model.apiFormatOverride = Model.normalizedAPIFormatOverride($0)
+                let pricing = model.pricing?.normalized(forAPIFormat: effectiveAPIFormat)
+                model.pricing = pricing?.isEffectivelyEmpty == true ? nil : pricing
+            }
+        )
+    }
+
+    private var providerAPIFormatName: String {
+        ProviderAPIFormatOption(rawValue: provider.apiFormat.lowercased())?.localizedName
+            ?? provider.apiFormat
+    }
+
+    private var modelAdapterSection: some View {
+        Section {
+            Picker(NSLocalizedString("API 格式", comment: "Model adapter API format picker"), selection: apiFormatOverrideBinding) {
+                Text(String(
+                    format: NSLocalizedString("跟随提供商（%@）", comment: "Use provider API format option"),
+                    providerAPIFormatName
+                ))
+                .tag("")
+
+                ForEach(ProviderAPIFormatOption.allCases) { option in
+                    Text(option.localizedName).tag(option.rawValue)
+                }
+            }
+        } header: {
+            Text(NSLocalizedString("模型适配器", comment: "Per-model adapter section title"))
+        } footer: {
+            Text(NSLocalizedString("默认跟随提供商。覆盖后，此模型会使用所选 API 格式构建请求端点，基础 URL、API Key 和请求头保持不变。", comment: "Per-model adapter override explanation"))
+        }
     }
 }
 
@@ -222,8 +525,6 @@ extension ModelSettingsView {
             return NSLocalizedString("用于长期记忆和检索向量化，不会出现在聊天模型列表中。", comment: "嵌入模型用途说明")
         case .rerank:
             return NSLocalizedString("用于检索结果重排，通常配合知识库或搜索结果精排使用。", comment: "重排模型用途说明")
-        case .speechToText:
-            return NSLocalizedString("用于把录音转换为文字。", comment: "语音转文字模型用途说明")
         case .textToSpeech:
             return NSLocalizedString("用于把文字转换为语音。", comment: "文字转语音模型用途说明")
         }
@@ -231,15 +532,12 @@ extension ModelSettingsView {
 
     private var capabilityFooterText: String {
         switch model.kind {
-        case .chat:
-            if model.outputModalities.contains(.image) {
-                return NSLocalizedString("开启“可生成图片”后，选中该模型的主聊天会直接按生图请求处理。", comment: "聊天模型生图能力说明")
-            }
-            return NSLocalizedString("这些开关描述模型能做什么；服务商原生工具等请求参数由适配器处理。", comment: "聊天模型能力说明")
         case .image:
             return NSLocalizedString("图片生成由用途决定；如果模型支持图生图，可以开启参考图片。", comment: "图片模型能力说明")
-        case .embedding, .rerank, .speechToText, .textToSpeech:
+        case .embedding, .rerank, .textToSpeech:
             return NSLocalizedString("专用模型的输入和输出由用途决定，通常不需要额外配置。", comment: "专用模型能力说明")
+        case .chat:
+            return ""
         }
     }
 
@@ -263,6 +561,7 @@ extension ModelSettingsView {
             pricing.inputPerMillionTokens,
             pricing.outputPerMillionTokens,
             pricing.cacheWritePerMillionTokens,
+            pricing.cacheWriteOneHourPerMillionTokens,
             pricing.cacheReadPerMillionTokens
         ].compactMap { $0 }.count
         var parts: [String] = []
@@ -282,16 +581,103 @@ extension ModelSettingsView {
             : parts.joined(separator: NSLocalizedString("，", comment: "List separator"))
     }
 
+    private var modelKindSelector: some View {
+        ModelSegmentedSelectionRow(
+            options: selectableModelKinds,
+            isSelected: { model.kind == $0 },
+            title: modelKindSelectionTitle,
+            onSelect: { kind in
+                kindBinding.wrappedValue = kind
+            }
+        )
+    }
+
+    private var selectableModelKinds: [ModelKind] {
+        // 旧配置仍可编辑和迁移，但新模型不再把 TTS 当作通用模型用途。
+        ModelKind.allCases.filter { $0 != .textToSpeech || model.kind == .textToSpeech }
+    }
+
+    private func modelKindSelectionTitle(_ kind: ModelKind) -> String {
+        kind == .image ? ModelModality.image.localizedName : kind.localizedName
+    }
+
     @ViewBuilder
-    private var modelCapabilityRows: some View {
+    private var chatModelCapabilitySections: some View {
+        Section(NSLocalizedString("输入模态", comment: "聊天模型输入模态区块标题")) {
+            ModelSegmentedSelectionRow(
+                options: availableInputModalities,
+                isSelected: { model.inputModalities.contains($0) },
+                title: { $0.localizedName },
+                onSelect: { modality in
+                    let binding = modalityBinding(modality, keyPath: \.inputModalities)
+                    binding.wrappedValue.toggle()
+                }
+            )
+        }
+
+        Section(NSLocalizedString("输出模态", comment: "聊天模型输出模态区块标题")) {
+            ModelSegmentedSelectionRow(
+                options: [.text, .image],
+                isSelected: { model.outputModalities.contains($0) },
+                title: { $0.localizedName },
+                onSelect: { modality in
+                    let binding = modalityBinding(modality, keyPath: \.outputModalities)
+                    binding.wrappedValue.toggle()
+                }
+            )
+        }
+
+        Section {
+            ModelSegmentedSelectionRow(
+                options: editableChatCapabilities,
+                isSelected: { model.capabilities.contains($0) },
+                title: { $0.localizedName },
+                onSelect: { capability in
+                    let binding = capabilityBinding(capability)
+                    binding.wrappedValue.toggle()
+                }
+            )
+        } header: {
+            Text(NSLocalizedString("能力", comment: "聊天模型能力区块标题"))
+        } footer: {
+            Text(chatCapabilityFooterText)
+        }
+    }
+
+    private var editableChatCapabilities: [ModelCapability] {
+        var capabilities: [ModelCapability] = [.toolCalling, .reasoning]
+        switch ProviderAPIFormatFamily(apiFormat: effectiveAPIFormat) {
+        case .anthropic, .gemini:
+            capabilities.append(.promptCaching)
+        case .openAICompatible, .openAIResponses:
+            break
+        }
+        return capabilities
+    }
+
+    private var chatCapabilityFooterText: String {
+        let protocolDescription: String
+        switch ProviderAPIFormatFamily(apiFormat: effectiveAPIFormat) {
+        case .anthropic:
+            protocolDescription = NSLocalizedString("开启推理或提示缓存能力后会自动添加对应的结构化控制；关闭能力不会删除已经配置的控制。", comment: "模型能力与结构化控制联动说明")
+        case .gemini:
+            protocolDescription = NSLocalizedString("Gemini 的提示缓存由服务端自动管理；此选项只记录模型能力，不会添加请求参数或结构化控制。", comment: "Gemini 隐式提示缓存说明")
+        case .openAICompatible, .openAIResponses:
+            protocolDescription = NSLocalizedString("推理能力开启后会自动添加思考预算控制；关闭能力不会删除已经配置的控制。", comment: "推理能力与结构化控制联动说明")
+        }
+        return protocolDescription
+    }
+
+    private var availableInputModalities: [ModelModality] {
+        ModelModality.allCases.filter { modality in
+            modality != .video
+                || effectiveAPIFormat == ProviderAPIFormatOption.gemini.rawValue
+        }
+    }
+
+    @ViewBuilder
+    private var specializedModelCapabilityRows: some View {
         switch model.kind {
-        case .chat:
-            Toggle(NSLocalizedString("可处理图片", comment: "聊天模型能力：图片输入"), isOn: modalityBinding(.image, keyPath: \.inputModalities))
-            Toggle(NSLocalizedString("可处理音频", comment: "聊天模型能力：音频输入"), isOn: modalityBinding(.audio, keyPath: \.inputModalities))
-            Toggle(NSLocalizedString("可处理文件", comment: "聊天模型能力：文件输入"), isOn: modalityBinding(.file, keyPath: \.inputModalities))
-            Toggle(NSLocalizedString("可生成图片", comment: "聊天模型能力：图片输出"), isOn: modalityBinding(.image, keyPath: \.outputModalities))
-            Toggle(NSLocalizedString("可调用工具", comment: "聊天模型能力：工具调用"), isOn: capabilityBinding(.toolCalling))
-            Toggle(NSLocalizedString("可用于嵌入", comment: "聊天模型能力：嵌入"), isOn: capabilityBinding(.embedding))
         case .image:
             Toggle(NSLocalizedString("支持参考图片", comment: "图片生成模型能力：参考图片输入"), isOn: modalityBinding(.image, keyPath: \.inputModalities))
         case .embedding:
@@ -300,12 +686,10 @@ extension ModelSettingsView {
         case .rerank:
             Text(NSLocalizedString("此模型用于重新排序候选内容。", comment: "重排模型能力说明"))
                 .foregroundStyle(.secondary)
-        case .speechToText:
-            Text(NSLocalizedString("此模型接收音频并输出文字。", comment: "语音转文字模型能力说明"))
-                .foregroundStyle(.secondary)
         case .textToSpeech:
-            Text(NSLocalizedString("此模型接收文字并输出语音。", comment: "文字转语音模型能力说明"))
-                .foregroundStyle(.secondary)
+            EmptyView()
+        case .chat:
+            EmptyView()
         }
     }
 
@@ -342,11 +726,63 @@ extension ModelSettingsView {
                 var capabilitySet = Set(model.capabilities)
                 if isEnabled {
                     capabilitySet.insert(capability)
+                    if capability == .reasoning {
+                        model.ensureThinkingRequestBodyControl(apiFormat: effectiveAPIFormat)
+                    } else if capability == .promptCaching {
+                        model.ensureAutomaticPromptCachingRequestBodyControl(apiFormat: effectiveAPIFormat)
+                    }
                 } else {
                     capabilitySet.remove(capability)
                 }
                 model.capabilities = Model.orderedCapabilities(Array(capabilitySet))
             }
         )
+    }
+}
+
+private struct ModelSegmentedSelectionRow<Option: Hashable>: View {
+    let options: [Option]
+    let isSelected: (Option) -> Bool
+    let title: (Option) -> String
+    let onSelect: (Option) -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(options.indices, id: \.self) { index in
+                let option = options[index]
+                Button {
+                    onSelect(option)
+                } label: {
+                    HStack {
+                        if isSelected(option) {
+                            Image(systemName: "checkmark")
+                        }
+                        Text(title(option))
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                    }
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Rectangle())
+                    .background {
+                        if isSelected(option) {
+                            Rectangle()
+                                .fill(Color.primary.opacity(0.08))
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isSelected(option) ? .isSelected : [])
+
+                if index < options.index(before: options.endIndex) {
+                    Divider()
+                }
+            }
+        }
+        .clipShape(Capsule())
+        .overlay {
+            Capsule()
+                .stroke(Color.secondary.opacity(0.55), lineWidth: 1)
+        }
     }
 }

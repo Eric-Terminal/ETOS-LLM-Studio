@@ -15,12 +15,16 @@ extension GeminiAdapter {
     
     public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
         let reasoningContentEchoMode = resolvedReasoningContentEchoMode(from: commonPayload)
+        let suppressesRequestLog = commonPayload[requestLogSuppressionControlKey] as? Bool ?? false
         guard let baseURL = normalizedGeminiBaseURL(from: model.provider.baseURL) else {
             logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
         }
         
-        guard let apiKey = model.provider.apiKeys.randomElement(), !apiKey.isEmpty else {
+        let controlledAPIKey = commonPayload[Self.apiKeyControlKey] as? String
+        guard let apiKey = controlledAPIKey.flatMap({ $0.isEmpty ? nil : $0 })
+            ?? model.provider.apiKeys.randomElement(),
+              !apiKey.isEmpty else {
             logger.error("构建聊天请求失败: 提供商 '\(model.provider.name)' 未配置有效的 API Key。")
             return nil
         }
@@ -104,6 +108,25 @@ extension GeminiAdapter {
             let msgFileAttachments = fileAttachments[msg.id] ?? []
             let audioAttachment = audioAttachments[msg.id]
             
+            // Gemini 视频理解建议先放视频，再放用户问题，便于模型按附件解释后续文本。
+            for fileAttachment in msgFileAttachments where VideoAttachmentSupport.isVideo(fileAttachment) {
+                if let remoteFileURI = fileAttachment.remoteFileURI {
+                    parts.append([
+                        "file_data": [
+                            "mime_type": fileAttachment.mimeType,
+                            "file_uri": remoteFileURI
+                        ]
+                    ])
+                } else {
+                    parts.append([
+                        "inline_data": [
+                            "mime_type": fileAttachment.mimeType,
+                            "data": fileAttachment.data.base64EncodedString()
+                        ]
+                    ])
+                }
+            }
+
             // 添加文本内容
             let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
             if shouldSendText(trimmed) {
@@ -136,7 +159,7 @@ extension GeminiAdapter {
             }
 
             // 添加文件 (Gemini 格式: inline_data)
-            for fileAttachment in msgFileAttachments {
+            for fileAttachment in msgFileAttachments where !VideoAttachmentSupport.isVideo(fileAttachment) {
                 let base64File = fileAttachment.data.base64EncodedString()
                 parts.append([
                     "inline_data": [
@@ -244,13 +267,14 @@ extension GeminiAdapter {
         }
         
         payload = mergedRequestPayload(payload, with: overrides)
+        payload.removeValue(forKey: requestLogSuppressionControlKey)
 
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-            if let httpBody = request.httpBody, let jsonString = String(data: httpBody, encoding: .utf8) {
-                logger.debug("构建的 Gemini 聊天请求体:\n---\n\(jsonString)\n---")
+            logger.debug("已构建 Gemini 聊天请求体，共 \(request.httpBody?.count ?? 0) 字节。")
+            if !suppressesRequestLog {
+                logChatRequestSnapshot(adapterName: "Gemini", request: request, payload: payload)
             }
-            logChatRequestSnapshot(adapterName: "Gemini", request: request, payload: payload)
         } catch {
             logger.error("构建聊天请求失败: JSON 序列化错误 - \(error.localizedDescription)")
             return nil
@@ -284,7 +308,14 @@ extension GeminiAdapter {
     public func parseModelListResponse(data: Data) throws -> [Model] {
         if let errorEnvelope = try? JSONDecoder().decode(GeminiErrorEnvelope.self, from: data),
            let error = errorEnvelope.error {
-            throw NSError(domain: "GeminiAPIError", code: error.code ?? -1, userInfo: [NSLocalizedDescriptionKey: error.message ?? "未知错误"])
+            throw NSError(
+                domain: "GeminiAPIError",
+                code: error.code ?? -1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: error.message
+                        ?? NSLocalizedString("未知错误", comment: "Generic unknown error")
+                ]
+            )
         }
 
         let response = try JSONDecoder().decode(GeminiModelListResponse.self, from: data)
@@ -329,6 +360,7 @@ extension GeminiAdapter {
         var textContent = ""
         var reasoningContent: String? = nil
         var internalToolCalls: [InternalToolCall] = []
+        let responseMessageID = UUID()
         
         for (index, part) in parts.enumerated() {
             if let text = part.text {
@@ -345,7 +377,7 @@ extension GeminiAdapter {
                    !existingCallId.isEmpty {
                     callId = existingCallId
                 } else {
-                    callId = "gemini_call_\(index)"
+                    callId = "gemini-\(responseMessageID.uuidString)-\(index)"
                 }
                 var argsString = "{}"
                 if let args = functionCall.args {
@@ -369,7 +401,7 @@ extension GeminiAdapter {
         }
         
         return ChatMessage(
-            id: UUID(),
+            id: responseMessageID,
             role: .assistant,
             content: textContent,
             reasoningContent: reasoningContent,
@@ -389,13 +421,26 @@ extension GeminiAdapter {
         
         do {
             let chunk = try JSONDecoder().decode(GeminiResponse.self, from: data)
-            
-            guard let candidate = chunk.candidates?.first,
+            if let error = chunk.error {
+                return ChatMessagePart(streamTermination: .failed(reason: error.message))
+            }
+
+            let candidate = chunk.candidates?.first
+            let streamTermination: ChatMessagePart.StreamTermination? = {
+                guard let finishReason = candidate?.finishReason,
+                      !finishReason.isEmpty else { return nil }
+                return .completed
+            }()
+
+            guard let candidate,
                   let content = candidate.content,
                   let parts = content.parts else {
                 // 可能只有 usageMetadata
-                if let usage = chunk.usageMetadata {
-                    return ChatMessagePart(tokenUsage: makeTokenUsage(from: usage))
+                if chunk.usageMetadata != nil || streamTermination != nil {
+                    return ChatMessagePart(
+                        tokenUsage: makeTokenUsage(from: chunk.usageMetadata),
+                        streamTermination: streamTermination
+                    )
                 }
                 return nil
             }
@@ -413,12 +458,14 @@ extension GeminiAdapter {
                     }
                 }
                 if let functionCall = part.functionCall {
-                    let callId: String
+                    let callId: String?
                     if let existingCallId = functionCall.id?.trimmingCharacters(in: .whitespacesAndNewlines),
                        !existingCallId.isEmpty {
                         callId = existingCallId
                     } else {
-                        callId = "gemini_call_\(index)"
+                        // 流式适配器本身没有消息身份；留空后由响应编排器按 loadingMessageID
+                        // 生成在整个响应期间稳定、跨消息唯一的调用 ID。
+                        callId = nil
                     }
                     var argsString: String? = nil
                     if let args = functionCall.args {
@@ -449,7 +496,8 @@ extension GeminiAdapter {
                 content: textContent,
                 reasoningContent: reasoningContent,
                 toolCallDeltas: toolCallDeltas,
-                tokenUsage: makeTokenUsage(from: chunk.usageMetadata)
+                tokenUsage: makeTokenUsage(from: chunk.usageMetadata),
+                streamTermination: streamTermination
             )
         } catch {
             logger.warning("Gemini 流式 JSON 解析失败: \(error.localizedDescription) - 原始数据: '\(dataString)'")

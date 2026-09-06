@@ -195,14 +195,15 @@ Worldbooks are **global resources** but only inject **when you explicitly bind**
 
 In the Worldbook page's "Current Session" section, **"Bind Worldbook"** binds the current session to one (or more) worldbooks. Bound worldbook entries then participate in matching and injection.
 
-### Isolation Mode (Key Feature)
+### Per-Session Context Blocking (Key Feature)
 
-When binding, you can enable **"Isolated Send"**. With isolation on:
+The current roleplay session offers three independent switches:
 
-- The session uses **only** the bound worldbooks + character setup; **no** global tools, memory, or other auto-injections
-- All tools in this session become **disabled** (shown as "This session has worldbook isolation enabled; this tool will not actually be active")
+- **Block Memory** removes long-term memory, cross-session summaries, and the user profile, along with memory write and active-retrieval tools.
+- **Block Tools** removes App, MCP, Agent Skills, and Shortcut tools plus historical tool-call messages, while allowing memory context to remain.
+- **Block Global System Prompt** removes only the global system prompt. Session prompts, character cards, personas, and lorebooks remain.
 
-Good for: **roleplay sessions**, where you don't want the AI suddenly calling a SQL query mid-scene.
+These switches do not require a bound worldbook. They are useful for **roleplay and image-prompt sessions** where global instructions should stay out while selected tools or memory remain available.
 
 ## Advanced
 

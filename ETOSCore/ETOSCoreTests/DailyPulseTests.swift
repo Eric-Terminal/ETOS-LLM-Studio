@@ -58,6 +58,7 @@ struct DailyPulseTests {
         #expect(userInfo["runID"] as? String == runID.uuidString)
         #expect(userInfo["cardID"] as? String == cardID.uuidString)
         #expect(AppLocalNotificationCenter.dailyPulseCategoryIdentifier(kind: "ready") == "dailyPulse.ready")
+        #expect(AppLocalNotificationCenter.dailyPulseCategoryIdentifier(kind: "card") == "dailyPulse.ready")
         #expect(AppLocalNotificationCenter.dailyPulseCategoryIdentifier(kind: "reminder") == "dailyPulse.reminder")
     }
 
@@ -240,6 +241,105 @@ struct DailyPulseTests {
             force: false,
             trigger: .automatic,
             autoGenerateEnabled: true
+        ))
+    }
+
+    @Test("分批检查点只会跳过已经完整保存的送达组")
+    func generationCheckpointResumesCompletedDeliveryGroups() {
+        let morning = DailyPulseDeliveryTime(
+            id: UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!,
+            hour: 8,
+            minute: 30
+        )
+        let evening = DailyPulseDeliveryTime(
+            id: UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!,
+            hour: 18,
+            minute: 0
+        )
+        let card = DailyPulseCard(
+            id: UUID(uuidString: "CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC")!,
+            title: "上午卡片",
+            whyRecommended: "原因",
+            summary: "摘要",
+            detailsMarkdown: "详情",
+            suggestedPrompt: "继续"
+        )
+        let checkpoint = DailyPulseGenerationCheckpoint(
+            dayKey: "2026-08-15",
+            scheduleSignature: "model|schedule",
+            sourceDigest: "digest",
+            generatedCards: [card],
+            deliveryBatches: [
+                DailyPulseDeliveryBatch(
+                    deliveryTimeID: morning.id,
+                    scheduledAt: Date(timeIntervalSince1970: 1_776_000_000),
+                    headline: "上午",
+                    cardIDs: [card.id]
+                )
+            ]
+        )
+
+        #expect(checkpoint.hasCompletedDeliveryGroup([morning]))
+        #expect(!checkpoint.hasCompletedDeliveryGroup([evening]))
+        #expect(DailyPulseManager.resumableCheckpoint(
+            from: [checkpoint],
+            dayKey: "2026-08-15",
+            scheduleSignature: "model|schedule"
+        ) == checkpoint)
+        #expect(DailyPulseManager.resumableCheckpoint(
+            from: [checkpoint],
+            dayKey: "2026-08-15",
+            scheduleSignature: "changed"
+        ) == nil)
+    }
+
+    @Test("失败冷却按次数退避且手动生成可以立即重试")
+    func generationFailureCooldownBacksOff() {
+        let now = Date(timeIntervalSince1970: 1_776_000_000)
+        let first = DailyPulseManager.failedGenerationAttempt(
+            dayKey: "2026-08-15",
+            previousAttempt: nil,
+            referenceDate: now
+        )
+        let second = DailyPulseManager.failedGenerationAttempt(
+            dayKey: "2026-08-15",
+            previousAttempt: first,
+            referenceDate: now
+        )
+
+        #expect(first.retryAfter.timeIntervalSince(now) == 15 * 60)
+        #expect(second.retryAfter.timeIntervalSince(now) == 30 * 60)
+        #expect(!DailyPulseManager.shouldAttemptGeneration(
+            trigger: .automatic,
+            attempt: first,
+            referenceDate: now.addingTimeInterval(60)
+        ))
+        #expect(DailyPulseManager.shouldAttemptGeneration(
+            trigger: .manual,
+            attempt: second,
+            referenceDate: now
+        ))
+    }
+
+    @Test("手表仅在同步开启且 iPhone 可达时让出自动生成")
+    func watchGenerationDefersToReachablePhone() {
+        #expect(!DailyPulseManager.shouldGenerateOnCurrentDevice(
+            trigger: .automatic,
+            isWatchOS: true,
+            syncEnabled: true,
+            companionReachable: true
+        ))
+        #expect(DailyPulseManager.shouldGenerateOnCurrentDevice(
+            trigger: .delivery,
+            isWatchOS: true,
+            syncEnabled: true,
+            companionReachable: false
+        ))
+        #expect(DailyPulseManager.shouldGenerateOnCurrentDevice(
+            trigger: .manual,
+            isWatchOS: true,
+            syncEnabled: true,
+            companionReachable: true
         ))
     }
 

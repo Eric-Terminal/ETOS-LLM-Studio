@@ -375,10 +375,96 @@ enum WatchWebHTMLDocumentFactory {
         content.innerHTML = '<div class="math-fallback">' + escapeHTML(raw).replaceAll("\\n", "<br/>") + '</div>';
       }
 
+      // marked 会移除 LaTeX 括号定界符的反斜杠；先用节点保护公式，避免被当作普通文本。
+      function tokenizeMath(source) {
+        const expressions = [];
+        let rewritten = source.replace(/\\$\\$([\\s\\S]+?)\\$\\$/g, (_, latex) => {
+          const index = expressions.length;
+          expressions.push({ latex: latex.trim(), displayMode: true });
+          return `\n\n<div class="et-math-block" data-et-math-index="${index}"></div>\n\n`;
+        });
+
+        let cursor = 0;
+        let bracketRewritten = "";
+        while (cursor < rewritten.length) {
+          const start = rewritten.indexOf("\\\\[", cursor);
+          if (start < 0) {
+            bracketRewritten += rewritten.slice(cursor);
+            break;
+          }
+          const end = rewritten.indexOf("\\\\]", start + 2);
+          if (end < 0) {
+            bracketRewritten += rewritten.slice(cursor);
+            break;
+          }
+
+          const index = expressions.length;
+          expressions.push({
+            latex: rewritten.slice(start + 2, end).trim(),
+            displayMode: true
+          });
+          bracketRewritten += rewritten.slice(cursor, start);
+          bracketRewritten += `\n\n<div class="et-math-block" data-et-math-index="${index}"></div>\n\n`;
+          cursor = end + 2;
+        }
+
+        cursor = 0;
+        let inlineRewritten = "";
+        while (cursor < bracketRewritten.length) {
+          const start = bracketRewritten.indexOf("\\\\(", cursor);
+          if (start < 0) {
+            inlineRewritten += bracketRewritten.slice(cursor);
+            break;
+          }
+          const end = bracketRewritten.indexOf("\\\\)", start + 2);
+          if (end < 0) {
+            inlineRewritten += bracketRewritten.slice(cursor);
+            break;
+          }
+
+          const index = expressions.length;
+          expressions.push({
+            latex: bracketRewritten.slice(start + 2, end).trim(),
+            displayMode: false
+          });
+          inlineRewritten += bracketRewritten.slice(cursor, start);
+          inlineRewritten += `<span class="et-math-inline" data-et-math-index="${index}"></span>`;
+          cursor = end + 2;
+        }
+
+        return { markdown: inlineRewritten, expressions };
+      }
+
+      function renderProtectedMath(expressions) {
+        if (!window.katex || !Array.isArray(expressions)) {
+          return;
+        }
+        content.querySelectorAll("[data-et-math-index]").forEach((node) => {
+          const index = Number(node.getAttribute("data-et-math-index"));
+          const expression = expressions[index];
+          if (!Number.isInteger(index) || !expression || !expression.latex) {
+            return;
+          }
+          try {
+            window.katex.render(expression.latex, node, {
+              displayMode: expression.displayMode,
+              throwOnError: false,
+              strict: "ignore"
+            });
+          } catch (_) {
+            node.textContent = expression.displayMode
+              ? `$$\n${expression.latex}\n$$`
+              : `$${expression.latex}$`;
+          }
+        });
+      }
+
       function render() {
         if (window.marked) {
           try {
-            content.innerHTML = window.marked.parse(raw, { gfm: true, breaks: false });
+            const tokenized = tokenizeMath(raw);
+            content.innerHTML = window.marked.parse(tokenized.markdown, { gfm: true, breaks: false });
+            renderProtectedMath(tokenized.expressions);
           } catch (_) {
             renderFallback();
           }

@@ -11,7 +11,7 @@ import Foundation
 import GRDB
 import os.log
 
-struct MemoryRawStore {
+struct MemoryRawStore: Sendable {
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "MemoryRawStore")
     private static var isRunningUnitTests: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
@@ -25,20 +25,12 @@ struct MemoryRawStore {
         queue.setSpecific(key: sqliteWriteQueueSpecificKey, value: 1)
         return queue
     }()
-    private let encoder: JSONEncoder
-    private let decoder: JSONDecoder
     private let rootDirectory: URL?
     private let grdbBlobKey = "memory_raw_memories"
     private var legacyBlobKeys: [String] { [grdbBlobKey, "memory_raw_memories_v1"] }
     
     init(rootDirectory: URL? = nil) {
         self.rootDirectory = rootDirectory
-        encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        
-        decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
     }
     
     func loadMemories() -> [MemoryItem] {
@@ -74,6 +66,151 @@ struct MemoryRawStore {
         if canUseGRDB {
             _ = saveMemoriesToSQLite(memories, asynchronously: !Self.isRunningUnitTests)
         }
+    }
+
+    /// 记忆正文与审计记录在同一个 GRDB 事务内提交；任一写入失败都不会留下半条历史。
+    func commitMutations(
+        _ mutations: [MemoryPendingMutation],
+        resultingMemories: [MemoryItem]
+    ) -> Bool {
+        guard !mutations.isEmpty else { return true }
+        if canUseGRDB {
+            let encoder = Self.makeEncoder()
+            // 先排空旧的异步镜像写入，避免它在审计事务之后回写过期快照。
+            Self.flushPendingSQLiteWritesForSnapshot()
+            let succeeded = Persistence.withMemoryDatabaseWrite { db in
+                for mutation in mutations {
+                    if let memory = mutation.after {
+                        try Self.upsert(memory: memory, in: db)
+                    } else {
+                        try db.execute(
+                            sql: "DELETE FROM memory_items WHERE id = ?",
+                            arguments: [mutation.record.memoryID.uuidString]
+                        )
+                    }
+                    try Self.insertMutation(mutation.record, in: db, encoder: encoder)
+                }
+                return true
+            } ?? false
+            guard succeeded else { return false }
+            persistJSONMirror(resultingMemories)
+            WatchDatabaseSyncService.markDatabaseChanged(.memory)
+            return true
+        }
+
+        do {
+            let encoder = Self.makeEncoder()
+            let memoryURL = MemoryStoragePaths.rawMemoriesFileURL(rootDirectory: rootDirectory)
+            let historyURL = MemoryStoragePaths.mutationHistoryFileURL(rootDirectory: rootDirectory)
+            let previousMemoryData = try? Data(contentsOf: memoryURL)
+            let previousHistoryData = try? Data(contentsOf: historyURL)
+            var history = loadMutationHistoryFromJSON()
+            history.append(contentsOf: mutations.map(\.record))
+            do {
+                try encoder.encode(resultingMemories).write(to: memoryURL, options: [.atomicWrite, .completeFileProtection])
+                try encoder.encode(history).write(to: historyURL, options: [.atomicWrite, .completeFileProtection])
+                return true
+            } catch {
+                try? Self.restoreFile(at: memoryURL, data: previousMemoryData)
+                try? Self.restoreFile(at: historyURL, data: previousHistoryData)
+                throw error
+            }
+        } catch {
+            logger.error("提交记忆与审计记录失败: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    func loadMutationHistory(memoryID: UUID? = nil, limit: Int = 200) -> [MemoryMutationRecord] {
+        let boundedLimit = min(max(limit, 1), 2_000)
+        if canUseGRDB {
+            let decoder = Self.makeDecoder()
+            return Persistence.withMemoryDatabaseRead { db in
+                let rows: [Row]
+                if let memoryID {
+                    rows = try Row.fetchAll(
+                        db,
+                        sql: """
+                            SELECT * FROM memory_mutation_history
+                            WHERE memory_id = ?
+                            ORDER BY created_at DESC, id DESC
+                            LIMIT ?
+                        """,
+                        arguments: [memoryID.uuidString, boundedLimit]
+                    )
+                } else {
+                    rows = try Row.fetchAll(
+                        db,
+                        sql: """
+                            SELECT * FROM memory_mutation_history
+                            ORDER BY created_at DESC, id DESC
+                            LIMIT ?
+                        """,
+                        arguments: [boundedLimit]
+                    )
+                }
+                return try rows.map { try Self.decodeMutation(row: $0, decoder: decoder) }
+            } ?? []
+        }
+        return Array(loadMutationHistoryFromJSON()
+            .filter { memoryID == nil || $0.memoryID == memoryID }
+            .sorted { $0.createdAt > $1.createdAt }
+            .prefix(boundedLimit))
+    }
+
+    @discardableResult
+    func saveTransferReceipt(_ receipt: MemoryTransferReceipt) -> Bool {
+        if canUseGRDB {
+            let succeeded = Persistence.withMemoryDatabaseWrite { db in
+                try db.execute(
+                    sql: """
+                        INSERT INTO memory_transfer_receipts (
+                            id, kind, file_name, payload_sha256, added_count,
+                            updated_count, conflict_count, archived_count, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    arguments: [
+                        receipt.id.uuidString,
+                        receipt.kind.rawValue,
+                        receipt.fileName,
+                        receipt.payloadSHA256,
+                        receipt.addedCount,
+                        receipt.updatedCount,
+                        receipt.conflictCount,
+                        receipt.archivedCount,
+                        receipt.createdAt.timeIntervalSince1970
+                    ]
+                )
+                return true
+            } ?? false
+            if succeeded { WatchDatabaseSyncService.markDatabaseChanged(.memory) }
+            return succeeded
+        }
+        do {
+            let encoder = Self.makeEncoder()
+            let url = MemoryStoragePaths.transferReceiptsFileURL(rootDirectory: rootDirectory)
+            var receipts = loadTransferReceiptsFromJSON()
+            receipts.append(receipt)
+            try encoder.encode(receipts).write(to: url, options: [.atomicWrite, .completeFileProtection])
+            return true
+        } catch {
+            logger.error("保存记忆迁移回执失败: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    func loadTransferReceipts(limit: Int = 100) -> [MemoryTransferReceipt] {
+        let boundedLimit = min(max(limit, 1), 1_000)
+        if canUseGRDB {
+            return Persistence.withMemoryDatabaseRead { db in
+                try Row.fetchAll(
+                    db,
+                    sql: "SELECT * FROM memory_transfer_receipts ORDER BY created_at DESC, id DESC LIMIT ?",
+                    arguments: [boundedLimit]
+                ).compactMap(Self.decodeTransferReceipt)
+            } ?? []
+        }
+        return Array(loadTransferReceiptsFromJSON().sorted { $0.createdAt > $1.createdAt }.prefix(boundedLimit))
     }
 
     static func flushPendingSQLiteWritesForSnapshot() {
@@ -273,10 +410,168 @@ struct MemoryRawStore {
         do {
             MemoryStoragePaths.ensureRootDirectory(rootDirectory: rootDirectory)
             let fileURL = MemoryStoragePaths.rawMemoriesFileURL(rootDirectory: rootDirectory)
-            let data = try encoder.encode(memories)
+            let data = try Self.makeEncoder().encode(memories)
             try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
         } catch {
             logger.error("写入 Memory JSON 镜像失败: \(error.localizedDescription)")
+        }
+    }
+
+    private func loadMutationHistoryFromJSON() -> [MemoryMutationRecord] {
+        let url = MemoryStoragePaths.mutationHistoryFileURL(rootDirectory: rootDirectory)
+        guard let data = try? Data(contentsOf: url) else { return [] }
+        return (try? Self.makeDecoder().decode([MemoryMutationRecord].self, from: data)) ?? []
+    }
+
+    private func loadTransferReceiptsFromJSON() -> [MemoryTransferReceipt] {
+        let url = MemoryStoragePaths.transferReceiptsFileURL(rootDirectory: rootDirectory)
+        guard let data = try? Data(contentsOf: url) else { return [] }
+        return (try? Self.makeDecoder().decode([MemoryTransferReceipt].self, from: data)) ?? []
+    }
+
+    static func applyMutationForTests(
+        _ mutation: MemoryPendingMutation,
+        in db: Database
+    ) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        if let after = mutation.after {
+            try upsert(memory: after, in: db)
+        } else {
+            try db.execute(sql: "DELETE FROM memory_items WHERE id = ?", arguments: [mutation.record.memoryID.uuidString])
+        }
+        try insertMutation(mutation.record, in: db, encoder: encoder)
+    }
+
+    private static func upsert(memory: MemoryItem, in db: Database) throws {
+        try db.execute(
+            sql: """
+                INSERT INTO memory_items (
+                    id, content, embedding_data, created_at, updated_at, is_archived,
+                    kind, source, importance, confidence, entities_json,
+                    valid_from, valid_until, source_session_id, access_count, last_accessed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    content = excluded.content,
+                    embedding_data = excluded.embedding_data,
+                    created_at = excluded.created_at,
+                    updated_at = excluded.updated_at,
+                    is_archived = excluded.is_archived,
+                    kind = excluded.kind,
+                    source = excluded.source,
+                    importance = excluded.importance,
+                    confidence = excluded.confidence,
+                    entities_json = excluded.entities_json,
+                    valid_from = excluded.valid_from,
+                    valid_until = excluded.valid_until,
+                    source_session_id = excluded.source_session_id,
+                    access_count = excluded.access_count,
+                    last_accessed_at = excluded.last_accessed_at
+            """,
+            arguments: [
+                memory.id.uuidString,
+                memory.content,
+                RelationalFloatArrayCodec.encode(memory.embedding),
+                memory.createdAt.timeIntervalSince1970,
+                memory.updatedAt?.timeIntervalSince1970,
+                memory.isArchived ? 1 : 0,
+                memory.kind.rawValue,
+                memory.source.rawValue,
+                memory.importance,
+                memory.confidence,
+                encodeEntities(memory.entities),
+                memory.validFrom?.timeIntervalSince1970,
+                memory.validUntil?.timeIntervalSince1970,
+                memory.sourceSessionID?.uuidString,
+                memory.accessCount,
+                memory.lastAccessedAt?.timeIntervalSince1970
+            ]
+        )
+    }
+
+    private static func insertMutation(
+        _ record: MemoryMutationRecord,
+        in db: Database,
+        encoder: JSONEncoder
+    ) throws {
+        let beforeData = try record.before.map { try encoder.encode($0) }
+        let afterData = try record.after.map { try encoder.encode($0) }
+        try db.execute(
+            sql: """
+                INSERT INTO memory_mutation_history (
+                    id, memory_id, operation, origin, source_session_id,
+                    source_message_id, source_tool_name, source_shortcut_name,
+                    transfer_receipt_id, before_digest, after_digest,
+                    before_snapshot_json, after_snapshot_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            arguments: [
+                record.id.uuidString,
+                record.memoryID.uuidString,
+                record.operation.rawValue,
+                record.context.origin.rawValue,
+                record.context.sourceSessionID?.uuidString,
+                record.context.sourceMessageID?.uuidString,
+                record.context.sourceToolName,
+                record.context.sourceShortcutName,
+                record.context.transferReceiptID?.uuidString,
+                record.before?.digest,
+                record.after?.digest,
+                beforeData,
+                afterData,
+                record.createdAt.timeIntervalSince1970
+            ]
+        )
+    }
+
+    private static func decodeMutation(row: Row, decoder: JSONDecoder) throws -> MemoryMutationRecord {
+        let beforeData: Data? = row["before_snapshot_json"]
+        let afterData: Data? = row["after_snapshot_json"]
+        let createdAt: Double = row["created_at"]
+        let sourceSessionID: String? = row["source_session_id"]
+        let sourceMessageID: String? = row["source_message_id"]
+        let transferReceiptID: String? = row["transfer_receipt_id"]
+        return MemoryMutationRecord(
+            id: UUID(uuidString: row["id"]) ?? UUID(),
+            memoryID: UUID(uuidString: row["memory_id"]) ?? UUID(),
+            operation: MemoryMutationOperation(rawValue: row["operation"]) ?? .edited,
+            context: MemoryMutationContext(
+                origin: MemoryMutationOrigin(rawValue: row["origin"]) ?? .manual,
+                sourceSessionID: sourceSessionID.flatMap(UUID.init(uuidString:)),
+                sourceMessageID: sourceMessageID.flatMap(UUID.init(uuidString:)),
+                sourceToolName: row["source_tool_name"],
+                sourceShortcutName: row["source_shortcut_name"],
+                transferReceiptID: transferReceiptID.flatMap(UUID.init(uuidString:))
+            ),
+            before: try beforeData.map { try decoder.decode(MemoryVersionSnapshot.self, from: $0) },
+            after: try afterData.map { try decoder.decode(MemoryVersionSnapshot.self, from: $0) },
+            createdAt: Date(timeIntervalSince1970: createdAt)
+        )
+    }
+
+    private static func decodeTransferReceipt(row: Row) -> MemoryTransferReceipt? {
+        guard let id = UUID(uuidString: row["id"]),
+              let kind = MemoryTransferKind(rawValue: row["kind"]) else { return nil }
+        let createdAt: Double = row["created_at"]
+        return MemoryTransferReceipt(
+            id: id,
+            kind: kind,
+            fileName: row["file_name"],
+            payloadSHA256: row["payload_sha256"],
+            addedCount: row["added_count"],
+            updatedCount: row["updated_count"],
+            conflictCount: row["conflict_count"],
+            archivedCount: row["archived_count"],
+            createdAt: Date(timeIntervalSince1970: createdAt)
+        )
+    }
+
+    private static func restoreFile(at url: URL, data: Data?) throws {
+        if let data {
+            try data.write(to: url, options: .atomic)
+        } else if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
         }
     }
 
@@ -288,7 +583,7 @@ struct MemoryRawStore {
 
         do {
             let data = try Data(contentsOf: fileURL)
-            return try decoder.decode([MemoryItem].self, from: data)
+            return try Self.makeDecoder().decode([MemoryItem].self, from: data)
         } catch {
             logger.error("读取 Memory JSON 失败: \(error.localizedDescription)")
             return nil
@@ -309,6 +604,19 @@ struct MemoryRawStore {
             return []
         }
         return entities
+    }
+
+    private static func makeEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }
+
+    private static func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
     }
 
     private struct RelationalMemoryItemRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord, Equatable {

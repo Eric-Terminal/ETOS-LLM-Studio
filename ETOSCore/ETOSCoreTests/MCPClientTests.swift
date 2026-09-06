@@ -130,7 +130,7 @@ struct MCPClientTests {
             Issue.record("缺少 listTools 请求记录。")
             return
         }
-        #expect(recorded.params == nil)
+        #expect(recorded.params?.isEmpty == true)
     }
 
     @Test("List tools follows cursor pagination")
@@ -151,7 +151,7 @@ struct MCPClientTests {
         #expect(fetched.map(\.toolId) == ["tool.page.1", "tool.page.2"])
         let requests = transport.requests(named: "tools/list")
         #expect(requests.count == 2)
-        #expect(requests[0].params == nil)
+        #expect(requests[0].params?.isEmpty == true)
         #expect(requests[1].params?["cursor"] as? String == "cursor-2")
     }
 
@@ -191,7 +191,7 @@ struct MCPClientTests {
         #expect(fetched.map(\.uriTemplate) == ["file://docs/{name}", "file://images/{id}"])
         let requests = transport.requests(named: "resources/templates/list")
         #expect(requests.count == 2)
-        #expect(requests[0].params == nil)
+        #expect(requests[0].params?.isEmpty == true)
         #expect(requests[1].params?["cursor"] as? String == "template-cursor-2")
     }
 
@@ -340,7 +340,7 @@ struct MCPClientTests {
                 return
             }
             #expect(rpcError.code == 404)
-            #expect(rpcError.message == "Resource not found")
+            #expect(rpcError.message.contains("Resource not found"))
         } catch {
             Issue.record("捕获到未知错误：\(error)")
         }

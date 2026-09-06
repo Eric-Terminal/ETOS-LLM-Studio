@@ -41,6 +41,40 @@ struct UpdateTimelineStateTests {
         #expect(state.summaryCommits.count == 30)
     }
 
+    @Test("检查更新代理响应忽略新增字段并保留提交与 CI 上下文")
+    func updateTimelineProxyEnvelopeToleratesAdditiveFields() throws {
+        let data = Data(
+            """
+            {
+              "version": 1,
+              "branch": "dev",
+              "future_top_level_field": true,
+              "commits": [
+                {
+                  "oid": "abcdef1234567890",
+                  "message_headline": "feat: 测试",
+                  "message": "feat: 测试\\n\\n正文",
+                  "committed_at": "2026-07-24T07:00:00Z",
+                  "url": "https://github.com/Eric-Terminal/ETOS-LLM-Studio/commit/abcdef1234567890",
+                  "ci_contexts": ["Xcode Cloud / iOS"],
+                  "future_commit_field": {"enabled": true}
+                }
+              ]
+            }
+            """.utf8
+        )
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let envelope = try decoder.decode(UpdateTimelineProxyEnvelope.self, from: data)
+        let commit = try #require(envelope.commits.first?.timelineCommit)
+
+        #expect(envelope.version == 1)
+        #expect(commit.oid == "abcdef1234567890")
+        #expect(commit.messageHeadline == "feat: 测试")
+        #expect(commit.ciContexts == ["Xcode Cloud / iOS"])
+    }
+
     private func makeCommit(_ oid: String) -> UpdateTimelineCommit {
         UpdateTimelineCommit(
             oid: oid,

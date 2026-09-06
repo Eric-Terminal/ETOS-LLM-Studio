@@ -52,6 +52,25 @@ struct BuiltInPromptStoreTests {
         #expect(!BuiltInPromptStore.snapshot(for: id).isCustomized)
     }
 
+    @Test("选区重写提示词会分别注入要求、选区和全文上下文")
+    func partialRewritePromptRendersAllBoundaries() {
+        let rendered = BuiltInPromptStore.render(
+            .messagePartialRewriteUser,
+            variables: [
+                "instruction": "改得更简洁",
+                "selection": "**原选区**",
+                "original": "前文 **原选区** 后文"
+            ]
+        )
+
+        #expect(rendered.contains("改得更简洁"))
+        #expect(rendered.contains("**原选区**"))
+        #expect(rendered.contains("前文 **原选区** 后文"))
+        #expect(!rendered.contains("{instruction}"))
+        #expect(!rendered.contains("{selection}"))
+        #expect(!rendered.contains("{original}"))
+    }
+
     private func storageKey(for id: BuiltInPromptID) -> String {
         "builtInPrompt.custom.\(id.rawValue)"
     }

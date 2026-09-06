@@ -36,6 +36,27 @@ public struct StorageManagementView: View {
             cleanupToolsSection
         }
         .navigationTitle(NSLocalizedString("存储管理", comment: ""))
+        .guideSettingsPageContext(
+            id: "watch-settings-storage-management",
+            title: NSLocalizedString("存储管理", comment: "存储管理向导上下文标题"),
+            documents: [GuideDocumentReference(id: "storage-management", title: "Storage Management")],
+            settings: [
+                .readOnly("loading", label: NSLocalizedString("正在统计", comment: "向导设置字段"), value: { .bool(isLoading) }),
+                .readOnly("total_bytes", label: NSLocalizedString("总使用空间", comment: "向导设置字段"), value: { .int(Int(clamping: storageBreakdown.totalSize)) }),
+                .readOnly("cache_bytes", label: NSLocalizedString("缓存", comment: "向导设置字段"), value: { .int(Int(clamping: storageBreakdown.cacheSize)) }),
+                .readOnly("orphaned_item_count", label: NSLocalizedString("孤立数据", comment: "向导设置字段"), value: { .int(orphanedDataCount.total) }),
+                .readOnly("categories", label: NSLocalizedString("存储分类", comment: "向导设置字段"), value: {
+                    .array(StorageCategory.allCases.map { category in
+                        .dictionary([
+                            "id": .string(category.rawValue),
+                            "name": .string(category.displayName),
+                            "bytes": .int(Int(clamping: storageBreakdown.categorySize[category] ?? 0))
+                        ])
+                    })
+                })
+            ]
+        )
+        .watchGuideEntry()
         .task {
             await refreshData()
         }

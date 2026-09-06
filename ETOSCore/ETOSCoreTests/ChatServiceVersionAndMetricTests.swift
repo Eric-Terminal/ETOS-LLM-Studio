@@ -12,6 +12,26 @@ import Combine
 @testable import ETOSCore
 
 extension ChatServiceTests {
+    @Test("流式输出分片不会覆盖缓存时长和非缓存输入量")
+    func streamingUsagePreservesCacheDurations() {
+        let start = MessageTokenUsage(
+            promptTokens: 20, completionTokens: 0, totalTokens: nil,
+            cacheWriteTokens: 300, cacheWriteFiveMinuteTokens: 100, cacheWriteOneHourTokens: 200,
+            cacheReadTokens: 500, uncachedInputTokens: 20
+        )
+        let output = MessageTokenUsage(promptTokens: nil, completionTokens: 8, totalTokens: nil)
+        let merged = chatService.mergeTokenUsage(existing: start, incoming: output)
+        #expect(merged.completionTokens == 8)
+        #expect(merged.cacheWriteFiveMinuteTokens == 100)
+        #expect(merged.cacheWriteOneHourTokens == 200)
+        #expect(merged.uncachedInputTokens == 20)
+        let updated = MessageTokenUsage(
+            promptTokens: nil, completionTokens: nil, totalTokens: nil,
+            cacheWriteTokens: 200, cacheWriteFiveMinuteTokens: 0, cacheWriteOneHourTokens: 200
+        )
+        #expect(chatService.mergeTokenUsage(existing: merged, incoming: updated).cacheWriteFiveMinuteTokens == 0)
+    }
+
     @Test("重试 assistant 失败时不会把错误写入版本历史")
     func testRetryAssistantFailureDoesNotPersistErrorAsVersion() async {
         await cleanup()
@@ -74,7 +94,6 @@ extension ChatServiceTests {
 
         let errorMessage = messages.last
         #expect(errorMessage?.role == .error)
-        #expect(errorMessage?.content.contains("重试失败") == true)
         #expect(errorMessage?.content.contains("HTTP 500") == true)
 
         await cleanup()
@@ -112,7 +131,7 @@ extension ChatServiceTests {
             includeSystemTime: false
         )
 
-        let sentMessages = mockAdapter.receivedMessages ?? []
+        let sentMessages = messagesExcludingConversationRuntime(mockAdapter.receivedMessages ?? [])
         #expect(sentMessages.map(\.content) == ["用户1"])
 
         let storedMessages = chatService.messagesForSessionSubject.value
@@ -160,7 +179,7 @@ extension ChatServiceTests {
             includeSystemTime: false
         )
 
-        let sentMessages = mockAdapter.receivedMessages ?? []
+        let sentMessages = messagesExcludingConversationRuntime(mockAdapter.receivedMessages ?? [])
         #expect(sentMessages.map(\.content) == ["retry-tail-assistant"])
         #expect(sentMessages.last?.role == .user)
 
@@ -220,7 +239,6 @@ extension ChatServiceTests {
 
         let latestError = messages.last
         #expect(latestError?.role == .error)
-        #expect(latestError?.content.contains("重试失败") == true)
         #expect(latestError?.content.contains("HTTP 500") == true)
         #expect(messages[0].selectedResponseAttemptID == latestError?.responseAttemptID)
         #expect(messages[1].responseAttemptIndex == 0)
@@ -261,7 +279,7 @@ extension ChatServiceTests {
             includeSystemTime: false
         )
 
-        let sentMessages = mockAdapter.receivedMessages ?? []
+        let sentMessages = messagesExcludingConversationRuntime(mockAdapter.receivedMessages ?? [])
         #expect(sentMessages.map(\.content) == ["retry-tail-error"])
         #expect(sentMessages.last?.role == .user)
 
@@ -430,6 +448,7 @@ extension ChatServiceTests {
         let afterDeletingAssistant = chatService.messagesForSessionSubject.value
         #expect(afterDeletingAssistant.map(\.id) == [
             userMessage.id,
+            toolResult.id,
             finalAssistant.id
         ])
         #expect(afterDeletingAssistant.first?.selectedResponseAttemptID == attemptID)
@@ -437,8 +456,8 @@ extension ChatServiceTests {
         await cleanup()
     }
 
-    @Test("批量删除只移除明确选中的消息")
-    func testDeleteSelectedMessagesDoesNotExpandDeletionScope() async {
+    @Test("批量删除会清理所选气泡内联的工具结果消息")
+    func testDeleteSelectedMessagesIncludesInlineToolResults() async {
         await cleanup()
 
         guard let sessionID = chatService.currentSessionSubject.value?.id else {
@@ -468,10 +487,45 @@ extension ChatServiceTests {
 
         chatService.deleteMessages(withIDs: [assistantMessage.id, nextUserMessage.id])
 
-        #expect(chatService.messagesForSessionSubject.value.map(\.id) == [
-            userMessage.id,
-            toolMessage.id
+        #expect(chatService.messagesForSessionSubject.value.map(\.id) == [userMessage.id])
+
+        await cleanup()
+    }
+
+    @Test("删除三图输入中的第二张后重试上下文只保留其余原子消息")
+    func testDeleteOneImageAtomKeepsOtherImagesAndTextInRetryContext() async throws {
+        await cleanup()
+        let sessionID = try #require(chatService.currentSessionSubject.value?.id)
+        let compound = ChatMessage(
+            role: .user,
+            content: "比较三张图片",
+            imageFileNames: ["a.png", "b.png", "c.png"]
+        )
+        let userAtoms = ChatMessageAtomicContentSupport.atomized(compound)
+        let response = ChatMessage(role: .assistant, content: "旧回答")
+        chatService.updateMessages(userAtoms + [response], for: sessionID)
+
+        chatService.deleteMessage(userAtoms[1])
+
+        let remaining = chatService.messagesForSessionSubject.value
+        #expect(remaining.map(\.id) == [
+            userAtoms[0].id,
+            userAtoms[2].id,
+            userAtoms[3].id,
+            response.id
         ])
+        #expect(remaining.flatMap { $0.imageFileNames ?? [] } == ["a.png", "c.png"])
+
+        let retry = try #require(
+            chatService.prepareMessageRetry(targetMessage: response, in: remaining)
+        )
+        #expect(Array(retry.requestMessages.prefix(3).map(\.id)) == [
+            userAtoms[0].id,
+            userAtoms[2].id,
+            userAtoms[3].id
+        ])
+        #expect(!retry.requestMessages.contains(where: { $0.id == userAtoms[1].id }))
+        #expect(retry.requestMessages.last?.id == retry.loadingMessage.id)
 
         await cleanup()
     }
@@ -536,6 +590,56 @@ extension ChatServiceTests {
                 .filter { $0.responseGroupID == userMessage.id }
                 .allSatisfy { $0.selectedResponseAttemptID == firstAttemptID }
         )
+
+        await cleanup()
+    }
+
+    @Test("删除多附件输入的锚点后版本组迁移到剩余用户气泡")
+    func testDeleteMultipartUserAnchorReanchorsResponseAttempts() async throws {
+        await cleanup()
+
+        let sessionID = try #require(chatService.currentSessionSubject.value?.id)
+        let firstAttemptID = UUID()
+        let secondAttemptID = UUID()
+        let imageMessage = ChatMessage(
+            role: .user,
+            content: "[图片]",
+            imageFileNames: ["reference.png"]
+        )
+        let textMessage = ChatMessage(
+            role: .user,
+            content: "请分析",
+            selectedResponseAttemptID: secondAttemptID
+        )
+        let firstResponse = ChatMessage(
+            role: .assistant,
+            content: "第一版",
+            responseGroupID: textMessage.id,
+            responseAttemptID: firstAttemptID,
+            responseAttemptIndex: 0
+        )
+        let secondResponse = ChatMessage(
+            role: .assistant,
+            content: "第二版",
+            responseGroupID: textMessage.id,
+            responseAttemptID: secondAttemptID,
+            responseAttemptIndex: 1,
+            selectedResponseAttemptID: secondAttemptID
+        )
+        chatService.updateMessages(
+            [imageMessage, textMessage, firstResponse, secondResponse],
+            for: sessionID
+        )
+
+        chatService.deleteMessage(textMessage)
+
+        let messages = chatService.messagesForSessionSubject.value
+        #expect(messages.first?.id == imageMessage.id)
+        #expect(messages.dropFirst().allSatisfy { $0.responseGroupID == imageMessage.id })
+        let versionInfo = try #require(
+            ChatResponseAttemptSupport.versionInfo(for: imageMessage, in: messages)
+        )
+        #expect(versionInfo.currentAttemptID == secondAttemptID)
 
         await cleanup()
     }

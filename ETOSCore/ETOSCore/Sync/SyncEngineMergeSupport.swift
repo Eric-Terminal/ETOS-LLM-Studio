@@ -33,7 +33,9 @@ extension SyncEngine {
             enhancedPrompt: session.enhancedPrompt,
             lorebookIDs: session.lorebookIDs,
             tagIDs: session.tagIDs,
-            worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled,
+            memoryContextIsolationEnabled: session.memoryContextIsolationEnabled,
+            toolContextIsolationEnabled: session.toolContextIsolationEnabled,
+            globalSystemPromptIsolationEnabled: session.globalSystemPromptIsolationEnabled,
             folderID: session.folderID,
             isTemporary: false
         )
@@ -55,7 +57,9 @@ extension SyncEngine {
             enhancedPrompt: session.enhancedPrompt,
             lorebookIDs: session.lorebookIDs,
             tagIDs: session.tagIDs,
-            worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled,
+            memoryContextIsolationEnabled: session.memoryContextIsolationEnabled,
+            toolContextIsolationEnabled: session.toolContextIsolationEnabled,
+            globalSystemPromptIsolationEnabled: session.globalSystemPromptIsolationEnabled,
             folderID: session.folderID,
             isTemporary: false
         )
@@ -70,7 +74,11 @@ extension SyncEngine {
         let resolvedBaseName = baseName.isEmpty ? session.name : baseName
         let platform = normalizedSessionForkPlatform(sourcePlatform)
             ?? inferredSessionForkPlatform(from: session.name)
-        let firstName = "\(resolvedBaseName) [\(platform) 分支]"
+        let firstName = String(
+            format: NSLocalizedString("%@ [%@ 分支]", comment: "Cross-platform sync conflict session name"),
+            resolvedBaseName,
+            platform
+        )
         guard existingNames.contains(firstName) else { return firstName }
 
         var index = 2
@@ -143,6 +151,7 @@ extension SyncEngine {
 
         if let originalImageFileNames = message.imageFileNames, !originalImageFileNames.isEmpty {
             var newImageFileNames: [String] = []
+            var copiedImageNamesByOriginal: [String: String] = [:]
             for originalImageFileName in originalImageFileNames {
                 guard let imageData = Persistence.loadImage(fileName: originalImageFileName) else {
                     continue
@@ -151,10 +160,14 @@ extension SyncEngine {
                 let newImageFileName = ext.isEmpty ? UUID().uuidString : "\(UUID().uuidString).\(ext)"
                 if Persistence.saveImage(imageData, fileName: newImageFileName) != nil {
                     newImageFileNames.append(newImageFileName)
+                    copiedImageNamesByOriginal[originalImageFileName] = newImageFileName
                 }
             }
             if !newImageFileNames.isEmpty {
                 message.imageFileNames = newImageFileNames
+                let excludedNames = (message.modelExcludedImageFileNames ?? [])
+                    .compactMap { copiedImageNamesByOriginal[$0] }
+                message.modelExcludedImageFileNames = excludedNames.isEmpty ? nil : excludedNames
             }
         }
 
@@ -182,7 +195,9 @@ extension SyncEngine {
         hasher.combine(session.topicPrompt ?? "")
         hasher.combine(session.enhancedPrompt ?? "")
         hasher.combine(session.folderID?.uuidString ?? "")
-        hasher.combine(session.worldbookContextIsolationEnabled)
+        hasher.combine(session.memoryContextIsolationEnabled)
+        hasher.combine(session.toolContextIsolationEnabled)
+        hasher.combine(session.globalSystemPromptIsolationEnabled)
         for worldbookID in session.lorebookIDs.sorted(by: { $0.uuidString < $1.uuidString }) {
             hasher.combine(worldbookID.uuidString)
         }
@@ -219,6 +234,8 @@ extension SyncEngine {
         for model in provider.models.sorted(by: { normalizedModelIdentity($0) < normalizedModelIdentity($1) }) {
             hasher.combine(model.modelName)
             hasher.combine(model.displayName)
+            hasher.combine(Model.normalizedPickerGroupName(model.pickerGroupName) ?? "")
+            hasher.combine(Model.normalizedAPIFormatOverride(model.apiFormatOverride) ?? "")
             hasher.combine(model.isActivated)
             hasher.combine(model.kind.rawValue)
             for modality in model.inputModalities.sorted(by: { $0.rawValue < $1.rawValue }) {
@@ -269,6 +286,7 @@ extension SyncEngine {
         hasher.combine(pricing.inputPerMillionTokens ?? -1)
         hasher.combine(pricing.outputPerMillionTokens ?? -1)
         hasher.combine(pricing.cacheWritePerMillionTokens ?? -1)
+        hasher.combine(pricing.cacheWriteOneHourPerMillionTokens ?? -1)
         hasher.combine(pricing.cacheReadPerMillionTokens ?? -1)
         hasher.combine(pricing.billingMode.rawValue)
         hasher.combine(pricing.perRequestPrice ?? -1)
@@ -279,15 +297,20 @@ extension SyncEngine {
             hasher.combine(tier.inputPerMillionTokens ?? -1)
             hasher.combine(tier.outputPerMillionTokens ?? -1)
             hasher.combine(tier.cacheWritePerMillionTokens ?? -1)
+            hasher.combine(tier.cacheWriteOneHourPerMillionTokens ?? -1)
             hasher.combine(tier.cacheReadPerMillionTokens ?? -1)
         }
         for timeOverride in pricing.timeOverrides {
             hasher.combine(timeOverride.id.uuidString)
             hasher.combine(timeOverride.startMinuteOfDay)
             hasher.combine(timeOverride.endMinuteOfDay)
+            for weekday in timeOverride.weekdays.sorted(by: { $0.rawValue < $1.rawValue }) {
+                hasher.combine(weekday.rawValue)
+            }
             hasher.combine(timeOverride.inputPerMillionTokens ?? -1)
             hasher.combine(timeOverride.outputPerMillionTokens ?? -1)
             hasher.combine(timeOverride.cacheWritePerMillionTokens ?? -1)
+            hasher.combine(timeOverride.cacheWriteOneHourPerMillionTokens ?? -1)
             hasher.combine(timeOverride.cacheReadPerMillionTokens ?? -1)
         }
     }
@@ -322,6 +345,9 @@ extension SyncEngine {
                 hasher.combine(key)
                 hasher.combine(value)
             }
+        case .localStdio(let configuration):
+            hasher.combine("localStdio")
+            hasher.combine(configuration)
         case .builtInSearch:
             hasher.combine("builtInSearch")
             hasher.combine(MCPBuiltInSearchServer.endpoint)
@@ -387,6 +413,9 @@ extension SyncEngine {
         hasher.combine(message.tokenUsage?.totalTokens ?? -1)
         hasher.combine(message.tokenUsage?.thinkingTokens ?? -1)
         hasher.combine(message.tokenUsage?.cacheWriteTokens ?? -1)
+        hasher.combine(message.tokenUsage?.cacheWriteFiveMinuteTokens ?? -1)
+        hasher.combine(message.tokenUsage?.cacheWriteOneHourTokens ?? -1)
+        hasher.combine(message.tokenUsage?.uncachedInputTokens ?? -1)
         hasher.combine(message.tokenUsage?.cacheReadTokens ?? -1)
         hasher.combine(message.modelReference?.providerName ?? "")
         hasher.combine(message.modelReference?.modelName ?? "")
@@ -731,7 +760,10 @@ extension SyncEngine {
                 totalTokens: maxOptional(lhs.totalTokens, rhs.totalTokens),
                 thinkingTokens: maxOptional(lhs.thinkingTokens, rhs.thinkingTokens),
                 cacheWriteTokens: maxOptional(lhs.cacheWriteTokens, rhs.cacheWriteTokens),
-                cacheReadTokens: maxOptional(lhs.cacheReadTokens, rhs.cacheReadTokens)
+                cacheWriteFiveMinuteTokens: maxOptional(lhs.cacheWriteFiveMinuteTokens, rhs.cacheWriteFiveMinuteTokens),
+                cacheWriteOneHourTokens: maxOptional(lhs.cacheWriteOneHourTokens, rhs.cacheWriteOneHourTokens),
+                cacheReadTokens: maxOptional(lhs.cacheReadTokens, rhs.cacheReadTokens),
+                uncachedInputTokens: maxOptional(lhs.uncachedInputTokens, rhs.uncachedInputTokens)
             )
         }
     }

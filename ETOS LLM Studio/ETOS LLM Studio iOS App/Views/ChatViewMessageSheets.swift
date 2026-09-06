@@ -11,6 +11,10 @@ import Foundation
 import ETOSCore
 
 struct MessageActionSheet: View {
+    private static let imageOnlyPlaceholders: Set<String> = [
+        "[图片]", "[圖片]", "[Image]", "[画像]", "[Imagen]", "[صورة]", "[Изображение]"
+    ]
+
     let payload: MessageActionSheetPayload
     let hasDisplayVersions: Bool
     let displayVersionCount: Int
@@ -30,7 +34,11 @@ struct MessageActionSheet: View {
     let onSwitchVersion: (Int, ChatMessage) -> Void
     let onDeleteVersion: (ChatMessage, Int) -> Void
     let onDelete: (ChatMessage) -> Void
-    let onDownloadImages: ([String]) -> Void
+    let onDownloadImages: (ChatMessage) -> Void
+    let onConvertMarkdownImages: (ChatMessage) -> Void
+    let onRetryVideoAnalysis: (ChatMessage, String) async throws -> VideoAnalysisResult
+    let onAskAI: (String, ChatMessage) -> Void
+    let onRewriteSelection: (MessageRewriteSelectionTarget, ChatMessage) -> Void
     let onSelectMultiple: (ChatMessage) -> Void
     let onJumpToMessage: (Int) -> Bool
 
@@ -39,13 +47,36 @@ struct MessageActionSheet: View {
     @State private var includeSystemPrompt = true
     @State private var jumpInput: String = ""
     @State private var jumpError: String?
+    @State private var videoAnalysisOverrides: [String: VideoAnalysisResult] = [:]
+    @State private var retryingVideoFileNames: Set<String> = []
+    @State private var videoAnalysisErrorMessage: String?
+    @State private var hasInlineMarkdownImages = false
 
     private var message: ChatMessage {
         payload.message
     }
 
     private var hasAttachments: Bool {
-        message.audioFileName != nil || (message.imageFileNames?.isEmpty == false)
+        message.audioFileName != nil
+            || (message.imageFileNames?.isEmpty == false)
+            || (message.fileFileNames?.isEmpty == false)
+    }
+
+    private var hasImageAttachments: Bool {
+        !(message.imageFileNames ?? []).isEmpty
+    }
+
+    private var hasTextBubblePayload: Bool {
+        let content = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasContent = !content.isEmpty && !Self.imageOnlyPlaceholders.contains(content)
+        let hasReasoning = !(message.reasoningContent ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+        return hasContent || hasReasoning || !(message.toolCalls ?? []).isEmpty
+    }
+
+    private var videoFileNames: [String] {
+        (message.fileFileNames ?? []).filter { VideoAttachmentSupport.isVideo(fileName: $0) }
     }
 
     private var messageIndex: Int? {
@@ -77,20 +108,11 @@ struct MessageActionSheet: View {
         NavigationStack {
             List {
                 Section {
-                    NavigationLink {
-                        MessageTextSelectionView(message: message)
-                    } label: {
-                        Label(
-                            NSLocalizedString("选定文字", comment: "Open message text selection"),
-                            systemImage: "character.cursor.ibeam"
-                        )
-                    }
-
-                    if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {
-                        Button {
-                            onDownloadImages(imageFileNames)
+                    if message.role == .user, !message.content.isEmpty {
+                        NavigationLink {
+                            FullMessageContentView(content: message.content)
                         } label: {
-                            Label(NSLocalizedString("下载", comment: "Download generated image"), systemImage: "square.and.arrow.down")
+                            Label(NSLocalizedString("查看完整内容", comment: ""), systemImage: "doc.text.magnifyingglass")
                         }
                     }
 
@@ -143,18 +165,65 @@ struct MessageActionSheet: View {
                         }
                     }
 
+                    NavigationLink {
+                        MessageTextSelectionView(
+                            message: message,
+                            onRewriteSelection: canRewrite ? { target in
+                                onRewriteSelection(target, message)
+                            } : nil
+                        ) { selectedText in
+                            onAskAI(selectedText, message)
+                        }
+                    } label: {
+                        Label(
+                            NSLocalizedString("选定文字", comment: "Open message text selection"),
+                            systemImage: "character.cursor.ibeam"
+                        )
+                    }
+
                     Button {
                         onSelectMultiple(message)
                     } label: {
                         Label(NSLocalizedString("多选", comment: "Enter message selection mode"), systemImage: "checkmark.circle")
                     }
+
+                    if hasInlineMarkdownImages {
+                        Button {
+                            onConvertMarkdownImages(message)
+                        } label: {
+                            Label(
+                                NSLocalizedString("转为图片附件", comment: "Convert inline Markdown images to attachments"),
+                                systemImage: "photo.badge.arrow.down"
+                            )
+                        }
+                    }
+
+                    if hasImageAttachments || hasInlineMarkdownImages {
+                        Button {
+                            onDownloadImages(message)
+                        } label: {
+                            Label(
+                                NSLocalizedString("下载", comment: "Download message images"),
+                                systemImage: "square.and.arrow.down"
+                            )
+                        }
+                    }
                 }
 
-                Section {
-                    Button(role: .destructive) {
-                        onDelete(message)
-                    } label: {
-                        Label(hasDisplayVersions ? NSLocalizedString("删除所有版本", comment: "") : NSLocalizedString("删除消息", comment: ""), systemImage: "trash.fill")
+                if !hasImageAttachments || hasTextBubblePayload {
+                    Section {
+                        Button(role: .destructive) {
+                            onDelete(message)
+                        } label: {
+                            Label(
+                                hasImageAttachments
+                                    ? NSLocalizedString("删除气泡", comment: "Delete text bubble but keep image attachments")
+                                    : (hasDisplayVersions
+                                        ? NSLocalizedString("删除所有版本", comment: "")
+                                        : NSLocalizedString("删除消息", comment: "")),
+                                systemImage: "trash.fill"
+                            )
+                        }
                     }
                 }
 
@@ -183,10 +252,13 @@ struct MessageActionSheet: View {
                     }
                 }
 
+                videoAnalysisSections
                 messageSupplementarySections
                 exportSection
                 messageInfoSection
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.clear)
             .navigationTitle(NSLocalizedString("消息操作", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -195,6 +267,77 @@ struct MessageActionSheet: View {
                         dismiss()
                     }
                 }
+            }
+        }
+        .alert(NSLocalizedString("视频解析失败", comment: "Video analysis failure alert title"), isPresented: Binding(
+            get: { videoAnalysisErrorMessage != nil },
+            set: { if !$0 { videoAnalysisErrorMessage = nil } }
+        )) {
+            Button(NSLocalizedString("确定", comment: ""), role: .cancel) {
+                videoAnalysisErrorMessage = nil
+            }
+        } message: {
+            Text(videoAnalysisErrorMessage ?? "")
+        }
+        .task(id: message.content) {
+            let content = message.content
+            let containsImage = await Task.detached(priority: .utility) {
+                MarkdownImageReferenceSupport.hasDownloadableImage(in: content)
+            }.value
+            guard !Task.isCancelled else { return }
+            hasInlineMarkdownImages = containsImage
+        }
+    }
+
+    @ViewBuilder
+    private var videoAnalysisSections: some View {
+        ForEach(videoFileNames, id: \.self) { fileName in
+            Section {
+                if let result = resolvedVideoAnalysis(for: fileName) {
+                    NavigationLink {
+                        VideoAnalysisDetailView(result: result)
+                    } label: {
+                        Label(NSLocalizedString("查看视频解析", comment: "View video analysis action"), systemImage: "doc.text.magnifyingglass")
+                    }
+                } else {
+                    Label(NSLocalizedString("暂无视频解析结果", comment: "No video analysis result"), systemImage: "doc.text")
+                        .foregroundStyle(.secondary)
+                }
+
+                Button {
+                    retryVideoAnalysis(fileName: fileName)
+                } label: {
+                    if retryingVideoFileNames.contains(fileName) {
+                        HStack {
+                            ProgressView()
+                            Text(NSLocalizedString("正在重新解析视频…", comment: "Retrying video analysis progress"))
+                        }
+                    } else {
+                        Label(NSLocalizedString("重新解析视频", comment: "Retry video analysis action"), systemImage: "arrow.clockwise")
+                    }
+                }
+                .disabled(retryingVideoFileNames.contains(fileName))
+            } header: {
+                Text(fileName)
+            } footer: {
+                Text(NSLocalizedString("重新解析会替换已保存的结果，之后发送和压缩上下文都会使用新内容。", comment: "Video analysis retry footer"))
+            }
+        }
+    }
+
+    private func resolvedVideoAnalysis(for fileName: String) -> VideoAnalysisResult? {
+        videoAnalysisOverrides[fileName] ?? message.videoAnalysisResult(for: fileName)
+    }
+
+    private func retryVideoAnalysis(fileName: String) {
+        retryingVideoFileNames.insert(fileName)
+        Task { @MainActor in
+            defer { retryingVideoFileNames.remove(fileName) }
+            do {
+                videoAnalysisOverrides[fileName] = try await onRetryVideoAnalysis(message, fileName)
+            } catch is CancellationError {
+            } catch {
+                videoAnalysisErrorMessage = error.localizedDescription
             }
         }
     }
@@ -489,6 +632,29 @@ struct MessageActionSheet: View {
     }
 }
 
+struct VideoAnalysisDetailView: View {
+    let result: VideoAnalysisResult
+
+    var body: some View {
+        List {
+            Section(NSLocalizedString("视频", comment: "Video analysis detail video section")) {
+                LabeledContent(NSLocalizedString("文件名", comment: ""), value: result.fileName)
+                LabeledContent(NSLocalizedString("解析模型", comment: "Video analysis model detail"), value: result.modelDisplayName)
+                LabeledContent(NSLocalizedString("解析时间", comment: "Video analysis date detail")) {
+                    Text(result.generatedAt.formatted(date: .abbreviated, time: .shortened))
+                }
+            }
+
+            Section(NSLocalizedString("解析文字", comment: "Video analysis text section")) {
+                Text(result.content)
+                    .textSelection(.enabled)
+            }
+        }
+        .navigationTitle(NSLocalizedString("视频解析", comment: "Video analysis detail title"))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 struct MessageVersionRow: View {
     let index: Int
     let isCurrent: Bool
@@ -576,6 +742,7 @@ struct SessionPickerRow: View {
     let onSelect: () -> Void
     let onRename: () -> Void
     let onBranch: (Bool) -> Void
+    let onCompress: () -> Void
     let onDeleteLastMessage: () -> Void
     let onDelete: () -> Void
     let onCancelRename: () -> Void
@@ -659,6 +826,13 @@ struct SessionPickerRow: View {
         } label: {
             Label(NSLocalizedString("复制历史创建分支", comment: ""), systemImage: "arrow.triangle.branch")
         }
+
+        Button {
+            onCompress()
+        } label: {
+            Label(NSLocalizedString("压缩为续聊", comment: "Context compression session action"), systemImage: "rectangle.compress.vertical")
+        }
+        .disabled(session.isTemporary)
 
         Button {
             onDeleteLastMessage()

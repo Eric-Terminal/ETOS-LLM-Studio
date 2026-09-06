@@ -1,0 +1,6 @@
+"NSLocationWhenInUseUsageDescription" = "Reads your current location when you explicitly use a location tool, and can keep a response active when Background Generation is enabled.";
+"NSHealthShareUsageDescription" = "Reads authorized health, sleep, and activity data when you explicitly use a Health tool.";
+"NSHealthUpdateUsageDescription" = "Writes authorized health records when you explicitly use a Health tool.";
+"NSBluetoothAlwaysUsageDescription" = "Scans for and connects to nearby Bluetooth devices only when you explicitly use a Bluetooth tool.";
+"NSHomeKitUsageDescription" = "Reads and controls authorized homes and accessories only when you explicitly use a Home tool.";
+"NSContactsUsageDescription" = "Read authorized contacts only when you explicitly invoke a contacts tool.";

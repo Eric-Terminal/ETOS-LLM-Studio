@@ -43,7 +43,33 @@ struct ProviderListView: View {
                 }
             }
         }
-        .navigationTitle(NSLocalizedString("提供商与模型管理", comment: ""))
+        .navigationTitle(NSLocalizedString("模型管理", comment: ""))
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: "watch-provider-management",
+                title: NSLocalizedString("模型管理", comment: "手表模型管理向导后备上下文标题"),
+                documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")]
+            ),
+            isFallback: true,
+            snapshot: {
+                GuidePageSnapshot(fields: [
+                    "providers": GuideSnapshotField(
+                        label: NSLocalizedString("已配置提供商", comment: "手表模型管理向导快照字段"),
+                        value: .array(viewModel.providers.map { provider in
+                            .dictionary([
+                                "id": .string(provider.id.uuidString.lowercased()),
+                                "name": .string(provider.name),
+                                "base_url": .string(provider.baseURL),
+                                "api_format": .string(provider.apiFormat),
+                                "active_model_count": .int(provider.models.count(where: \.isActivated))
+                            ])
+                        }),
+                        access: .readOnly
+                    )
+                ])
+            }
+        )
+        .watchGuideEntry()
     }
 }
 
@@ -92,6 +118,58 @@ private struct WatchProviderManagementContentView: View {
                 .environmentObject(viewModel)
             }
         }
+        .guideSettingsPageContext(
+            id: "watch-provider-list",
+            title: NSLocalizedString("提供商管理", comment: "手表提供商管理向导上下文标题"),
+            documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
+            settings: providerListGuideSettings
+        )
+        .watchGuideEntry()
+    }
+
+    private var providerListGuideSettings: [GuidePageSetting] {
+        [
+            .json(
+                "provider_order",
+                label: NSLocalizedString("提供商顺序", comment: "手表提供商管理向导字段"),
+                schema: GuideOrderedSettingsSupport.identifierOrderSchema,
+                get: {
+                    GuideOrderedSettingsSupport.identifierOrderValue(
+                        viewModel.providers.map { $0.id.uuidString.lowercased() }
+                    )
+                },
+                normalize: { value in
+                    try GuideOrderedSettingsSupport.normalizeIdentifierOrder(
+                        value,
+                        currentIdentifiers: viewModel.providers.map { $0.id.uuidString.lowercased() }
+                    )
+                },
+                set: { value in
+                    let identifiers = try GuideOrderedSettingsSupport.identifierOrder(
+                        from: value,
+                        currentIdentifiers: viewModel.providers.map { $0.id.uuidString.lowercased() }
+                    )
+                    ChatService.shared.setProviderOrder(try identifiers.map { identifier in
+                        guard let id = UUID(uuidString: identifier) else { throw GuideError.invalidToolArguments }
+                        return id
+                    })
+                }
+            ),
+            .readOnly(
+                "providers",
+                label: NSLocalizedString("已配置提供商", comment: "手表提供商管理向导字段"),
+                value: {
+                    .array(viewModel.providers.map { provider in
+                        .dictionary([
+                            "id": .string(provider.id.uuidString.lowercased()),
+                            "name": .string(provider.name),
+                            "base_url": .string(provider.baseURL),
+                            "api_format": .string(provider.apiFormat)
+                        ])
+                    })
+                }
+            )
+        ]
     }
 
     private func deleteProvider(_ provider: Provider) {
@@ -109,55 +187,446 @@ private struct WatchProviderManagementContentView: View {
 
 private struct WatchProviderModelOrderContentView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @ObservedObject private var appConfig = AppConfigStore.shared
 
     var body: some View {
         List {
             Section(
-                header: Text(NSLocalizedString("模型顺序", comment: "")),
-                footer: Text(NSLocalizedString("拖拽右侧把手可调整全局模型顺序。模型选择列表会按这里的顺序展示。", comment: ""))
+                header: Text(NSLocalizedString("模型选择方式", comment: "")),
+                footer: Text(NSLocalizedString("经典列表会直接显示全部模型；按提供商会先选择提供商，再显示对应模型。", comment: ""))
             ) {
-                if viewModel.configuredModels.isEmpty {
-                    Text(NSLocalizedString("暂无可排序模型。", comment: ""))
+                Picker(
+                    NSLocalizedString("模型选择方式", comment: ""),
+                    selection: modelPickerGroupingBinding
+                ) {
+                    Text(NSLocalizedString("经典列表", comment: ""))
+                        .tag(false)
+                    Text(NSLocalizedString("按提供商", comment: ""))
+                        .tag(true)
+                }
+            }
+
+            Section(
+                header: Text(NSLocalizedString("提供商顺序", comment: "")),
+                footer: Text(NSLocalizedString("拖拽右侧把手调整提供商顺序；轻点提供商可调整其模型顺序。", comment: ""))
+            ) {
+                if viewModel.providers.isEmpty {
+                    Text(NSLocalizedString("暂无提供商。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(configuredModelsBinding, id: \.id, editActions: .move) { $runnable in
-                        modelOrderRow(runnable: runnable)
+                    ForEach(providersBinding, id: \.id, editActions: .move) { $provider in
+                        NavigationLink {
+                            WatchProviderModelOrderDetailView(provider: provider)
+                                .environmentObject(viewModel)
+                        } label: {
+                            MarqueeTitleSubtitleLabel(
+                                title: provider.name,
+                                subtitle: provider.baseURL,
+                                titleUIFont: .preferredFont(forTextStyle: .body),
+                                subtitleUIFont: .preferredFont(forTextStyle: .caption2),
+                                spacing: 2
+                            )
+                        }
                     }
                 }
             }
         }
         .navigationTitle(NSLocalizedString("模型顺序", comment: ""))
+        .guideSettingsPageContext(
+            id: "watch-provider-model-order",
+            title: NSLocalizedString("模型顺序", comment: "手表模型顺序向导上下文标题"),
+            documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
+            settings: modelOrderGuideSettings
+        )
+        .watchGuideEntry()
     }
 
-    private var configuredModelsBinding: Binding<[RunnableModel]> {
+    private var modelOrderGuideSettings: [GuidePageSetting] {
+        [
+            .bool(
+                "groups_by_provider",
+                label: NSLocalizedString("按提供商选择模型", comment: "手表模型顺序向导字段"),
+                get: { appConfig.watchModelPickerGroupsByProvider },
+                set: { appConfig.watchModelPickerGroupsByProvider = $0 }
+            ),
+            .json(
+                "provider_order",
+                label: NSLocalizedString("提供商顺序", comment: "手表模型顺序向导字段"),
+                schema: GuideOrderedSettingsSupport.identifierOrderSchema,
+                get: {
+                    GuideOrderedSettingsSupport.identifierOrderValue(
+                        viewModel.providers.map { $0.id.uuidString.lowercased() }
+                    )
+                },
+                normalize: { value in
+                    try GuideOrderedSettingsSupport.normalizeIdentifierOrder(
+                        value,
+                        currentIdentifiers: viewModel.providers.map { $0.id.uuidString.lowercased() }
+                    )
+                },
+                set: { value in
+                    let identifiers = try GuideOrderedSettingsSupport.identifierOrder(
+                        from: value,
+                        currentIdentifiers: viewModel.providers.map { $0.id.uuidString.lowercased() }
+                    )
+                    ChatService.shared.setProviderOrder(try identifiers.map { identifier in
+                        guard let id = UUID(uuidString: identifier) else { throw GuideError.invalidToolArguments }
+                        return id
+                    })
+                }
+            ),
+            .readOnly(
+                "providers",
+                label: NSLocalizedString("已配置提供商", comment: "手表模型顺序向导字段"),
+                value: {
+                    .array(viewModel.providers.map { provider in
+                        .dictionary([
+                            "id": .string(provider.id.uuidString.lowercased()),
+                            "name": .string(provider.name),
+                            "base_url": .string(provider.baseURL)
+                        ])
+                    })
+                }
+            )
+        ]
+    }
+
+    private var modelPickerGroupingBinding: Binding<Bool> {
         Binding {
-            viewModel.configuredModels
-        } set: { orderedModels in
-            ChatService.shared.setConfiguredModelOrder(orderedModels.map(\.id))
+            appConfig.watchModelPickerGroupsByProvider
+        } set: { groupsByProvider in
+            appConfig.watchModelPickerGroupsByProvider = groupsByProvider
         }
+    }
+
+    private var providersBinding: Binding<[Provider]> {
+        Binding {
+            viewModel.providers
+        } set: { orderedProviders in
+            ChatService.shared.setProviderOrder(orderedProviders.map(\.id))
+        }
+    }
+}
+
+private struct ModelOrganizationBoundaryRow: Identifiable, Hashable {
+    let item: RunnableModelPickerOrganization.BoundaryItem
+    let depth: Int
+
+    var id: String { item.id }
+}
+
+private struct WatchProviderModelOrderDetailView: View {
+    @EnvironmentObject private var viewModel: ChatViewModel
+    @State private var editingOrganization: RunnableModelPickerOrganization?
+    @State private var boundaryRows: [ModelOrganizationBoundaryRow] = []
+    @State private var isCreatingFolder = false
+    @State private var newFolderName = ""
+    let provider: Provider
+
+    var body: some View {
+        List {
+            Section(
+                header: Text(NSLocalizedString("模型顺序", comment: "")),
+                footer: Text(NSLocalizedString(
+                    "拖动模型或文件夹边界调整位置。两个边界之间的模型属于该文件夹，边界可以嵌套但不能交叉。",
+                    comment: "手表模型目录边界排序提示"
+                ))
+            ) {
+                if boundaryRows.isEmpty {
+                    Text(NSLocalizedString("暂无可排序模型。", comment: ""))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(boundaryRows) { row in
+                        boundaryRowContent(row)
+                            .contentShape(Rectangle())
+                            .accessibilityAction(named: Text(NSLocalizedString("上移", comment: ""))) {
+                                moveBoundaryItem(row.id, by: -1)
+                            }
+                            .accessibilityAction(named: Text(NSLocalizedString("下移", comment: ""))) {
+                                moveBoundaryItem(row.id, by: 1)
+                            }
+                    }
+                    .onMove(perform: moveBoundaryRows)
+                }
+            }
+        }
+        .navigationTitle(provider.name)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    let current = editingOrganization ?? organization
+                    newFolderName = suggestedFolderName(organization: current)
+                    isCreatingFolder = true
+                } label: {
+                    Label(NSLocalizedString("新建文件夹", comment: ""), systemImage: "folder.badge.plus")
+                }
+            }
+        }
+        .alert(NSLocalizedString("新建文件夹", comment: ""), isPresented: $isCreatingFolder) {
+            TextField(NSLocalizedString("文件夹名称", comment: ""), text: $newFolderName)
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
+            Button(NSLocalizedString("创建", comment: "")) {
+                createFolder(named: newFolderName)
+            }
+            .disabled(normalizedGroupPath(newFolderName) == nil)
+        }
+        .onAppear {
+            synchronize(with: organization)
+        }
+        .onChange(of: organization) { _, updated in
+            synchronize(with: updated)
+        }
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "watch-provider-model-order-\(provider.id.uuidString.lowercased())"),
+            title: provider.name,
+            documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
+            settings: providerModelOrderGuideSettings
+        )
+        .watchGuideEntry()
+    }
+
+    private var providerModelOrderGuideSettings: [GuidePageSetting] {
+        [
+            .readOnly(
+                "provider",
+                label: NSLocalizedString("提供商信息", comment: "手表单提供商模型顺序向导字段"),
+                value: {
+                    .dictionary([
+                        "id": .string(provider.id.uuidString.lowercased()),
+                        "name": .string(provider.name),
+                        "base_url": .string(provider.baseURL)
+                    ])
+                }
+            ),
+            .json(
+                "boundary_order",
+                label: NSLocalizedString("模型与文件夹边界顺序", comment: "手表单提供商模型顺序向导字段"),
+                schema: GuideOrderedSettingsSupport.modelBoundaryOrderSchema,
+                get: {
+                    GuideOrderedSettingsSupport.modelBoundaryOrderValue(
+                        (editingOrganization ?? organization).boundaryItems
+                    )
+                },
+                normalize: { value in
+                    try GuideOrderedSettingsSupport.normalizeModelBoundaryOrder(
+                        value,
+                        organization: editingOrganization ?? organization
+                    )
+                },
+                set: { value in
+                    let current = editingOrganization ?? organization
+                    let items = try GuideOrderedSettingsSupport.modelBoundaryOrder(
+                        from: value,
+                        organization: current
+                    )
+                    guard let updated = current.applyingBoundaryItems(items) else {
+                        throw GuideError.invalidToolArguments
+                    }
+                    synchronize(with: updated)
+                    persist(updated)
+                }
+            )
+        ]
+    }
+
+    private var organization: RunnableModelPickerOrganization {
+        viewModel.configuredModelOrganizationsByProviderID[provider.id]
+            ?? RunnableModelPickerOrganization(models: [])
     }
 
     @ViewBuilder
-    private func modelOrderRow(runnable: RunnableModel) -> some View {
-        HStack(alignment: .top, spacing: 6) {
-            MarqueeTitleSubtitleLabel(
-                title: runnable.model.displayName,
-                subtitle: "\(runnable.provider.name) · \(runnable.model.modelName)",
-                titleUIFont: .preferredFont(forTextStyle: .body),
-                subtitleUIFont: .monospacedSystemFont(
-                    ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
-                    weight: .regular
-                ),
-                spacing: 2
-            )
-            .frame(maxWidth: .infinity, alignment: .leading)
+    private func boundaryRowContent(_ row: ModelOrganizationBoundaryRow) -> some View {
+        switch row.item {
+        case .model(let modelID):
+            if let runnable = viewModel.configuredModelsByID[modelID] {
+                HStack(alignment: .center, spacing: 6) {
+                    if row.depth > 0 {
+                        Image(systemName: "arrow.turn.down.right")
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                    }
 
-            if !runnable.model.isActivated {
-                Text(NSLocalizedString("未启用", comment: ""))
+                    MarqueeTitleSubtitleLabel(
+                        title: runnable.model.displayName,
+                        subtitle: runnable.model.modelName,
+                        titleUIFont: .preferredFont(forTextStyle: .body),
+                        subtitleUIFont: .monospacedSystemFont(
+                            ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
+                            weight: .regular
+                        ),
+                        spacing: 2
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if !runnable.model.isActivated {
+                        Text(NSLocalizedString("未启用", comment: ""))
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.leading, CGFloat(row.depth) * 8)
+            }
+
+        case .groupStart(let groupPath):
+            folderBoundaryRow(
+                groupPath: groupPath,
+                depth: row.depth,
+                isStart: true
+            )
+
+        case .groupEnd(let groupPath):
+            folderBoundaryRow(
+                groupPath: groupPath,
+                depth: row.depth,
+                isStart: false
+            )
+        }
+    }
+
+    private func folderBoundaryRow(
+        groupPath: String,
+        depth: Int,
+        isStart: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if !isStart {
+                Capsule()
+                    .fill(Color.accentColor.opacity(0.7))
+                    .frame(height: 2)
+            }
+
+            HStack(spacing: 4) {
+                Image(systemName: isStart ? "folder.fill" : "folder")
+                    .foregroundStyle(Color.accentColor)
+
+                Text(groupPath.split(separator: "/").last.map(String.init) ?? groupPath)
+                    .etFont(.caption)
+                    .lineLimit(1)
+
+                Spacer(minLength: 2)
+
+                Text(NSLocalizedString(isStart ? "开始" : "结束", comment: "文件夹边界"))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
+
+            if isStart {
+                Capsule()
+                    .fill(Color.accentColor.opacity(0.7))
+                    .frame(height: 2)
+            }
         }
+        .padding(.leading, CGFloat(depth) * 8)
+        .accessibilityLabel(String(
+            format: NSLocalizedString(
+                isStart ? "文件夹“%@”开始" : "文件夹“%@”结束",
+                comment: "模型目录边界辅助功能标签"
+            ),
+            groupPath.split(separator: "/").last.map(String.init) ?? groupPath
+        ))
+    }
+
+    private func moveBoundaryRows(
+        from source: IndexSet,
+        to destination: Int
+    ) {
+        guard let editingOrganization else { return }
+        var candidateItems = boundaryRows.map(\.item)
+        candidateItems.move(fromOffsets: source, toOffset: destination)
+        guard let updated = editingOrganization.applyingBoundaryItems(candidateItems) else {
+            return
+        }
+
+        withAnimation(.spring(response: 0.34, dampingFraction: 1)) {
+            self.editingOrganization = updated
+            boundaryRows = Self.makeBoundaryRows(candidateItems)
+        }
+        persist(updated)
+    }
+
+    private func moveBoundaryItem(_ itemID: String, by offset: Int) {
+        guard let editingOrganization,
+              let sourceIndex = boundaryRows.firstIndex(where: { $0.id == itemID }) else {
+            return
+        }
+        let targetIndex = sourceIndex + offset
+        guard boundaryRows.indices.contains(targetIndex) else { return }
+
+        var candidateItems = boundaryRows.map(\.item)
+        let movedItem = candidateItems.remove(at: sourceIndex)
+        candidateItems.insert(movedItem, at: targetIndex)
+        guard let updated = editingOrganization.applyingBoundaryItems(candidateItems) else {
+            return
+        }
+
+        withAnimation(.spring(response: 0.34, dampingFraction: 1)) {
+            self.editingOrganization = updated
+            boundaryRows = Self.makeBoundaryRows(candidateItems)
+        }
+        persist(updated)
+    }
+
+    private func synchronize(with organization: RunnableModelPickerOrganization) {
+        editingOrganization = organization
+        boundaryRows = Self.makeBoundaryRows(organization.boundaryItems)
+    }
+
+    private static func makeBoundaryRows(
+        _ items: [RunnableModelPickerOrganization.BoundaryItem]
+    ) -> [ModelOrganizationBoundaryRow] {
+        var depth = 0
+        return items.map { item in
+            switch item {
+            case .model:
+                return ModelOrganizationBoundaryRow(item: item, depth: depth)
+            case .groupStart:
+                defer { depth += 1 }
+                return ModelOrganizationBoundaryRow(item: item, depth: depth)
+            case .groupEnd:
+                depth = max(0, depth - 1)
+                return ModelOrganizationBoundaryRow(item: item, depth: depth)
+            }
+        }
+    }
+
+    private func createFolder(named name: String) {
+        guard let groupPath = normalizedGroupPath(name) else { return }
+        var updated = editingOrganization ?? organization
+        guard !updated.allGroupPaths.contains(groupPath) else { return }
+
+        updated.createGroup(groupPath)
+        synchronize(with: updated)
+        persist(updated)
+    }
+
+    private func suggestedFolderName(
+        organization: RunnableModelPickerOrganization
+    ) -> String {
+        let baseName = NSLocalizedString("新建文件夹", comment: "")
+        var suffix = 1
+        while true {
+            let folderName = suffix == 1 ? baseName : "\(baseName) \(suffix)"
+            if !organization.allGroupPaths.contains(folderName) {
+                return folderName
+            }
+            suffix += 1
+        }
+    }
+
+    private func normalizedGroupPath(_ path: String) -> String? {
+        let components = path
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return components.isEmpty ? nil : components.joined(separator: "/")
+    }
+
+    private func persist(_ updated: RunnableModelPickerOrganization) {
+        ChatService.shared.setModelPickerOrganization(
+            updated,
+            for: provider.id
+        )
     }
 }

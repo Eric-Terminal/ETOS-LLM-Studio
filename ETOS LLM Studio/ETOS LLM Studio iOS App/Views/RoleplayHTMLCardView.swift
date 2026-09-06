@@ -15,6 +15,7 @@ struct RoleplayHTMLCardView: View {
     let sessionID: UUID
     let messageID: UUID
     let versionIndex: Int
+    let chatMessages: [ChatMessage]
 
     @State private var documents: [PreparedRoleplayHTMLDocument] = []
     @State private var heights: [Int: CGFloat] = [:]
@@ -37,9 +38,12 @@ struct RoleplayHTMLCardView: View {
                         set: { heights[document.id] = max(1, $0) }
                     )
                 )
+                // WKWebView 没有可供 SwiftUI 采用的固有宽度；显式吃满气泡宽度，避免只剩高度占位。
+                .frame(maxWidth: .infinity)
                 .frame(height: heights[document.id] ?? 180)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: preparationKey) {
             let key = preparationKey
             let extraction = extraction
@@ -47,10 +51,10 @@ struct RoleplayHTMLCardView: View {
             let messageID = messageID
             let versionIndex = versionIndex
             let contentRevision = contentRevision
+            let chatMessages = chatMessages
             let prepared = await Task.detached(priority: .utility) {
                 let store = RoleplayStore.shared
                 let snapshot = store.variableSnapshot(sessionID: sessionID)
-                let chatMessages = Persistence.loadMessages(for: sessionID)
                 let worldbooks = ChatService.shared.loadWorldbooks()
                 let variables = snapshot.mergedVariables(messageID: messageID, versionIndex: versionIndex)
                 let binding = store.binding(sessionID: sessionID)
@@ -112,6 +116,7 @@ struct RoleplaySessionScriptHost: View {
     let sessionID: UUID?
     let messageID: UUID?
     let versionIndex: Int
+    let chatMessages: [ChatMessage]
 
     @State private var documents: [PreparedRoleplayScriptDocument] = []
     @State private var heights: [UUID: CGFloat] = [:]
@@ -141,13 +146,13 @@ struct RoleplaySessionScriptHost: View {
                 documents = []
                 return
             }
+            let chatMessages = chatMessages
             documents = await Task.detached(priority: .utility) {
                 let store = RoleplayStore.shared
                 guard let binding = store.binding(sessionID: sessionID), binding.helperScriptsEnabled else { return [] }
                 let characters = binding.characterIDs.compactMap(store.character(id:))
                 let persona = binding.personaID.flatMap(store.persona(id:))
                 let snapshot = store.variableSnapshot(sessionID: sessionID)
-                let chatMessages = Persistence.loadMessages(for: sessionID)
                 let worldbooks = ChatService.shared.loadWorldbooks()
                 let additionalWorldbookNames = binding.additionalWorldbookIDs.compactMap { id in
                     worldbooks.first(where: { $0.id == id })?.name

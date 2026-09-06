@@ -39,22 +39,43 @@ extension ChatService {
         var trailingUnparsedResponseBody = ""
         var trailingUnparsedHTTPStatusCode: Int?
         var messages = messagesSnapshot(for: currentSessionID)
-        var streamingPublishCoalescer = StreamingUIPublishCoalescer.platformDefault()
-        let shouldCaptureResponseBody = AppConfigStore.boolValue(for: .requestLogEnabled)
-        var rawStreamingResponseLines: [String] = []
+        let streamingDisplayMode = await MainActor.run {
+            ChatStreamingDisplayMode.normalized(AppConfigStore.shared.chatStreamingDisplayMode)
+        }
+        var streamingPublishCoalescer = StreamingUIPublishCoalescer.platformDefault(
+            displayMode: streamingDisplayMode
+        )
+        let shouldRecordRequestLog = AppConfigStore.boolValue(for: .requestLogEnabled)
+        let shouldCaptureRawStreamingResponse = RequestLogCapturePolicy.shouldCaptureStreamingBody(
+            requestLogEnabled: shouldRecordRequestLog,
+            plainMessageEnabled: AppConfigStore.boolValue(for: .requestLogPlainMessageEnabled)
+        )
+        var rawStreamingResponseLines: [String]? = shouldCaptureRawStreamingResponse ? [] : nil
+        var streamingResponseByteCount = 0
+        var hasReceivedStreamingLine = false
+        var streamTermination: ChatMessagePart.StreamTermination?
+        let streamingSignpost = TelemetrySignpost.begin(
+            .streamingResponseProcessing,
+            correlatingWith: requestLogContext.requestID
+        )
+        defer {
+            TelemetrySignpost.end(streamingSignpost)
+        }
 
         func rawStreamingResponseBody() -> String {
-            rawStreamingResponseLines.joined(separator: "\n")
+            rawStreamingResponseLines?.joined(separator: "\n") ?? ""
         }
 
         func logCapturedStreamingResponse(isPartial: Bool = false, httpStatusCode: Int? = nil) {
-            guard shouldCaptureResponseBody, !rawStreamingResponseLines.isEmpty else { return }
+            guard shouldRecordRequestLog, streamingResponseByteCount > 0 else { return }
             logResponseBodySnapshot(
                 context: requestLogContext,
                 request: request,
                 body: rawStreamingResponseBody(),
+                byteCount: streamingResponseByteCount,
                 httpStatusCode: httpStatusCode,
-                isPartial: isPartial
+                isPartial: isPartial,
+                hasCapturedStreamingBody: rawStreamingResponseLines != nil
             )
         }
 
@@ -80,8 +101,15 @@ extension ChatService {
             var finalResponseCompletedAtForLog: Date?
 
             for try await line in bytes.lines {
-                if shouldCaptureResponseBody {
-                    rawStreamingResponseLines.append(line)
+                if shouldRecordRequestLog {
+                    if hasReceivedStreamingLine {
+                        streamingResponseByteCount += 1
+                    }
+                    streamingResponseByteCount += line.lengthOfBytes(using: .utf8)
+                    hasReceivedStreamingLine = true
+                }
+                if shouldCaptureRawStreamingResponse {
+                    rawStreamingResponseLines?.append(line)
                 }
 
                 guard let part = adapter.parseStreamingResponse(line: line) else {
@@ -91,6 +119,16 @@ extension ChatService {
                         httpStatusCode: &trailingUnparsedHTTPStatusCode
                     )
                     continue
+                }
+                if let incomingTermination = part.streamTermination {
+                    switch incomingTermination {
+                    case .completed:
+                        if streamTermination == nil {
+                            streamTermination = .completed
+                        }
+                    case .failed:
+                        streamTermination = incomingTermination
+                    }
                 }
                 trailingUnparsedResponseBody = ""
                 trailingUnparsedHTTPStatusCode = nil
@@ -215,7 +253,7 @@ extension ChatService {
                         }
                         let partialToolCalls: [InternalToolCall] = toolCallOrder.compactMap { orderIdx in
                             guard let builder = toolCallBuilders[orderIdx], let name = builder.name else { return nil }
-                            let id = builder.id ?? "tool-\(orderIdx)"
+                            let id = builder.id ?? "tool-\(loadingMessageID.uuidString)-\(orderIdx)"
                             let resolvedName = resolveToolName(name, availableTools: availableTools ?? [])
                             return InternalToolCall(
                                 id: id,
@@ -316,6 +354,52 @@ extension ChatService {
                 return
             }
 
+            let terminationFailure: (reason: String, errorKind: String)?
+            switch streamTermination {
+            case .some(.failed(let reason)):
+                let trimmedReason = reason?.trimmingCharacters(in: .whitespacesAndNewlines)
+                terminationFailure = (
+                    trimmedReason.flatMap { $0.isEmpty ? nil : $0 }
+                        ?? URLError(.badServerResponse).localizedDescription,
+                    "streaming_provider_failure"
+                )
+            case .some(.completed):
+                terminationFailure = nil
+            case nil:
+                terminationFailure = adapter.requiresExplicitStreamingTermination
+                    ? (URLError(.networkConnectionLost).localizedDescription, "streaming_unexpected_eof")
+                    : nil
+            }
+
+            if let terminationFailure {
+                logCapturedStreamingResponse(isPartial: true)
+                messages = await persistAndPublishStreamingMessages(
+                    messages,
+                    loadingMessageID: loadingMessageID,
+                    sessionID: currentSessionID
+                )
+                await finalizeInterruptedReasoningMessageIfNeeded(
+                    loadingMessageID: loadingMessageID,
+                    in: currentSessionID
+                )
+                addErrorMessage(
+                    String(
+                        format: NSLocalizedString("流式传输错误: %@", comment: "Streaming error with description"),
+                        terminationFailure.reason
+                    ),
+                    sessionID: currentSessionID
+                )
+                emitSessionRequestStatus(.error, sessionID: currentSessionID)
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .failed,
+                    tokenUsage: latestTokenUsage,
+                    finishedAt: Date(),
+                    errorKind: terminationFailure.errorKind
+                )
+                return
+            }
+
             var finalAssistantMessage: ChatMessage?
             if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
                 let (finalContent, extractedReasoning) = parseThoughtTags(from: messages[index].content)
@@ -330,7 +414,7 @@ extension ChatService {
                             logger.error("流式响应中检测到未完成的工具调用 (index: \(orderIdx))，缺少名称。")
                             return nil
                         }
-                        let id = builder.id ?? "tool-\(orderIdx)"
+                        let id = builder.id ?? "tool-\(loadingMessageID.uuidString)-\(orderIdx)"
                         let resolvedName = resolveToolName(name, availableTools: availableTools ?? [])
                         return InternalToolCall(
                             id: id,
@@ -400,6 +484,7 @@ extension ChatService {
                         speedSamples: enableResponseSpeedMetrics && !speedSamples.isEmpty ? speedSamples : nil
                     )
                 }
+                finalizeResponsesGeneratedImages(in: &messages[index])
                 attachOpenAIResponsesRequestMetadata(
                     to: &messages[index],
                     request: request,
@@ -407,7 +492,7 @@ extension ChatService {
                 )
                 attachCostEstimateIfPossible(to: &messages[index], using: requestLogContext)
                 finalAssistantMessage = messages[index]
-                messages = persistAndPublishStreamingMessages(
+                messages = await persistAndPublishStreamingMessages(
                     messages,
                     loadingMessageID: loadingMessageID,
                     sessionID: currentSessionID
@@ -451,7 +536,7 @@ extension ChatService {
                     tokenUsage: nil,
                     finishedAt: Date()
                 )
-                emitSessionRequestStatus(.finished, sessionID: currentSessionID)
+                await finishSessionRequestAndCleanupFileHistory(sessionID: currentSessionID)
             }
         } catch is CancellationError {
             logger.info("流式请求在处理中被取消。")
@@ -462,7 +547,7 @@ extension ChatService {
                 sessionID: currentSessionID,
                 coalescer: &streamingPublishCoalescer
             )
-            finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingMessageID, in: currentSessionID)
+            await finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingMessageID, in: currentSessionID)
             persistRequestLog(
                 context: requestLogContext,
                 status: .cancelled,
@@ -544,7 +629,7 @@ extension ChatService {
                     sessionID: currentSessionID,
                     coalescer: &streamingPublishCoalescer
                 )
-                finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingMessageID, in: currentSessionID)
+                await finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingMessageID, in: currentSessionID)
                 persistRequestLog(
                     context: requestLogContext,
                     status: .cancelled,
@@ -645,16 +730,7 @@ extension ChatService {
         ensureReasoningTimingIfNeeded(for: &responseMessage)
 
         if enableStreaming {
-            let generatedImageFileNames = extractGeneratedImagesFromProviderResponseMetadata(responseMessage.providerResponseMetadata)
-            if !generatedImageFileNames.isEmpty {
-                responseMessage.imageFileNames = (responseMessage.imageFileNames ?? []) + generatedImageFileNames
-            }
-        }
-
-        let inlineImageExtraction = await extractInlineImagesFromMarkdown(responseMessage.content)
-        if !inlineImageExtraction.imageFileNames.isEmpty {
-            responseMessage.content = inlineImageExtraction.cleanedContent
-            responseMessage.imageFileNames = (responseMessage.imageFileNames ?? []) + inlineImageExtraction.imageFileNames
+            finalizeResponsesGeneratedImages(in: &responseMessage)
         }
 
         scheduleAssistantReplyAchievementDetectionIfNeeded(responseMessage.content)
@@ -672,25 +748,26 @@ extension ChatService {
         }
 
         guard let toolCalls = responseMessage.toolCalls, !toolCalls.isEmpty else {
-            updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
+            await updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
             scheduleReasoningSummaryIfNeeded(for: loadingMessageID, in: currentSessionID)
             scheduleConversationMemoryUpdateIfNeeded(for: currentSessionID, enableMemory: enableMemory)
             scheduleLongTermMemoryConsolidationIfNeeded(for: currentSessionID, enableMemory: enableMemory)
-            emitSessionRequestStatus(.finished, sessionID: currentSessionID)
+            await finishSessionRequestAndCleanupFileHistory(sessionID: currentSessionID)
             return
         }
 
-        updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
+        await updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
         scheduleReasoningSummaryIfNeeded(for: loadingMessageID, in: currentSessionID)
         let toolCallMessageID = loadingMessageID
-        ensureToolCallsVisible(toolCalls, in: toolCallMessageID, sessionID: currentSessionID)
+        await ensureToolCallsVisible(toolCalls, in: toolCallMessageID, sessionID: currentSessionID)
         let activeAttemptMetadata = responseAttemptMetadata(for: toolCallMessageID, in: currentSessionID)
             ?? responseAttemptMetadata(from: responseMessage)
+        let activeAgentRunID = conversationRunIDs(for: currentSessionID)?.runID
 
         let toolDefs = availableTools ?? []
         if toolDefs.isEmpty {
             logger.info("当前未提供任何工具定义，忽略 AI 返回的 \(toolCalls.count) 个工具调用。")
-            emitSessionRequestStatus(.finished, sessionID: currentSessionID)
+            await finishSessionRequestAndCleanupFileHistory(sessionID: currentSessionID)
             return
         }
         let blockingCalls = toolCalls.filter { tc in
@@ -704,12 +781,29 @@ extension ChatService {
 
         var blockingResultMessages: [ChatMessage] = []
         var shouldAwaitUserSupplement = false
+        var shouldPauseForConversation = false
         if !blockingCalls.isEmpty {
             logger.info("正在执行 \(blockingCalls.count) 个阻塞式工具，即将进入二次调用流程...")
             for toolCall in blockingCalls {
-                let outcome = await handleToolCall(toolCall, sessionID: currentSessionID)
+                let outcome = await handleToolCall(
+                    toolCall,
+                    sessionID: currentSessionID,
+                    agentRunID: activeAgentRunID,
+                    triggeringMessageID: activeAttemptMetadata?.groupID
+                )
                 if let toolResult = outcome.toolResult {
-                    await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
+                    await attachToolResult(
+                        toolResult,
+                        disposition: outcome.resultDisposition,
+                        to: toolCall.id,
+                        toolName: toolCall.toolName,
+                        loadingMessageID: toolCallMessageID,
+                        sessionID: currentSessionID
+                    )
+                }
+                if outcome.shouldPauseForConversation {
+                    shouldPauseForConversation = true
+                    break
                 }
                 var outcomeMessage = outcome.message
                 applyResponseAttemptMetadata(activeAttemptMetadata, to: &outcomeMessage)
@@ -721,15 +815,25 @@ extension ChatService {
             }
         }
 
+        if shouldPauseForConversation {
+            if !blockingResultMessages.isEmpty {
+                _ = try? await insertConversationResponseAttemptMessagesAtomically(
+                    blockingResultMessages,
+                    afterAttemptOf: toolCallMessageID,
+                    in: currentSessionID
+                )
+            }
+            await finishSessionRequestAndCleanupFileHistory(sessionID: currentSessionID)
+            return
+        }
+
         if shouldAwaitUserSupplement {
-            var updatedMessages = self.messagesSnapshot(for: currentSessionID)
-            updatedMessages = insertingResponseAttemptMessages(
+            _ = try? await insertConversationResponseAttemptMessagesAtomically(
                 blockingResultMessages,
                 afterAttemptOf: toolCallMessageID,
-                in: updatedMessages
+                in: currentSessionID
             )
-            self.persistAndPublishMessages(updatedMessages, for: currentSessionID)
-            emitSessionRequestStatus(.finished, sessionID: currentSessionID)
+            await finishSessionRequestAndCleanupFileHistory(sessionID: currentSessionID)
             return
         }
 
@@ -739,28 +843,50 @@ extension ChatService {
                 logger.info("在后台启动 \(nonBlockingCalls.count) 个非阻塞式工具...")
                 Task {
                     for toolCall in nonBlockingCalls {
-                        let outcome = await handleToolCall(toolCall, sessionID: currentSessionID)
+                        let outcome = await handleToolCall(
+                            toolCall,
+                            sessionID: currentSessionID,
+                            agentRunID: activeAgentRunID,
+                            triggeringMessageID: activeAttemptMetadata?.groupID
+                        )
                         if let toolResult = outcome.toolResult {
-                            await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
+                            await attachToolResult(
+                                toolResult,
+                                disposition: outcome.resultDisposition,
+                                to: toolCall.id,
+                                toolName: toolCall.toolName,
+                                loadingMessageID: toolCallMessageID,
+                                sessionID: currentSessionID
+                            )
                         }
                         var outcomeMessage = outcome.message
                         self.applyResponseAttemptMetadata(activeAttemptMetadata, to: &outcomeMessage)
-                        var messages = self.messagesSnapshot(for: currentSessionID)
-                        messages = self.insertingResponseAttemptMessages(
+                        _ = try? await self.insertConversationResponseAttemptMessagesAtomically(
                             [outcomeMessage],
                             afterAttemptOf: toolCallMessageID,
-                            in: messages
+                            in: currentSessionID
                         )
-                        self.persistAndPublishMessages(messages, for: currentSessionID)
                         logger.info("  - 非阻塞式工具 '\(toolCall.toolName)' 已在后台执行完毕并保存了结果。")
                     }
                 }
             } else {
                 logger.info("非阻塞式工具返回但没有正文，将等待工具执行结果再发起二次调用。")
                 for toolCall in nonBlockingCalls {
-                    let outcome = await handleToolCall(toolCall, sessionID: currentSessionID)
+                    let outcome = await handleToolCall(
+                        toolCall,
+                        sessionID: currentSessionID,
+                        agentRunID: activeAgentRunID,
+                        triggeringMessageID: activeAttemptMetadata?.groupID
+                    )
                     if let toolResult = outcome.toolResult {
-                        await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
+                        await attachToolResult(
+                            toolResult,
+                            disposition: outcome.resultDisposition,
+                            to: toolCall.id,
+                            toolName: toolCall.toolName,
+                            loadingMessageID: toolCallMessageID,
+                            sessionID: currentSessionID
+                        )
                     }
                     var outcomeMessage = outcome.message
                     applyResponseAttemptMetadata(activeAttemptMetadata, to: &outcomeMessage)
@@ -774,34 +900,40 @@ extension ChatService {
         }
 
         if shouldAwaitUserSupplement {
-            var updatedMessages = self.messagesSnapshot(for: currentSessionID)
-            updatedMessages = insertingResponseAttemptMessages(
+            _ = try? await insertConversationResponseAttemptMessagesAtomically(
                 blockingResultMessages + nonBlockingResultsForFollowUp,
                 afterAttemptOf: toolCallMessageID,
-                in: updatedMessages
+                in: currentSessionID
             )
-            self.persistAndPublishMessages(updatedMessages, for: currentSessionID)
-            emitSessionRequestStatus(.finished, sessionID: currentSessionID)
+            await finishSessionRequestAndCleanupFileHistory(sessionID: currentSessionID)
             return
         }
 
         let shouldTriggerFollowUp = !blockingResultMessages.isEmpty || !nonBlockingResultsForFollowUp.isEmpty
 
         if shouldTriggerFollowUp {
-            var updatedMessages = self.messagesSnapshot(for: currentSessionID)
-
             var followUpLoadingMessage = ChatMessage(
                 role: .assistant,
                 content: "",
                 requestedAt: Date()
             )
             applyResponseAttemptMetadata(activeAttemptMetadata, to: &followUpLoadingMessage)
-            updatedMessages = insertingResponseAttemptMessages(
-                blockingResultMessages + nonBlockingResultsForFollowUp + [followUpLoadingMessage],
-                afterAttemptOf: toolCallMessageID,
-                in: updatedMessages
+            let updatedMessages: [ChatMessage]
+            do {
+                updatedMessages = try await insertConversationResponseAttemptMessagesAtomically(
+                    blockingResultMessages + nonBlockingResultsForFollowUp + [followUpLoadingMessage],
+                    afterAttemptOf: toolCallMessageID,
+                    in: currentSessionID
+                )
+            } catch {
+                logger.error("原子保存工具续写消息失败：\(error.localizedDescription)")
+                emitSessionRequestStatus(.error, sessionID: currentSessionID)
+                return
+            }
+            await consumePendingUserSteeringEvents(
+                in: currentSessionID,
+                includedMessageIDs: Set(updatedMessages.map(\.id))
             )
-            self.persistAndPublishMessages(updatedMessages, for: currentSessionID)
             updateRequestLoadingMessageID(followUpLoadingMessage.id, for: currentSessionID)
 
             logger.info("正在将工具结果发回 AI 以生成最终回复...")
@@ -809,7 +941,10 @@ extension ChatService {
                 messages: updatedMessages, loadingMessageID: followUpLoadingMessage.id, currentSessionID: currentSessionID,
                 userMessage: userMessage, wasTemporarySession: wasTemporarySession, aiTemperature: aiTemperature,
                 aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory,
-                enableStreaming: enableStreaming, enhancedPrompt: nil, tools: availableTools, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite,
+                enableStreaming: enableStreaming, enhancedPrompt: nil, tools: availableTools,
+                localAgentPrompt: conversationRunIDs(for: currentSessionID)
+                    .flatMap { Persistence.loadLocalAgentRun(id: $0.runID)?.context.promptContent },
+                enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite,
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
                 systemTimeInjectionPosition: systemTimeInjectionPosition,
@@ -817,246 +952,28 @@ extension ChatService {
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: false,
                 currentAudioAttachment: nil,
+                currentImageAttachments: [],
                 currentFileAttachments: []
             )
         } else {
             scheduleConversationMemoryUpdateIfNeeded(for: currentSessionID, enableMemory: enableMemory)
             scheduleLongTermMemoryConsolidationIfNeeded(for: currentSessionID, enableMemory: enableMemory)
-            emitSessionRequestStatus(.finished, sessionID: currentSessionID)
+            await finishSessionRequestAndCleanupFileHistory(sessionID: currentSessionID)
         }
     }
 
-    private func updateTrailingUnparsedStreamingResponse(
-        with line: String,
-        body: inout String,
-        httpStatusCode: inout Int?
-    ) {
-        switch classifyUnparsedStreamingLine(line, isCapturingBody: !body.isEmpty) {
-        case .append(let payload):
-            appendUnparsedStreamingPayload(payload, to: &body)
-            if httpStatusCode == nil {
-                httpStatusCode = inferredHTTPStatusCode(from: body)
-            }
-        case .reset:
-            body = ""
-            httpStatusCode = nil
-        case .ignore:
-            break
+    func finishSessionRequestAndCleanupFileHistory(sessionID: UUID) async {
+        emitSessionRequestStatus(.finished, sessionID: sessionID)
+        guard let runID = conversationRunIDs(for: sessionID)?.runID,
+              Persistence.loadConversationRun(id: runID)?.status.isTerminal == true else {
+            return
         }
-    }
-
-    private func makeUnparsedStreamingResponseError(
-        body: String,
-        fallbackHTTPStatusCode: Int?
-    ) -> (body: String, httpStatusCode: Int?)? {
-        let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedBody.isEmpty, looksLikeStreamingErrorResponse(trimmedBody) else {
-            return nil
-        }
-        return (trimmedBody, fallbackHTTPStatusCode ?? inferredHTTPStatusCode(from: trimmedBody))
-    }
-
-    private enum UnparsedStreamingLineAction {
-        case append(String)
-        case reset
-        case ignore
-    }
-
-    private func classifyUnparsedStreamingLine(
-        _ line: String,
-        isCapturingBody: Bool
-    ) -> UnparsedStreamingLineAction {
-        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedLine.isEmpty else {
-            return isCapturingBody ? .append("") : .ignore
-        }
-
-        if trimmedLine == "[DONE]" {
-            return .reset
-        }
-
-        if trimmedLine.hasPrefix("data:") {
-            let payload = String(trimmedLine.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
-            if payload == "[DONE]" {
-                return .reset
-            }
-            guard !payload.isEmpty else { return .ignore }
-            if looksLikeStreamingErrorResponse(payload) || isCapturingBody {
-                return .append(payload)
-            }
-            return .ignore
-        }
-
-        if trimmedLine.hasPrefix(":")
-            || trimmedLine.hasPrefix("event:")
-            || trimmedLine.hasPrefix("id:")
-            || trimmedLine.hasPrefix("retry:") {
-            return .ignore
-        }
-
-        if looksLikeStreamingErrorResponse(trimmedLine) || isCapturingBody {
-            return .append(line)
-        }
-
-        return .ignore
-    }
-
-    private func appendUnparsedStreamingPayload(_ payload: String, to body: inout String) {
-        let maxLength = 64 * 1024
-        if body.isEmpty {
-            body = payload
-        } else if payload.isEmpty {
-            body += "\n"
+        if Persistence.loadLocalAgentRun(id: runID)?.state == .running {
+            await LocalAgentRuntimeContextManager.shared.finishRun(id: runID, state: .completed)
         } else {
-            body += "\n\(payload)"
-        }
-        if body.count > maxLength {
-            body = String(body.suffix(maxLength))
+            await SkillAllowedToolRuntime.shared.finishRun(id: runID)
+            await LocalAgentFileToolExecutor.shared.finishRun(id: runID)
         }
     }
 
-    private func looksLikeStreamingErrorResponse(_ text: String) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-
-        if let json = try? JSONSerialization.jsonObject(with: Data(trimmed.utf8)),
-           jsonPayloadLooksLikeError(json) {
-            return true
-        }
-
-        let lowercased = trimmed.lowercased()
-        if trimmed.hasPrefix("HTTP/") || trimmed.hasPrefix("<!DOCTYPE") || lowercased.hasPrefix("<html") {
-            return true
-        }
-
-        let errorMarkers = [
-            "bad gateway",
-            "gateway timeout",
-            "gateway time-out",
-            "service unavailable",
-            "internal server error",
-            "upstream timed out",
-            "nginx",
-            "cloudflare",
-            "error",
-            "错误",
-            "失败",
-            "无法解析流式响应",
-            "无法解析流失响应"
-        ]
-        return errorMarkers.contains { lowercased.contains($0) }
-    }
-
-    private func jsonPayloadLooksLikeError(_ value: Any) -> Bool {
-        if let dictionary = value as? [String: Any] {
-            if let type = dictionary["type"] as? String, type.lowercased() == "error" {
-                return true
-            }
-            if let errorValue = dictionary["error"], !(errorValue is NSNull) {
-                return true
-            }
-            if let statusCode = httpStatusCode(fromJSONObject: dictionary), statusCode >= 400 {
-                return true
-            }
-            return dictionary.values.contains { jsonPayloadLooksLikeError($0) }
-        }
-
-        if let array = value as? [Any] {
-            return array.contains { jsonPayloadLooksLikeError($0) }
-        }
-
-        return false
-    }
-
-    private func inferredHTTPStatusCode(from text: String) -> Int? {
-        if let json = try? JSONSerialization.jsonObject(with: Data(text.utf8)),
-           let code = httpStatusCode(fromJSONObject: json) {
-            return code
-        }
-
-        let patterns = [
-            #"HTTP/\d(?:\.\d)?\s+([1-5]\d{2})"#,
-            #"\b([1-5]\d{2})\s+(?:Bad Gateway|Gateway Timeout|Gateway Time-out|Service Unavailable|Internal Server Error|Not Found|Forbidden|Unauthorized|Too Many Requests)\b"#
-        ]
-        for pattern in patterns {
-            if let code = firstHTTPStatusCode(in: text, pattern: pattern) {
-                return code
-            }
-        }
-
-        let lowercased = text.lowercased()
-        if lowercased.contains("gateway timeout") || lowercased.contains("gateway time-out") {
-            return 504
-        }
-        if lowercased.contains("bad gateway") {
-            return 502
-        }
-        if lowercased.contains("service unavailable") {
-            return 503
-        }
-        if lowercased.contains("internal server error") {
-            return 500
-        }
-        if lowercased.contains("too many requests") {
-            return 429
-        }
-        if lowercased.contains("unauthorized") {
-            return 401
-        }
-        if lowercased.contains("forbidden") {
-            return 403
-        }
-        if lowercased.contains("not found") {
-            return 404
-        }
-        return nil
-    }
-
-    private func httpStatusCode(fromJSONObject value: Any) -> Int? {
-        if let dictionary = value as? [String: Any] {
-            for key in ["status", "status_code", "statusCode", "code"] {
-                if let code = normalizedHTTPStatusCode(from: dictionary[key]) {
-                    return code
-                }
-            }
-            for key in ["error", "response"] {
-                if let nested = dictionary[key],
-                   let code = httpStatusCode(fromJSONObject: nested) {
-                    return code
-                }
-            }
-        } else if let array = value as? [Any] {
-            for item in array {
-                if let code = httpStatusCode(fromJSONObject: item) {
-                    return code
-                }
-            }
-        }
-        return nil
-    }
-
-    private func normalizedHTTPStatusCode(from value: Any?) -> Int? {
-        if let intValue = value as? Int, (100...599).contains(intValue) {
-            return intValue
-        }
-        if let stringValue = value as? String,
-           let intValue = Int(stringValue.trimmingCharacters(in: .whitespacesAndNewlines)),
-           (100...599).contains(intValue) {
-            return intValue
-        }
-        return nil
-    }
-
-    private func firstHTTPStatusCode(in text: String, pattern: String) -> Int? {
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
-            return nil
-        }
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        guard let match = regex.firstMatch(in: text, options: [], range: range),
-              match.numberOfRanges > 1,
-              let codeRange = Range(match.range(at: 1), in: text) else {
-            return nil
-        }
-        return Int(text[codeRange])
-    }
 }

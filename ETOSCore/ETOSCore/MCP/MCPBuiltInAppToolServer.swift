@@ -13,6 +13,12 @@ import MCP
 
 public enum MCPBuiltInAppToolServer {
     public static let endpointPrefix = "builtin://app-tools/"
+    static let conversationSourceSessionIDArgument = "_etos_source_session_id"
+    static let conversationToolCallIDArgument = "_etos_tool_call_id"
+    static let localAgentRunIDArgument = "_etos_agent_run_id"
+    static let localAgentTriggeringMessageIDArgument = "_etos_triggering_message_id"
+    static let localAgentSelectedMCPServerIDsArgument = "_etos_selected_mcp_server_ids"
+    static let localAgentApprovedCommandRuleIDsArgument = "_etos_approved_command_rule_ids"
 
     private static let serverIDs: [AppToolCatalogCategory: UUID] = [
         .interaction: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0001")!,
@@ -20,11 +26,17 @@ public enum MCPBuiltInAppToolServer {
         .file: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0003")!,
         .database: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0004")!,
         .custom: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0005")!,
-        .feedback: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0006")!
+        .feedback: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0006")!,
+        .conversation: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0007")!,
+        .linux: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0008")!,
+        .browser: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0009")!,
+        .deviceOperations: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0010")!,
+        .mediaEnvironment: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0011")!,
+        .visionLanguage: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0012")!
     ]
 
     public static var categories: [AppToolCatalogCategory] {
-        [.interaction, .memory, .file, .database, .custom]
+        [.interaction, .conversation, .memory, .file, .database, .custom, .linux, .browser, .deviceOperations, .mediaEnvironment, .visionLanguage]
     }
 
     public static func serverID(for category: AppToolCatalogCategory) -> UUID {
@@ -84,13 +96,22 @@ public enum MCPBuiltInAppToolServer {
             appToolManager: appToolManager,
             includeUnavailablePlatformTools: true
         )
-        let disabledToolIds = tools
-            .filter { !isMigratedEnabled($0, appToolManager: appToolManager) }
-            .map(\.toolId)
-        let approvalPolicies = tools.reduce(into: [String: MCPToolApprovalPolicy]()) { result, tool in
-            guard let policy = migratedApprovalPolicy(for: tool.toolId, appToolManager: appToolManager),
-                  policy != .askEveryTime else { return }
-            result[tool.toolId] = policy
+        let disabledToolIds: [String]
+        let approvalPolicies: [String: MCPToolApprovalPolicy]
+        if category == .conversation || category == .linux || category == .browser || category == .deviceOperations || category == .mediaEnvironment || category == .visionLanguage {
+            disabledToolIds = []
+            approvalPolicies = category == .conversation
+                ? Dictionary(uniqueKeysWithValues: tools.map { ($0.toolId, .alwaysAllow) })
+                : [:]
+        } else {
+            disabledToolIds = tools
+                .filter { !isMigratedEnabled($0, appToolManager: appToolManager) }
+                .map(\.toolId)
+            approvalPolicies = tools.reduce(into: [String: MCPToolApprovalPolicy]()) { result, tool in
+                guard let policy = migratedApprovalPolicy(for: tool.toolId, appToolManager: appToolManager),
+                      policy != .askEveryTime else { return }
+                result[tool.toolId] = policy
+            }
         }
 
         return MCPServerConfiguration(
@@ -98,7 +119,15 @@ public enum MCPBuiltInAppToolServer {
             displayName: displayName(for: category),
             notes: notes(for: category),
             transport: .builtInAppTool(category: category),
-            isSelectedForChat: appToolManager.chatToolsEnabled,
+            isSelectedForChat: category == .conversation || category == .linux || category == .browser
+                ? true
+                : category == .deviceOperations
+                ? false
+                : category == .mediaEnvironment
+                ? false
+                : category == .visionLanguage
+                ? false
+                : appToolManager.chatToolsEnabled,
             disabledToolIds: disabledToolIds,
             toolApprovalPolicies: approvalPolicies,
             sortIndex: defaultSortIndex(for: category)
@@ -148,6 +177,8 @@ public enum MCPBuiltInAppToolServer {
         switch category {
         case .interaction:
             return NSLocalizedString("内建交互工具", comment: "Built-in app tool interaction MCP server name")
+        case .conversation:
+            return NSLocalizedString("内建会话协作", comment: "Built-in conversation MCP server name")
         case .memory:
             return NSLocalizedString("内建记忆操作", comment: "Built-in app tool memory MCP server name")
         case .file:
@@ -156,6 +187,16 @@ public enum MCPBuiltInAppToolServer {
             return NSLocalizedString("内建数据库操作", comment: "Built-in app tool database MCP server name")
         case .custom:
             return NSLocalizedString("内建自定义工具", comment: "Built-in app tool custom MCP server name")
+        case .linux:
+            return NSLocalizedString("内建本地 Linux", comment: "Built-in local Linux MCP server name")
+        case .browser:
+            return NSLocalizedString("内建 Browser Agent", comment: "Built-in Browser Agent MCP server name")
+        case .deviceOperations:
+            return NSLocalizedString("内建设备操作", comment: "Built-in device operations MCP server name")
+        case .mediaEnvironment:
+            return NSLocalizedString("内建媒体与环境", comment: "Built-in media and environment MCP server name")
+        case .visionLanguage:
+            return NSLocalizedString("内建视觉与语言", comment: "Built-in vision and language MCP server name")
         case .feedback:
             return displayName(for: .interaction)
         }
@@ -165,14 +206,26 @@ public enum MCPBuiltInAppToolServer {
         switch category {
         case .interaction:
             return NSLocalizedString("提供文本回显、输入草稿填充与反馈工单提交等本地交互工具。", comment: "Built-in app tool interaction MCP server notes")
+        case .conversation:
+            return NSLocalizedString("提供创建、联系、读取、等待和停止长期协作会话，以及按需查询可用模型的工具。", comment: "Built-in conversation MCP server notes")
         case .memory:
             return NSLocalizedString("提供长期记忆的查看、编辑、归档与恢复工具。", comment: "Built-in app tool memory MCP server notes")
         case .file:
-            return NSLocalizedString("提供应用沙盒 Documents 目录内的读取、搜索、写入、移动、复制、删除、差异查看与撤销工具。", comment: "Built-in app tool file MCP server notes")
+            return NSLocalizedString("提供统一文件工具：相对路径和 app:// 访问 Documents；Agent 模式还可通过 linux:// 与 mount:// 访问 Linux 和授权挂载。", comment: "Built-in app tool file MCP server notes")
         case .database:
             return NSLocalizedString("提供聊天、配置与记忆数据库的表结构查看、只读查询和受限写入工具。", comment: "Built-in app tool database MCP server notes")
         case .custom:
             return NSLocalizedString("提供 JavaScript 执行器以及由 AI 创建的可复用脚本工具。", comment: "Built-in app tool custom MCP server notes")
+        case .linux:
+            return NSLocalizedString("在 Agent 模式中提供 Linux 命令、Shell 与交互式进程管理；不会自动安装软件。", comment: "Built-in local Linux MCP server notes")
+        case .browser:
+            return NSLocalizedString("提供按会话隔离的网页导航、读取和交互；用户可接管同一标签页。", comment: "Built-in Browser Agent MCP server notes")
+        case .deviceOperations:
+            return NSLocalizedString("提供剪贴板、通知、AlarmKit、地图、URL 与只读设备状态工具。该服务器默认不加入聊天。", comment: "Built-in device operations MCP server notes")
+        case .mediaEnvironment:
+            return NSLocalizedString("提供语音、ETOS 内媒体播放、WeatherKit、HomeKit、蓝牙与 NFC 工具。该服务器默认不加入聊天。", comment: "Built-in media and environment MCP server notes")
+        case .visionLanguage:
+            return NSLocalizedString("提供 Vision 与 NaturalLanguage 的确定性端侧分析工具，不会启动大模型。该服务器默认不加入聊天。", comment: "Built-in vision and language MCP server notes")
         case .feedback:
             return notes(for: .interaction)
         }
@@ -196,6 +249,57 @@ public enum MCPBuiltInAppToolServer {
         appToolManager: AppToolManager,
         includeUnavailablePlatformTools: Bool = false
     ) -> [MCPToolDescription] {
+        if category == .conversation {
+            return ConversationToolDefinitions.all.map { tool in
+                MCPToolDescription(
+                    toolId: tool.name,
+                    description: tool.description,
+                    inputSchema: tool.parameters,
+                    examples: nil
+                )
+            }
+        }
+
+        if category == .linux {
+            return LocalLinuxToolDefinitions.all.map { tool in
+                MCPToolDescription(
+                    toolId: tool.name,
+                    description: tool.description,
+                    inputSchema: tool.parameters,
+                    examples: nil
+                )
+            }
+        }
+
+        if category == .browser {
+            return BrowserAgentToolDefinitions.all.map { tool in
+                MCPToolDescription(
+                    toolId: tool.name,
+                    description: tool.description,
+                    inputSchema: tool.parameters,
+                    examples: nil
+                )
+            }
+        }
+
+        if category == .deviceOperations {
+            return includeUnavailablePlatformTools
+                ? MCPNativeDeviceToolDefinitions.descriptions
+                : MCPNativeDeviceToolDefinitions.availableDescriptions
+        }
+
+        if category == .mediaEnvironment {
+            return includeUnavailablePlatformTools
+                ? MCPNativeMediaToolDefinitions.descriptions
+                : MCPNativeMediaToolDefinitions.availableDescriptions
+        }
+
+        if category == .visionLanguage {
+            return includeUnavailablePlatformTools
+                ? MCPNativeVisionLanguageToolDefinitions.descriptions
+                : MCPNativeVisionLanguageToolDefinitions.availableDescriptions
+        }
+
         let staticTools = AppToolKind.allCases
             .filter { !AppToolManager.builtInToolKinds.contains($0) }
             .filter { includeUnavailablePlatformTools || $0.isAvailableOnCurrentPlatform }
@@ -222,10 +326,31 @@ public enum MCPBuiltInAppToolServer {
                 )
             }
 
-        return staticTools + customTools
+        return staticTools + customTools + [MCPServerManagementTool.definition]
     }
 
     static func category(for toolName: String) -> AppToolCatalogCategory? {
+        if ConversationToolDefinitions.contains(toolName) {
+            return .conversation
+        }
+        if LocalLinuxToolDefinitions.contains(toolName) {
+            return .linux
+        }
+        if BrowserAgentToolDefinitions.contains(toolName) {
+            return .browser
+        }
+        if MCPNativeDeviceToolDefinitions.contains(toolName) {
+            return .deviceOperations
+        }
+        if MCPNativeMediaToolDefinitions.contains(toolName) {
+            return .mediaEnvironment
+        }
+        if MCPNativeVisionLanguageToolDefinitions.contains(toolName) {
+            return .visionLanguage
+        }
+        if toolName == MCPServerManagementTool.name {
+            return .custom
+        }
         if let kind = AppToolKind.resolve(from: toolName),
            !AppToolManager.builtInToolKinds.contains(kind) {
             return ToolCatalogSupport.appToolCategory(for: kind)
@@ -238,10 +363,103 @@ public enum MCPBuiltInAppToolServer {
 
     @MainActor
     static func executeTool(toolName: String, argumentsJSON: String) async throws -> String {
-        try await AppToolManager.shared.executeToolForBuiltInMCP(
+        if toolName == MCPServerManagementTool.name {
+            return try MCPServerManagementTool.execute(argumentsJSON: argumentsJSON)
+        }
+        return try await AppToolManager.shared.executeToolForBuiltInMCP(
             toolName: toolName,
             argumentsJSON: argumentsJSON
         )
+    }
+
+    static func executeConversationTool(
+        toolName: String,
+        argumentsJSON: String,
+        sourceSessionID: UUID,
+        toolCallID: String
+    ) async throws -> String {
+        let result = try await ChatService.shared.executeConversationTool(
+            InternalToolCall(
+                id: toolCallID,
+                toolName: toolName,
+                arguments: argumentsJSON
+            ),
+            sourceSessionID: sourceSessionID
+        )
+        return result.content
+    }
+
+    static func executeLinuxTool(
+        toolName: String,
+        argumentsJSON: String,
+        sourceSessionID: UUID,
+        sourceRunID: UUID,
+        triggeringMessageID: UUID?,
+        toolCallID: String,
+        selectedMCPServerIDs: [UUID],
+        approvedCommandRuleIDs: Set<UUID>
+    ) async throws -> String {
+        try await LocalLinuxToolExecutor.shared.execute(
+            toolName: toolName,
+            argumentsJSON: argumentsJSON,
+            sessionID: sourceSessionID,
+            runID: sourceRunID,
+            triggeringMessageID: triggeringMessageID,
+            toolCallID: toolCallID,
+            selectedMCPServerIDs: selectedMCPServerIDs,
+            approvedCommandRuleIDs: approvedCommandRuleIDs
+        )
+    }
+
+    static func executeFileTool(toolName: String, argumentsJSON: String) async throws -> String {
+        try await LocalAgentFileToolExecutor.shared.execute(
+            toolName: toolName,
+            argumentsJSON: argumentsJSON
+        )
+    }
+
+    static func executeBrowserTool(
+        toolName: String,
+        argumentsJSON: String,
+        sourceSessionID: UUID,
+        sourceRunID: UUID,
+        triggeringMessageID: UUID?,
+        toolCallID: String,
+        selectedMCPServerIDs: [UUID]
+    ) async throws -> String {
+        try await BrowserAgentToolExecutor.shared.execute(
+            toolName: toolName,
+            argumentsJSON: argumentsJSON,
+            sessionID: sourceSessionID,
+            runID: sourceRunID,
+            triggeringMessageID: triggeringMessageID,
+            toolCallID: toolCallID,
+            selectedMCPServerIDs: selectedMCPServerIDs
+        )
+    }
+
+    static func executeNativeDeviceTool(toolName: String, argumentsJSON: String) async throws -> String {
+        let result = try await MCPNativeDeviceExecutor.shared.execute(
+            toolName: toolName,
+            argumentsJSON: argumentsJSON
+        )
+        return try MCPNativeJSON.text(result)
+    }
+
+    static func executeNativeMediaTool(toolName: String, argumentsJSON: String) async throws -> String {
+        let result = try await MCPNativeMediaExecutor.shared.execute(
+            toolName: toolName,
+            argumentsJSON: argumentsJSON
+        )
+        return try MCPNativeJSON.text(result)
+    }
+
+    static func executeNativeVisionLanguageTool(toolName: String, argumentsJSON: String) async throws -> String {
+        let result = try await MCPNativeVisionLanguageExecutor.shared.execute(
+            toolName: toolName,
+            argumentsJSON: argumentsJSON
+        )
+        return try MCPNativeJSON.text(result)
     }
 
     @MainActor
@@ -456,9 +674,149 @@ actor MCPBuiltInAppToolServerEngine {
         guard MCPBuiltInAppToolServer.category(for: name) == category else {
             return errorToolResult(message: "Unknown built-in app tool: \(name)")
         }
-        let arguments = params["arguments"] as? [String: Any] ?? [:]
+        var arguments = params["arguments"] as? [String: Any] ?? [:]
         let argumentsJSON: String
         do {
+            // 旧缓存或手动 MCP 请求也不能越过本机能力边界。
+            if category == .deviceOperations || category == .mediaEnvironment || category == .visionLanguage {
+                guard MCPNativeCapabilityAvailability.isToolAvailableOnCurrentPlatform(name) else {
+                    throw MCPNativeCapabilityError.unsupportedTool(name)
+                }
+            }
+            if category == .conversation {
+                guard let rawSourceSessionID = arguments.removeValue(
+                    forKey: MCPBuiltInAppToolServer.conversationSourceSessionIDArgument
+                ) as? String,
+                      let sourceSessionID = UUID(uuidString: rawSourceSessionID),
+                      let toolCallID = arguments.removeValue(
+                        forKey: MCPBuiltInAppToolServer.conversationToolCallIDArgument
+                      ) as? String,
+                      !toolCallID.isEmpty else {
+                    throw ConversationRuntimeError.sessionNotFound
+                }
+                argumentsJSON = try prettyPrintedJSON(arguments, prettyPrinted: false)
+                let result = try await MCPBuiltInAppToolServer.executeConversationTool(
+                    toolName: name,
+                    argumentsJSON: argumentsJSON,
+                    sourceSessionID: sourceSessionID,
+                    toolCallID: toolCallID
+                )
+                return successToolResult(toolName: name, result: result)
+            }
+
+            if category == .linux {
+                guard let rawSourceSessionID = arguments.removeValue(
+                    forKey: MCPBuiltInAppToolServer.conversationSourceSessionIDArgument
+                ) as? String,
+                      let sourceSessionID = UUID(uuidString: rawSourceSessionID),
+                      let rawRunID = arguments.removeValue(
+                        forKey: MCPBuiltInAppToolServer.localAgentRunIDArgument
+                      ) as? String,
+                      let sourceRunID = UUID(uuidString: rawRunID),
+                      let toolCallID = arguments.removeValue(
+                        forKey: MCPBuiltInAppToolServer.conversationToolCallIDArgument
+                      ) as? String,
+                      !toolCallID.isEmpty else {
+                    throw LocalLinuxRuntimeError.runtimeUnavailable(
+                        NSLocalizedString("Linux 工具缺少可信运行上下文。", comment: "Missing trusted Linux tool context")
+                    )
+                }
+                let triggeringMessageID = (arguments.removeValue(
+                    forKey: MCPBuiltInAppToolServer.localAgentTriggeringMessageIDArgument
+                ) as? String).flatMap(UUID.init(uuidString:))
+                let selectedMCPServerIDs = (arguments.removeValue(
+                    forKey: MCPBuiltInAppToolServer.localAgentSelectedMCPServerIDsArgument
+                ) as? [String] ?? []).compactMap(UUID.init(uuidString:))
+                let approvedCommandRuleIDs = Set((arguments.removeValue(
+                    forKey: MCPBuiltInAppToolServer.localAgentApprovedCommandRuleIDsArgument
+                ) as? [String] ?? []).compactMap(UUID.init(uuidString:)))
+                argumentsJSON = try prettyPrintedJSON(arguments, prettyPrinted: false)
+                let result = try await MCPBuiltInAppToolServer.executeLinuxTool(
+                    toolName: name,
+                    argumentsJSON: argumentsJSON,
+                    sourceSessionID: sourceSessionID,
+                    sourceRunID: sourceRunID,
+                    triggeringMessageID: triggeringMessageID,
+                    toolCallID: toolCallID,
+                    selectedMCPServerIDs: selectedMCPServerIDs,
+                    approvedCommandRuleIDs: approvedCommandRuleIDs
+                )
+                return successToolResult(toolName: name, result: result)
+            }
+
+            if category == .browser {
+                guard let rawSourceSessionID = arguments.removeValue(
+                    forKey: MCPBuiltInAppToolServer.conversationSourceSessionIDArgument
+                ) as? String,
+                      let sourceSessionID = UUID(uuidString: rawSourceSessionID),
+                      let rawRunID = arguments.removeValue(
+                        forKey: MCPBuiltInAppToolServer.localAgentRunIDArgument
+                      ) as? String,
+                      let sourceRunID = UUID(uuidString: rawRunID),
+                      let toolCallID = arguments.removeValue(
+                        forKey: MCPBuiltInAppToolServer.conversationToolCallIDArgument
+                      ) as? String,
+                      !toolCallID.isEmpty else {
+                    throw BrowserAgentError.invalidArguments(
+                        NSLocalizedString("Browser Agent 缺少可信运行上下文。", comment: "Missing trusted Browser Agent context")
+                    )
+                }
+                let triggeringMessageID = (arguments.removeValue(
+                    forKey: MCPBuiltInAppToolServer.localAgentTriggeringMessageIDArgument
+                ) as? String).flatMap(UUID.init(uuidString:))
+                let selectedMCPServerIDs = (arguments.removeValue(
+                    forKey: MCPBuiltInAppToolServer.localAgentSelectedMCPServerIDsArgument
+                ) as? [String] ?? []).compactMap(UUID.init(uuidString:))
+                arguments.removeValue(forKey: MCPBuiltInAppToolServer.localAgentApprovedCommandRuleIDsArgument)
+                argumentsJSON = try prettyPrintedJSON(arguments, prettyPrinted: false)
+                let result = try await MCPBuiltInAppToolServer.executeBrowserTool(
+                    toolName: name,
+                    argumentsJSON: argumentsJSON,
+                    sourceSessionID: sourceSessionID,
+                    sourceRunID: sourceRunID,
+                    triggeringMessageID: triggeringMessageID,
+                    toolCallID: toolCallID,
+                    selectedMCPServerIDs: selectedMCPServerIDs
+                )
+                return successToolResult(toolName: name, result: result)
+            }
+
+            if category == .file {
+                argumentsJSON = try prettyPrintedJSON(arguments, prettyPrinted: false)
+                let result = try await MCPBuiltInAppToolServer.executeFileTool(
+                    toolName: name,
+                    argumentsJSON: argumentsJSON
+                )
+                return successToolResult(toolName: name, result: result)
+            }
+
+            if category == .deviceOperations {
+                argumentsJSON = try prettyPrintedJSON(arguments, prettyPrinted: false)
+                let result = try await MCPBuiltInAppToolServer.executeNativeDeviceTool(
+                    toolName: name,
+                    argumentsJSON: argumentsJSON
+                )
+                return successToolResult(toolName: name, result: result)
+            }
+
+            if category == .mediaEnvironment {
+                argumentsJSON = try prettyPrintedJSON(arguments, prettyPrinted: false)
+                let result = try await MCPBuiltInAppToolServer.executeNativeMediaTool(
+                    toolName: name,
+                    argumentsJSON: argumentsJSON
+                )
+                return successToolResult(toolName: name, result: result)
+            }
+
+            if category == .visionLanguage {
+                argumentsJSON = try prettyPrintedJSON(arguments, prettyPrinted: false)
+                let result = try await MCPBuiltInAppToolServer.executeNativeVisionLanguageTool(
+                    toolName: name,
+                    argumentsJSON: argumentsJSON
+                )
+                return successToolResult(toolName: name, result: result)
+            }
+
             argumentsJSON = try prettyPrintedJSON(arguments, prettyPrinted: false)
             let result = try await MCPBuiltInAppToolServer.executeTool(
                 toolName: name,
@@ -574,7 +932,9 @@ extension AppToolManager {
             return try await Self.executeResolvedTool(
                 kind: kind,
                 argumentsJSON: argumentsJSON,
-                current: self
+                current: self,
+                sourceSessionID: nil,
+                sourceMessageID: nil
             )
         }
 

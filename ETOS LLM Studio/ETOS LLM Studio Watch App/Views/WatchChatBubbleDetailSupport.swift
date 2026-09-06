@@ -11,7 +11,7 @@ import ETOSCore
 import SwiftUI
 
 enum WatchToolCallTextPreviewConstants {
-    static let previewLimit = 3_000
+    nonisolated static let previewLimit = 3_000
 }
 
 func watchFormattedToolCallJSONOrRaw(_ raw: String) -> String {
@@ -47,6 +47,7 @@ enum ToolCallBubbleStatus: Equatable {
     case pendingApproval
     case running
     case finished
+    case failed
     case rejected
 
     var title: String {
@@ -57,6 +58,8 @@ enum ToolCallBubbleStatus: Equatable {
             return NSLocalizedString("执行中", comment: "")
         case .finished:
             return NSLocalizedString("已完成", comment: "")
+        case .failed:
+            return NSLocalizedString("执行失败", comment: "Tool execution failed status")
         case .rejected:
             return NSLocalizedString("已拒绝", comment: "")
         }
@@ -70,7 +73,7 @@ enum ToolCallBubbleStatus: Equatable {
             return "clock.arrow.trianglehead.counterclockwise.rotate.90"
         case .finished:
             return "checkmark.circle.fill"
-        case .rejected:
+        case .failed, .rejected:
             return "xmark.circle.fill"
         }
     }
@@ -83,7 +86,7 @@ enum ToolCallBubbleStatus: Equatable {
             return .blue
         case .finished:
             return .green
-        case .rejected:
+        case .failed, .rejected:
             return .red
         }
     }
@@ -114,6 +117,10 @@ extension ChatBubble {
               let request = toolPermissionCenter.activeRequest else {
             return nil
         }
+        if let sourceSessionID = request.sourceSessionID,
+           sourceSessionID != roleplaySessionID {
+            return nil
+        }
         if let toolCallID = request.toolCallID {
             return call.id == toolCallID ? request : nil
         }
@@ -121,6 +128,10 @@ extension ChatBubble {
         let callArgs = call.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
         let isMatch = call.toolName == request.toolName && callArgs == trimmedArgs
         return isMatch ? request : nil
+    }
+
+    func pendingToolCallPresentationID(_ toolCallID: String) -> String {
+        "\(message.id.uuidString)#\(toolCallID)"
     }
 
     func resolvedToolResultText(for call: InternalToolCall) -> String {
@@ -136,8 +147,11 @@ extension ChatBubble {
         if resolvedResult.isEmpty {
             return .running
         }
-        if isDeniedToolResultText(resolvedResult) {
+        if call.wasRejected {
             return .rejected
+        }
+        if call.executionFailed {
+            return .failed
         }
         return .finished
     }
@@ -169,7 +183,7 @@ extension ChatBubble {
         guard toolPermissionCenter.canAutoPresentRequestDetails else { return }
         guard selectedToolCallDetailSheetItem == nil else { return }
         guard let pendingCall = pendingToolCallForAutoPresentation else { return }
-        markPendingToolCallAutoOpened(pendingCall.id)
+        markPendingToolCallAutoOpened(pendingToolCallPresentationID(pendingCall.id))
         showRawToolResultInDetailSheet = false
         selectedToolCallDetailSheetItem = ToolCallDetailSheetItem(
             messageID: message.id,
@@ -186,14 +200,6 @@ extension ChatBubble {
         let callIDs = (message.toolCalls ?? []).map(\.id).joined(separator: "|")
         let activeRequestID = toolPermissionCenter.activeRequest?.id.uuidString ?? ""
         return "\(message.id.uuidString)#\(callIDs)#\(activeRequestID)"
-    }
-
-    func isDeniedToolResultText(_ text: String) -> Bool {
-        let normalized = text.lowercased()
-        return normalized.contains("denied")
-            || normalized.contains("拒绝")
-            || normalized.contains("拒絕")
-            || normalized.contains("rejected")
     }
 
     @ViewBuilder
@@ -290,6 +296,7 @@ extension ChatBubble {
                             title: NSLocalizedString("允许一次", comment: ""),
                             systemImage: "checkmark.circle.fill",
                             tint: .green,
+                            requestID: permissionRequest.id,
                             decision: .allowOnce
                         )
                         toolPermissionDecisionButton(
@@ -297,24 +304,28 @@ extension ChatBubble {
                             systemImage: "xmark.circle.fill",
                             tint: .red,
                             role: .destructive,
+                            requestID: permissionRequest.id,
                             decision: .deny
                         )
                         toolPermissionDecisionButton(
                             title: NSLocalizedString("补充提示", comment: ""),
                             systemImage: "text.badge.plus",
                             tint: .blue,
+                            requestID: permissionRequest.id,
                             decision: .supplement
                         )
                         toolPermissionDecisionButton(
                             title: NSLocalizedString("保持允许", comment: ""),
                             systemImage: "checkmark.shield.fill",
                             tint: .teal,
+                            requestID: permissionRequest.id,
                             decision: .allowForTool
                         )
                         toolPermissionDecisionButton(
                             title: NSLocalizedString("完全权限", comment: ""),
                             systemImage: "shield.fill",
                             tint: .purple,
+                            requestID: permissionRequest.id,
                             decision: .allowAll
                         )
                     }
@@ -432,10 +443,11 @@ extension ChatBubble {
         systemImage: String,
         tint: Color,
         role: ButtonRole? = nil,
+        requestID: UUID,
         decision: ToolPermissionDecision
     ) -> some View {
         Button(role: role) {
-            resolveToolPermission(decision)
+            resolveToolPermission(decision, requestID: requestID)
         } label: {
             Label {
                 Text(title)
@@ -446,8 +458,8 @@ extension ChatBubble {
         }
     }
 
-    private func resolveToolPermission(_ decision: ToolPermissionDecision) {
-        toolPermissionCenter.resolveActiveRequest(with: decision)
+    private func resolveToolPermission(_ decision: ToolPermissionDecision, requestID: UUID) {
+        toolPermissionCenter.resolveRequest(withID: requestID, decision: decision)
         selectedToolCallDetailSheetItem = nil
     }
 
@@ -477,12 +489,14 @@ struct WatchToolCallLongTextPreview: View {
     let textCharacterCount: Int
     let needsExpansion: Bool
     let lineLimit: Int?
+    let customTextColor: Color?
 
     init(
         title: String,
         text: String,
         usesMonospacedFont: Bool,
-        lineLimit: Int? = nil
+        lineLimit: Int? = nil,
+        customTextColor: Color? = nil
     ) {
         self.title = title
         self.text = text
@@ -493,6 +507,27 @@ struct WatchToolCallLongTextPreview: View {
         self.textCharacterCount = characterCount
         self.needsExpansion = expands
         self.displayedText = expands ? String(text.prefix(WatchToolCallTextPreviewConstants.previewLimit)) : text
+        self.customTextColor = customTextColor
+    }
+
+    init(
+        title: String,
+        text: String,
+        usesMonospacedFont: Bool,
+        displayedText: String,
+        textCharacterCount: Int,
+        needsExpansion: Bool,
+        lineLimit: Int? = nil,
+        customTextColor: Color? = nil
+    ) {
+        self.title = title
+        self.text = text
+        self.usesMonospacedFont = usesMonospacedFont
+        self.displayedText = displayedText
+        self.textCharacterCount = textCharacterCount
+        self.needsExpansion = needsExpansion
+        self.lineLimit = lineLimit
+        self.customTextColor = customTextColor
     }
 
     var body: some View {
@@ -502,7 +537,7 @@ struct WatchToolCallLongTextPreview: View {
             if needsExpansion {
                 Text(String(format: NSLocalizedString("已显示前 %d 个字符，共 %d 个字符。", comment: ""), WatchToolCallTextPreviewConstants.previewLimit, textCharacterCount))
                     .etFont(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(customTextColor ?? .secondary)
 
                 NavigationLink {
                     WatchToolCallPagedTextView(title: title, text: text)
@@ -519,13 +554,13 @@ struct WatchToolCallLongTextPreview: View {
         if usesMonospacedFont {
             Text(displayedText)
                 .etFont(.caption2.monospaced())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(customTextColor ?? .secondary)
                 .lineLimit(lineLimit)
                 .fixedSize(horizontal: false, vertical: true)
         } else {
             Text(displayedText)
                 .etFont(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(customTextColor ?? .secondary)
                 .lineLimit(lineLimit)
                 .fixedSize(horizontal: false, vertical: true)
         }

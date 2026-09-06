@@ -12,6 +12,9 @@ import Dispatch
 
 public struct LocalLLMGenerationOptions: Hashable, Sendable {
     public var mmprojPath: String?
+    public var loraPath: String?
+    public var loraScale: Double
+    public var kvCacheKey: String?
     public var contextSize: Int
     public var maxOutputTokens: Int
     public var gpuLayers: Int
@@ -20,6 +23,7 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
     public var kvOffload: Bool
     public var flashAttention: LocalLLMFlashAttentionMode
     public var useModelCache: Bool
+    public var reuseKVCache: Bool
     public var seed: UInt32
     public var temperature: Double
     public var topK: Int
@@ -36,9 +40,13 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
     public var samplerKinds: [LocalLLMSamplerKind]
     public var chatTemplateKwargs: [String: JSONValue]
     public var advancedArguments: String
+    public var toolCallIDScope: String
 
     public init(
         mmprojPath: String? = nil,
+        loraPath: String? = nil,
+        loraScale: Double = LocalModelRecord.defaultLoRAScale,
+        kvCacheKey: String? = nil,
         contextSize: Int,
         maxOutputTokens: Int,
         temperature: Double = LocalModelRecord.defaultTemperature,
@@ -49,6 +57,7 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
         kvOffload: Bool = LocalModelRecord.defaultKVOffload,
         flashAttention: LocalLLMFlashAttentionMode = LocalModelRecord.defaultFlashAttention,
         useModelCache: Bool = true,
+        reuseKVCache: Bool = false,
         seed: UInt32 = LocalModelRecord.defaultSeed,
         topK: Int = LocalModelRecord.defaultTopK,
         minP: Double = LocalModelRecord.defaultMinP,
@@ -62,9 +71,13 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
         imageMaxTokens: Int = LocalModelRecord.defaultImageMaxTokens,
         samplerKinds: [LocalLLMSamplerKind] = LocalLLMSamplerKind.defaultChain,
         chatTemplateKwargs: [String: JSONValue] = [:],
-        advancedArguments: String = LocalModelRecord.defaultAdvancedArguments
+        advancedArguments: String = LocalModelRecord.defaultAdvancedArguments,
+        toolCallIDScope: String = UUID().uuidString
     ) {
         self.mmprojPath = mmprojPath?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.loraPath = loraPath?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.loraScale = loraScale.clamped(to: -100...100)
+        self.kvCacheKey = kvCacheKey?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.contextSize = contextSize.clamped(to: 1...1_048_576)
         self.maxOutputTokens = maxOutputTokens.clamped(to: 1...131_072)
         self.gpuLayers = gpuLayers
@@ -73,6 +86,7 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
         self.kvOffload = kvOffload
         self.flashAttention = flashAttention
         self.useModelCache = useModelCache
+        self.reuseKVCache = reuseKVCache && self.kvCacheKey != nil
         self.seed = seed
         self.temperature = temperature.clamped(to: 0...5)
         self.topK = topK.clamped(to: 0...1_000)
@@ -90,19 +104,39 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
         self.samplerKinds = uniqueSamplerKinds.isEmpty ? LocalLLMSamplerKind.defaultChain : uniqueSamplerKinds
         self.chatTemplateKwargs = chatTemplateKwargs
         self.advancedArguments = advancedArguments.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedToolCallIDScope = toolCallIDScope.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.toolCallIDScope = normalizedToolCallIDScope.isEmpty ? UUID().uuidString : normalizedToolCallIDScope
     }
 }
 
 public struct LocalLLMEmbeddingOptions: Hashable, Sendable {
+    public var mmprojPath: String?
+    public var loraPath: String?
+    public var loraScale: Double
     public var contextSize: Int
     public var gpuLayers: Int
+    public var flashAttention: LocalLLMFlashAttentionMode
+    public var imageMinTokens: Int
+    public var imageMaxTokens: Int
 
     public init(
         contextSize: Int,
-        gpuLayers: Int = LocalModelRecord.defaultGPULayers
+        gpuLayers: Int = LocalModelRecord.defaultGPULayers,
+        mmprojPath: String? = nil,
+        loraPath: String? = nil,
+        loraScale: Double = LocalModelRecord.defaultLoRAScale,
+        flashAttention: LocalLLMFlashAttentionMode = LocalModelRecord.defaultFlashAttention,
+        imageMinTokens: Int = LocalModelRecord.defaultImageMinTokens,
+        imageMaxTokens: Int = LocalModelRecord.defaultImageMaxTokens
     ) {
+        self.mmprojPath = mmprojPath?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.loraPath = loraPath?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.loraScale = loraScale.clamped(to: -100...100)
         self.contextSize = max(1, contextSize)
         self.gpuLayers = gpuLayers
+        self.flashAttention = flashAttention
+        self.imageMinTokens = imageMinTokens.clamped(to: -1...1_048_576)
+        self.imageMaxTokens = imageMaxTokens.clamped(to: -1...1_048_576)
     }
 }
 
@@ -132,9 +166,20 @@ public struct LocalLLMMediaAttachment: Hashable, Sendable {
     }
 }
 
+public struct LocalLLMEmbeddingInput: Hashable, Sendable {
+    public var text: String
+    public var mediaAttachments: [LocalLLMMediaAttachment]
+
+    public init(text: String = "", mediaAttachments: [LocalLLMMediaAttachment] = []) {
+        self.text = text
+        self.mediaAttachments = mediaAttachments
+    }
+}
+
 public enum LocalLLMEngineError: LocalizedError {
     case backendUnavailable
     case modelFileMissing(String)
+    case modelFileIncomplete(fileName: String, actualBytes: UInt64, requiredBytes: UInt64)
     case generationFailed(String)
 
     public var errorDescription: String? {
@@ -143,6 +188,13 @@ public enum LocalLLMEngineError: LocalizedError {
             return NSLocalizedString("本地推理后端尚未完成编译接入。", comment: "Local LLM backend unavailable")
         case .modelFileMissing(let fileName):
             return String(format: NSLocalizedString("本地模型文件不存在：%@", comment: "Local model file missing"), fileName)
+        case .modelFileIncomplete(let fileName, let actualBytes, let requiredBytes):
+            return String(
+                format: NSLocalizedString("本地模型文件不完整：%@（当前 %@，至少需要 %@）。请重新下载后再导入。", comment: "Incomplete local model file"),
+                fileName,
+                StorageUtility.formatSize(Int64(clamping: actualBytes)),
+                StorageUtility.formatSize(Int64(clamping: requiredBytes))
+            )
         case .generationFailed(let message):
             return message
         }
@@ -296,22 +348,37 @@ public final class LocalLLMEngine: @unchecked Sendable {
         modelURL: URL,
         options: LocalLLMEmbeddingOptions
     ) async throws -> [[Float]] {
+        try await embed(
+            inputs: texts.map { LocalLLMEmbeddingInput(text: $0) },
+            modelURL: modelURL,
+            options: options
+        )
+    }
+
+    public func embed(
+        inputs: [LocalLLMEmbeddingInput],
+        modelURL: URL,
+        options: LocalLLMEmbeddingOptions
+    ) async throws -> [[Float]] {
         guard FileManager.default.fileExists(atPath: modelURL.path) else {
             throw LocalLLMEngineError.modelFileMissing(modelURL.lastPathComponent)
         }
 
         return try await Task.detached(priority: .userInitiated) {
             try LocalLLMBridge.embed(
-                texts: texts,
+                inputs: inputs,
                 modelPath: modelURL.path,
-                contextSize: options.contextSize,
-                gpuLayers: options.gpuLayers
+                options: options
             )
         }.value
     }
 
     public func clearModelCache() {
         LocalLLMBridge.clearModelCache()
+    }
+
+    public func clearKVCache(for cacheKey: String? = nil) {
+        LocalLLMBridge.clearKVCache(for: cacheKey)
     }
 }
 
@@ -330,6 +397,18 @@ private enum LocalLLMBridge {
 
     static func clearModelCache() {
         etos_local_llm_clear_model_cache()
+    }
+
+    static func clearKVCache(for cacheKey: String?) {
+        if let normalizedKey = cacheKey?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty {
+            normalizedKey.withCString { expectedCacheKey in
+                etos_local_llm_clear_kv_cache(expectedCacheKey)
+            }
+        } else {
+            etos_local_llm_clear_kv_cache(nil)
+        }
     }
 
     static func generateChat(
@@ -437,7 +516,10 @@ private enum LocalLLMBridge {
             let message = errorPointer.map { String(cString: $0) } ?? LocalLLMEngineError.backendUnavailable.localizedDescription
             throw LocalLLMEngineError.generationFailed(message)
         }
-        return try parseChatResponseJSON(String(cString: outputPointer))
+        return try parseChatResponseJSON(
+            String(cString: outputPointer),
+            fallbackToolCallIDScope: options.toolCallIDScope
+        )
     }
 
     static func streamChat(
@@ -522,7 +604,10 @@ private enum LocalLLMBridge {
                 return
             }
 
-            let state = LocalLLMParsedStreamState(continuation: continuation)
+            let state = LocalLLMParsedStreamState(
+                continuation: continuation,
+                fallbackToolCallIDScope: options.toolCallIDScope
+            )
             continuation.onTermination = { @Sendable _ in
                 state.cancel()
             }
@@ -620,28 +705,67 @@ private enum LocalLLMBridge {
             let message = errorPointer.map { String(cString: $0) } ?? LocalLLMEngineError.backendUnavailable.localizedDescription
             throw LocalLLMEngineError.generationFailed(message)
         }
-        return try parseChatResponseJSON(String(cString: outputPointer))
+        return try parseChatResponseJSON(
+            String(cString: outputPointer),
+            fallbackToolCallIDScope: UUID().uuidString
+        )
     }
 
     static func embed(
-        texts: [String],
+        inputs: [LocalLLMEmbeddingInput],
         modelPath: String,
-        contextSize: Int,
-        gpuLayers: Int
+        options: LocalLLMEmbeddingOptions
     ) throws -> [[Float]] {
-        let normalizedTexts = texts.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        guard !normalizedTexts.isEmpty, normalizedTexts.allSatisfy({ !$0.isEmpty }) else {
+        guard !inputs.isEmpty else {
             throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地嵌入文本为空。", comment: "Local LLM empty embedding texts"))
         }
 
-        let textPointers = normalizedTexts.compactMap { strdup($0) }
+        let preparedInputs = try inputs.enumerated().map { inputIndex, input -> (prompt: String, attachments: [LocalLLMMediaAttachment]) in
+            let text = input.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard input.mediaAttachments.allSatisfy({ !$0.id.isEmpty && !$0.data.isEmpty }) else {
+                throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地多模态图片内存分配失败。", comment: "Local LLM media allocation failed"))
+            }
+            let markers = Array(
+                repeating: LocalLLMChatMessage.mediaMarker,
+                count: input.mediaAttachments.count
+            ).joined()
+            let prompt: String
+            if markers.isEmpty {
+                prompt = text
+            } else if text.isEmpty {
+                prompt = markers
+            } else {
+                prompt = "\(markers)\n\(text)"
+            }
+            guard !prompt.isEmpty else {
+                throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地嵌入文本为空。", comment: "Local LLM empty embedding texts"))
+            }
+            let attachments = input.mediaAttachments.enumerated().map { attachmentIndex, attachment in
+                LocalLLMMediaAttachment(
+                    id: "embedding-\(inputIndex)-\(attachmentIndex)-\(attachment.id)",
+                    data: attachment.data,
+                    mimeType: attachment.mimeType,
+                    fileName: attachment.fileName
+                )
+            }
+            return (prompt, attachments)
+        }
+        let prompts = preparedInputs.map(\.prompt)
+        let textPointers = prompts.compactMap { strdup($0) }
         defer {
             textPointers.forEach { free($0) }
         }
-        guard textPointers.count == normalizedTexts.count else {
+        guard textPointers.count == prompts.count else {
             throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地嵌入文本内存分配失败。", comment: "Local LLM embedding text allocation failed"))
         }
         let bridgedTextPointers: [UnsafePointer<CChar>?] = textPointers.map { UnsafePointer($0) }
+        let mediaEntries = preparedInputs.enumerated().flatMap { inputIndex, preparedInput in
+            preparedInput.attachments.map { (attachment: $0, inputIndex: Int32(inputIndex)) }
+        }
+        let preparedConfig = try PreparedLocalLLMEmbeddingConfig(
+            options: options,
+            mediaEntries: mediaEntries
+        )
 
         var outputPointer: UnsafeMutablePointer<Float>?
         var errorPointer: UnsafeMutablePointer<CChar>?
@@ -650,17 +774,18 @@ private enum LocalLLMBridge {
         let status = LocalLLMExecutionGate.withExclusiveAccess {
             modelPath.withCString { modelPathCString in
                 bridgedTextPointers.withUnsafeBufferPointer { textsPointer in
-                    etos_local_llm_embed(
-                        modelPathCString,
-                        textsPointer.baseAddress,
-                        Int32(textsPointer.count),
-                        Int32(max(1, contextSize)),
-                        Int32(gpuLayers),
-                        &outputPointer,
-                        &embeddingCount,
-                        &embeddingDimension,
-                        &errorPointer
-                    )
+                    preparedConfig.withUnsafePointer { configPointer in
+                        etos_local_llm_embed(
+                            modelPathCString,
+                            textsPointer.baseAddress,
+                            Int32(textsPointer.count),
+                            configPointer,
+                            &outputPointer,
+                            &embeddingCount,
+                            &embeddingDimension,
+                            &errorPointer
+                        )
+                    }
                 }
             }
         }
@@ -675,7 +800,7 @@ private enum LocalLLMBridge {
 
         guard status == 0,
               let outputPointer,
-              embeddingCount == normalizedTexts.count,
+              embeddingCount == prompts.count,
               embeddingDimension > 0 else {
             let message = errorPointer.map { String(cString: $0) } ?? LocalLLMEngineError.backendUnavailable.localizedDescription
             throw LocalLLMEngineError.generationFailed(message)
@@ -712,7 +837,10 @@ private struct LocalLLMParsedChatMessage: Decodable {
     }
 }
 
-private func parseChatResponseJSON(_ json: String) throws -> LocalLLMToolCallParseResult {
+private func parseChatResponseJSON(
+    _ json: String,
+    fallbackToolCallIDScope: String
+) throws -> LocalLLMToolCallParseResult {
     guard let data = json.data(using: .utf8) else {
         throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地模型结构化输出不是有效 UTF-8。", comment: "Local LLM structured output invalid UTF-8"))
     }
@@ -723,7 +851,7 @@ private func parseChatResponseJSON(_ json: String) throws -> LocalLLMToolCallPar
         guard !name.isEmpty else { return nil }
         let id = toolCall.id?.trimmingCharacters(in: .whitespacesAndNewlines)
         return InternalToolCall(
-            id: id?.isEmpty == false ? id! : "local_tool_\(index + 1)",
+            id: id?.isEmpty == false ? id! : "local-\(fallbackToolCallIDScope)-\(index + 1)",
             toolName: name,
             arguments: toolCall.function?.arguments ?? "{}"
         )
@@ -737,6 +865,9 @@ private func parseChatResponseJSON(_ json: String) throws -> LocalLLMToolCallPar
 
 private struct ETOSLocalLLMGenerationConfig {
     var mmprojPath: UnsafePointer<CChar>?
+    var loraPath: UnsafePointer<CChar>?
+    var loraScale: Float
+    var kvCacheKey: UnsafePointer<CChar>?
     var contextSize: Int32
     var maxOutputTokens: Int32
     var gpuLayers: Int32
@@ -745,6 +876,7 @@ private struct ETOSLocalLLMGenerationConfig {
     var kvOffload: Int32
     var flashAttention: Int32
     var useModelCache: Int32
+    var reuseKVCache: Int32
     var seed: UInt32
     var minKeep: Int32
     var topK: Int32
@@ -789,6 +921,8 @@ private struct ETOSLocalLLMGenerationConfig {
 
 private final class PreparedLocalLLMGenerationConfig {
     private let mmprojPathPointer: UnsafeMutablePointer<CChar>
+    private let loraPathPointer: UnsafeMutablePointer<CChar>
+    private let kvCacheKeyPointer: UnsafeMutablePointer<CChar>
     private let drySequenceBreakerPointers: [UnsafeMutablePointer<CChar>]
     private let bridgedDrySequenceBreakers: [UnsafePointer<CChar>?]
     private let bridgedSamplerKinds: [Int32]
@@ -806,6 +940,8 @@ private final class PreparedLocalLLMGenerationConfig {
 
     init(_ config: LocalLLMGenerationConfig, mediaAttachments: [LocalLLMMediaAttachment]) throws {
         let mmprojPathPointer = try Self.duplicate(config.mmprojPath)
+        let loraPathPointer = try Self.duplicate(config.loraPath)
+        let kvCacheKeyPointer = try Self.duplicate(config.kvCacheKey)
         let drySequenceBreakerPointers = try config.drySequenceBreakers.map(Self.duplicate)
         let grammarPointer = try Self.duplicate(config.grammar)
         let chatTemplateKwargs = try Self.encodedChatTemplateKwargs(config.chatTemplateKwargs)
@@ -816,6 +952,8 @@ private final class PreparedLocalLLMGenerationConfig {
         let mediaIDPointers = try validMediaAttachments.map { try Self.duplicate($0.id) }
 
         self.mmprojPathPointer = mmprojPathPointer
+        self.loraPathPointer = loraPathPointer
+        self.kvCacheKeyPointer = kvCacheKeyPointer
         self.drySequenceBreakerPointers = drySequenceBreakerPointers
         self.bridgedDrySequenceBreakers = drySequenceBreakerPointers.map { UnsafePointer($0) }
         self.bridgedSamplerKinds = config.samplerKinds.map(\.rawValue)
@@ -831,6 +969,9 @@ private final class PreparedLocalLLMGenerationConfig {
         self.bridgedMediaIDs = mediaIDPointers.map { UnsafePointer($0) }
         self.bridgedConfig = ETOSLocalLLMGenerationConfig(
             mmprojPath: UnsafePointer(mmprojPathPointer),
+            loraPath: UnsafePointer(loraPathPointer),
+            loraScale: config.loraScale,
+            kvCacheKey: UnsafePointer(kvCacheKeyPointer),
             contextSize: config.contextSize,
             maxOutputTokens: config.maxOutputTokens,
             gpuLayers: config.gpuLayers,
@@ -839,6 +980,7 @@ private final class PreparedLocalLLMGenerationConfig {
             kvOffload: config.kvOffload ? 1 : 0,
             flashAttention: config.flashAttention.rawValue,
             useModelCache: config.useModelCache ? 1 : 0,
+            reuseKVCache: config.reuseKVCache ? 1 : 0,
             seed: config.seed,
             minKeep: config.minKeep,
             topK: config.topK,
@@ -884,6 +1026,8 @@ private final class PreparedLocalLLMGenerationConfig {
 
     deinit {
         free(mmprojPathPointer)
+        free(loraPathPointer)
+        free(kvCacheKeyPointer)
         drySequenceBreakerPointers.forEach { free($0) }
         free(grammarPointer)
         chatTemplateKwargKeyPointers.forEach { free($0) }
@@ -967,6 +1111,116 @@ private final class PreparedLocalLLMGenerationConfig {
     }
 }
 
+private struct ETOSLocalLLMEmbeddingConfig {
+    var mmprojPath: UnsafePointer<CChar>?
+    var loraPath: UnsafePointer<CChar>?
+    var loraScale: Float
+    var contextSize: Int32
+    var gpuLayers: Int32
+    var flashAttention: Int32
+    var imageMinTokens: Int32
+    var imageMaxTokens: Int32
+    var mediaData: UnsafePointer<UnsafePointer<UInt8>?>?
+    var mediaDataSizes: UnsafePointer<Int64>?
+    var mediaIDs: UnsafePointer<UnsafePointer<CChar>?>?
+    var mediaInputIndices: UnsafePointer<Int32>?
+    var mediaCount: Int32
+}
+
+private final class PreparedLocalLLMEmbeddingConfig {
+    private let mmprojPathPointer: UnsafeMutablePointer<CChar>
+    private let loraPathPointer: UnsafeMutablePointer<CChar>
+    private let mediaDataPointers: [UnsafeMutablePointer<UInt8>]
+    private let bridgedMediaDataPointers: [UnsafePointer<UInt8>?]
+    private let mediaDataByteCounts: [Int64]
+    private let mediaIDPointers: [UnsafeMutablePointer<CChar>]
+    private let bridgedMediaIDs: [UnsafePointer<CChar>?]
+    private let mediaInputIndices: [Int32]
+    private var bridgedConfig: ETOSLocalLLMEmbeddingConfig
+
+    init(
+        options: LocalLLMEmbeddingOptions,
+        mediaEntries: [(attachment: LocalLLMMediaAttachment, inputIndex: Int32)]
+    ) throws {
+        let mmprojPathPointer = try Self.duplicate(options.mmprojPath ?? "")
+        let loraPathPointer = try Self.duplicate(options.loraPath ?? "")
+        let mediaDataPointers = try mediaEntries.map { try Self.duplicate($0.attachment.data) }
+        let mediaIDPointers = try mediaEntries.map { try Self.duplicate($0.attachment.id) }
+
+        self.mmprojPathPointer = mmprojPathPointer
+        self.loraPathPointer = loraPathPointer
+        self.mediaDataPointers = mediaDataPointers
+        self.bridgedMediaDataPointers = mediaDataPointers.map { UnsafePointer($0) }
+        self.mediaDataByteCounts = mediaEntries.map { Int64($0.attachment.data.count) }
+        self.mediaIDPointers = mediaIDPointers
+        self.bridgedMediaIDs = mediaIDPointers.map { UnsafePointer($0) }
+        self.mediaInputIndices = mediaEntries.map(\.inputIndex)
+        self.bridgedConfig = ETOSLocalLLMEmbeddingConfig(
+            mmprojPath: UnsafePointer(mmprojPathPointer),
+            loraPath: UnsafePointer(loraPathPointer),
+            loraScale: Float(options.loraScale),
+            contextSize: Int32(clamping: options.contextSize),
+            gpuLayers: Int32(clamping: options.gpuLayers),
+            flashAttention: options.flashAttention.rawValue,
+            imageMinTokens: Int32(clamping: options.imageMinTokens),
+            imageMaxTokens: Int32(clamping: options.imageMaxTokens),
+            mediaData: nil,
+            mediaDataSizes: nil,
+            mediaIDs: nil,
+            mediaInputIndices: nil,
+            mediaCount: Int32(mediaEntries.count)
+        )
+    }
+
+    deinit {
+        free(mmprojPathPointer)
+        free(loraPathPointer)
+        mediaDataPointers.forEach { $0.deallocate() }
+        mediaIDPointers.forEach { free($0) }
+    }
+
+    func withUnsafePointer<Result>(
+        _ body: (UnsafePointer<ETOSLocalLLMEmbeddingConfig>) throws -> Result
+    ) rethrows -> Result {
+        try bridgedMediaDataPointers.withUnsafeBufferPointer { mediaDataPointer in
+            try mediaDataByteCounts.withUnsafeBufferPointer { mediaSizePointer in
+                try bridgedMediaIDs.withUnsafeBufferPointer { mediaIDPointer in
+                    try mediaInputIndices.withUnsafeBufferPointer { mediaInputIndexPointer in
+                        bridgedConfig.mediaData = mediaDataPointer.baseAddress
+                        bridgedConfig.mediaDataSizes = mediaSizePointer.baseAddress
+                        bridgedConfig.mediaIDs = mediaIDPointer.baseAddress
+                        bridgedConfig.mediaInputIndices = mediaInputIndexPointer.baseAddress
+                        bridgedConfig.mediaCount = Int32(mediaDataPointer.count)
+                        return try Swift.withUnsafePointer(to: &bridgedConfig, body)
+                    }
+                }
+            }
+        }
+    }
+
+    private static func duplicate(_ value: String) throws -> UnsafeMutablePointer<CChar> {
+        guard let pointer = strdup(value) else {
+            throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地推理配置内存分配失败。", comment: "Local LLM config allocation failed"))
+        }
+        return pointer
+    }
+
+    private static func duplicate(_ data: Data) throws -> UnsafeMutablePointer<UInt8> {
+        let pointer = UnsafeMutablePointer<UInt8>.allocate(capacity: data.count)
+        guard data.withUnsafeBytes({ rawBuffer -> Bool in
+            guard let baseAddress = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
+                return false
+            }
+            pointer.initialize(from: baseAddress, count: data.count)
+            return true
+        }) else {
+            pointer.deallocate()
+            throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地多模态图片内存分配失败。", comment: "Local LLM media allocation failed"))
+        }
+        return pointer
+    }
+}
+
 private final class LocalLLMCancellationState: @unchecked Sendable {
     private let lock = NSLock()
     private var cancelled = false
@@ -1020,9 +1274,14 @@ private final class LocalLLMStreamState: @unchecked Sendable {
 private final class LocalLLMParsedStreamState: @unchecked Sendable {
     private let continuation: AsyncThrowingStream<LocalLLMToolCallParseResult, Error>.Continuation
     private let cancellationState = LocalLLMCancellationState()
+    private let fallbackToolCallIDScope: String
 
-    init(continuation: AsyncThrowingStream<LocalLLMToolCallParseResult, Error>.Continuation) {
+    init(
+        continuation: AsyncThrowingStream<LocalLLMToolCallParseResult, Error>.Continuation,
+        fallbackToolCallIDScope: String
+    ) {
         self.continuation = continuation
+        self.fallbackToolCallIDScope = fallbackToolCallIDScope
     }
 
     func cancel() {
@@ -1037,7 +1296,12 @@ private final class LocalLLMParsedStreamState: @unchecked Sendable {
         guard !isCancelled() else { return false }
 
         do {
-            let result = continuation.yield(try parseChatResponseJSON(json))
+            let result = continuation.yield(
+                try parseChatResponseJSON(
+                    json,
+                    fallbackToolCallIDScope: fallbackToolCallIDScope
+                )
+            )
             switch result {
             case .terminated:
                 cancel()
@@ -1176,9 +1440,8 @@ private func etos_local_llm_parse_chat_response(
 private func etos_local_llm_embed(
     _ modelPath: UnsafePointer<CChar>,
     _ texts: UnsafePointer<UnsafePointer<CChar>?>?,
-    _ textCount: Int32,
-    _ contextSize: Int32,
-    _ gpuLayers: Int32,
+    _ inputCount: Int32,
+    _ config: UnsafePointer<ETOSLocalLLMEmbeddingConfig>,
     _ output: UnsafeMutablePointer<UnsafeMutablePointer<Float>?>,
     _ embeddingCount: UnsafeMutablePointer<Int32>,
     _ embeddingDimension: UnsafeMutablePointer<Int32>,
@@ -1193,6 +1456,9 @@ private func etos_local_llm_free_float(_ pointer: UnsafeMutablePointer<Float>)
 
 @_silgen_name("etos_local_llm_clear_model_cache")
 private func etos_local_llm_clear_model_cache()
+
+@_silgen_name("etos_local_llm_clear_kv_cache")
+private func etos_local_llm_clear_kv_cache(_ expectedCacheKey: UnsafePointer<CChar>?)
 
 private extension Comparable {
     func clamped(to range: ClosedRange<Self>) -> Self {

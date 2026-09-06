@@ -126,7 +126,9 @@ extension PersistenceGRDBStore {
             uniqueFolders.append(
                 SessionFolder(
                     id: folder.id,
-                    name: normalizedName.isEmpty ? "未命名文件夹" : normalizedName,
+                    name: normalizedName.isEmpty
+                        ? NSLocalizedString("未命名文件夹", comment: "Unnamed session folder fallback")
+                        : normalizedName,
                     parentID: folder.parentID,
                     updatedAt: folder.updatedAt
                 )
@@ -157,7 +159,9 @@ extension PersistenceGRDBStore {
             uniqueTags.append(
                 SessionTag(
                     id: tag.id,
-                    name: normalizedName.isEmpty ? "未命名标签" : normalizedName,
+                    name: normalizedName.isEmpty
+                        ? NSLocalizedString("未命名标签", comment: "Unnamed session tag fallback")
+                        : normalizedName,
                     color: tag.color,
                     updatedAt: tag.updatedAt
                 )

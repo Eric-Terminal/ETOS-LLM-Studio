@@ -39,6 +39,7 @@ public enum Persistence {
         "shortcut_tools_v1",
         "feedback_tickets",
         "feedback_tickets_v1",
+        "survey_client_state_v1",
         "mcp_servers_records",
         "mcp_servers_records_v1",
         "roleplay_library_v1",
@@ -64,6 +65,19 @@ public enum Persistence {
     static var pendingLaunchRecoveryKinds: [LaunchDatabaseKind] = []
     static var hasCreatedLaunchBackupPoint = false
     static var hasScheduledLaunchBackupPoint = false
+
+    /// 数据写入允许在后台完成，但驱动 SwiftUI 刷新的通知必须始终从主线程发出。
+    static func postCloudSyncLocalDataDidChange(
+        notificationCenter: NotificationCenter = .default
+    ) {
+        guard !Thread.isMainThread else {
+            notificationCenter.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            return
+        }
+        DispatchQueue.main.async {
+            notificationCenter.post(name: .cloudSyncLocalDataDidChange, object: nil)
+        }
+    }
 
     static var deferredLaunchBackupDelay: TimeInterval {
         #if os(watchOS)
@@ -155,11 +169,20 @@ public enum Persistence {
         public var errorDescription: String? {
             switch self {
             case .grdbUnavailable:
-                return "当前无法访问 SQLite 数据库，暂时不能执行 JSON 迁移。"
+                return NSLocalizedString(
+                    "当前无法访问 SQLite 数据库，暂时不能执行 JSON 迁移。",
+                    comment: "Legacy JSON migration database unavailable"
+                )
             case .importFailed(let reason):
-                return "迁移失败：\(reason)"
+                return String(
+                    format: NSLocalizedString("迁移失败：%@", comment: "Legacy JSON migration failure"),
+                    reason
+                )
             case .cleanupFailed(let reason):
-                return "清理失败：\(reason)"
+                return String(
+                    format: NSLocalizedString("清理失败：%@", comment: "Legacy JSON cleanup failure"),
+                    reason
+                )
             }
         }
     }
@@ -211,7 +234,7 @@ public enum Persistence {
     }
 
     static var documentsDirectory: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        StorageUtility.documentsDirectory
     }
 
     static let sessionIndexFileName = "index.json"
@@ -226,6 +249,7 @@ public enum Persistence {
     static let dailyPulsePendingCurationFileName = "pending-curation.json"
     static let dailyPulseExternalSignalsFileName = "external-signals.json"
     static let dailyPulseTasksFileName = "tasks.json"
+    static let dailyPulseGenerationRuntimeFileName = "generation-runtime.json"
     static let legacySessionDirectoryName = "v3"
     static let legacyArchiveDirectoryName = "legacy"
 

@@ -186,6 +186,128 @@ public extension ModelRequestBodyControl {
     }
 }
 
+public enum ModelRequestBodyControlSplitter {
+    public static func canSplit(_ control: ModelRequestBodyControl) -> Bool {
+        leafPaths(for: control).count > 1
+    }
+
+    /// 按最终字典叶子拆成并列控制；数组保持整体，确保拆分结果仍可由现有合并器还原。
+    public static func split(_ control: ModelRequestBodyControl) -> [ModelRequestBodyControl]? {
+        switch control.kind {
+        case .toggle:
+            let leaves = leafValues(in: control.payload)
+            let paths = sortedPaths(in: [leaves])
+            guard paths.count > 1 else { return nil }
+            return paths.map { path in
+                copiedControl(
+                    from: control,
+                    payload: nestedPayload(path: path, value: leaves[path]),
+                    options: [],
+                    defaultOptionID: nil
+                )
+            }
+
+        case .optionGroup:
+            let leavesByOption = control.options.map { leafValues(in: $0.payload) }
+            let paths = sortedPaths(in: leavesByOption)
+            guard paths.count > 1 else { return nil }
+
+            return paths.map { path in
+                var mappedDefaultOptionID: String?
+                let options = zip(control.options, leavesByOption).map { option, leaves in
+                    let optionID = UUID().uuidString
+                    if option.id == control.defaultOptionID {
+                        mappedDefaultOptionID = optionID
+                    }
+                    return ModelRequestBodyControlOption(
+                        id: optionID,
+                        title: option.title,
+                        payload: nestedPayload(path: path, value: leaves[path])
+                    )
+                }
+                return copiedControl(
+                    from: control,
+                    payload: [:],
+                    options: options,
+                    defaultOptionID: mappedDefaultOptionID
+                )
+            }
+        }
+    }
+}
+
+private extension ModelRequestBodyControlSplitter {
+    struct LeafPath: Hashable {
+        let components: [String]
+    }
+
+    static func leafPaths(for control: ModelRequestBodyControl) -> [LeafPath] {
+        switch control.kind {
+        case .toggle:
+            return sortedPaths(in: [leafValues(in: control.payload)])
+        case .optionGroup:
+            return sortedPaths(in: control.options.map { leafValues(in: $0.payload) })
+        }
+    }
+
+    static func leafValues(
+        in payload: [String: JSONValue],
+        parentPath: [String] = []
+    ) -> [LeafPath: JSONValue] {
+        var leaves: [LeafPath: JSONValue] = [:]
+        for key in payload.keys.sorted() {
+            guard let value = payload[key] else { continue }
+            let path = parentPath + [key]
+            if case let .dictionary(dictionary) = value, !dictionary.isEmpty {
+                leaves.merge(leafValues(in: dictionary, parentPath: path)) { _, nested in nested }
+            } else {
+                // 数组和空字典作为一个叶子保留，避免现有整体覆盖语义丢失数据。
+                leaves[LeafPath(components: path)] = value
+            }
+        }
+        return leaves
+    }
+
+    static func sortedPaths(in leafMaps: [[LeafPath: JSONValue]]) -> [LeafPath] {
+        Set(leafMaps.flatMap { $0.keys }).sorted { lhs, rhs in
+            lhs.components.lexicographicallyPrecedes(rhs.components)
+        }
+    }
+
+    static func nestedPayload(path: LeafPath, value: JSONValue?) -> [String: JSONValue] {
+        guard let value, let leafKey = path.components.last else { return [:] }
+        var nestedValue = JSONValue.dictionary([leafKey: value])
+        for key in path.components.dropLast().reversed() {
+            nestedValue = .dictionary([key: nestedValue])
+        }
+        guard case let .dictionary(payload) = nestedValue else { return [:] }
+        return payload
+    }
+
+    static func copiedControl(
+        from control: ModelRequestBodyControl,
+        payload: [String: JSONValue],
+        options: [ModelRequestBodyControlOption],
+        defaultOptionID: String?
+    ) -> ModelRequestBodyControl {
+        ModelRequestBodyControl(
+            id: UUID().uuidString,
+            title: control.title,
+            kind: control.kind,
+            isEnabled: control.isEnabled,
+            defaultIsActive: control.defaultIsActive,
+            defaultOptionID: defaultOptionID,
+            isSliderEnabled: control.isSliderEnabled,
+            sliderGranularity: control.sliderGranularity,
+            sliderStartColorHex: control.sliderStartColorHex,
+            sliderEndColorHex: control.sliderEndColorHex,
+            usesRainbowAtMaximum: control.usesRainbowAtMaximum,
+            payload: payload,
+            options: options
+        )
+    }
+}
+
 public struct ModelRequestBodyControlState: Codable, Hashable, Sendable {
     public var toggleValuesByControlID: [String: Bool]
     public var selectedOptionIDsByControlID: [String: String]
@@ -330,6 +452,28 @@ public enum ModelRequestBodyControlCompiler {
     }
 }
 
+public enum ProviderAPIFormatOption: String, CaseIterable, Identifiable, Hashable, Sendable {
+    case openAICompatible = "openai-compatible"
+    case openAIResponses = "openai-responses"
+    case gemini
+    case anthropic
+
+    public var id: String { rawValue }
+
+    public var localizedName: String {
+        switch self {
+        case .openAICompatible:
+            return NSLocalizedString("OpenAI 兼容", comment: "Provider API format")
+        case .openAIResponses:
+            return NSLocalizedString("OpenAI Responses", comment: "Provider API format")
+        case .gemini:
+            return NSLocalizedString("Gemini", comment: "Provider API format")
+        case .anthropic:
+            return NSLocalizedString("Anthropic", comment: "Provider API format")
+        }
+    }
+}
+
 public enum ProviderAPIFormatFamily {
     case openAICompatible
     case openAIResponses
@@ -355,6 +499,18 @@ public enum ProviderAPIFormatFamily {
 }
 
 public enum ModelRequestBodyControlDefaults {
+    public static func isThinkingControl(_ control: ModelRequestBodyControl) -> Bool {
+        guard control.kind == .optionGroup else { return false }
+        let payloads = [control.payload] + control.options.map(\.payload)
+        return payloads.contains(where: containsThinkingParameter)
+    }
+
+    public static func isAutomaticPromptCachingControl(_ control: ModelRequestBodyControl) -> Bool {
+        guard control.kind == .optionGroup else { return false }
+        let payloads = [control.payload] + control.options.map(\.payload)
+        return payloads.contains { $0["cache_control"] != nil }
+    }
+
     public static func temperatureControl() -> ModelRequestBodyControl {
         ModelRequestBodyControl(
             title: NSLocalizedString("温度", comment: ""),
@@ -378,49 +534,101 @@ public enum ModelRequestBodyControlDefaults {
                 title: NSLocalizedString("思考预算", comment: ""),
                 kind: .optionGroup,
                 defaultOptionID: "medium",
+                isSliderEnabled: true,
                 options: [
-                    ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: ["effort": .string("low")]),
-                    ModelRequestBodyControlOption(id: "medium", title: NSLocalizedString("medium", comment: ""), payload: ["effort": .string("medium")]),
-                    ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: ["effort": .string("high")]),
-                    ModelRequestBodyControlOption(id: "budget-2048", title: "2048", payload: ["thinking": .dictionary(["type": .string("enabled"), "budget_tokens": .int(2048)])])
+                    ModelRequestBodyControlOption(
+                        id: "off",
+                        title: NSLocalizedString("关闭", comment: ""),
+                        payload: ["thinking": .dictionary(["type": .string("disabled")])]
+                    ),
+                    ModelRequestBodyControlOption(
+                        id: "auto",
+                        title: NSLocalizedString("自动", comment: ""),
+                        payload: anthropicThinkingPayload()
+                    ),
+                    ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: anthropicThinkingPayload(effort: "low")),
+                    ModelRequestBodyControlOption(id: "medium", title: NSLocalizedString("medium", comment: ""), payload: anthropicThinkingPayload(effort: "medium")),
+                    ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: anthropicThinkingPayload(effort: "high")),
+                    ModelRequestBodyControlOption(id: "xhigh", title: NSLocalizedString("xhigh", comment: ""), payload: anthropicThinkingPayload(effort: "xhigh"))
                 ]
             )
         case .gemini:
-            func thinkingConfigPayload(_ payload: [String: JSONValue]) -> [String: JSONValue] {
-                [
-                    "generationConfig": .dictionary([
-                        "thinkingConfig": .dictionary(payload)
-                    ])
-                ]
-            }
+            // Gemini 适配器统一使用当前的 thinkingLevel，不根据模型名称猜测协议能力。
+            let offConfig: [String: JSONValue] = ["includeThoughts": .bool(true), "thinkingLevel": .string("minimal")]
+            let lowConfig: [String: JSONValue] = ["includeThoughts": .bool(true), "thinkingLevel": .string("low")]
+            let mediumConfig: [String: JSONValue] = ["includeThoughts": .bool(true), "thinkingLevel": .string("medium")]
+            let highConfig: [String: JSONValue] = ["includeThoughts": .bool(true), "thinkingLevel": .string("high")]
             return ModelRequestBodyControl(
                 title: NSLocalizedString("思考预算", comment: ""),
                 kind: .optionGroup,
                 defaultOptionID: "medium",
+                isSliderEnabled: true,
                 options: [
-                    ModelRequestBodyControlOption(id: "minimal", title: NSLocalizedString("minimal", comment: ""), payload: thinkingConfigPayload(["thinkingLevel": .string("MINIMAL")])),
-                    ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: thinkingConfigPayload(["thinkingLevel": .string("LOW")])),
-                    ModelRequestBodyControlOption(id: "medium", title: NSLocalizedString("medium", comment: ""), payload: thinkingConfigPayload(["thinkingLevel": .string("MEDIUM")])),
-                    ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: thinkingConfigPayload(["thinkingLevel": .string("HIGH")])),
-                    ModelRequestBodyControlOption(id: "auto", title: NSLocalizedString("自动", comment: ""), payload: thinkingConfigPayload(["thinkingBudget": .int(-1)])),
-                    ModelRequestBodyControlOption(id: "off", title: NSLocalizedString("关闭", comment: ""), payload: thinkingConfigPayload(["thinkingBudget": .int(0)]))
+                    ModelRequestBodyControlOption(id: "off", title: NSLocalizedString("关闭", comment: ""), payload: geminiThinkingPayload(offConfig)),
+                    ModelRequestBodyControlOption(id: "auto", title: NSLocalizedString("自动", comment: ""), payload: geminiThinkingPayload(["includeThoughts": .bool(true)])),
+                    ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: geminiThinkingPayload(lowConfig)),
+                    ModelRequestBodyControlOption(id: "medium", title: NSLocalizedString("medium", comment: ""), payload: geminiThinkingPayload(mediumConfig)),
+                    ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: geminiThinkingPayload(highConfig)),
+                    ModelRequestBodyControlOption(id: "xhigh", title: NSLocalizedString("xhigh", comment: ""), payload: geminiThinkingPayload(highConfig))
                 ]
             )
-        case .openAICompatible, .openAIResponses:
+        case .openAICompatible:
             return ModelRequestBodyControl(
                 title: NSLocalizedString("思考预算", comment: ""),
                 kind: .optionGroup,
                 defaultOptionID: "medium",
+                isSliderEnabled: true,
                 options: [
                     ModelRequestBodyControlOption(id: "none", title: NSLocalizedString("none", comment: ""), payload: ["reasoning_effort": .string("none")]),
                     ModelRequestBodyControlOption(id: "minimal", title: NSLocalizedString("minimal", comment: ""), payload: ["reasoning_effort": .string("minimal")]),
                     ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: ["reasoning_effort": .string("low")]),
                     ModelRequestBodyControlOption(id: "medium", title: NSLocalizedString("medium", comment: ""), payload: ["reasoning_effort": .string("medium")]),
                     ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: ["reasoning_effort": .string("high")]),
-                    ModelRequestBodyControlOption(id: "xhigh", title: NSLocalizedString("xhigh", comment: ""), payload: ["reasoning_effort": .string("xhigh")])
+                    ModelRequestBodyControlOption(id: "xhigh", title: NSLocalizedString("xhigh", comment: ""), payload: ["reasoning_effort": .string("xhigh")]),
+                    ModelRequestBodyControlOption(id: "max", title: NSLocalizedString("max", comment: ""), payload: ["reasoning_effort": .string("max")])
+                ]
+            )
+        case .openAIResponses:
+            return ModelRequestBodyControl(
+                title: NSLocalizedString("思考预算", comment: ""),
+                kind: .optionGroup,
+                defaultOptionID: "medium",
+                isSliderEnabled: true,
+                options: [
+                    ModelRequestBodyControlOption(id: "none", title: NSLocalizedString("none", comment: ""), payload: openAIResponsesThinkingPayload(effort: "none")),
+                    ModelRequestBodyControlOption(id: "minimal", title: NSLocalizedString("minimal", comment: ""), payload: openAIResponsesThinkingPayload(effort: "minimal")),
+                    ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: openAIResponsesThinkingPayload(effort: "low")),
+                    ModelRequestBodyControlOption(id: "medium", title: NSLocalizedString("medium", comment: ""), payload: openAIResponsesThinkingPayload(effort: "medium")),
+                    ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: openAIResponsesThinkingPayload(effort: "high")),
+                    ModelRequestBodyControlOption(id: "xhigh", title: NSLocalizedString("xhigh", comment: ""), payload: openAIResponsesThinkingPayload(effort: "xhigh")),
+                    ModelRequestBodyControlOption(id: "max", title: NSLocalizedString("max", comment: ""), payload: openAIResponsesThinkingPayload(effort: "max"))
                 ]
             )
         }
+    }
+
+    public static func automaticPromptCachingOptionGroup() -> ModelRequestBodyControl {
+        ModelRequestBodyControl(
+            title: NSLocalizedString("自动缓存", comment: "Anthropic 自动提示缓存控制标题"),
+            kind: .optionGroup,
+            defaultOptionID: "off",
+            options: [
+                ModelRequestBodyControlOption(
+                    id: "off",
+                    title: NSLocalizedString("关闭", comment: "Anthropic 自动提示缓存关闭选项")
+                ),
+                ModelRequestBodyControlOption(
+                    id: "5m",
+                    title: NSLocalizedString("5 分钟", comment: "Anthropic 自动提示缓存五分钟选项"),
+                    payload: automaticPromptCachingPayload(ttl: "5m")
+                ),
+                ModelRequestBodyControlOption(
+                    id: "1h",
+                    title: NSLocalizedString("1 小时", comment: "Anthropic 自动提示缓存一小时选项"),
+                    payload: automaticPromptCachingPayload(ttl: "1h")
+                )
+            ]
+        )
     }
 
     public static func initialOptionGroupControl(
@@ -431,6 +639,63 @@ public enum ModelRequestBodyControlDefaults {
             return ModelRequestBodyControl(title: "", kind: .optionGroup)
         }
         return thinkingOptionGroup(for: apiFormat)
+    }
+
+    private static func openAIResponsesThinkingPayload(effort: String) -> [String: JSONValue] {
+        ["reasoning": .dictionary(["effort": .string(effort)])]
+    }
+
+    private static func geminiThinkingPayload(_ config: [String: JSONValue]) -> [String: JSONValue] {
+        [
+            "generationConfig": .dictionary([
+                "thinkingConfig": .dictionary(config)
+            ])
+        ]
+    }
+
+    private static func anthropicThinkingPayload(effort: String? = nil) -> [String: JSONValue] {
+        var payload: [String: JSONValue] = [
+            "thinking": .dictionary([
+                "type": .string("adaptive")
+            ])
+        ]
+        if let effort {
+            payload["output_config"] = .dictionary(["effort": .string(effort)])
+        }
+        return payload
+    }
+
+    private static func automaticPromptCachingPayload(ttl: String) -> [String: JSONValue] {
+        [
+            "cache_control": .dictionary([
+                "type": .string("ephemeral"),
+                "ttl": .string(ttl)
+            ])
+        ]
+    }
+
+    private static func containsThinkingParameter(_ payload: [String: JSONValue]) -> Bool {
+        for (key, value) in payload {
+            let normalizedKey = key
+                .lowercased()
+                .replacingOccurrences(of: "_", with: "")
+                .replacingOccurrences(of: "-", with: "")
+            if [
+                "reasoningeffort",
+                "thinkingbudget",
+                "thinking",
+                "thinkingconfig",
+                "thinkinglevel",
+                "effort"
+            ].contains(normalizedKey) {
+                return true
+            }
+            if case let .dictionary(nestedPayload) = value,
+               containsThinkingParameter(nestedPayload) {
+                return true
+            }
+        }
+        return false
     }
 }
 

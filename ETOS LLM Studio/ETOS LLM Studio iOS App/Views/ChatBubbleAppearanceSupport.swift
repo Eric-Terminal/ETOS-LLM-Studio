@@ -48,6 +48,10 @@ extension ChatBubble {
         appConfig.messageActionBarSettings
     }
 
+    var messageActionBarFontScale: CGFloat {
+        CGFloat(messageActionBarConfiguration.fontScale)
+    }
+
     var messageActionBarRole: MessageActionBarRole {
         isOutgoing ? .user : .assistant
     }
@@ -97,7 +101,7 @@ extension ChatBubble {
             )
         }
 
-        if shouldForceMergedWidth {
+        if shouldForceBubbleWidth {
             row
                 .frame(width: bubbleMaxWidth, alignment: messageActionBarAlignment)
                 .padding(.top, 2)
@@ -152,41 +156,56 @@ extension ChatBubble {
 
     @ViewBuilder
     func messageActionBarItemView(_ item: MessageActionBarItem) -> some View {
+        // 字重在字体适配后叠加，确保功能栏沿用正文槽位而不是“粗体”槽位。
         switch item {
         case .quickRetry:
             Button(action: onRetry) {
                 Image(systemName: item.systemImage)
-                    .etFont(.system(size: 13, weight: .semibold))
+                    .etFont(.system(size: 13 * messageActionBarFontScale))
+                    .fontWeight(.semibold)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(item.title))
             .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .copyMessage:
-            Button(action: onCopy) {
-                Image(systemName: item.systemImage)
-                    .etFont(.system(size: 13, weight: .semibold))
+            CopyConfirmationButton(action: onCopy) { didCopy in
+                Image(systemName: didCopy ? "checkmark" : item.systemImage)
+                    .etFont(.system(size: 13 * messageActionBarFontScale))
+                    .fontWeight(.semibold)
+                    .contentTransition(.symbolEffect(.replace))
+                    .accessibilityLabel(
+                        Text(didCopy ? NSLocalizedString("已复制", comment: "") : item.title)
+                    )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(Text(item.title))
             .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
+        case .readAloud:
+            MessageReadAloudButton(messageID: message.id) { messageState.message }
+                .etFont(.system(size: 13 * messageActionBarFontScale))
+                .fontWeight(.semibold)
+                .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .requestTime:
             Label(messageRequestTimeText, systemImage: item.systemImage)
-                .etFont(.system(size: 12, weight: .semibold))
+                .etFont(.system(size: 12 * messageActionBarFontScale))
+                .fontWeight(.semibold)
                 .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .inputTokens:
             Label("\(inputTokenCount)", systemImage: item.systemImage)
-                .etFont(.system(size: 12, weight: .semibold))
+                .etFont(.system(size: 12 * messageActionBarFontScale))
+                .fontWeight(.semibold)
                 .monospacedDigit()
                 .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .outputTokens:
             Label("\(outputTokenCount)", systemImage: item.systemImage)
-                .etFont(.system(size: 12, weight: .semibold))
+                .etFont(.system(size: 12 * messageActionBarFontScale))
+                .fontWeight(.semibold)
                 .monospacedDigit()
                 .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .costEstimate:
             if let estimate = resolvedCostEstimate {
                 Label(MessageCostFormatter.formatCompact(estimate), systemImage: item.systemImage)
-                    .etFont(.system(size: 12, weight: .semibold))
+                    .etFont(.system(size: 12 * messageActionBarFontScale))
+                    .fontWeight(.semibold)
                     .monospacedDigit()
                     .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
             }
@@ -204,21 +223,24 @@ extension ChatBubble {
                 onSwitchToPreviousVersion()
             } label: {
                 Image(systemName: "chevron.left")
-                    .etFont(.system(size: 14, weight: .bold))
+                    .etFont(.system(size: 14 * messageActionBarFontScale))
+                    .fontWeight(.bold)
             }
             .buttonStyle(.plain)
             .disabled(currentIndex == 0)
             .opacity(currentIndex > 0 ? 1 : 0.4)
 
             Text("\(currentIndex + 1)/\(totalCount)")
-                .etFont(.system(size: 14, weight: .semibold))
+                .etFont(.system(size: 14 * messageActionBarFontScale))
+                .fontWeight(.semibold)
                 .monospacedDigit()
 
             Button {
                 onSwitchToNextVersion()
             } label: {
                 Image(systemName: "chevron.right")
-                    .etFont(.system(size: 14, weight: .bold))
+                    .etFont(.system(size: 14 * messageActionBarFontScale))
+                    .fontWeight(.bold)
             }
             .buttonStyle(.plain)
             .disabled(currentIndex >= totalCount - 1)
@@ -241,6 +263,8 @@ extension ChatBubble {
             return canRetry
         case .copyMessage:
             return !message.content.isEmpty
+        case .readAloud:
+            return MessageActionBarAvailability.canReadAloud(message)
         case .requestTime:
             return messageRequestDate != nil
         case .inputTokens:
@@ -309,14 +333,11 @@ extension ChatBubble {
     }
 
     var isOutgoing: Bool {
-        message.role == .user
+        message.role == .user && message.authorKind == .user
     }
 
     var isError: Bool {
-        let retryFailedPrefix = NSLocalizedString("重试失败", comment: "Retry failed error message prefix")
-        return message.role == .error
-            || (message.role == .assistant
-                && (message.content.hasPrefix(retryFailedPrefix) || message.content.hasPrefix("重试失败")))
+        message.role == .error
     }
 
     var usesNoBubbleStyle: Bool {
@@ -379,8 +400,7 @@ extension ChatBubble {
             )
         }
 
-        switch message.role {
-        case .user:
+        if isOutgoing {
             return AnyShapeStyle(
                 LinearGradient(
                     colors: [
@@ -391,7 +411,10 @@ extension ChatBubble {
                     endPoint: .bottomTrailing
                 )
             )
-        case .assistant, .system, .tool:
+        }
+
+        switch message.role {
+        case .user, .assistant, .system, .tool:
             let baseColor: Color
             if let resolvedAssistantBubbleColor {
                 baseColor = resolvedAssistantBubbleColor.opacity(enableBackground ? assistantOpacity : 1)
@@ -420,10 +443,12 @@ extension ChatBubble {
             return AnyShapeStyle(Color.red.opacity(0.7 * errorOpacity))
         }
 
-        switch message.role {
-        case .user:
+        if isOutgoing {
             return AnyShapeStyle(resolvedUserBubbleEndColor.opacity(userOpacity))
-        case .assistant, .system, .tool:
+        }
+
+        switch message.role {
+        case .user, .assistant, .system, .tool:
             if let resolvedAssistantBubbleColor {
                 return AnyShapeStyle(resolvedAssistantBubbleColor.opacity(enableBackground ? assistantOpacity : 1))
             }
@@ -462,14 +487,39 @@ extension ChatBubble {
         max(1, bubbleLayoutBaseWidth * 0.65)
     }
 
-    var shouldForceMergedWidth: Bool {
+    var shouldForceBubbleWidth: Bool {
+        Self.shouldForceBubbleWidth(
+            usesNoBubbleStyle: usesNoBubbleStyle,
+            isOutgoing: isOutgoing,
+            isAssistant: message.role == .assistant,
+            hasAudio: message.audioFileName != nil,
+            locksStreamingAssistantWidth: messageState.retainsStreamingAssistantWidth
+                || showsStreamingIndicators
+                || isStaticMarkdownHandoffInProgress,
+            mergesWithAdjacentBubble: mergeWithPrevious || mergeWithNext,
+            rendersReasoningToolTimeline: shouldRenderReasoningToolTimeline
+        )
+    }
+
+    nonisolated static func shouldForceBubbleWidth(
+        usesNoBubbleStyle: Bool,
+        isOutgoing: Bool,
+        isAssistant: Bool,
+        hasAudio: Bool,
+        locksStreamingAssistantWidth: Bool,
+        mergesWithAdjacentBubble: Bool,
+        rendersReasoningToolTimeline: Bool
+    ) -> Bool {
         if usesNoBubbleStyle {
             return true
         }
-        if isOutgoing && message.audioFileName != nil {
+        if isOutgoing && hasAudio {
             return true
         }
-        return !isOutgoing && (mergeWithPrevious || mergeWithNext || shouldRenderReasoningToolTimeline)
+        guard !isOutgoing else { return false }
+        return mergesWithAdjacentBubble
+            || rendersReasoningToolTimeline
+            || (isAssistant && locksStreamingAssistantWidth)
     }
 
     var rowSideSpacerMinLength: CGFloat {
@@ -548,7 +598,11 @@ extension ChatBubble {
         }
         .padding(.horizontal, usesNoBubbleStyle ? 2 : 12)
         .padding(.vertical, bubbleContentVerticalPadding)
-        .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: isOutgoing ? .trailing : .leading)
+        // 流式内容开始后固定横向几何；token、换行和 Markdown Block 交接只改变高度。
+        .frame(
+            width: shouldForceBubbleWidth ? bubbleMaxWidth : nil,
+            alignment: isOutgoing ? .trailing : .leading
+        )
         .background(
             bubbleDecoratedBackground(
                 shape: shape,
@@ -610,7 +664,10 @@ extension ChatBubble {
     }
 
     static let imagePlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]", "[Imagen]", "[صورة]", "[Изображение]"]
-    static let filePlaceholders: Set<String> = ["[文件]", "[檔案]", "[ファイル]", "[File]", "[Archivo]", "[Fichier]", "[ملف]", "[Файл]"]
+    static let filePlaceholders: Set<String> = [
+        "[文件]", "[檔案]", "[ファイル]", "[File]", "[Archivo]", "[Fichier]", "[ملف]", "[Файл]",
+        "[视频]", "[影片]", "[ビデオ]", "[Video]", "[Vídeo]", "[Vidéo]", "[فيديو]", "[Видео]"
+    ]
 
     var hasOnlyImages: Bool {
         guard let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty else {
@@ -757,7 +814,8 @@ extension ChatBubble {
     var pendingToolCallForAutoPresentation: InternalToolCall? {
         guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return nil }
         return toolCalls.first { call in
-            activeToolPermissionRequest(for: call) != nil && !hasAutoOpenedPendingToolCall(call.id)
+            activeToolPermissionRequest(for: call) != nil
+                && !hasAutoOpenedPendingToolCall(pendingToolCallPresentationID(call.id))
         }
     }
 

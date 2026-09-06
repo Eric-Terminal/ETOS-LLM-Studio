@@ -77,7 +77,8 @@ enum ETNativeMathMarkdownCodec {
 
     nonisolated private static func imageMarkdown(for request: Request) -> String {
         guard let url = url(for: request) else { return request.latex }
-        return "![数学公式](\(url.absoluteString))"
+        let alternativeText = NSLocalizedString("数学公式", comment: "Math formula image alternative text")
+        return "![\(alternativeText)](\(url.absoluteString))"
     }
 
     nonisolated private static func url(for request: Request) -> URL? {

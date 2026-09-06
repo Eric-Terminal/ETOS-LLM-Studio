@@ -3,6 +3,7 @@
 // ============================================================================
 
 import Testing
+import ETOSCore
 @testable import ETOS_LLM_Studio_App
 
 @Suite("聊天快捷功能配置测试")
@@ -12,21 +13,50 @@ struct ChatQuickActionSelectionTests {
         #expect(ChatQuickAction.temporaryChat.systemImage == "eye.slash")
     }
 
-    @Test("空配置和未知配置回退到临时对话")
-    func invalidSelectionUsesTemporaryChatFallback() {
-        #expect(ChatQuickActionSelection.decode("") == [.temporaryChat])
-        #expect(ChatQuickActionSelection.decode("unknown") == [.temporaryChat])
+    @Test("临时对话开关使用有无斜线区分状态")
+    func temporaryChatStateUsesSlash() {
+        #expect(ChatQuickAction.temporaryChat.systemImage(isTemporaryChatEnabled: false) == "eye")
+        #expect(ChatQuickAction.temporaryChat.systemImage(isTemporaryChatEnabled: true) == "eye.slash")
+        #expect(ChatQuickAction.temporaryChat.systemImage(
+            isTemporaryChatEnabled: true,
+            memoryMode: .isolated
+        ) == "eye.slash.fill")
+    }
+
+    @Test("空配置和未知配置回退到全部快捷功能")
+    func invalidSelectionUsesAllActionsFallback() {
+        #expect(ChatQuickActionSelection.decode("") == ChatQuickAction.allCases)
+        #expect(ChatQuickActionSelection.decode("unknown") == ChatQuickAction.allCases)
+    }
+
+    @Test("新用户数据库默认值选中全部快捷功能")
+    func newUserDefaultSelectsAllActions() {
+        guard case .text(let rawValue) = AppConfigKey.chatQuickActionIDs.defaultValue else {
+            Issue.record("聊天快捷功能默认值不是文本配置")
+            return
+        }
+
+        #expect(ChatQuickActionSelection.decode(rawValue) == ChatQuickAction.allCases)
     }
 
     @Test("多选配置去重并按界面顺序保存")
     func multipleSelectionIsNormalized() {
         let encoded = ChatQuickActionSelection.encode([
             .agentSkills,
+            .browser,
             .usageAnalytics,
             .agentSkills
         ])
 
-        #expect(encoded == "usageAnalytics,agentSkills")
-        #expect(ChatQuickActionSelection.decode(encoded) == [.usageAnalytics, .agentSkills])
+        #expect(encoded == "usageAnalytics,agentSkills,browser")
+        #expect(ChatQuickActionSelection.decode(encoded) == [.usageAnalytics, .agentSkills, .browser])
+    }
+
+    @Test("快捷文件夹按数量估算自适应网格")
+    func quickActionFolderLayoutAdaptsToContent() {
+        #expect(ChatQuickActionFolderLayout.estimatedColumnCount(actionCount: 4, usesAccessibilitySize: false) == 2)
+        #expect(ChatQuickActionFolderLayout.estimatedColumnCount(actionCount: 5, usesAccessibilitySize: false) == 3)
+        #expect(ChatQuickActionFolderLayout.estimatedColumnCount(actionCount: 5, usesAccessibilitySize: true) == 2)
+        #expect(ChatQuickActionFolderLayout.estimatedRowCount(actionCount: 13, columnCount: 3) == 5)
     }
 }

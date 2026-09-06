@@ -37,6 +37,24 @@ struct EmbeddingModelSelectionView: View {
             }
         }
         .navigationTitle(NSLocalizedString("嵌入模型", comment: ""))
+        .guideSettingsPageContext(
+            id: "settings-memory-embedding-model",
+            title: NSLocalizedString("嵌入模型", comment: "嵌入模型向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-memory", title: "Memory System")],
+            settings: [
+                .string("selected_model_id", label: NSLocalizedString("嵌入模型", comment: "向导设置字段"), allowedValues: [""] + embeddingModels.map(\.id), get: { selectedEmbeddingModel?.id ?? "" }, set: { id in selectedEmbeddingModel = embeddingModels.first(where: { $0.id == id }) }),
+                .readOnly("models", label: NSLocalizedString("可用嵌入模型", comment: "向导设置字段"), value: {
+                    .array(embeddingModels.map { model in
+                        .dictionary([
+                            "id": .string(model.id),
+                            "name": .string(model.model.displayName),
+                            "provider": .string(model.provider.name),
+                            "model_name": .string(model.model.modelName)
+                        ])
+                    })
+                })
+            ]
+        )
     }
 
     private func select(_ model: RunnableModel?) {
@@ -86,6 +104,18 @@ struct AddMemorySheet: View {
             }
         }
         .navigationTitle(NSLocalizedString("添加记忆", comment: ""))
+        .guideSettingsPageContext(
+            id: "settings-memory-add",
+            title: NSLocalizedString("添加记忆", comment: "添加记忆向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-memory", title: "Memory System")],
+            settings: [
+                .string("content", label: NSLocalizedString("记忆内容", comment: "向导设置字段"), allowsEmpty: false, get: { memoryContent }, set: { memoryContent = $0 }),
+                .string("kind", label: NSLocalizedString("类型", comment: "向导设置字段"), allowedValues: MemoryKind.allCases.map(\.rawValue), get: { memoryKind.rawValue }, set: { memoryKind = MemoryKind(rawValue: $0) ?? memoryKind }),
+                .double("importance", label: NSLocalizedString("重要度", comment: "向导设置字段"), range: 0...1, get: { importance }, set: { importance = $0 }),
+                .string("entities", label: NSLocalizedString("相关实体（用逗号分隔）", comment: "向导设置字段"), get: { entitiesText }, set: { entitiesText = $0 }),
+                .readOnly("requires_save", label: NSLocalizedString("应用方式", comment: "向导设置字段"), value: { .string(NSLocalizedString("修改后需要保存", comment: "向导草稿应用方式")) })
+            ]
+        )
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button(NSLocalizedString("取消", comment: "")) { dismiss() }
@@ -213,6 +243,27 @@ struct MemoryDataMaintenanceView: View {
             }
         }
         .navigationTitle(NSLocalizedString("数据维护", comment: ""))
+        .guideSettingsPageContext(
+            id: "settings-memory-maintenance",
+            title: NSLocalizedString("数据维护", comment: "记忆数据维护向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-memory", title: "Memory System")],
+            settings: [
+                .integer(
+                    "reembedding_concurrency",
+                    label: NSLocalizedString("并发数量", comment: "记忆数据维护向导字段"),
+                    range: 1...128,
+                    get: { appConfig.memoryReembeddingConcurrencyLimit },
+                    set: { appConfig.memoryReembeddingConcurrencyLimit = $0 }
+                ),
+                .readOnly("memory_count", label: NSLocalizedString("记忆数量", comment: "记忆数据维护向导字段"), value: { .int(memories.count) }),
+                .readOnly("is_reembedding", label: NSLocalizedString("正在重新嵌入", comment: "记忆数据维护向导字段"), value: { .bool(isReembeddingBusy) }),
+                .readOnly(
+                    "full_reembedding_action",
+                    label: NSLocalizedString("重新生成全部嵌入", comment: "记忆数据维护向导字段"),
+                    value: { .string(NSLocalizedString("需要用户在页面点击并确认", comment: "向导页面操作说明")) }
+                )
+            ]
+        )
         .confirmationDialog(NSLocalizedString("重新嵌入全部记忆？", comment: ""),
             isPresented: $showReembedConfirmation,
             titleVisibility: .visible
@@ -572,6 +623,12 @@ struct ConversationMemorySettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("跨对话记忆与画像", comment: ""))
+        .guideSettingsPageContext(
+            id: "settings-conversation-memory",
+            title: NSLocalizedString("跨对话记忆与画像", comment: "跨对话记忆向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-memory", title: "Memory System")],
+            settings: conversationMemoryGuideSettings
+        )
         .confirmationDialog(NSLocalizedString("清空全部会话摘要？", comment: ""),
             isPresented: $showClearConversationSummariesConfirmation,
             titleVisibility: .visible
@@ -608,24 +665,42 @@ struct ConversationMemorySettingsView: View {
                 dismissButton: .default(Text(NSLocalizedString("好的", comment: "")))
             )
         }
-        .sheet(isPresented: $isEditingConversationProfile) {
-            NavigationStack {
-                ConversationProfileEditorSheet(
-                    initialText: conversationProfileDraft,
-                    onSave: { newText in
-                        do {
-                            try viewModel.saveConversationUserProfile(content: newText)
-                            conversationMemoryAlert = .init(title: NSLocalizedString("保存成功", comment: ""), message: NSLocalizedString("用户画像已更新。", comment: ""))
-                        } catch {
-                            conversationMemoryAlert = .init(title: NSLocalizedString("保存失败", comment: ""), message: error.localizedDescription)
-                        }
+        .navigationDestination(isPresented: $isEditingConversationProfile) {
+            ConversationProfileEditorSheet(
+                initialText: conversationProfileDraft,
+                onSave: { newText in
+                    do {
+                        try viewModel.saveConversationUserProfile(content: newText)
+                        conversationMemoryAlert = .init(title: NSLocalizedString("保存成功", comment: ""), message: NSLocalizedString("用户画像已更新。", comment: ""))
+                    } catch {
+                        conversationMemoryAlert = .init(title: NSLocalizedString("保存失败", comment: ""), message: error.localizedDescription)
                     }
-                )
-            }
+                }
+            )
         }
         .task {
             viewModel.reloadConversationMemoryState()
         }
+    }
+
+    private var conversationMemoryGuideSettings: [GuidePageSetting] {
+        let options = viewModel.conversationSummaryModelOptions
+        return [
+            .integer("recent_summary_limit", label: NSLocalizedString("注入最近摘要数", comment: "跨对话记忆向导字段"), range: 1...1_000, get: { appConfig.conversationMemoryRecentLimit }, set: { appConfig.conversationMemoryRecentLimit = $0 }),
+            .integer("summary_round_threshold", label: NSLocalizedString("摘要触发轮次阈值", comment: "跨对话记忆向导字段"), range: 1...100_000, get: { appConfig.conversationMemoryRoundThreshold }, set: { appConfig.conversationMemoryRoundThreshold = $0 }),
+            .integer("summary_min_interval_minutes", label: NSLocalizedString("摘要最小间隔（分钟）", comment: "跨对话记忆向导字段"), range: 0...525_600, get: { appConfig.conversationMemorySummaryMinIntervalMinutes }, set: { appConfig.conversationMemorySummaryMinIntervalMinutes = $0 }),
+            .bool("daily_profile_update", label: NSLocalizedString("用户画像每天自动更新一次", comment: "跨对话记忆向导字段"), get: { appConfig.enableConversationProfileDailyUpdate }, set: { appConfig.enableConversationProfileDailyUpdate = $0 }),
+            .string(
+                "summary_model_id",
+                label: NSLocalizedString("摘要专用模型", comment: "跨对话记忆向导字段"),
+                allowedValues: [""] + options.map(\.id),
+                get: { viewModel.selectedConversationSummaryModel?.id ?? "" },
+                set: { modelID in viewModel.setSelectedConversationSummaryModel(options.first { $0.id == modelID }) }
+            ),
+            .readOnly("summary_count", label: NSLocalizedString("会话摘要数量", comment: "跨对话记忆向导字段"), value: { .int(viewModel.conversationSessionSummaries.count) }),
+            .readOnly("profile_content", label: NSLocalizedString("用户画像", comment: "跨对话记忆向导字段"), value: { .string(viewModel.conversationUserProfile?.content ?? "") }),
+            .readOnly("profile_fact_count", label: NSLocalizedString("结构化事实数量", comment: "跨对话记忆向导字段"), value: { .int(viewModel.conversationUserProfile?.facts.count ?? 0) })
+        ]
     }
 
     private func selectedConversationSummaryModelLabel(in options: [RunnableModel]) -> String {
@@ -663,6 +738,27 @@ private struct ConversationProfileFactsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("画像事实", comment: "Structured profile facts title"))
+        .guideSettingsPageContext(
+            id: "settings-conversation-profile-facts",
+            title: NSLocalizedString("画像事实", comment: "画像事实向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-memory", title: "Memory System")],
+            settings: [
+                .readOnly(
+                    "facts",
+                    label: NSLocalizedString("画像事实", comment: "画像事实向导字段"),
+                    value: {
+                        .array(facts.map { fact in
+                            .dictionary([
+                                "category": .string(fact.category.rawValue),
+                                "statement": .string(fact.statement),
+                                "confidence": .double(fact.confidence),
+                                "evidence_count": .int(fact.evidenceCount)
+                            ])
+                        })
+                    }
+                )
+            ]
+        )
     }
 }
 
@@ -684,6 +780,15 @@ private struct ConversationProfileEditorSheet: View {
             }
         }
         .navigationTitle(NSLocalizedString("编辑用户画像", comment: ""))
+        .guideSettingsPageContext(
+            id: "settings-conversation-profile-editor",
+            title: NSLocalizedString("编辑用户画像", comment: "用户画像编辑器向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-memory", title: "Memory System")],
+            settings: [
+                .string("profile", label: NSLocalizedString("用户画像内容", comment: "用户画像编辑器向导字段"), allowsEmpty: false, get: { draft }, set: { draft = $0 }),
+                .readOnly("requires_save", label: NSLocalizedString("应用方式", comment: "向导设置字段"), value: { .string(NSLocalizedString("修改后需要保存", comment: "向导草稿应用方式")) })
+            ]
+        )
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button(NSLocalizedString("取消", comment: "")) { dismiss() }

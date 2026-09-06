@@ -203,9 +203,27 @@ struct WatchReasoningMarkdownContentView: View {
     let customTextStyleColors: ChatAppearanceTextStyleColors
     let font: Font
     let onCodeBlockHeaderTap: ((String) -> Void)?
+    let streamingMarkdownState: ETStreamingMarkdownRenderState?
+    let isStreaming: Bool
 
     var body: some View {
-        if enableMarkdown,
+        if isStreaming, let streamingMarkdownState {
+            ETAdvancedMarkdownRenderer(
+                content: reasoning,
+                preparedContent: nil,
+                enableMarkdown: enableMarkdown,
+                isOutgoing: false,
+                enableAdvancedRenderer: enableAdvancedRenderer,
+                enableMathRendering: enableMathRendering,
+                customTextColor: textColor,
+                customTextStyleColors: customTextStyleColors,
+                isStreaming: true,
+                streamingState: streamingMarkdownState,
+                streamingChannel: .reasoning,
+                onCodeBlockHeaderTap: onCodeBlockHeaderTap
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else if enableMarkdown,
            let preparedReasoningContent,
            preparedReasoningContent.sourceText == reasoning {
             ETAdvancedMarkdownRenderer(
@@ -248,6 +266,8 @@ struct WatchTimelineReasoningStepView: View {
     let reasoningCompletedAt: Date?
     let fallbackReasoningDuration: TimeInterval?
     let reasoningSummary: String?
+    let streamingMarkdownState: ETStreamingMarkdownRenderState?
+    let isStreaming: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -288,7 +308,9 @@ struct WatchTimelineReasoningStepView: View {
                         textColor: secondaryColor,
                         customTextStyleColors: customTextStyleColors,
                         font: .footnote,
-                        onCodeBlockHeaderTap: nil
+                        onCodeBlockHeaderTap: nil,
+                        streamingMarkdownState: streamingMarkdownState,
+                        isStreaming: isStreaming
                     )
                 }
                 .transition(.opacity)

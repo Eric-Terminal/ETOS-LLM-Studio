@@ -2,9 +2,11 @@
 // WatchTextSelectionAutoScrollTests.swift
 // ============================================================================
 
+import CoreFoundation
 import Testing
 @testable import ETOS_LLM_Studio_Watch_App
 
+@MainActor
 @Suite("watchOS 文字选区边缘滚动测试")
 struct WatchTextSelectionAutoScrollTests {
     @Test("触点只有进入上下边缘时才触发对应方向")

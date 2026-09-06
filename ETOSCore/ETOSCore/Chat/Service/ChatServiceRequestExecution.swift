@@ -19,18 +19,21 @@ extension ChatService {
         from messagesToSend: [ChatMessage],
         loadingMessageID: UUID,
         sessionID: UUID
-    ) {
+    ) async {
         let snapshot = messagesToSend
             .filter { $0.role == .system }
             .map(\.content)
             .joined(separator: "\n\n")
-        var persistedMessages = messagesSnapshot(for: sessionID)
-        guard let index = persistedMessages.firstIndex(where: { $0.id == loadingMessageID }) else {
+        guard var loadingMessage = messagesSnapshot(for: sessionID).first(where: { $0.id == loadingMessageID }) else {
             logger.warning("无法记录系统提示词快照：未找到回复占位消息 \(loadingMessageID)。")
             return
         }
-        persistedMessages[index].sentSystemPromptSnapshot = snapshot
-        persistAndPublishMessages(persistedMessages, for: sessionID)
+        loadingMessage.sentSystemPromptSnapshot = snapshot
+        do {
+            _ = try await upsertConversationMessage(loadingMessage, to: sessionID)
+        } catch {
+            logger.error("原子保存系统提示词快照失败：\(error.localizedDescription)")
+        }
     }
 
     func openAIReasoningContentEchoModeControlValue() async -> String {
@@ -52,6 +55,7 @@ extension ChatService {
         enableStreaming: Bool,
         enhancedPrompt: String?,
         tools: [InternalToolDefinition]?,
+        localAgentPrompt: String?,
         enableMemory: Bool,
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool,
@@ -61,26 +65,91 @@ extension ChatService {
         periodicTimeLandmarkIntervalMinutes: Int,
         enableResponseSpeedMetrics: Bool,
         currentAudioAttachment: AudioAttachment?,
-        currentFileAttachments _: [FileAttachment]
+        currentImageAttachments: [ImageAttachment],
+        currentFileAttachments: [FileAttachment]
     ) async {
         let currentSessionSnapshot = currentSessionSubject.value
         let sessionForRequest = currentSessionSnapshot?.id == currentSessionID
             ? currentSessionSnapshot
-            : chatSessionsSubject.value.first(where: { $0.id == currentSessionID })
+            : conversationSession(withID: currentSessionID)
+        let resolvedEnhancedPrompt = sessionForRequest?.enhancedPrompt ?? enhancedPrompt
+        let linkedConversations = await Task.detached(priority: .utility) {
+            Persistence.loadLinkedConversationContacts(sourceSessionID: currentSessionID)
+        }.value
+        let continuationMessages: [ChatMessage]
+        do {
+            continuationMessages = try await Task.detached(priority: .userInitiated) {
+                try Persistence.loadConversationContinuationContext(for: currentSessionID)
+            }.value.map(ContextCompressionPromptBuilder.continuationRequestMessages) ?? []
+        } catch {
+            addErrorMessage(
+                String(
+                    format: NSLocalizedString("错误: 无法读取续聊上下文：%@", comment: "Continuation context load error"),
+                    error.localizedDescription
+                ),
+                sessionID: currentSessionID
+            )
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
+            return
+        }
         let preparedRequestMessages = preparedMessagesForRequest(
             from: messages,
             loadingMessageID: loadingMessageID,
             session: sessionForRequest
         )
+        let sessionPreferredModel = sessionForRequest?.preferredModelIdentifier.flatMap { identifier in
+            activatedConversationModels.first(where: { $0.id == identifier })
+        }
+        let runConfiguredModelIdentifier = conversationRunIDs(for: currentSessionID).flatMap { runIDs in
+            Persistence.loadConversationRun(id: runIDs.runID)?.requestConfiguration.modelIdentifier
+        }
+        let runConfiguredModel = runConfiguredModelIdentifier.flatMap { identifier in
+            activatedConversationModels.first(where: { $0.id == identifier })
+                ?? selectedModelSubject.value.flatMap { $0.id == identifier ? $0 : nil }
+        }
+        if runConfiguredModelIdentifier != nil, runConfiguredModel == nil {
+            addErrorMessage(
+                NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error"),
+                sessionID: currentSessionID
+            )
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
+            return
+        }
+        guard let runnableModel = runConfiguredModel ?? sessionPreferredModel ?? selectedModelSubject.value else {
+            addErrorMessage(
+                NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error"),
+                sessionID: currentSessionID
+            )
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
+            return
+        }
+
+        // 先按实际模型展开发送副本，并保护字面宏，再交给角色与脚本模板处理。
+        let requestStartedAt = Date()
+        let promptMacroRequest = await PromptMacroRenderer.render(
+            PromptMacroTemplates(
+                global: sessionForRequest?.isGlobalSystemPromptIsolationActive == true ? nil : systemPrompt,
+                conversation: sessionForRequest?.systemPrompt,
+                topic: sessionForRequest?.topicPrompt,
+                enhanced: resolvedEnhancedPrompt
+            ),
+            model: runnableModel,
+            sessionID: currentSessionID,
+            session: sessionForRequest,
+            messages: preparedRequestMessages,
+            now: requestStartedAt,
+            roleplayStore: roleplayStore
+        )
+        let promptTemplates = promptMacroRequest.templates
         var resolvedRoleplay = RoleplayRuntime.resolve(
             sessionID: currentSessionID,
-            messages: preparedRequestMessages,
+            messages: promptMacroRequest.messages,
             store: roleplayStore
         )
-        var requestMessages = preparedRequestMessages
+        var requestMessages = promptMacroRequest.messages
         if var resolved = resolvedRoleplay {
             requestMessages = RoleplayRuntime.transformedRequestMessages(
-                preparedRequestMessages,
+                promptMacroRequest.messages,
                 resolved: &resolved
             )
             if resolved.variables != roleplayStore.variableSnapshot(sessionID: currentSessionID) {
@@ -110,9 +179,22 @@ extension ChatService {
             if topK == 0 {
                 memories = await self.memoryManager.getActiveMemories()
             } else {
-                let queryText = buildMemoryQueryContext(from: requestMessages, fallbackUserMessage: userMessage)
-                if let queryText {
-                    memories = await self.memoryManager.searchMemoriesHybrid(query: queryText, topK: topK)
+                // 检索使用可读文本，字面宏的临时保护标记只留在模板处理链路内。
+                let messagesBeforeMemoryQuery = requestMessages
+                let memoryQueryMessages = await Task.detached(priority: .userInitiated) {
+                    promptMacroRequest.restoringLiterals(in: messagesBeforeMemoryQuery)
+                }.value
+                let queryText = buildMemoryQueryContext(from: memoryQueryMessages, fallbackUserMessage: userMessage)
+                let queryImages = await memoryQueryImageAttachments(
+                    currentImages: currentImageAttachments,
+                    currentFiles: currentFileAttachments
+                )
+                if queryText != nil || !queryImages.isEmpty {
+                    memories = await self.memoryManager.searchMemoriesHybrid(
+                        query: queryText ?? "",
+                        imageAttachments: queryImages,
+                        topK: topK
+                    )
                 }
             }
             if !memories.isEmpty {
@@ -120,8 +202,8 @@ extension ChatService {
             }
         }
 
-        let isWorldbookIsolationActive = sessionForRequest?.isWorldbookContextIsolationActive ?? false
-        let conversationMemoryEnabled = enableMemory && isConversationMemoryEnabled() && !isWorldbookIsolationActive
+        let isMemoryIsolationActive = sessionForRequest?.isMemoryContextIsolationActive ?? false
+        let conversationMemoryEnabled = enableMemory && isConversationMemoryEnabled() && !isMemoryIsolationActive
         let recentConversationSummaries: [ConversationSessionSummary]
         let conversationUserProfile: ConversationUserProfile?
         if conversationMemoryEnabled {
@@ -136,21 +218,11 @@ extension ChatService {
             conversationUserProfile = nil
         }
 
-        guard let runnableModel = selectedModelSubject.value else {
-            addErrorMessage(
-                NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error"),
-                sessionID: currentSessionID
-            )
-            emitSessionRequestStatus(.error, sessionID: currentSessionID)
-            return
-        }
-
         let effectiveStreaming = resolvedRequestStreamingEnabled(
             preference: enableStreaming,
             overrides: runnableModel.effectiveOverrideParameters
         )
 
-        let requestStartedAt = Date()
         let modelReference = MessageModelReference(
             providerID: runnableModel.provider.id,
             providerName: runnableModel.provider.name,
@@ -204,7 +276,7 @@ extension ChatService {
                 worldbooks: boundWorldbooks,
                 messages: requestMessages,
                 topicPrompt: sessionForRequest?.topicPrompt,
-                enhancedPrompt: enhancedPrompt,
+                enhancedPrompt: resolvedEnhancedPrompt,
                 personaDescription: resolvedRoleplay?.persona?.description,
                 characterDescription: resolvedRoleplay?.characters.first?.description,
                 characterPersonality: resolvedRoleplay?.characters.first?.personality,
@@ -222,9 +294,19 @@ extension ChatService {
         )
 
         var messagesToSend: [ChatMessage] = []
+        let includesConversationTools = runnableModel.model.supportsToolCalling
+            && (tools?.contains { ConversationToolDefinitions.containsExposedName($0.name) } == true)
+        let includesLocalLinuxInstructions = shouldIncludeLocalLinuxInstructions(
+            tools: tools,
+            modelSupportsToolCalling: runnableModel.model.supportsToolCalling,
+            localLinuxToolsEnabled: activeRequestIncludesLocalLinuxTools(sessionID: currentSessionID)
+        )
         var finalSystemPrompt = buildFinalSystemPrompt(
-            global: systemPrompt,
-            topic: sessionForRequest?.topicPrompt,
+            global: promptTemplates.global,
+            conversationSystem: promptTemplates.conversation,
+            topic: promptTemplates.topic,
+            includeConversationRuntime: includesConversationTools,
+            linkedConversations: linkedConversations,
             memories: memories,
             recentConversationSummaries: recentConversationSummaries,
             conversationProfile: conversationUserProfile,
@@ -233,7 +315,9 @@ extension ChatService {
             worldbookAfter: worldbookResult.after,
             worldbookANTop: worldbookResult.anTop,
             worldbookANBottom: worldbookResult.anBottom,
-            roleplayPrompt: resolvedRoleplay.map(RoleplayRuntime.roleplaySystemPrompt)
+            roleplayPrompt: resolvedRoleplay.map(RoleplayRuntime.roleplaySystemPrompt),
+            includeLocalLinuxInstructions: includesLocalLinuxInstructions,
+            localAgentPrompt: localAgentPrompt
         )
         if !helperScriptIDs.isEmpty, finalSystemPrompt.contains("{{") {
             finalSystemPrompt = await RoleplayMacroExpansionBridge.shared.expand(
@@ -279,12 +363,25 @@ extension ChatService {
             messagesToSend.append(ChatMessage(role: .system, content: postHistoryPrompt))
         }
 
-        if let enhancedPromptMessage = makeEnhancedPromptSystemMessage(enhancedPrompt) {
-            messagesToSend.append(enhancedPromptMessage)
+        let openAIUsesSystemRole = await MainActor.run {
+            AppConfigStore.shared.openAITailContextUsesSystemRole
+        }
+        let apiFormat = runnableModel.effectiveAPIFormat
+
+        if let enhancedPromptMessage = makeEnhancedPromptMessage(
+            promptTemplates.enhanced,
+            apiFormat: apiFormat,
+            openAIUsesSystemRole: openAIUsesSystemRole
+        ) {
+            appendTailContextMessage(enhancedPromptMessage, to: &messagesToSend, apiFormat: apiFormat)
         }
 
         if includeSystemTime && systemTimeInjectionPosition == .tail {
-            messagesToSend.append(makeSystemTimeSystemMessage())
+            let timeMessage = makeTailSystemTimeMessage(
+                apiFormat: apiFormat,
+                openAIUsesSystemRole: openAIUsesSystemRole
+            )
+            appendTailContextMessage(timeMessage, to: &messagesToSend, apiFormat: apiFormat)
         }
 
         messagesToSend = await RoleplayPromptTemplateRenderer.renderMessages(
@@ -308,6 +405,17 @@ extension ChatService {
                 outlets: worldbookOutlets
             )
         }
+        let messagesBeforeLiteralRestoration = messagesToSend
+        messagesToSend = await Task.detached(priority: .userInitiated) {
+            promptMacroRequest.restoringLiterals(in: messagesBeforeLiteralRestoration)
+        }.value
+
+        // 续聊上下文是已持久化的固定交接，不参与角色模板、正则和宏替换。
+        // 将它放在首个系统提示词之后，也确保 maxChatHistory 永远不会裁掉这段上下文。
+        if !continuationMessages.isEmpty {
+            let insertionIndex = messagesToSend.first?.role == .system ? 1 : 0
+            messagesToSend.insert(contentsOf: continuationMessages, at: insertionIndex)
+        }
 
         var audioAttachments: [UUID: AudioAttachment] = [:]
         for msg in messagesToSend {
@@ -324,7 +432,8 @@ extension ChatService {
 
         var imageAttachments: [UUID: [ImageAttachment]] = [:]
         for msg in messagesToSend {
-            guard let imageFileNames = msg.imageFileNames, !imageFileNames.isEmpty else { continue }
+            let imageFileNames = msg.modelVisibleImageFileNames
+            guard !imageFileNames.isEmpty else { continue }
             var attachments: [ImageAttachment] = []
             for fileName in imageFileNames {
                 if let attachment = loadImageAttachmentFromStorage(fileName: fileName) {
@@ -336,6 +445,44 @@ extension ChatService {
                 imageAttachments[msg.id] = attachments
             }
         }
+
+        var loadedFileAttachments: [UUID: [FileAttachment]] = [:]
+        for msg in messagesToSend {
+            guard let fileFileNames = msg.fileFileNames, !fileFileNames.isEmpty else { continue }
+            var attachments: [FileAttachment] = []
+            for fileName in fileFileNames {
+                if let attachment = loadFileAttachmentFromStorage(fileName: fileName) {
+                    attachments.append(attachment)
+                    logger.info("已加载历史文件附件: \(fileName) 用于消息 \(msg.id)")
+                }
+            }
+            if !attachments.isEmpty {
+                loadedFileAttachments[msg.id] = attachments
+            }
+        }
+
+        let videoPreprocessing = await preprocessVideoAttachments(
+            messages: messagesToSend,
+            imageAttachments: imageAttachments,
+            fileAttachments: loadedFileAttachments,
+            targetModel: runnableModel,
+            sessionID: currentSessionID
+        )
+        if let errorMessage = videoPreprocessing.errorMessage {
+            addErrorMessage(errorMessage, sessionID: currentSessionID)
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                recordUsageEvent: false,
+                errorKind: "video_frame_extraction_failed"
+            )
+            return
+        }
+        messagesToSend = videoPreprocessing.messages
+        imageAttachments = videoPreprocessing.imageAttachments
 
         let imagePreprocessing = await preprocessImageAttachmentsIfNeeded(
             messages: messagesToSend,
@@ -359,24 +506,9 @@ extension ChatService {
         messagesToSend = imagePreprocessing.messages
         imageAttachments = imagePreprocessing.imageAttachments
 
-        var fileAttachments: [UUID: [FileAttachment]] = [:]
-        for msg in messagesToSend {
-            guard let fileFileNames = msg.fileFileNames, !fileFileNames.isEmpty else { continue }
-            var attachments: [FileAttachment] = []
-            for fileName in fileFileNames {
-                if let attachment = loadFileAttachmentFromStorage(fileName: fileName) {
-                    attachments.append(attachment)
-                    logger.info("已加载历史文件附件: \(fileName) 用于消息 \(msg.id)")
-                }
-            }
-            if !attachments.isEmpty {
-                fileAttachments[msg.id] = attachments
-            }
-        }
-
         let filePreprocessing = preprocessFileAttachmentsForText(
             messages: messagesToSend,
-            fileAttachments: fileAttachments
+            fileAttachments: videoPreprocessing.documentAttachments
         )
         if let errorMessage = filePreprocessing.errorMessage {
             addErrorMessage(errorMessage, sessionID: currentSessionID)
@@ -392,18 +524,56 @@ extension ChatService {
             return
         }
         messagesToSend = filePreprocessing.messages
-        fileAttachments = filePreprocessing.fileAttachments
+        var fileAttachments = filePreprocessing.fileAttachments
+        for (messageID, attachments) in videoPreprocessing.nativeVideoAttachments {
+            fileAttachments[messageID, default: []].append(contentsOf: attachments)
+        }
 
         if !helperScriptIDs.isEmpty {
-            messagesToSend = await RoleplayPromptMutationBridge.shared.mutate(
-                messagesToSend,
-                sessionID: currentSessionID,
-                scriptIDs: helperScriptIDs
-            )
+            if continuationMessages.isEmpty {
+                messagesToSend = await RoleplayPromptMutationBridge.shared.mutate(
+                    messagesToSend,
+                    sessionID: currentSessionID,
+                    scriptIDs: helperScriptIDs
+                )
+            } else {
+                let protectedMessageIDs = Set(continuationMessages.map(\.id))
+                let firstProtectedIndex = messagesToSend.firstIndex {
+                    protectedMessageIDs.contains($0.id)
+                }
+                let lastProtectedIndex = messagesToSend.lastIndex {
+                    protectedMessageIDs.contains($0.id)
+                }
+                if let firstProtectedIndex, let lastProtectedIndex {
+                    let prefixSource = Array(messagesToSend[..<firstProtectedIndex])
+                    let prefix = prefixSource.isEmpty
+                        ? []
+                        : await RoleplayPromptMutationBridge.shared.mutate(
+                            prefixSource,
+                            sessionID: currentSessionID,
+                            scriptIDs: helperScriptIDs
+                        )
+                    let protectedMessages = Array(messagesToSend[firstProtectedIndex...lastProtectedIndex])
+                    let suffixStartIndex = messagesToSend.index(after: lastProtectedIndex)
+                    let suffixSource = Array(messagesToSend[suffixStartIndex...])
+                    let suffix = suffixSource.isEmpty
+                        ? []
+                        : await RoleplayPromptMutationBridge.shared.mutate(
+                            suffixSource,
+                            sessionID: currentSessionID,
+                            scriptIDs: helperScriptIDs
+                        )
+                    messagesToSend = prefix + protectedMessages + suffix
+                }
+            }
         }
 
         if LocalModelProviderBridge.isLocalRunnableModel(runnableModel) {
-            persistSentSystemPromptSnapshot(
+            let localTools = runnableModel.model.supportsToolCalling ? tools : nil
+            if tools != nil, localTools == nil {
+                logger.info("当前本地模型未启用工具能力，本次请求不会附带工具定义。")
+            }
+            await persistSentSystemPromptSnapshot(
                 from: messagesToSend,
                 loadingMessageID: loadingMessageID,
                 sessionID: currentSessionID
@@ -429,16 +599,16 @@ extension ChatService {
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 requestStartedAt: requestStartedAt,
                 requestLogContext: requestLogContext,
-                availableTools: nil,
+                availableTools: localTools,
                 imageAttachments: imageAttachments
             )
             return
         }
 
-        guard let adapter = adapters[runnableModel.provider.apiFormat] else {
+        guard let adapter = adapters[runnableModel.effectiveAPIFormat] else {
             addErrorMessage(String(
                 format: NSLocalizedString("错误: 找不到适用于 '%@' 格式的 API 适配器。", comment: "Missing API adapter error"),
-                runnableModel.provider.apiFormat
+                runnableModel.effectiveAPIFormat
             ), sessionID: currentSessionID)
             emitSessionRequestStatus(.error, sessionID: currentSessionID)
             persistRequestLog(
@@ -468,22 +638,92 @@ extension ChatService {
             return
         }
 
+        var selectedGeminiAPIKey: String?
+        if let geminiAdapter = adapter as? GeminiAdapter {
+            do {
+                let preparation = try await prepareGeminiNativeVideoAttachments(
+                    fileAttachments,
+                    provider: runnableModel.provider,
+                    adapter: geminiAdapter
+                )
+                fileAttachments = preparation.attachments
+                selectedGeminiAPIKey = preparation.apiKey
+            } catch {
+                let errorMessage = String(
+                    format: NSLocalizedString("Gemini 原生视频上传失败：%@", comment: "Gemini native video upload failed"),
+                    error.localizedDescription
+                )
+                addErrorMessage(errorMessage, sessionID: currentSessionID)
+                emitSessionRequestStatus(.error, sessionID: currentSessionID)
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .failed,
+                    tokenUsage: nil,
+                    finishedAt: Date(),
+                    recordUsageEvent: false,
+                    errorKind: "gemini_video_upload_failed"
+                )
+                return
+            }
+        }
+
         let temperatureEnabled = await MainActor.run { AppConfigStore.shared.aiTemperatureEnabled }
         let topPEnabled = await MainActor.run { AppConfigStore.shared.aiTopPEnabled }
         var commonPayload: [String: Any] = ["stream": effectiveStreaming]
         if temperatureEnabled { commonPayload["temperature"] = aiTemperature }
         if topPEnabled { commonPayload["top_p"] = aiTopP }
         commonPayload[ReasoningContentEchoPayload.key] = await openAIReasoningContentEchoModeControlValue()
+        if let selectedGeminiAPIKey {
+            commonPayload[GeminiAdapter.apiKeyControlKey] = selectedGeminiAPIKey
+        }
         if adapter is OpenAIAdapter {
             let includeUsageInStream = await MainActor.run { AppConfigStore.shared.enableOpenAIStreamIncludeUsage }
             commonPayload[OpenAIAdapter.streamIncludeUsageControlKey] = includeUsageInStream
         }
-        let effectiveTools = runnableModel.model.supportsToolCalling ? tools : nil
+        let providerResolvedTools: [InternalToolDefinition]?
+        do {
+            providerResolvedTools = try await toolsUsingNativeResponsesShellIfNeeded(
+                tools,
+                runnableModel: runnableModel,
+                sessionID: currentSessionID
+            )
+        } catch {
+            let reason = String(
+                format: NSLocalizedString("错误: 无法准备 Responses 本地 Shell：%@", comment: "Prepare Responses local shell failure"),
+                error.localizedDescription
+            )
+            addErrorMessage(reason, sessionID: currentSessionID)
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                recordUsageEvent: false,
+                errorKind: "responses_local_shell_preparation_failed"
+            )
+            return
+        }
+        let effectiveTools = runnableModel.model.supportsToolCalling ? providerResolvedTools : nil
         if tools != nil, effectiveTools == nil {
             logger.info("当前模型未启用工具能力，本次请求不会附带工具定义。")
         }
 
-        guard let request = adapter.buildChatRequest(for: runnableModel, commonPayload: commonPayload, messages: messagesToSend, tools: effectiveTools, audioAttachments: audioAttachments, imageAttachments: imageAttachments, fileAttachments: fileAttachments) else {
+        let preparationSignpost = TelemetrySignpost.begin(
+            .requestPreparation,
+            correlatingWith: requestLogContext.requestID
+        )
+        let builtRequest = adapter.buildChatRequest(
+            for: runnableModel,
+            commonPayload: commonPayload,
+            messages: messagesToSend,
+            tools: effectiveTools,
+            audioAttachments: audioAttachments,
+            imageAttachments: imageAttachments,
+            fileAttachments: fileAttachments
+        )
+        TelemetrySignpost.end(preparationSignpost)
+        guard let request = builtRequest else {
             let reason = providerConfigurationValidationErrorMessage(
                 for: runnableModel.provider,
                 action: NSLocalizedString("发送聊天请求", comment: "Send chat request action")
@@ -499,8 +739,16 @@ extension ChatService {
             )
             return
         }
+        RequestTransactionLogRegistry.bindRequest(
+            request,
+            requestID: requestLogContext.requestID,
+            requestedAt: requestLogContext.requestedAt,
+            providerName: requestLogContext.providerName,
+            modelID: requestLogContext.modelID,
+            isStreaming: requestLogContext.isStreaming
+        )
 
-        persistSentSystemPromptSnapshot(
+        await persistSentSystemPromptSnapshot(
             from: messagesToSend,
             loadingMessageID: loadingMessageID,
             sessionID: currentSessionID
@@ -588,6 +836,270 @@ extension ChatService {
         }
         #endif
         return "application/octet-stream"
+    }
+
+    private func memoryQueryImageAttachments(
+        currentImages: [ImageAttachment],
+        currentFiles: [FileAttachment]
+    ) async -> [ImageAttachment] {
+        let videos = currentFiles.filter(VideoAttachmentSupport.isVideo)
+        guard !videos.isEmpty else { return currentImages }
+
+        let configuration = await MainActor.run {
+            let appConfig = AppConfigStore.shared
+            return VideoFrameExtractionConfiguration(
+                mode: VideoFrameExtractionMode.normalized(appConfig.videoFrameExtractionMode),
+                fixedFPS: appConfig.videoFrameExtractionFPS,
+                maximumFrameCount: appConfig.videoFrameMaximumCount
+            )
+        }
+        var images = currentImages
+        let extractor = VideoFrameExtractor()
+        for video in videos {
+            do {
+                let result = try await extractor.extractFrames(
+                    from: video,
+                    configuration: configuration
+                )
+                images.append(contentsOf: result.frames.map(\.attachment))
+            } catch {
+                logger.warning("视频帧无法用于多模态记忆检索，将继续使用其他查询信息：\(error.localizedDescription)")
+            }
+        }
+        return images
+    }
+
+    func preprocessVideoAttachments(
+        messages: [ChatMessage],
+        imageAttachments: [UUID: [ImageAttachment]],
+        fileAttachments: [UUID: [FileAttachment]],
+        targetModel: RunnableModel,
+        sessionID: UUID
+    ) async -> VideoAttachmentPreprocessingResult {
+        guard !fileAttachments.isEmpty else {
+            return VideoAttachmentPreprocessingResult(
+                messages: messages,
+                imageAttachments: imageAttachments,
+                nativeVideoAttachments: [:],
+                documentAttachments: [:],
+                errorMessage: nil
+            )
+        }
+
+        var videoAttachments: [UUID: [FileAttachment]] = [:]
+        var documentAttachments: [UUID: [FileAttachment]] = [:]
+        for (messageID, attachments) in fileAttachments {
+            for attachment in attachments {
+                if VideoAttachmentSupport.isVideo(attachment) {
+                    videoAttachments[messageID, default: []].append(attachment)
+                } else {
+                    documentAttachments[messageID, default: []].append(attachment)
+                }
+            }
+        }
+
+        guard !videoAttachments.isEmpty else {
+            return VideoAttachmentPreprocessingResult(
+                messages: messages,
+                imageAttachments: imageAttachments,
+                nativeVideoAttachments: [:],
+                documentAttachments: documentAttachments,
+                errorMessage: nil
+            )
+        }
+
+        let usesNativeVideo = VideoAttachmentSupport.usesNativeInput(for: targetModel)
+        if usesNativeVideo {
+            logger.info("当前 Gemini 模型已启用视频输入，将发送原始视频附件。")
+            return VideoAttachmentPreprocessingResult(
+                messages: messages,
+                imageAttachments: imageAttachments,
+                nativeVideoAttachments: videoAttachments,
+                documentAttachments: documentAttachments,
+                errorMessage: nil
+            )
+        }
+
+        let usesVideoAnalysis = await MainActor.run {
+            AppConfigStore.shared.enableVideoAnalysisForNonNativeModels
+        }
+        if usesVideoAnalysis {
+            guard let analysisModel = resolveSelectedVideoAnalysisModel() else {
+                return VideoAttachmentPreprocessingResult(
+                    messages: messages,
+                    imageAttachments: imageAttachments,
+                    nativeVideoAttachments: [:],
+                    documentAttachments: documentAttachments,
+                    errorMessage: VideoAnalysisError.modelNotConfigured.localizedDescription
+                )
+            }
+
+            var updatedMessages = messages
+            let orderedMessageIDs = updatedMessages.map(\.id)
+            let sortedPairs = videoAttachments.sorted { lhs, rhs in
+                let lhsIndex = orderedMessageIDs.firstIndex(of: lhs.key) ?? Int.max
+                let rhsIndex = orderedMessageIDs.firstIndex(of: rhs.key) ?? Int.max
+                return lhsIndex < rhsIndex
+            }
+
+            for (messageID, attachments) in sortedPairs {
+                guard let messageIndex = updatedMessages.firstIndex(where: { $0.id == messageID }) else {
+                    continue
+                }
+                var analysisResults: [VideoAnalysisResult] = []
+                for attachment in attachments {
+                    do {
+                        let result: VideoAnalysisResult
+                        if let cached = updatedMessages[messageIndex].videoAnalysisResult(
+                            for: attachment.fileName
+                        ) {
+                            result = cached
+                            logger.info("复用已保存的视频解析结果: \(attachment.fileName)")
+                        } else {
+                            result = try await analyzeVideoAttachment(
+                                attachment,
+                                using: analysisModel,
+                                sessionID: sessionID
+                            )
+                            updatedMessages[messageIndex].replaceVideoAnalysisResult(result)
+                            await persistVideoAnalysisResult(
+                                result,
+                                messageID: messageID,
+                                sessionID: sessionID
+                            )
+                        }
+                        analysisResults.append(result)
+                    } catch {
+                        let errorMessage = String(
+                            format: NSLocalizedString("视频“%@”解析失败：%@", comment: "Video analysis failed"),
+                            attachment.fileName,
+                            error.localizedDescription
+                        )
+                        return VideoAttachmentPreprocessingResult(
+                            messages: messages,
+                            imageAttachments: imageAttachments,
+                            nativeVideoAttachments: [:],
+                            documentAttachments: documentAttachments,
+                            errorMessage: errorMessage
+                        )
+                    }
+                }
+
+                guard !analysisResults.isEmpty else { continue }
+                let appendix = makeVideoAnalysisAppendixText(analysisResults)
+                if updatedMessages[messageIndex].content
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .isEmpty {
+                    updatedMessages[messageIndex].content = appendix
+                } else {
+                    updatedMessages[messageIndex].content += "\n\n\(appendix)"
+                }
+            }
+
+            logger.info("非原生视频已转换为持久化的视频解析上下文。")
+            return VideoAttachmentPreprocessingResult(
+                messages: updatedMessages,
+                imageAttachments: imageAttachments,
+                nativeVideoAttachments: [:],
+                documentAttachments: documentAttachments,
+                errorMessage: nil
+            )
+        }
+
+        let configuration = await MainActor.run {
+            let appConfig = AppConfigStore.shared
+            return VideoFrameExtractionConfiguration(
+                mode: VideoFrameExtractionMode.normalized(appConfig.videoFrameExtractionMode),
+                fixedFPS: appConfig.videoFrameExtractionFPS,
+                maximumFrameCount: appConfig.videoFrameMaximumCount
+            )
+        }
+        let extractor = VideoFrameExtractor()
+        var updatedMessages = messages
+        var updatedImageAttachments = imageAttachments
+        let orderedMessageIDs = updatedMessages.map(\.id)
+        let sortedPairs = videoAttachments.sorted { lhs, rhs in
+            let lhsIndex = orderedMessageIDs.firstIndex(of: lhs.key) ?? Int.max
+            let rhsIndex = orderedMessageIDs.firstIndex(of: rhs.key) ?? Int.max
+            return lhsIndex < rhsIndex
+        }
+
+        for (messageID, attachments) in sortedPairs {
+            guard let messageIndex = updatedMessages.firstIndex(where: { $0.id == messageID }) else {
+                continue
+            }
+            for attachment in attachments {
+                do {
+                    let result = try await extractor.extractFrames(
+                        from: attachment,
+                        configuration: configuration
+                    )
+                    updatedImageAttachments[messageID, default: []].append(
+                        contentsOf: result.frames.map(\.attachment)
+                    )
+                    let appendix = makeVideoFrameAppendixText(
+                        fileName: attachment.fileName,
+                        result: result,
+                        mode: configuration.mode
+                    )
+                    if updatedMessages[messageIndex].content
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .isEmpty {
+                        updatedMessages[messageIndex].content = appendix
+                    } else {
+                        updatedMessages[messageIndex].content += "\n\n\(appendix)"
+                    }
+                    logger.info(
+                        "视频抽帧完成: \(attachment.fileName)，生成 \(result.frames.count) 帧。"
+                    )
+                } catch {
+                    let errorMessage = String(
+                        format: NSLocalizedString("视频“%@”处理失败：%@", comment: "Video extraction failed"),
+                        attachment.fileName,
+                        error.localizedDescription
+                    )
+                    return VideoAttachmentPreprocessingResult(
+                        messages: messages,
+                        imageAttachments: imageAttachments,
+                        nativeVideoAttachments: [:],
+                        documentAttachments: documentAttachments,
+                        errorMessage: errorMessage
+                    )
+                }
+            }
+        }
+
+        return VideoAttachmentPreprocessingResult(
+            messages: updatedMessages,
+            imageAttachments: updatedImageAttachments,
+            nativeVideoAttachments: [:],
+            documentAttachments: documentAttachments,
+            errorMessage: nil
+        )
+    }
+
+    private func makeVideoFrameAppendixText(
+        fileName: String,
+        result: VideoFrameExtractionResult,
+        mode: VideoFrameExtractionMode
+    ) -> String {
+        let frameLines = result.frames.map { frame in
+            String(
+                format: "  <frame file=\"%@\" timestamp_seconds=\"%.3f\" />",
+                xmlEscapedAttribute(frame.attachment.fileName),
+                frame.timestamp
+            )
+        }.joined(separator: "\n")
+        let localizedInstruction = NSLocalizedString(
+            "以下图片附件是该视频按时间顺序提取的画面。请结合时间戳分析动作、场景变化和前后关系，不要把相邻画面误认为同时发生。",
+            comment: "Video extracted frames prompt"
+        )
+        return """
+        <video_frames name="\(xmlEscapedAttribute(fileName))" duration_seconds="\(String(format: "%.3f", result.duration))" mode="\(mode.rawValue)">
+        \(localizedInstruction)
+        \(frameLines)
+        </video_frames>
+        """
     }
 
     func preprocessFileAttachmentsForText(
@@ -774,7 +1286,7 @@ extension ChatService {
         using ocrModel: RunnableModel,
         sessionID: UUID
     ) async throws -> String {
-        guard let adapter = adapters[ocrModel.provider.apiFormat] else {
+        guard let adapter = adapters[ocrModel.effectiveAPIFormat] else {
             throw DetachedCompletionError.unsupportedAdapter
         }
         if let configurationError = providerConfigurationValidationErrorMessage(

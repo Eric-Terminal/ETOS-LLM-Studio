@@ -16,6 +16,7 @@ struct SessionFolderBrowserView: View {
     let tags: [SessionTag]
     @Binding var currentSession: ChatSession?
     let runningSessionIDs: Set<UUID>
+    let conversationRuntimeStates: [UUID: ConversationRuntimeSessionState]
 
     let deleteSessionAction: (ChatSession) -> Void
     let branchAction: (ChatSession, Bool) -> ChatSession?

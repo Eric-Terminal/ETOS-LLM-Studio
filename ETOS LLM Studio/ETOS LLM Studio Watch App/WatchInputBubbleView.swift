@@ -21,7 +21,11 @@ struct WatchInputBubbleView: View {
     let inputStrokeColor: Color
     let inputPlaceholderText: String
     let inputBubbleVerticalPadding: CGFloat
-    let onOpenSessionHistory: () -> Void
+    let isContextCompressionAvailable: Bool
+    let isTemporaryChatActivationAvailable: Bool
+    let onPerformQuickAction: (WatchInputQuickAction) -> Void
+    let onPerformSlashCommand: (ChatSlashCommand) -> Void
+    let onShowTransientNotice: (WatchChatTransientNotice) -> Void
     let onHandleInputAction: (WatchChatInputActionState) -> Void
     let onSpeechInputLayoutWillChange: () -> Void
     let onRememberAttachmentSource: (String) -> Void
@@ -30,12 +34,22 @@ struct WatchInputBubbleView: View {
     @Binding var isRequestControlsPresented: Bool
     @Binding var isAttachmentImportPresented: Bool
     @Binding var attachmentSourceText: String
+    @ObservedObject private var appConfig = AppConfigStore.shared
+    @ObservedObject private var customSlashCommandStore = CustomChatSlashCommandStore.shared
     @State private var resourceUsageTask: Task<Void, Never>?
     @State private var speechPreviewFinalizeTask: Task<Void, Never>?
     @State private var isDraftEditorPresented = false
     @State private var roleplayScriptActions: [WatchRoleplayScriptButtonAction] = []
     @State private var roleplayScriptRevision = 0
     @State private var isRoleplayScriptActionMenuPresented = false
+    @State private var presentedQuickActionEdge: WatchInputQuickActionEdge?
+    @State private var pendingQuickAction: WatchInputQuickAction?
+    @State private var isTemporaryChatEnabled = false
+    @State private var temporaryChatMemoryMode: TemporaryChatMemoryMode = .enabled
+    @State private var visibleLeadingQuickActions: [WatchInputQuickAction] = []
+    @State private var visibleTrailingQuickActions: [WatchInputQuickAction] = []
+    @State private var slashCommandSuggestions: [ChatSlashCommandSuggestion] = []
+    @State private var customSlashCommandPrefilledPrompt: String?
 
     private var hasPendingAttachments: Bool {
         viewModel.pendingAudioAttachment != nil
@@ -48,6 +62,7 @@ struct WatchInputBubbleView: View {
             || isAttachmentImportPresented
             || isDraftEditorPresented
             || isRoleplayScriptActionMenuPresented
+            || presentedQuickActionEdge != nil
             || viewModel.showSpeechErrorAlert
             || viewModel.showAttachmentImportErrorAlert
             || viewModel.showDimensionMismatchAlert
@@ -74,6 +89,7 @@ struct WatchInputBubbleView: View {
                 inputLinkLabel
             } onSubmit: { submittedText in
                 viewModel.userInput = WatchChatInputSubmission.normalizedText(from: submittedText)
+                refreshSlashCommandSuggestions()
             }
             .buttonStyle(.plain)
             .accessibilityLabel(NSLocalizedString("输入...", comment: ""))
@@ -136,7 +152,9 @@ struct WatchInputBubbleView: View {
         let hasTrimmedText = !viewModel.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let canSend = hasTrimmedText || hasPendingAttachments
         let inputActionState = WatchChatInputActionState.resolve(
-            isSending: viewModel.isSendingMessage || viewModel.isSendDelayPending,
+            isSending: viewModel.isSendingMessage
+                || viewModel.isSendDelayPending
+                || viewModel.isSendSubmissionPending,
             hasSendableContent: canSend,
             canQuickRetry: viewModel.canQuickRetryLatestMessage,
             isSpeechInputEnabled: viewModel.enableSpeechInput
@@ -144,6 +162,14 @@ struct WatchInputBubbleView: View {
 
         let coreBubble = Group {
             VStack(spacing: 6) {
+                if !slashCommandSuggestions.isEmpty {
+                    WatchSlashCommandSuggestionPanel(
+                        commands: slashCommandSuggestions,
+                        onSelect: performSuggestedSlashCommand
+                    )
+                    .transition(.opacity)
+                }
+
                 if isInlineSpeechComposerPresented {
                     inlineSpeechComposer
                 } else if isLiquidGlassEnabled {
@@ -153,7 +179,7 @@ struct WatchInputBubbleView: View {
                                 .glassEffect(.clear, in: Capsule())
 
                             Button {
-                                onHandleInputAction(inputActionState)
+                                handleInputAction(inputActionState)
                             } label: {
                                 Image(systemName: inputActionState.systemImageName)
                                     .etFont(.system(size: 18, weight: .medium))
@@ -161,7 +187,11 @@ struct WatchInputBubbleView: View {
                             }
                             .buttonStyle(.plain)
                             .glassEffect(.clear, in: Circle())
-                            .disabled(inputActionState.isDisabled || viewModel.attachmentImportInProgress)
+                            .disabled(
+                                inputActionState.isDisabled
+                                    || viewModel.attachmentImportInProgress
+                                    || viewModel.isSendSubmissionPending
+                            )
                         } else {
                             ZStack {
                                 Capsule()
@@ -174,7 +204,7 @@ struct WatchInputBubbleView: View {
                             }
 
                             Button {
-                                onHandleInputAction(inputActionState)
+                                handleInputAction(inputActionState)
                             } label: {
                                 Image(systemName: inputActionState.systemImageName)
                                     .etFont(.system(size: 18, weight: .medium))
@@ -185,7 +215,11 @@ struct WatchInputBubbleView: View {
                                 Circle()
                                     .stroke(inputStrokeColor, lineWidth: 0.8)
                             )
-                            .disabled(inputActionState.isDisabled || viewModel.attachmentImportInProgress)
+                            .disabled(
+                                inputActionState.isDisabled
+                                    || viewModel.attachmentImportInProgress
+                                    || viewModel.isSendSubmissionPending
+                            )
                         }
                     }
                     .frame(height: inputControlHeight)
@@ -202,7 +236,7 @@ struct WatchInputBubbleView: View {
                         }
 
                         Button {
-                            onHandleInputAction(inputActionState)
+                            handleInputAction(inputActionState)
                         } label: {
                             Image(systemName: inputActionState.systemImageName)
                                 .etFont(.system(size: 18, weight: .medium))
@@ -216,7 +250,11 @@ struct WatchInputBubbleView: View {
                             Circle()
                                 .stroke(inputStrokeColor, lineWidth: 0.8)
                         )
-                        .disabled(inputActionState.isDisabled || viewModel.attachmentImportInProgress)
+                        .disabled(
+                            inputActionState.isDisabled
+                                || viewModel.attachmentImportInProgress
+                                || viewModel.isSendSubmissionPending
+                        )
                     }
                     .frame(height: inputControlHeight)
                     .padding(.horizontal, 10)
@@ -228,6 +266,7 @@ struct WatchInputBubbleView: View {
         .padding(.horizontal)
         .padding(.vertical, inputBubbleVerticalPadding)
         .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isInlineSpeechComposerPresented)
+        .animation(.easeOut(duration: 0.16), value: slashCommandSuggestions)
 
         return coreBubble
             .onLongPressGesture(minimumDuration: 0.5) {
@@ -237,78 +276,23 @@ struct WatchInputBubbleView: View {
                 }
             }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                if !roleplayScriptActions.isEmpty {
-                    Button {
-                        isRoleplayScriptActionMenuPresented = true
-                    } label: {
-                        Image(systemName: "curlybraces.square")
-                            .etFont(.system(size: 16, weight: .semibold))
-                            .frame(width: inputControlHeight, height: inputControlHeight)
-                            .contentShape(Circle())
-                    }
-                    .labelStyle(.iconOnly)
-                    .accessibilityLabel(NSLocalizedString("助手脚本", comment: "Watch roleplay script actions"))
-                    .tint(.indigo)
-                }
-
-                Button {
-                    attachmentSourceText = importSourceHistory.first ?? lastAttachmentSource
-                    isAttachmentImportPresented = true
-                } label: {
-                    Image(systemName: "plus")
-                        .etFont(.system(size: 16, weight: .semibold))
-                        .frame(width: inputControlHeight, height: inputControlHeight)
-                        .contentShape(Circle())
-                }
-                .labelStyle(.iconOnly)
-                .accessibilityLabel(NSLocalizedString("添加附件", comment: ""))
-                .tint(.blue)
-                .disabled(viewModel.attachmentImportInProgress)
-
-                if !viewModel.userInput.isEmpty || hasPendingAttachments {
-                    Button(role: .destructive) {
-                        viewModel.clearUserInput()
-                        viewModel.clearAllAttachments()
-                    } label: {
-                        Image(systemName: "trash")
-                            .etFont(.system(size: 16, weight: .semibold))
-                            .frame(width: inputControlHeight, height: inputControlHeight)
-                            .contentShape(Circle())
-                    }
-                    .labelStyle(.iconOnly)
-                    .accessibilityLabel(NSLocalizedString("清空输入", comment: ""))
-                }
+                quickActionButtons(for: .trailing)
             }
             .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                if let selectedModel = viewModel.selectedModel,
-                   !selectedModel.model.requestBodyControls.filter(\.isEnabled).isEmpty {
-                    Button {
-                        isRequestControlsPresented = true
-                    } label: {
-                        Image(systemName: "slider.vertical.3")
-                            .font(.system(size: 16, weight: .semibold))
-                            .frame(width: inputControlHeight, height: inputControlHeight)
-                    }
-                    .labelStyle(.iconOnly)
-                    .accessibilityLabel(NSLocalizedString("请求控制", comment: ""))
-                    .tint(.purple)
+                quickActionButtons(for: .leading)
+            }
+            .sheet(item: $presentedQuickActionEdge, onDismiss: performPendingQuickAction) { edge in
+                NavigationStack {
+                    quickActionFolder(for: edge)
                 }
-                Button {
-                    onOpenSessionHistory()
-                } label: {
-                    Image(systemName: "list.bullet.rectangle")
-                        .font(.system(size: 16, weight: .semibold))
-                        .frame(width: inputControlHeight, height: inputControlHeight)
-                }
-                .labelStyle(.iconOnly)
-                .accessibilityLabel(NSLocalizedString("历史会话", comment: ""))
-                .tint(.blue)
             }
             .sheet(isPresented: $isRequestControlsPresented) {
                 if let selectedModel = viewModel.selectedModel {
                     NavigationStack {
                         WatchQuickRequestControlsView(
                             runnableModel: selectedModel,
+                            sessionID: viewModel.currentSession?.id,
+                            isLocked: viewModel.isSendingMessage || viewModel.isSendDelayPending,
                             onDone: { isRequestControlsPresented = false }
                         )
                     }
@@ -336,11 +320,21 @@ struct WatchInputBubbleView: View {
                     )
                 }
             }
-            .sheet(isPresented: $isDraftEditorPresented) {
+            .sheet(isPresented: $isDraftEditorPresented, onDismiss: refreshSlashCommandSuggestions) {
                 WatchChatDraftEditorView(
                     text: $viewModel.userInput,
                     placeholder: inputPlaceholderText
                 )
+            }
+            .onChange(of: appConfig.enableSlashCommands) { _, isEnabled in
+                if isEnabled {
+                    refreshSlashCommandSuggestions()
+                } else {
+                    slashCommandSuggestions = []
+                }
+            }
+            .onChange(of: customSlashCommandStore.commands) { _, _ in
+                refreshSlashCommandSuggestions()
             }
             .confirmationDialog(
                 NSLocalizedString("助手脚本", comment: "Watch roleplay script action menu"),
@@ -381,6 +375,9 @@ struct WatchInputBubbleView: View {
                 Text(viewModel.memoryEmbeddingErrorMessage)
             }
             .onAppear {
+                refreshTemporaryChatState()
+                refreshVisibleQuickActions()
+                refreshSlashCommandSuggestions()
                 updateResourceUsageSampling()
                 refreshInputLocalPresentationBlocker()
             }
@@ -392,8 +389,24 @@ struct WatchInputBubbleView: View {
                     roleplayScriptRevision &+= 1
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .temporaryChatStateDidChange)) { _ in
+                refreshTemporaryChatState()
+            }
+            .onReceive(appConfig.$watchInputQuickActionSettings) { configuration in
+                refreshVisibleQuickActions(using: configuration)
+            }
             .onChange(of: viewModel.selectedModel?.id) { _, _ in
                 updateResourceUsageSampling()
+                refreshVisibleQuickActions()
+            }
+            .onChange(of: viewModel.currentSession?.id) { _, _ in
+                refreshTemporaryChatState()
+            }
+            .onChange(of: viewModel.userInput.isEmpty) { _, _ in
+                refreshVisibleQuickActions()
+            }
+            .onChange(of: hasPendingAttachments) { _, _ in
+                refreshVisibleQuickActions()
             }
             .onChange(of: inputLocalPresentationBlocked) { _, _ in
                 refreshInputLocalPresentationBlocker()
@@ -404,6 +417,327 @@ struct WatchInputBubbleView: View {
                 speechPreviewFinalizeTask = nil
                 setInputLocalPresentationBlocked(false)
             }
+    }
+
+    @ViewBuilder
+    private func quickActionButtons(for edge: WatchInputQuickActionEdge) -> some View {
+        let actions = visibleQuickActions(for: edge)
+        if actions.count > 3 {
+            Button {
+                presentedQuickActionEdge = edge
+            } label: {
+                Image(systemName: "ellipsis")
+            }
+            .tint(.gray)
+            .accessibilityLabel(NSLocalizedString("更多快捷功能", comment: "Watch collapsed quick actions"))
+        } else {
+            ForEach(actions) { action in
+                quickActionButton(action)
+            }
+        }
+    }
+
+    private func quickActionFolder(for edge: WatchInputQuickActionEdge) -> some View {
+        List {
+            ForEach(visibleQuickActions(for: edge)) { action in
+                Button {
+                    pendingQuickAction = action
+                    presentedQuickActionEdge = nil
+                } label: {
+                    HStack {
+                        Image(systemName: systemImage(for: action))
+                            .foregroundStyle(action.tint)
+                            .frame(width: 24)
+
+                        VStack(alignment: .leading) {
+                            Text(action.title)
+                            if action == .temporaryChat && isQuickActionDisabled(action) {
+                                Text(NSLocalizedString("仅可在对话开始前开启", comment: "Watch temporary chat availability"))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isQuickActionDisabled(action))
+            }
+        }
+        .navigationTitle(NSLocalizedString("快捷功能", comment: "Watch collapsed quick actions title"))
+    }
+
+    @ViewBuilder
+    private func quickActionButton(_ action: WatchInputQuickAction) -> some View {
+        if action == .clearInput {
+            Button(role: .destructive) {
+                performQuickAction(action)
+            } label: {
+                quickActionIcon(action)
+            }
+            .labelStyle(.iconOnly)
+            .accessibilityLabel(action.title)
+        } else {
+            Button {
+                performQuickAction(action)
+            } label: {
+                quickActionIcon(action)
+            }
+            .labelStyle(.iconOnly)
+            .accessibilityLabel(action.title)
+            .tint(action.tint)
+            .disabled(isQuickActionDisabled(action))
+        }
+    }
+
+    private func quickActionIcon(_ action: WatchInputQuickAction) -> some View {
+        Image(systemName: systemImage(for: action))
+            .etFont(.system(size: 16, weight: .semibold))
+            .frame(width: inputControlHeight, height: inputControlHeight)
+            .contentShape(Circle())
+    }
+
+    private func visibleQuickActions(for edge: WatchInputQuickActionEdge) -> [WatchInputQuickAction] {
+        switch edge {
+        case .leading:
+            return visibleLeadingQuickActions
+        case .trailing:
+            return visibleTrailingQuickActions
+        }
+    }
+
+    private func refreshVisibleQuickActions(
+        using configuration: WatchInputQuickActionConfiguration? = nil
+    ) {
+        let configuration = configuration ?? appConfig.watchInputQuickActionSettings
+        visibleLeadingQuickActions = configuration.leadingActions.filter(shouldShowQuickAction)
+        visibleTrailingQuickActions = configuration.trailingActions.filter(shouldShowQuickAction)
+    }
+
+    private func systemImage(for action: WatchInputQuickAction) -> String {
+        guard action == .temporaryChat else { return action.systemImage }
+        guard isTemporaryChatEnabled else { return "eye" }
+        return temporaryChatMemoryMode == .isolated ? "eye.slash.fill" : "eye.slash"
+    }
+
+    private func shouldShowQuickAction(_ action: WatchInputQuickAction) -> Bool {
+        switch action {
+        case .requestControls:
+            return viewModel.selectedModel?.model.requestBodyControls.contains(where: \.isEnabled) == true
+                || (appConfig.localLinuxEnabled
+                    && viewModel.currentSession != nil
+                    && viewModel.selectedModel != nil)
+        case .agentMode:
+            return appConfig.localLinuxEnabled
+                && viewModel.currentSession != nil
+                && viewModel.selectedModel != nil
+        case .browser:
+            return viewModel.currentSession != nil
+        case .localTerminal:
+            return appConfig.localLinuxEnabled && viewModel.currentSession != nil
+        case .roleplayScripts:
+            return !roleplayScriptActions.isEmpty
+        case .clearInput:
+            return !viewModel.userInput.isEmpty || hasPendingAttachments
+        default:
+            return true
+        }
+    }
+
+    private func isQuickActionDisabled(_ action: WatchInputQuickAction) -> Bool {
+        switch action {
+        case .contextCompression:
+            return !isContextCompressionAvailable
+        case .addAttachment:
+            return viewModel.attachmentImportInProgress
+        case .temporaryChat:
+            return !TemporaryChatToggleAvailability.isAvailable(
+                isTemporaryChatEnabled: isTemporaryChatEnabled,
+                hasConversationStarted: !isTemporaryChatActivationAvailable
+            )
+        case .agentMode:
+            return viewModel.currentSession == nil || !appConfig.localLinuxEnabled
+        case .browser:
+            return viewModel.currentSession == nil
+        case .localTerminal:
+            return viewModel.currentSession == nil || !appConfig.localLinuxEnabled
+        default:
+            return false
+        }
+    }
+
+    private func performQuickAction(_ action: WatchInputQuickAction) {
+        switch action {
+        case .requestControls:
+            isRequestControlsPresented = true
+        case .roleplayScripts:
+            isRoleplayScriptActionMenuPresented = true
+        case .temporaryChat:
+            performTemporaryChatTap()
+        case .addAttachment:
+            attachmentSourceText = importSourceHistory.first ?? lastAttachmentSource
+            isAttachmentImportPresented = true
+        case .clearInput:
+            viewModel.clearUserInput()
+            viewModel.clearAllAttachments()
+            customSlashCommandPrefilledPrompt = nil
+            slashCommandSuggestions = []
+        case .agentMode:
+            onPerformQuickAction(action)
+        case .sessionHistory,
+             .contextCompression,
+             .settings,
+             .toolCenter,
+             .dailyPulse,
+             .usageAnalytics,
+             .imageGallery,
+             .memory,
+             .mcp,
+             .agentSkills,
+             .shortcuts,
+             .roleplay,
+             .worldbook,
+             .extendedFeatures,
+             .browser,
+             .localTerminal:
+            onPerformQuickAction(action)
+        }
+    }
+
+    private func handleInputAction(_ state: WatchChatInputActionState) {
+        if case .send = state,
+           appConfig.enableSlashCommands,
+           customSlashCommandPrefilledPrompt != viewModel.userInput,
+           let command = ChatSlashCommandParser.recognizedSuggestion(
+               in: viewModel.userInput,
+               customCommands: customSlashCommandStore.commands
+           ) {
+            performSelectedSlashCommand(command)
+            return
+        }
+
+        if case .send = state {
+            customSlashCommandPrefilledPrompt = nil
+            slashCommandSuggestions = []
+        }
+        onHandleInputAction(state)
+    }
+
+    private func refreshSlashCommandSuggestions() {
+        guard appConfig.enableSlashCommands else {
+            slashCommandSuggestions = []
+            return
+        }
+
+        if customSlashCommandPrefilledPrompt == viewModel.userInput {
+            slashCommandSuggestions = []
+            return
+        }
+        customSlashCommandPrefilledPrompt = nil
+        slashCommandSuggestions = ChatSlashCommandParser.suggestions(
+            for: viewModel.userInput,
+            customCommands: customSlashCommandStore.commands
+        )
+    }
+
+    private func performSuggestedSlashCommand(_ command: ChatSlashCommandSuggestion) {
+        performSelectedSlashCommand(command)
+    }
+
+    private func performSelectedSlashCommand(_ command: ChatSlashCommandSuggestion) {
+        slashCommandSuggestions = []
+
+        switch command {
+        case .builtIn(let builtInCommand):
+            customSlashCommandPrefilledPrompt = nil
+            viewModel.userInput = ""
+            onPerformSlashCommand(builtInCommand)
+        case .custom(let customCommand):
+            customSlashCommandPrefilledPrompt = customCommand.prompt
+            viewModel.userInput = customCommand.prompt
+        }
+    }
+
+    private func performPendingQuickAction() {
+        guard let action = pendingQuickAction else { return }
+        pendingQuickAction = nil
+        performQuickAction(action)
+    }
+
+    private func performTemporaryChatTap() {
+        let canEnable = TemporaryChatToggleAvailability.isAvailable(
+            isTemporaryChatEnabled: isTemporaryChatEnabled,
+            hasConversationStarted: !isTemporaryChatActivationAvailable
+        )
+        let preferredMode: TemporaryChatMemoryMode = appConfig.temporaryChatMemoryEnabled
+            ? .enabled
+            : .isolated
+        let outcome = viewModel.performTemporaryChatTap(
+            preferredMemoryMode: preferredMode,
+            canEnable: canEnable
+        )
+
+        let notice: WatchChatTransientNotice
+        switch outcome {
+        case .enabled(let memoryMode):
+            isTemporaryChatEnabled = true
+            temporaryChatMemoryMode = memoryMode
+            notice = WatchChatTransientNotice(
+                message: temporaryChatEnabledMessage(for: memoryMode),
+                systemImage: memoryMode == .isolated ? "eye.slash.fill" : "eye.slash",
+                tint: .accentColor
+            )
+        case .memoryModeChanged(let memoryMode):
+            appConfig.temporaryChatMemoryEnabled = memoryMode.isMemoryEnabled
+            isTemporaryChatEnabled = true
+            temporaryChatMemoryMode = memoryMode
+            notice = WatchChatTransientNotice(
+                message: temporaryChatMemoryModeChangedMessage(for: memoryMode),
+                systemImage: memoryMode == .isolated ? "eye.slash.fill" : "eye.slash",
+                tint: .accentColor
+            )
+        case .disabled:
+            isTemporaryChatEnabled = false
+            notice = WatchChatTransientNotice(
+                message: NSLocalizedString("临时对话已关闭", comment: "Watch temporary chat status"),
+                systemImage: "eye",
+                tint: .secondary
+            )
+        case .unavailable:
+            return
+        }
+        onShowTransientNotice(notice)
+    }
+
+    private func refreshTemporaryChatState() {
+        isTemporaryChatEnabled = viewModel.isTemporaryChatEnabled(for: viewModel.currentSession?.id)
+        if let memoryMode = viewModel.temporaryChatMemoryMode(for: viewModel.currentSession?.id) {
+            temporaryChatMemoryMode = memoryMode
+        }
+    }
+
+    private func temporaryChatEnabledMessage(for memoryMode: TemporaryChatMemoryMode) -> String {
+        switch memoryMode {
+        case .enabled:
+            return NSLocalizedString(
+                "临时对话已开启，可使用记忆。2 秒内再点可切换模式。",
+                comment: "Watch temporary chat enabled with memory"
+            )
+        case .isolated:
+            return NSLocalizedString(
+                "临时对话已开启，已隔离记忆。2 秒内再点可切换模式。",
+                comment: "Watch temporary chat enabled with memory isolation"
+            )
+        }
+    }
+
+    private func temporaryChatMemoryModeChangedMessage(for memoryMode: TemporaryChatMemoryMode) -> String {
+        switch memoryMode {
+        case .enabled:
+            return NSLocalizedString("临时对话已切换为可使用记忆", comment: "Watch temporary chat memory enabled")
+        case .isolated:
+            return NSLocalizedString("临时对话已切换为记忆隔离", comment: "Watch temporary chat memory isolated")
+        }
     }
 
     private var isInlineSpeechComposerPresented: Bool {
@@ -454,6 +788,7 @@ struct WatchInputBubbleView: View {
     private func loadRoleplayScriptActions() async {
         guard let sessionID = viewModel.currentSession?.id else {
             roleplayScriptActions = []
+            refreshVisibleQuickActions()
             return
         }
         roleplayScriptActions = await Task.detached(priority: .utility) { () -> [WatchRoleplayScriptButtonAction] in
@@ -472,6 +807,7 @@ struct WatchInputBubbleView: View {
                 }
             }
         }.value
+        refreshVisibleQuickActions()
     }
 
     private func performRoleplayScriptAction(_ action: WatchRoleplayScriptButtonAction) {
@@ -511,7 +847,7 @@ struct WatchInputBubbleView: View {
         guard resourceUsageTask == nil else { return }
         resourceUsageTask = Task { @MainActor in
             while !Task.isCancelled {
-                resourceUsageMonitor.refresh()
+                await resourceUsageMonitor.refresh()
                 do {
                     try await Task.sleep(nanoseconds: 1_000_000_000)
                 } catch {

@@ -14,6 +14,36 @@ import Foundation
 struct AnthropicAdapterTests {
     private let adapter = AnthropicAdapter()
 
+    @Test("Anthropic 解析混合缓存时长并保留非缓存输入量")
+    func parsesMixedCacheDurationUsage() throws {
+        let data = Data(#"{"content":[],"usage":{"input_tokens":20,"output_tokens":8,"cache_creation_input_tokens":300,"cache_read_input_tokens":500,"cache_creation":{"ephemeral_5m_input_tokens":100,"ephemeral_1h_input_tokens":200}}}"#.utf8)
+        let usage = try #require(adapter.parseResponse(data: data).tokenUsage)
+        #expect(usage.promptTokens == 20)
+        #expect(usage.uncachedInputTokens == 20)
+        #expect(usage.cacheWriteTokens == 300)
+        #expect(usage.cacheWriteFiveMinuteTokens == 100)
+        #expect(usage.cacheWriteOneHourTokens == 200)
+        #expect(ModelCostCalculator.tierBasisTokens(for: usage) == 820)
+    }
+
+    @Test("Anthropic 流式起始和增量事件保留缓存时长且允许省略总量")
+    func parsesCacheDurationStreamingEvents() throws {
+        let start = #"data: {"type":"message_start","message":{"usage":{"input_tokens":20,"cache_creation":{"ephemeral_5m_input_tokens":100,"ephemeral_1h_input_tokens":200}}}}"#
+        let usage = try #require(adapter.parseStreamingResponse(line: start)?.tokenUsage)
+        #expect(usage.cacheWriteTokens == 300)
+        #expect(usage.cacheWriteFiveMinuteTokens == 100)
+        #expect(usage.cacheWriteOneHourTokens == 200)
+        let delta = #"data: {"type":"message_delta","usage":{"output_tokens":8,"cache_creation_input_tokens":350,"cache_creation":{"ephemeral_5m_input_tokens":150,"ephemeral_1h_input_tokens":200}}}"#
+        let updated = try #require(adapter.parseStreamingResponse(line: delta)?.tokenUsage)
+        #expect(updated.cacheWriteFiveMinuteTokens == 150)
+        #expect(updated.cacheWriteOneHourTokens == 200)
+        #expect(updated.uncachedInputTokens == nil)
+        let outputOnly = #"data: {"type":"message_delta","usage":{"output_tokens":9}}"#
+        let output = try #require(adapter.parseStreamingResponse(line: outputOnly)?.tokenUsage)
+        #expect(output.cacheWriteFiveMinuteTokens == nil)
+        #expect(output.cacheWriteOneHourTokens == nil)
+    }
+
     @Test("Anthropic 响应可解析缓存 Token 字段")
     func testAnthropicResponseParsesCacheTokens() throws {
         let payload = """
@@ -110,6 +140,72 @@ struct AnthropicAdapterTests {
         #expect(content[1]["id"] as? String == "toolu_1")
     }
 
+    @Test("Anthropic 并行工具结果合并至同一条 user 消息")
+    func testAnthropicParallelToolResultsShareSingleUserMessage() throws {
+        let firstCall = InternalToolCall(
+            id: "call_00_weather",
+            toolName: "get_weather",
+            arguments: #"{"city":"上海"}"#
+        )
+        let secondCall = InternalToolCall(
+            id: "call_01_time",
+            toolName: "get_time",
+            arguments: #"{"timezone":"Asia/Shanghai"}"#
+        )
+        let messages = [
+            ChatMessage(role: .user, content: "查询上海的天气和时间"),
+            ChatMessage(role: .assistant, content: "", toolCalls: [firstCall, secondCall]),
+            ChatMessage(role: .tool, content: "晴，28°C", toolCalls: [firstCall]),
+            ChatMessage(role: .tool, content: "20:14", toolCalls: [secondCall])
+        ]
+
+        let request = try #require(adapter.buildChatRequest(
+            for: makeAnthropicModel(),
+            commonPayload: [:],
+            messages: messages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let httpBody = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+        let payloadMessages = try #require(payload["messages"] as? [[String: Any]])
+        try #require(payloadMessages.count == 3)
+        let assistantContent = try #require(payloadMessages[1]["content"] as? [[String: Any]])
+        let toolResultContent = try #require(payloadMessages[2]["content"] as? [[String: Any]])
+
+        #expect(payloadMessages.compactMap { $0["role"] as? String } == ["user", "assistant", "user"])
+        #expect(assistantContent.compactMap { $0["id"] as? String } == ["call_00_weather", "call_01_time"])
+        #expect(toolResultContent.compactMap { $0["tool_use_id"] as? String } == ["call_00_weather", "call_01_time"])
+    }
+
+    @Test("Anthropic 末尾时间以 user 消息保留在 system 之外")
+    func testAnthropicTailTimeRemainsUserMessage() throws {
+        let messages = [
+            ChatMessage(role: .system, content: "稳定系统提示"),
+            ChatMessage(role: .user, content: "现在几点？"),
+            ChatMessage(role: .user, content: "<time>当前系统时间</time>")
+        ]
+
+        let request = try #require(adapter.buildChatRequest(
+            for: makeAnthropicModel(),
+            commonPayload: [:],
+            messages: messages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let httpBody = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+        let payloadMessages = try #require(payload["messages"] as? [[String: Any]])
+
+        #expect(payload["system"] as? String == "稳定系统提示")
+        #expect(payloadMessages.compactMap { $0["role"] as? String } == ["user", "user"])
+        #expect(payloadMessages.last?["content"] as? String == "<time>当前系统时间</time>")
+    }
+
     @Test("Anthropic 流式增量保留 thinking signature")
     func testAnthropicStreamingDeltaPreservesThinkingSignature() throws {
         let line = """
@@ -118,6 +214,19 @@ struct AnthropicAdapterTests {
 
         let part = try #require(adapter.parseStreamingResponse(line: line))
         #expect(part.reasoningProviderSpecificFields?["anthropic_signature"] == .string("sig-stream"))
+    }
+
+    @Test("Anthropic 流式停止和错误事件会报告终止状态")
+    func testAnthropicStreamingTerminationEvents() throws {
+        let stoppedPart = try #require(adapter.parseStreamingResponse(
+            line: #"data: {"type":"message_stop"}"#
+        ))
+        let failedPart = try #require(adapter.parseStreamingResponse(
+            line: #"data: {"type":"error","error":{"type":"overloaded_error","message":"服务暂时过载"}}"#
+        ))
+
+        #expect(stoppedPart.streamTermination == .completed)
+        #expect(failedPart.streamTermination == .failed(reason: "服务暂时过载"))
     }
 
     @Test("Anthropic 请求体支持自适应思考和 effort")
@@ -129,20 +238,13 @@ struct AnthropicAdapterTests {
             apiKeys: ["test-key"],
             apiFormat: "anthropic"
         )
+        var thinkingControl = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "anthropic")
+        thinkingControl.defaultOptionID = "medium"
         let model = RunnableModel(
             provider: provider,
             model: Model(
-                modelName: "claude-sonnet-4-6",
-                requestBodyControls: [
-                    ModelRequestBodyControl(
-                        id: "thinking-toggle",
-                        title: NSLocalizedString("开启思考", comment: ""),
-                        kind: .toggle,
-                        defaultIsActive: true,
-                        payload: ["thinking": .dictionary(["type": .string("adaptive")])]
-                    ),
-                    ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "anthropic")
-                ]
+                modelName: "adapter-only-model",
+                requestBodyControls: [thinkingControl]
             )
         )
 
@@ -158,9 +260,60 @@ struct AnthropicAdapterTests {
         let httpBody = try #require(request.httpBody)
         let payload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
         let thinking = try #require(payload["thinking"] as? [String: Any])
+        let outputConfig = try #require(payload["output_config"] as? [String: Any])
 
         #expect(thinking["type"] as? String == "adaptive")
-        #expect(payload["effort"] as? String == "medium")
+        #expect(outputConfig["effort"] as? String == "medium")
+        #expect(payload["effort"] == nil)
+    }
+
+    @Test("Anthropic 自动缓存控制按所选 TTL 写入顶层请求体")
+    func testAnthropicBuildRequestUsesAutomaticPromptCachingControl() throws {
+        let provider = Provider(
+            id: UUID(),
+            name: "Anthropic",
+            baseURL: "https://api.anthropic.com/v1",
+            apiKeys: ["test-key"],
+            apiFormat: "anthropic"
+        )
+        var offControl = ModelRequestBodyControlDefaults.automaticPromptCachingOptionGroup()
+        offControl.defaultOptionID = "off"
+        var oneHourControl = ModelRequestBodyControlDefaults.automaticPromptCachingOptionGroup()
+        oneHourControl.defaultOptionID = "1h"
+
+        let offRequest = try #require(adapter.buildChatRequest(
+            for: RunnableModel(
+                provider: provider,
+                model: Model(modelName: "claude-sonnet-4-6", requestBodyControls: [offControl])
+            ),
+            commonPayload: [:],
+            messages: [ChatMessage(role: .user, content: "关闭缓存")],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let offBody = try #require(offRequest.httpBody)
+        let offPayload = try #require(JSONSerialization.jsonObject(with: offBody) as? [String: Any])
+        #expect(offPayload["cache_control"] == nil)
+
+        let oneHourRequest = try #require(adapter.buildChatRequest(
+            for: RunnableModel(
+                provider: provider,
+                model: Model(modelName: "claude-sonnet-4-6", requestBodyControls: [oneHourControl])
+            ),
+            commonPayload: [:],
+            messages: [ChatMessage(role: .user, content: "开启缓存")],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let oneHourBody = try #require(oneHourRequest.httpBody)
+        let oneHourPayload = try #require(JSONSerialization.jsonObject(with: oneHourBody) as? [String: Any])
+        let cacheControl = try #require(oneHourPayload["cache_control"] as? [String: Any])
+        #expect(cacheControl["type"] as? String == "ephemeral")
+        #expect(cacheControl["ttl"] as? String == "1h")
     }
 
     @Test("Anthropic 自定义 Body 会和运行时工具合并")

@@ -52,9 +52,13 @@ struct WatchMessageRowView: View {
 
     private var hasActivePermission: Bool {
         guard let request = toolPermissionCenter.activeRequest,
+              request.sourceSessionID == nil || request.sourceSessionID == viewModel.currentSession?.id,
               let toolCalls = message.toolCalls,
               !toolCalls.isEmpty else {
             return false
+        }
+        if let toolCallID = request.toolCallID {
+            return toolCalls.contains(where: { $0.id == toolCallID })
         }
         let normalizedRequestArguments = request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
         return toolCalls.contains { call in
@@ -78,6 +82,7 @@ struct WatchMessageRowView: View {
         let bubble = ChatBubble(
             messageState: state,
             roleplaySessionID: viewModel.currentSession?.id,
+            roleplayMessages: viewModel.allMessagesForSession,
             preparedMarkdownPayload: viewModel.preparedMarkdownByMessageID[message.id],
             preparedReasoningMarkdownPayload: viewModel.preparedReasoningMarkdownByMessageID[message.id],
             reasoningThinkingTitle: viewModel.reasoningThinkingTitleByMessageID[message.id],
@@ -114,7 +119,7 @@ struct WatchMessageRowView: View {
             },
             onCopy: {
                 viewModel.applyToolInputDraftRequest(
-                    AppToolInputDraftRequest(text: message.content, mode: .append)
+                    AppToolInputDraftRequest(text: state.message.content, mode: .append)
                 )
             },
             onSwitchToPreviousVersion: {
@@ -127,6 +132,15 @@ struct WatchMessageRowView: View {
             isSelected: isSelected,
             onToggleSelection: onToggleSelection,
             onOpenMore: hasActivePermission ? nil : onOpenMore,
+            sourceConversationName: message.sourceSessionID.flatMap { sourceSessionID in
+                viewModel.chatSessions.first(where: { $0.id == sourceSessionID })?.name
+            },
+            onOpenSourceConversation: message.sourceSessionID.map { sourceSessionID in
+                { _ = viewModel.setCurrentSessionIfExists(sessionID: sourceSessionID) }
+            },
+            onOpenConversation: { sessionID in
+                _ = viewModel.setCurrentSessionIfExists(sessionID: sessionID)
+            },
             providers: viewModel.providers
         )
         .id(state.id)

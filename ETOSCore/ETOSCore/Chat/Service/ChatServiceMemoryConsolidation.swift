@@ -139,10 +139,11 @@ extension ChatService {
             keeper.importance = mergedMemories.map(\.importance).max() ?? keeper.importance
             keeper.confidence = mergedMemories.map(\.confidence).max() ?? keeper.confidence
             keeper.entities = Array(Set(mergedMemories.flatMap(\.entities))).sorted()
-            await memoryManager.updateMemory(item: keeper)
+            let consolidationContext = MemoryMutationContext(origin: .automaticConsolidation)
+            await memoryManager.updateMemory(item: keeper, context: consolidationContext)
 
             for duplicate in duplicates {
-                await memoryManager.archiveMemory(duplicate)
+                await memoryManager.archiveMemory(duplicate, context: consolidationContext)
                 archivedCount += 1
             }
         }
@@ -160,7 +161,10 @@ extension ChatService {
             }
 
             older.validUntil = operation.validUntil
-            await memoryManager.updateMemory(item: older)
+            await memoryManager.updateMemory(
+                item: older,
+                context: MemoryMutationContext(origin: .automaticConsolidation)
+            )
             expiredCount += 1
         }
 

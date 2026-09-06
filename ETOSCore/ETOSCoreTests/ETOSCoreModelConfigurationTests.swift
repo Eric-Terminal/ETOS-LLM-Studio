@@ -11,6 +11,16 @@ import Foundation
 import SwiftUI
 @testable import ETOSCore
 
+@Suite("模型用途配置")
+struct ModelKindConfigurationTests {
+    @Test("通用模型配置只提供聊天、图片生成和嵌入用途")
+    func exposesConfigurableModelKinds() {
+        #expect(ModelKind.allCases == [.chat, .image, .embedding])
+        #expect(ModelKind.chat.supportsConnectivityTest)
+        #expect(!ModelKind.textToSpeech.supportsConnectivityTest)
+    }
+}
+
 @Suite("聊天颜色偏好编解码")
 struct ChatAppearanceColorCodecTests {
     @Test("支持解析 6 位十六进制并默认不透明")
@@ -188,6 +198,412 @@ struct ModelOrderIndexTests {
 
         #expect(moved == ["a", "d", "b", "c"])
     }
+
+    @Test("分层排序先遵循提供商顺序并保留内部模型顺序")
+    func hierarchicalOrderUsesProviderThenModelOrder() {
+        let current = ["p1-m1", "p1-m2", "p2-m1", "p2-m2"]
+        let providerByModel = [
+            "p1-m1": "p1",
+            "p1-m2": "p1",
+            "p2-m1": "p2",
+            "p2-m2": "p2"
+        ]
+
+        let ordered = ModelOrderIndex.hierarchicalOrder(
+            storedModelIDs: ["p1-m2", "p2-m2", "p1-m1", "p2-m1"],
+            currentModelIDs: current,
+            providerIDByModelID: providerByModel,
+            orderedProviderIDs: ["p2", "p1"]
+        )
+
+        #expect(ordered == ["p2-m2", "p2-m1", "p1-m2", "p1-m1"])
+    }
+}
+
+@Suite("RunnableModelGrouping Tests")
+struct RunnableModelGroupingTests {
+    @Test("提供商缩写识别分词、驼峰、全大写与中文拼音")
+    func providerMonogramRecognizesNamingStyles() {
+        #expect(ProviderMonogram.abbreviation(for: "FoxCode") == "FC")
+        #expect(ProviderMonogram.abbreviation(for: "NVIDIA") == "NV")
+        #expect(ProviderMonogram.abbreviation(for: "ETOS API") == "EA")
+        #expect(ProviderMonogram.abbreviation(for: "硅基流动") == "GJ")
+    }
+
+    @Test("按提供商顺序分组并保留组内模型顺序")
+    func groupsModelsByConfiguredProviderOrder() {
+        let providerAID = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!
+        let providerBID = UUID(uuidString: "00000000-0000-0000-0000-00000000000B")!
+        let modelA1 = Model(modelName: "a-1", displayName: "A 1", isActivated: true)
+        let modelA2 = Model(modelName: "a-2", displayName: "A 2", isActivated: true)
+        let modelB1 = Model(modelName: "b-1", displayName: "B 1", isActivated: true)
+        let providerA = Provider(
+            id: providerAID,
+            name: "Alpha",
+            baseURL: "https://alpha.example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [modelA1, modelA2]
+        )
+        let providerB = Provider(
+            id: providerBID,
+            name: "Beta",
+            baseURL: "https://beta.example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [modelB1]
+        )
+        let models = [
+            RunnableModel(provider: providerA, model: modelA2),
+            RunnableModel(provider: providerB, model: modelB1),
+            RunnableModel(provider: providerA, model: modelA1)
+        ]
+
+        let groups = RunnableModelGrouping.groups(
+            models: models,
+            providerOrder: [providerB, providerA]
+        )
+
+        #expect(groups.map(\.id) == [providerBID, providerAID])
+        #expect(groups[0].models.map(\.model.modelName) == ["b-1"])
+        #expect(groups[1].models.map(\.model.modelName) == ["a-2", "a-1"])
+    }
+
+    @Test("模型选择分组保留未分类、分组与组内模型顺序")
+    func pickerLayoutPreservesConfiguredOrder() {
+        let models = [
+            Model(modelName: "ungrouped-1", isActivated: true),
+            Model(modelName: "claude-1", pickerGroupName: " Claude ", isActivated: true),
+            Model(modelName: "openai-1", pickerGroupName: "OpenAI", isActivated: true),
+            Model(modelName: "ungrouped-2", pickerGroupName: "  ", isActivated: true),
+            Model(modelName: "claude-2", pickerGroupName: "Claude", isActivated: true)
+        ]
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: models
+        )
+
+        let layout = RunnableModelPickerGrouping.layout(
+            models: models.map { RunnableModel(provider: provider, model: $0) }
+        )
+
+        #expect(layout.ungroupedModels.map(\.model.modelName) == ["ungrouped-1", "ungrouped-2"])
+        #expect(layout.groups.map(\.name) == ["Claude", "OpenAI"])
+        #expect(layout.groups[0].models.map(\.model.modelName) == ["claude-1", "claude-2"])
+        #expect(layout.groups[1].models.map(\.model.modelName) == ["openai-1"])
+    }
+
+    @Test("模型可以拖入文件夹并拖回根目录")
+    func pickerOrganizationMovesModelsAcrossFolderBoundary() {
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(modelName: "root-a", isActivated: true),
+                Model(modelName: "folder-b1", pickerGroupName: "Folder", isActivated: true),
+                Model(modelName: "folder-b2", pickerGroupName: "Folder", isActivated: true),
+                Model(modelName: "root-c", isActivated: true)
+            ]
+        )
+        let models = provider.models.map { RunnableModel(provider: provider, model: $0) }
+        let idByName = Dictionary(uniqueKeysWithValues: models.map { ($0.model.modelName, $0.id) })
+        var organization = RunnableModelPickerOrganization(models: models)
+
+        organization.moveModel(
+            idByName["root-a"]!,
+            intoGroup: "Folder",
+            beforeModelID: idByName["folder-b2"]!
+        )
+
+        #expect(organization.placements.map(\.modelID) == [
+            idByName["folder-b1"]!,
+            idByName["root-a"]!,
+            idByName["folder-b2"]!,
+            idByName["root-c"]!
+        ])
+        #expect(organization.placements.map(\.pickerGroupName) == [
+            "Folder", "Folder", "Folder", nil
+        ])
+
+        organization.moveModelToRoot(
+            idByName["folder-b1"]!,
+            beforeRootItemID: RunnableModelPickerOrganization.RootItem.modelID(
+                idByName["root-c"]!
+            )
+        )
+
+        #expect(organization.placements.map(\.modelID) == [
+            idByName["root-a"]!,
+            idByName["folder-b2"]!,
+            idByName["folder-b1"]!,
+            idByName["root-c"]!
+        ])
+        #expect(organization.placements.map(\.pickerGroupName) == [
+            "Folder", "Folder", nil, nil
+        ])
+    }
+
+    @Test("文件夹和文件夹内模型可以独立排序")
+    func pickerOrganizationReordersFoldersAndChildren() {
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(modelName: "root-a", isActivated: true),
+                Model(modelName: "folder-b1", pickerGroupName: "Folder", isActivated: true),
+                Model(modelName: "folder-b2", pickerGroupName: "Folder", isActivated: true),
+                Model(modelName: "other-d", pickerGroupName: "Other", isActivated: true)
+            ]
+        )
+        let models = provider.models.map { RunnableModel(provider: provider, model: $0) }
+        let idByName = Dictionary(uniqueKeysWithValues: models.map { ($0.model.modelName, $0.id) })
+        var organization = RunnableModelPickerOrganization(models: models)
+
+        organization.moveGroup(
+            "Other",
+            beforeRootItemID: RunnableModelPickerOrganization.RootItem.modelID(
+                idByName["root-a"]!
+            )
+        )
+        organization.reorderModels(
+            inGroup: "Folder",
+            orderedModelIDs: [idByName["folder-b2"]!, idByName["folder-b1"]!]
+        )
+
+        #expect(organization.rootItems.map(\.id) == [
+            RunnableModelPickerOrganization.RootItem.groupID("Other"),
+            RunnableModelPickerOrganization.RootItem.modelID(idByName["root-a"]!),
+            RunnableModelPickerOrganization.RootItem.groupID("Folder")
+        ])
+        #expect(organization.placements.map(\.modelID) == [
+            idByName["other-d"]!,
+            idByName["root-a"]!,
+            idByName["folder-b2"]!,
+            idByName["folder-b1"]!
+        ])
+    }
+
+    @Test("文件夹可以嵌套并保持完整目录路径")
+    func pickerOrganizationNestsFolders() {
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(modelName: "folder-a", pickerGroupName: "Folder", isActivated: true),
+                Model(modelName: "child-b", pickerGroupName: "Folder/Child", isActivated: true),
+                Model(modelName: "other-c", pickerGroupName: "Other", isActivated: true)
+            ]
+        )
+        let models = provider.models.map { RunnableModel(provider: provider, model: $0) }
+        var organization = RunnableModelPickerOrganization(models: models)
+
+        #expect(organization.allGroupPaths == ["Folder", "Folder/Child", "Other"])
+
+        organization.moveGroup("Folder", intoGroup: "Other")
+
+        #expect(organization.allGroupPaths == [
+            "Other",
+            "Other/Folder",
+            "Other/Folder/Child"
+        ])
+        #expect(organization.placements.map(\.pickerGroupName) == [
+            "Other",
+            "Other/Folder",
+            "Other/Folder/Child"
+        ])
+
+        let unchangedPlacements = organization.placements
+        organization.moveGroup("Other", intoGroup: "Other/Folder")
+        #expect(organization.placements == unchangedPlacements)
+    }
+
+    @Test("嵌套目录会映射为递归模型选择布局")
+    func pickerLayoutBuildsNestedFolders() {
+        let models = [
+            Model(modelName: "parent", pickerGroupName: "Tools", isActivated: true),
+            Model(modelName: "child", pickerGroupName: "Tools/Coding", isActivated: true)
+        ]
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: models
+        )
+
+        let layout = RunnableModelPickerGrouping.layout(
+            models: models.map { RunnableModel(provider: provider, model: $0) }
+        )
+
+        #expect(layout.groups.map(\.path) == ["Tools"])
+        #expect(layout.groups.first?.models.map(\.model.modelName) == ["parent", "child"])
+        guard let parent = layout.groups.first,
+              case .group(let childFolder) = parent.items.last else {
+            Issue.record("缺少嵌套文件夹")
+            return
+        }
+        #expect(childFolder.path == "Tools/Coding")
+        #expect(childFolder.models.map(\.model.modelName) == ["child"])
+    }
+
+    @Test("空文件夹可以创建、嵌套并在模型移出后保留")
+    func pickerOrganizationKeepsEmptyFolders() {
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(modelName: "nested", pickerGroupName: "Tools/Coding", isActivated: true)
+            ]
+        )
+        let models = provider.models.map { RunnableModel(provider: provider, model: $0) }
+        var organization = RunnableModelPickerOrganization(
+            models: models,
+            groupPaths: ["Empty", "Tools/Coding"]
+        )
+
+        organization.createGroup("Empty/Child")
+        organization.moveModelToRoot(models[0].id)
+
+        #expect(organization.orderedGroupPaths == [
+            "Tools",
+            "Tools/Coding",
+            "Empty",
+            "Empty/Child"
+        ])
+        #expect(organization.placements == [
+            RunnableModelPickerPlacement(modelID: models[0].id, pickerGroupName: nil)
+        ])
+    }
+
+    @Test("空文件夹与模型的混合顺序可以恢复")
+    func pickerOrganizationRestoresMixedItemOrder() {
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(modelName: "root-a", isActivated: true),
+                Model(modelName: "folder-b", pickerGroupName: "Folder", isActivated: true),
+                Model(modelName: "root-c", isActivated: true)
+            ]
+        )
+        let models = provider.models.map { RunnableModel(provider: provider, model: $0) }
+        let idByName = Dictionary(uniqueKeysWithValues: models.map { ($0.model.modelName, $0.id) })
+        var organization = RunnableModelPickerOrganization(
+            models: models,
+            groupPaths: ["Empty", "Folder"]
+        )
+
+        organization.moveGroup(
+            "Empty",
+            beforeRootItemID: RunnableModelPickerOrganization.RootItem.modelID(
+                idByName["root-a"]!
+            )
+        )
+        let restored = RunnableModelPickerOrganization(
+            models: models,
+            groupPaths: organization.orderedGroupPaths,
+            itemOrderIDs: organization.orderedItemIDs
+        )
+
+        #expect(restored.rootItems.map(\.id) == organization.rootItems.map(\.id))
+        #expect(restored.orderedItemIDs == organization.orderedItemIDs)
+    }
+
+    @Test("文件夹边界决定模型归属并允许嵌套")
+    func pickerOrganizationAppliesFolderBoundaries() {
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(modelName: "root-a", isActivated: true),
+                Model(modelName: "root-b", isActivated: true),
+                Model(modelName: "root-c", isActivated: true)
+            ]
+        )
+        let models = provider.models.map { RunnableModel(provider: provider, model: $0) }
+        var organization = RunnableModelPickerOrganization(models: models)
+        organization.createGroup("A")
+        organization.createGroup("B")
+
+        let reordered: [RunnableModelPickerOrganization.BoundaryItem] = [
+            .groupStart("A"),
+            .model(models[0].id),
+            .groupStart("B"),
+            .model(models[1].id),
+            .groupEnd("B"),
+            .model(models[2].id),
+            .groupEnd("A")
+        ]
+        let updated = organization.applyingBoundaryItems(reordered)
+
+        #expect(updated?.orderedGroupPaths == ["A", "A/B"])
+        #expect(updated?.placements.map(\.pickerGroupName) == ["A", "A/B", "A"])
+    }
+
+    @Test("文件夹边界不能交叉")
+    func pickerOrganizationRejectsCrossedFolderBoundaries() {
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [Model(modelName: "root", isActivated: true)]
+        )
+        let models = provider.models.map { RunnableModel(provider: provider, model: $0) }
+        var organization = RunnableModelPickerOrganization(models: models)
+        organization.createGroup("A")
+        organization.createGroup("B")
+
+        let crossed: [RunnableModelPickerOrganization.BoundaryItem] = [
+            .groupStart("A"),
+            .groupStart("B"),
+            .model(models[0].id),
+            .groupEnd("A"),
+            .groupEnd("B")
+        ]
+
+        #expect(organization.applyingBoundaryItems(crossed) == nil)
+    }
+
+    @Test("删除文件夹会成对移除边界并保留内部条目")
+    func pickerOrganizationRemovesFolderBoundariesAndKeepsContents() {
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(modelName: "direct", pickerGroupName: "A", isActivated: true),
+                Model(modelName: "nested", pickerGroupName: "A/Child", isActivated: true),
+                Model(modelName: "root", isActivated: true)
+            ]
+        )
+        let models = provider.models.map { RunnableModel(provider: provider, model: $0) }
+        let organization = RunnableModelPickerOrganization(models: models)
+
+        let updated = organization.removingGroup("A")
+
+        #expect(updated?.orderedGroupPaths == ["Child"])
+        #expect(updated?.placements.map(\.modelID) == models.map(\.id))
+        #expect(updated?.placements.map(\.pickerGroupName) == [nil, "Child", nil])
+        #expect(updated?.boundaryItems.contains(.groupStart("A")) == false)
+        #expect(updated?.boundaryItems.contains(.groupEnd("A")) == false)
+    }
 }
 
 @Suite("Provider Order Tests")
@@ -225,6 +641,7 @@ struct ProviderOrderTests {
             id: id,
             name: name,
             baseURL: "https://example.com",
+            chatEndpointPath: Provider.defaultChatEndpointPath,
             apiFormat: "openai-compatible",
             proxyIsEnabled: nil,
             proxyType: nil,
@@ -349,6 +766,8 @@ struct RequestBodyOverrideModeTests {
     func testModelCodingPreservesRequestBodyMode() throws {
         let source = Model(
             modelName: "test-model",
+            pickerGroupName: " Reasoning ",
+            apiFormatOverride: " Gemini ",
             overrideParameters: ["temperature": .double(0.8)],
             requestBodyOverrideMode: .rawJSON,
             rawRequestBodyJSON: "{\"temperature\":0.8}"
@@ -358,6 +777,8 @@ struct RequestBodyOverrideModeTests {
 
         #expect(decoded.requestBodyOverrideMode == .rawJSON)
         #expect(decoded.rawRequestBodyJSON == "{\"temperature\":0.8}")
+        #expect(decoded.pickerGroupName == "Reasoning")
+        #expect(decoded.apiFormatOverride == "gemini")
     }
 
     @Test("键值对编辑模式是默认请求体编辑模式")
@@ -381,6 +802,29 @@ struct RequestBodyOverrideModeTests {
 
         #expect(decoded.requestBodyOverrideMode == .keyValue)
         #expect(decoded.rawRequestBodyJSON == nil)
+        #expect(decoded.pickerGroupName == nil)
+        #expect(decoded.apiFormatOverride == nil)
+    }
+
+    @Test("模型级 API 格式覆盖优先于提供商默认格式")
+    func testModelAPIFormatOverrideTakesPrecedence() {
+        let provider = Provider(
+            name: "Multi-format Provider",
+            baseURL: "https://example.com/v1beta",
+            apiKeys: ["key"],
+            apiFormat: "openai-compatible"
+        )
+        let inherited = RunnableModel(
+            provider: provider,
+            model: Model(modelName: "inherited")
+        )
+        let overridden = RunnableModel(
+            provider: provider,
+            model: Model(modelName: "native-gemini", apiFormatOverride: "gemini")
+        )
+
+        #expect(inherited.effectiveAPIFormat == "openai-compatible")
+        #expect(overridden.effectiveAPIFormat == "gemini")
     }
 
     @Test("聊天模型默认开启工具调用")
@@ -397,7 +841,7 @@ struct RequestBodyOverrideModeTests {
     func testChatModelCanDeclareEmbeddingCapability() throws {
         let model = Model(
             modelName: "chat-with-embedding",
-            capabilities: [.toolCalling, .embedding]
+            capabilities: [ModelCapability.toolCalling, .embedding]
         )
 
         #expect(model.kind == .chat)
@@ -423,12 +867,13 @@ struct RequestBodyOverrideModeTests {
         #expect(decoded.supportsImageGeneration)
     }
 
-    @Test("旧语音能力解码后仍能通过便捷属性识别")
-    func testLegacySpeechCapabilitiesRemainSelectable() throws {
+    @Test("旧语音转文字标记解码后会被清除")
+    func testLegacySpeechToTextMarkerIsDiscarded() throws {
         let speechJSON = """
         {
           "id": "00000000-0000-0000-0000-000000000125",
           "modelName": "legacy-speech",
+          "kind": "speechToText",
           "capabilities": ["speechToText"]
         }
         """
@@ -443,8 +888,9 @@ struct RequestBodyOverrideModeTests {
         let speechModel = try JSONDecoder().decode(Model.self, from: Data(speechJSON.utf8))
         let ttsModel = try JSONDecoder().decode(Model.self, from: Data(ttsJSON.utf8))
 
-        #expect(speechModel.supportsSpeechToText)
-        #expect(speechModel.inputModalities.contains(.audio))
+        #expect(speechModel.kind == .chat)
+        #expect(speechModel.inputModalities == [.text])
+        #expect(speechModel.capabilities.isEmpty)
         #expect(ttsModel.supportsTextToSpeech)
         #expect(ttsModel.outputModalities.contains(.audio))
     }
@@ -502,5 +948,19 @@ struct RequestBodyOverrideModeTests {
         #expect(legacyImage.supportsImageGeneration)
         #expect(legacyVision.kind == .chat)
         #expect(legacyVision.inputModalities.contains(.image))
+    }
+
+    @Test("聊天图片输出与独立生图接口保持分离")
+    func testChatImageOutputDoesNotUseDedicatedImageGenerationEndpoint() throws {
+        let chatModel = Model(
+            modelName: "chat-with-image-output",
+            kind: .chat,
+            outputModalities: [.text, .image]
+        )
+        let imageModel = Model(modelName: "image-model", kind: .image)
+
+        #expect(chatModel.supportsImageGeneration)
+        #expect(chatModel.usesDedicatedImageGenerationEndpoint == false)
+        #expect(imageModel.usesDedicatedImageGenerationEndpoint)
     }
 }

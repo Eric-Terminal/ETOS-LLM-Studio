@@ -13,6 +13,16 @@ import Foundation
 @Suite("快捷指令工具管理器测试")
 struct ShortcutToolManagerTests {
 
+    @Test("快捷指令回调只有明确 success 才成功")
+    func callbackStatusUsesStrictSuccessValue() {
+        #expect(ShortcutToolManager.callbackIndicatesSuccess(status: "success", errorMessage: nil))
+        #expect(!ShortcutToolManager.callbackIndicatesSuccess(status: nil, errorMessage: nil))
+        #expect(!ShortcutToolManager.callbackIndicatesSuccess(status: "failed", errorMessage: nil))
+        #expect(!ShortcutToolManager.callbackIndicatesSuccess(status: "cancelled", errorMessage: nil))
+        #expect(!ShortcutToolManager.callbackIndicatesSuccess(status: "denied", errorMessage: nil))
+        #expect(!ShortcutToolManager.callbackIndicatesSuccess(status: "success", errorMessage: "失败"))
+    }
+
     @MainActor
     @Test("chatToolsForLLM 仅返回已启用的快捷指令")
     func testChatToolsForLLMReturnsEnabledOnly() {

@@ -348,7 +348,7 @@ fileprivate struct SessionHistorySearchSupportTests {
 
         let ordinals = hits[session.id]?.matches.compactMap(\.messageOrdinal) ?? []
         #expect(ordinals == [2, 3, 4])
-        #expect(hits[session.id]?.matchCount == 3)
+        #expect(hits[session.id]?.matchCount == 4)
     }
 
     @Test("命中结果会按单条消息拆分并保持顺序")
@@ -371,9 +371,9 @@ fileprivate struct SessionHistorySearchSupportTests {
             hits: hits
         )
 
-        #expect(results.map(\.sessionID) == [session.id, session.id, session.id])
+        #expect(results.map(\.sessionID) == [session.id, session.id, session.id, session.id])
         #expect(results.compactMap(\.messageOrdinal) == [2, 3, 4])
-        #expect(results.map(\.matchIndexInSession) == [0, 1, 2])
+        #expect(results.map(\.matchIndexInSession) == [0, 1, 2, 3])
     }
 
     @Test("长命中预览会围绕首次命中保留前后二十字")

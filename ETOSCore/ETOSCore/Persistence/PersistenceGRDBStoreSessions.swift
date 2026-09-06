@@ -17,14 +17,91 @@ public struct OrphanedAudioReferenceRecord {
     public let audioFileName: String
 }
 
+/// 数据库读取阶段只复制 SQLite 标量与 Data，避免在占用 reader 时执行 JSON 解码。
+private struct PersistedChatMessageReadRecord: Decodable, FetchableRecord, Sendable {
+    enum CodingKeys: String, CodingKey {
+        case id
+        case role
+        case requestedAt = "requested_at"
+        case content
+        case contentVersionsJSON = "content_versions_json"
+        case currentVersionIndex = "current_version_index"
+        case reasoningContent = "reasoning_content"
+        case toolCallsJSON = "tool_calls_json"
+        case toolCallsPlacement = "tool_calls_placement"
+        case tokenUsageJSON = "token_usage_json"
+        case modelReferenceJSON = "model_reference_json"
+        case costEstimateJSON = "cost_estimate_json"
+        case audioFileName = "audio_file_name"
+        case imageFileNamesJSON = "image_file_names_json"
+        case modelExcludedImageFileNamesJSON = "model_excluded_image_file_names_json"
+        case fileFileNamesJSON = "file_file_names_json"
+        case videoAnalysisResultsJSON = "video_analysis_results_json"
+        case fullErrorContent = "full_error_content"
+        case sentSystemPromptSnapshot = "sent_system_prompt_snapshot"
+        case responseMetricsJSON = "response_metrics_json"
+        case responseGroupID = "response_group_id"
+        case responseAttemptID = "response_attempt_id"
+        case responseAttemptIndex = "response_attempt_index"
+        case selectedResponseAttemptID = "selected_response_attempt_id"
+        case authorKind = "author_kind"
+        case sourceSessionID = "source_session_id"
+        case sourceMessageID = "source_message_id"
+        case conversationEventID = "conversation_event_id"
+    }
+
+    let id: String
+    let role: String
+    let requestedAt: Double?
+    let content: String
+    let contentVersionsJSON: Data
+    let currentVersionIndex: Int
+    let reasoningContent: String?
+    let toolCallsJSON: Data?
+    let toolCallsPlacement: String?
+    let tokenUsageJSON: Data?
+    let modelReferenceJSON: Data?
+    let costEstimateJSON: Data?
+    let audioFileName: String?
+    let imageFileNamesJSON: Data?
+    let modelExcludedImageFileNamesJSON: Data?
+    let fileFileNamesJSON: Data?
+    let videoAnalysisResultsJSON: Data?
+    let fullErrorContent: String?
+    let sentSystemPromptSnapshot: String?
+    let responseMetricsJSON: Data?
+    let responseGroupID: String?
+    let responseAttemptID: String?
+    let responseAttemptIndex: Int?
+    let selectedResponseAttemptID: String?
+    let authorKind: String?
+    let sourceSessionID: String?
+    let sourceMessageID: String?
+    let conversationEventID: String?
+}
+
+private let loadPersistedChatMessagesSQL = """
+    SELECT id, role, requested_at, content, content_versions_json, current_version_index,
+           reasoning_content, tool_calls_json, tool_calls_placement, token_usage_json,
+           model_reference_json, cost_estimate_json,
+           audio_file_name, image_file_names_json, model_excluded_image_file_names_json,
+           file_file_names_json, video_analysis_results_json,
+           full_error_content, sent_system_prompt_snapshot, response_metrics_json,
+           response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id,
+           author_kind, source_session_id, source_message_id, conversation_event_id
+    FROM messages
+    WHERE session_id = ?
+    ORDER BY position ASC, created_at ASC, id ASC
+    """
+
 extension PersistenceGRDBStore {
     func saveChatSessions(_ sessions: [ChatSession]) {
-        let persistedSessions = sessions.filter { !$0.isTemporary }
+        let persistedSessions = sessions.filter { !$0.isTemporary && !$0.isEmbeddedSubagent }
         do {
             try dbPool.write { db in
                 let existingNonTemporaryCount = try Int.fetchOne(
                     db,
-                    sql: "SELECT COUNT(*) FROM sessions WHERE is_temporary = 0"
+                    sql: "SELECT COUNT(*) FROM sessions WHERE is_temporary = 0 AND container_session_id IS NULL"
                 ) ?? 0
                 if persistedSessions.isEmpty,
                    sessions.contains(where: \.isTemporary),
@@ -33,7 +110,10 @@ extension PersistenceGRDBStore {
                     return
                 }
 
-                let existingNonTemporaryIDs = try String.fetchAll(db, sql: "SELECT id FROM sessions WHERE is_temporary = 0")
+                let existingNonTemporaryIDs = try String.fetchAll(
+                    db,
+                    sql: "SELECT id FROM sessions WHERE is_temporary = 0 AND container_session_id IS NULL"
+                )
                 let targetIDs = Set(persistedSessions.map { $0.id.uuidString })
                 for id in existingNonTemporaryIDs where !targetIDs.contains(id) {
                     try db.execute(sql: "DELETE FROM sessions WHERE id = ?", arguments: [id])
@@ -72,10 +152,12 @@ extension PersistenceGRDBStore {
                 let rows = try Row.fetchAll(
                     db,
                     sql: """
-                    SELECT id, name, topic_prompt, enhanced_prompt, folder_id,
-                           lorebook_ids_json, worldbook_context_isolation_enabled
+                    SELECT id, name, system_prompt, topic_prompt, enhanced_prompt,
+                           preferred_model_identifier, folder_id, container_session_id,
+                           lorebook_ids_json, memory_context_isolation_enabled,
+                           tool_context_isolation_enabled, global_system_prompt_isolation_enabled
                     FROM sessions
-                    WHERE is_temporary = 0
+                    WHERE is_temporary = 0 AND container_session_id IS NULL
                     ORDER BY sort_index ASC, updated_at DESC, id ASC
                     """
                 )
@@ -86,18 +168,82 @@ extension PersistenceGRDBStore {
                     return ChatSession(
                         id: UUID(uuidString: row["id"]) ?? UUID(),
                         name: row["name"],
+                        systemPrompt: row["system_prompt"],
                         topicPrompt: row["topic_prompt"],
                         enhancedPrompt: row["enhanced_prompt"],
+                        preferredModelIdentifier: row["preferred_model_identifier"],
                         lorebookIDs: lorebookIDs,
                         tagIDs: tagAssignments[row["id"]] ?? [],
-                        worldbookContextIsolationEnabled: (row["worldbook_context_isolation_enabled"] as Int) != 0,
+                        memoryContextIsolationEnabled: (row["memory_context_isolation_enabled"] as Int) != 0,
+                        toolContextIsolationEnabled: (row["tool_context_isolation_enabled"] as Int) != 0,
+                        globalSystemPromptIsolationEnabled: (row["global_system_prompt_isolation_enabled"] as Int) != 0,
                         folderID: uuid(from: row["folder_id"]),
+                        containerSessionID: uuid(from: row["container_session_id"]),
                         isTemporary: false
                     )
                 }
             }
         } catch {
             logger.error("读取会话列表失败: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    func loadChatSession(id sessionID: UUID) -> ChatSession? {
+        do {
+            return try dbPool.read { db in
+                guard let row = try Row.fetchOne(
+                    db,
+                    sql: """
+                    SELECT id, name, system_prompt, topic_prompt, enhanced_prompt,
+                           preferred_model_identifier, folder_id, container_session_id,
+                           lorebook_ids_json, memory_context_isolation_enabled,
+                           tool_context_isolation_enabled, global_system_prompt_isolation_enabled,
+                           is_temporary
+                    FROM sessions
+                    WHERE id = ?
+                    """,
+                    arguments: [sessionID.uuidString]
+                ) else {
+                    return nil
+                }
+                let rawSessionID: String = row["id"]
+                let lorebookData: Data = row["lorebook_ids_json"]
+                let tagAssignments = try loadSessionTagAssignments(db)
+                return ChatSession(
+                    id: UUID(uuidString: rawSessionID) ?? sessionID,
+                    name: row["name"],
+                    systemPrompt: row["system_prompt"],
+                    topicPrompt: row["topic_prompt"],
+                    enhancedPrompt: row["enhanced_prompt"],
+                    preferredModelIdentifier: row["preferred_model_identifier"],
+                    lorebookIDs: decodeJSON([UUID].self, from: lorebookData) ?? [],
+                    tagIDs: tagAssignments[rawSessionID] ?? [],
+                    memoryContextIsolationEnabled: (row["memory_context_isolation_enabled"] as Int) != 0,
+                    toolContextIsolationEnabled: (row["tool_context_isolation_enabled"] as Int) != 0,
+                    globalSystemPromptIsolationEnabled: (row["global_system_prompt_isolation_enabled"] as Int) != 0,
+                    folderID: uuid(from: row["folder_id"]),
+                    containerSessionID: uuid(from: row["container_session_id"]),
+                    isTemporary: (row["is_temporary"] as Int) != 0
+                )
+            }
+        } catch {
+            logger.error("读取指定会话失败 \(sessionID.uuidString): \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    func loadEmbeddedSubagentSessionIDs(containerSessionID: UUID) -> [UUID] {
+        do {
+            return try dbPool.read { db in
+                try String.fetchAll(
+                    db,
+                    sql: "SELECT id FROM sessions WHERE container_session_id = ? ORDER BY updated_at DESC, id ASC",
+                    arguments: [containerSessionID.uuidString]
+                ).compactMap(UUID.init(uuidString:))
+            }
+        } catch {
+            logger.error("读取内嵌子代理会话失败 \(containerSessionID.uuidString): \(error.localizedDescription)")
             return []
         }
     }
@@ -182,7 +328,7 @@ extension PersistenceGRDBStore {
         return assignments
     }
 
-    private func saveSessionTagAssignments(
+    func saveSessionTagAssignments(
         _ db: Database,
         sessionID: UUID,
         tagIDs: [UUID],
@@ -338,95 +484,112 @@ extension PersistenceGRDBStore {
 
     func loadMessages(for sessionID: UUID) -> [ChatMessage] {
         do {
-            return try dbPool.read { db in
-                let rows = try Row.fetchAll(
-                    db,
-                    sql: """
-                    SELECT id, role, requested_at, content, content_versions_json, current_version_index,
-                           reasoning_content, tool_calls_json, tool_calls_placement, token_usage_json,
-                           model_reference_json, cost_estimate_json,
-                           audio_file_name, image_file_names_json, file_file_names_json,
-                           full_error_content, sent_system_prompt_snapshot, response_metrics_json,
-                           response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id
-                    FROM messages
-                    WHERE session_id = ?
-                    ORDER BY position ASC, created_at ASC, id ASC
-                    """,
-                    arguments: [sessionID.uuidString]
-                )
-
-                return rows.map { row in
-                    let messageID = UUID(uuidString: row["id"]) ?? UUID()
-                    let roleRaw: String = row["role"]
-                    let role = MessageRole(rawValue: roleRaw) ?? .assistant
-                    let requestedAtValue: Double? = row["requested_at"]
-                    let requestedAt = requestedAtValue.map(Date.init(timeIntervalSince1970:))
-
-                    let content: String = row["content"]
-                    let contentVersionsData: Data = row["content_versions_json"]
-                    let contentVersions = decodeJSON([String].self, from: contentVersionsData) ?? [content]
-                    let currentVersionIndex: Int = row["current_version_index"]
-
-                    let toolCallsData: Data? = row["tool_calls_json"]
-                    let tokenUsageData: Data? = row["token_usage_json"]
-                    let modelReferenceData: Data? = row["model_reference_json"]
-                    let costEstimateData: Data? = row["cost_estimate_json"]
-                    let imageFileNamesData: Data? = row["image_file_names_json"]
-                    let fileFileNamesData: Data? = row["file_file_names_json"]
-                    let responseMetricsData: Data? = row["response_metrics_json"]
-
-                    let toolCalls = decodeJSON([InternalToolCall].self, from: toolCallsData)
-                    let toolCallsPlacementRaw: String? = row["tool_calls_placement"]
-                    let tokenUsage = decodeJSON(MessageTokenUsage.self, from: tokenUsageData)
-                    let modelReference = decodeJSON(MessageModelReference.self, from: modelReferenceData)
-                    let costEstimate = decodeJSON(MessageCostEstimate.self, from: costEstimateData)
-                    let imageFileNames = decodeJSON([String].self, from: imageFileNamesData)
-                    let fileFileNames = decodeJSON([String].self, from: fileFileNamesData)
-                    let responseMetrics = decodeJSON(MessageResponseMetrics.self, from: responseMetricsData)
-
-                    var message = ChatMessage(
-                        id: messageID,
-                        role: role,
-                        content: contentVersions.first ?? content,
-                        requestedAt: requestedAt,
-                        reasoningContent: row["reasoning_content"],
-                        toolCalls: toolCalls,
-                        toolCallsPlacement: toolCallsPlacementRaw.flatMap(ToolCallsPlacement.init(rawValue:)),
-                        tokenUsage: tokenUsage,
-                        modelReference: modelReference,
-                        costEstimate: costEstimate,
-                        audioFileName: row["audio_file_name"],
-                        imageFileNames: imageFileNames,
-                        fileFileNames: fileFileNames,
-                        fullErrorContent: row["full_error_content"],
-                        sentSystemPromptSnapshot: row["sent_system_prompt_snapshot"],
-                        responseMetrics: responseMetrics,
-                        responseGroupID: (row["response_group_id"] as String?).flatMap(UUID.init(uuidString:)),
-                        responseAttemptID: (row["response_attempt_id"] as String?).flatMap(UUID.init(uuidString:)),
-                        responseAttemptIndex: row["response_attempt_index"],
-                        selectedResponseAttemptID: (row["selected_response_attempt_id"] as String?).flatMap(UUID.init(uuidString:))
-                    )
-
-                    if contentVersions.count > 1 {
-                        for version in contentVersions.dropFirst() {
-                            message.addVersion(version)
-                        }
-                        let clampedIndex = min(max(0, currentVersionIndex), contentVersions.count - 1)
-                        message.switchToVersion(clampedIndex)
-                    }
-
-                    if message.toolCallsPlacement == nil,
-                       let calls = message.toolCalls,
-                       !calls.isEmpty {
-                        message.toolCallsPlacement = inferToolCallsPlacement(from: message.content)
-                    }
-
-                    return message
-                }
+            let records = try dbPool.read { db in
+                try Self.fetchPersistedChatMessageReadRecords(db, sessionID: sessionID)
             }
+            return atomizePersistedMessagesIfNeeded(
+                decodePersistedChatMessages(records),
+                sessionID: sessionID
+            )
         } catch {
             logger.error("读取会话消息失败 \(sessionID.uuidString): \(error.localizedDescription)")
             return []
+        }
+    }
+
+    /// 异步等待 reader，避免高优先级调用线程同步阻塞在 GRDB 连接池上。
+    func loadMessagesAsync(for sessionID: UUID) async -> [ChatMessage] {
+        do {
+            let records = try await dbPool.read { db in
+                try Self.fetchPersistedChatMessageReadRecords(db, sessionID: sessionID)
+            }
+            return atomizePersistedMessagesIfNeeded(
+                decodePersistedChatMessages(records),
+                sessionID: sessionID
+            )
+        } catch {
+            logger.error("异步读取会话消息失败 \(sessionID.uuidString): \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    /// 旧记录允许正文与多份附件共用一条消息。首次读取时同步拆分并落库，
+    /// 确保随后删除任一附件只影响对应原子消息，且新生成的 UUID 保持稳定。
+    private func atomizePersistedMessagesIfNeeded(
+        _ messages: [ChatMessage],
+        sessionID: UUID
+    ) -> [ChatMessage] {
+        let atomizedMessages = messages.flatMap(ChatMessageAtomicContentSupport.atomized)
+        guard atomizedMessages != messages else { return messages }
+        saveMessagesIncrementally(atomizedMessages, for: sessionID)
+        WatchDatabaseSyncService.markDatabaseChanged(.chat)
+        Persistence.postCloudSyncLocalDataDidChange()
+        logger.info("会话 \(sessionID.uuidString) 的复合消息已拆分为独立附件消息。")
+        return atomizedMessages
+    }
+
+    private static func fetchPersistedChatMessageReadRecords(
+        _ db: Database,
+        sessionID: UUID
+    ) throws -> [PersistedChatMessageReadRecord] {
+        try PersistedChatMessageReadRecord.fetchAll(
+            db,
+            sql: loadPersistedChatMessagesSQL,
+            arguments: [sessionID.uuidString]
+        )
+    }
+
+    private func decodePersistedChatMessages(
+        _ records: [PersistedChatMessageReadRecord]
+    ) -> [ChatMessage] {
+        records.map { record in
+            let contentVersions = decodeJSON([String].self, from: record.contentVersionsJSON) ?? [record.content]
+            let toolCalls = decodeJSON([InternalToolCall].self, from: record.toolCallsJSON)
+
+            var message = ChatMessage(
+                id: UUID(uuidString: record.id) ?? UUID(),
+                role: MessageRole(rawValue: record.role) ?? .assistant,
+                content: contentVersions.first ?? record.content,
+                requestedAt: record.requestedAt.map(Date.init(timeIntervalSince1970:)),
+                reasoningContent: record.reasoningContent,
+                toolCalls: toolCalls,
+                toolCallsPlacement: record.toolCallsPlacement.flatMap(ToolCallsPlacement.init(rawValue:)),
+                tokenUsage: decodeJSON(MessageTokenUsage.self, from: record.tokenUsageJSON),
+                modelReference: decodeJSON(MessageModelReference.self, from: record.modelReferenceJSON),
+                costEstimate: decodeJSON(MessageCostEstimate.self, from: record.costEstimateJSON),
+                audioFileName: record.audioFileName,
+                imageFileNames: decodeJSON([String].self, from: record.imageFileNamesJSON),
+                modelExcludedImageFileNames: decodeJSON([String].self, from: record.modelExcludedImageFileNamesJSON),
+                fileFileNames: decodeJSON([String].self, from: record.fileFileNamesJSON),
+                videoAnalysisResults: decodeJSON([VideoAnalysisResult].self, from: record.videoAnalysisResultsJSON),
+                fullErrorContent: record.fullErrorContent,
+                sentSystemPromptSnapshot: record.sentSystemPromptSnapshot,
+                responseMetrics: decodeJSON(MessageResponseMetrics.self, from: record.responseMetricsJSON),
+                responseGroupID: record.responseGroupID.flatMap(UUID.init(uuidString:)),
+                responseAttemptID: record.responseAttemptID.flatMap(UUID.init(uuidString:)),
+                responseAttemptIndex: record.responseAttemptIndex,
+                selectedResponseAttemptID: record.selectedResponseAttemptID.flatMap(UUID.init(uuidString:)),
+                authorKind: record.authorKind.flatMap(ConversationMessageAuthorKind.init(rawValue:)),
+                sourceSessionID: record.sourceSessionID.flatMap(UUID.init(uuidString:)),
+                sourceMessageID: record.sourceMessageID.flatMap(UUID.init(uuidString:)),
+                conversationEventID: record.conversationEventID.flatMap(UUID.init(uuidString:))
+            )
+
+            if contentVersions.count > 1 {
+                for version in contentVersions.dropFirst() {
+                    message.addVersion(version)
+                }
+                let clampedIndex = min(max(0, record.currentVersionIndex), contentVersions.count - 1)
+                message.switchToVersion(clampedIndex)
+            }
+
+            if message.toolCallsPlacement == nil,
+               let toolCalls = message.toolCalls,
+               !toolCalls.isEmpty {
+                message.toolCallsPlacement = inferToolCallsPlacement(from: message.content)
+            }
+
+            return message
         }
     }
 
@@ -441,6 +604,22 @@ extension PersistenceGRDBStore {
             }
         } catch {
             logger.error("统计消息数量失败 \(sessionID.uuidString): \(error.localizedDescription)")
+            return 0
+        }
+    }
+
+    /// 异步统计消息数量，调用方等待连接时不会占住 UI 工作线程。
+    func loadMessageCountAsync(for sessionID: UUID) async -> Int {
+        do {
+            return try await dbPool.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM messages WHERE session_id = ?",
+                    arguments: [sessionID.uuidString]
+                ) ?? 0
+            }
+        } catch {
+            logger.error("异步统计消息数量失败 \(sessionID.uuidString): \(error.localizedDescription)")
             return 0
         }
     }
@@ -478,7 +657,11 @@ extension PersistenceGRDBStore {
                     db,
                     sql: "SELECT DISTINCT audio_file_name FROM messages WHERE audio_file_name IS NOT NULL AND audio_file_name != ''"
                 )
-                return Set(names)
+                var result = Set(names)
+                for context in try loadAllConversationContinuationContexts(db) {
+                    result.formUnion(context.retainedMessages.compactMap(\.audioFileName))
+                }
+                return result
             }
         } catch {
             logger.error("查询音频文件引用失败: \(error.localizedDescription)")
@@ -500,6 +683,9 @@ extension PersistenceGRDBStore {
                         allNames.formUnion(names)
                     }
                 }
+                for context in try loadAllConversationContinuationContexts(db) {
+                    allNames.formUnion(context.retainedMessages.flatMap { $0.imageFileNames ?? [] })
+                }
                 return allNames
             }
         } catch {
@@ -516,7 +702,8 @@ extension PersistenceGRDBStore {
                     sql: """
                     SELECT s.id FROM sessions s
                     LEFT JOIN messages m ON m.session_id = s.id
-                    WHERE m.id IS NULL
+                    LEFT JOIN conversation_continuation_contexts c ON c.child_session_id = s.id
+                    WHERE m.id IS NULL AND c.id IS NULL
                     """
                 )
                 return orphanedIDs.compactMap { UUID(uuidString: $0) }
@@ -574,6 +761,7 @@ extension PersistenceGRDBStore {
     }
 
     func deleteSessionArtifacts(sessionID: UUID) {
+        flushPendingMessageWrites()
         do {
             try dbPool.write { db in
                 try db.execute(sql: "DELETE FROM sessions WHERE id = ?", arguments: [sessionID.uuidString])

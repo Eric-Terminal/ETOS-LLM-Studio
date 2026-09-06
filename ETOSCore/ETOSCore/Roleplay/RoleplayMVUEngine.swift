@@ -236,7 +236,7 @@ public enum RoleplayMVUEngine {
         var commands: [Command] = []
         for match in matches {
             guard let operations = decodeJSONPatch(match.content) else {
-                failures.append("JSONPatch 无法解码。")
+                failures.append(NSLocalizedString("JSONPatch 无法解码。", comment: "Roleplay MVU JSONPatch decode failure"))
                 continue
             }
             for (index, operation) in operations.enumerated() {
@@ -257,7 +257,7 @@ public enum RoleplayMVUEngine {
                     commands.append(.init(offset: offset, path: path, kind: .delete(nil), reason: "json_patch"))
                 case "move":
                     guard let from = operation.from else {
-                        failures.append("JSONPatch move 缺少 from。")
+                        failures.append(NSLocalizedString("JSONPatch move 缺少 from。", comment: "Roleplay MVU JSONPatch move source missing"))
                         continue
                     }
                     commands.append(.init(
@@ -267,7 +267,9 @@ public enum RoleplayMVUEngine {
                         reason: "json_patch"
                     ))
                 default:
-                    failures.append("不支持的 MVU 操作：\(operation.op)")
+                    failures.append(
+                        String(format: NSLocalizedString("不支持的 MVU 操作：%@", comment: "Unsupported roleplay MVU operation"), operation.op)
+                    )
                 }
             }
         }
@@ -326,7 +328,7 @@ public enum RoleplayMVUEngine {
               ) {
             let argumentStart = NSMaxRange(match.range)
             guard let closing = matchingParenthesis(in: units, startingAt: argumentStart) else {
-                failures.append("MVU 命令缺少右括号。")
+                failures.append(NSLocalizedString("MVU 命令缺少右括号。", comment: "Roleplay MVU command missing closing parenthesis"))
                 break
             }
             var commandEnd = closing + 1
@@ -351,7 +353,9 @@ public enum RoleplayMVUEngine {
 
             guard let rawPath = arguments.first,
                   case .string(let path) = parseLiteral(rawPath) else {
-                failures.append("MVU \(name) 命令缺少字符串路径。")
+                failures.append(
+                    String(format: NSLocalizedString("MVU %@ 命令缺少字符串路径。", comment: "Roleplay MVU command missing string path"), name)
+                )
                 continue
             }
             let values = arguments.dropFirst().compactMap(parseLiteral)
@@ -387,7 +391,13 @@ public enum RoleplayMVUEngine {
             if let command {
                 commands.append(command)
             } else {
-                failures.append("MVU \(name) 命令参数无效：\(path)")
+                failures.append(
+                    String(
+                        format: NSLocalizedString("MVU %@ 命令参数无效：%@", comment: "Invalid roleplay MVU command arguments"),
+                        name,
+                        path
+                    )
+                )
             }
         }
         return commands
@@ -410,7 +420,7 @@ public enum RoleplayMVUEngine {
         case .set(let expected, let value):
             if path.isEmpty {
                 guard case .dictionary(let replacement) = value else {
-                    failures.append("MVU set 根路径只接受对象。")
+                    failures.append(NSLocalizedString("MVU set 根路径只接受对象。", comment: "Roleplay MVU set root requires object"))
                     return nil
                 }
                 let previous = JSONValue.dictionary(statData)
@@ -424,28 +434,38 @@ public enum RoleplayMVUEngine {
                 )
             }
             guard oldValue != nil else {
-                failures.append("MVU set 路径不存在：\(path)")
+                failures.append(
+                    String(format: NSLocalizedString("MVU set 路径不存在：%@", comment: "Roleplay MVU set path missing"), path)
+                )
                 return nil
             }
             if let expected, comparableValue(oldValue) != comparableValue(expected) { return nil }
             setValue(preservingDescription(coerced(value, for: oldValue), current: oldValue), at: path, in: &statData)
         case .add(let delta):
             guard let current = comparableValue(oldValue) else {
-                failures.append("MVU add 路径不存在：\(path)")
+                failures.append(
+                    String(format: NSLocalizedString("MVU add 路径不存在：%@", comment: "Roleplay MVU add path missing"), path)
+                )
                 return nil
             }
             guard let next = adding(delta, to: current) else {
-                failures.append("MVU add 只支持数字或 ISO 日期：\(path)")
+                failures.append(
+                    String(format: NSLocalizedString("MVU add 只支持数字或 ISO 日期：%@", comment: "Roleplay MVU add unsupported value"), path)
+                )
                 return nil
             }
             setValue(preservingDescription(next, current: oldValue), at: path, in: &statData)
         case .insert(let key, let value):
             guard permitsInsertion(at: path, key: key, schema: schema) else {
-                failures.append("MVU insert 违反 schema 扩展约束：\(path)")
+                failures.append(
+                    String(format: NSLocalizedString("MVU insert 违反 schema 扩展约束：%@", comment: "Roleplay MVU insert schema violation"), path)
+                )
                 return nil
             }
             guard insert(value, at: path, key: key, in: &statData) else {
-                failures.append("MVU insert 目标不是集合：\(path)")
+                failures.append(
+                    String(format: NSLocalizedString("MVU insert 目标不是集合：%@", comment: "Roleplay MVU insert target is not a collection"), path)
+                )
                 return nil
             }
         case .patchInsert(let value):
@@ -461,21 +481,32 @@ public enum RoleplayMVUEngine {
                 insertionKey = pointerParts.last
             }
             guard permitsInsertion(at: schemaPath, key: insertionKey, schema: schema) else {
-                failures.append("MVU JSONPatch insert 违反 schema 扩展约束：\(command.path)")
+                failures.append(
+                    String(
+                        format: NSLocalizedString("MVU JSONPatch insert 违反 schema 扩展约束：%@", comment: "Roleplay MVU JSONPatch insert schema violation"),
+                        command.path
+                    )
+                )
                 return nil
             }
             guard insertPatchValue(value, pointer: command.path, in: &statData) else {
-                failures.append("MVU JSONPatch insert 路径无效：\(command.path)")
+                failures.append(
+                    String(format: NSLocalizedString("MVU JSONPatch insert 路径无效：%@", comment: "Roleplay MVU JSONPatch insert path invalid"), command.path)
+                )
                 return nil
             }
         case .delete(let target):
             guard permitsDeletion(at: path, target: target, schema: schema) else {
-                failures.append("MVU delete 违反 schema 必填或扩展约束：\(path)")
+                failures.append(
+                    String(format: NSLocalizedString("MVU delete 违反 schema 必填或扩展约束：%@", comment: "Roleplay MVU delete schema violation"), path)
+                )
                 return nil
             }
             if let target {
                 guard remove(target, from: path, in: &statData) else {
-                    failures.append("MVU delete 未找到目标：\(path)")
+                    failures.append(
+                        String(format: NSLocalizedString("MVU delete 未找到目标：%@", comment: "Roleplay MVU delete target missing"), path)
+                    )
                     return nil
                 }
             } else {
@@ -483,7 +514,9 @@ public enum RoleplayMVUEngine {
             }
         case .move(let destination):
             guard let value = oldValue else {
-                failures.append("MVU move 源路径不存在：\(path)")
+                failures.append(
+                    String(format: NSLocalizedString("MVU move 源路径不存在：%@", comment: "Roleplay MVU move source path missing"), path)
+                )
                 return nil
             }
             _ = removeValue(at: path, in: &statData)

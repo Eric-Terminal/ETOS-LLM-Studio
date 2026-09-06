@@ -15,11 +15,65 @@
 
 import Foundation
 import CoreGraphics
+import SwiftUI
 import Testing
 import ETOSCore
 @testable import ETOS_LLM_Studio_Watch_App
 
+@MainActor
 struct ETOS_LLM_Studio_Watch_AppTests {
+
+    @Test("watchOS MCP 目录不暴露当前平台无法执行的工具")
+    func testMCPToolCatalogHidesUnavailableTools() async throws {
+        let personalClient = MCPClient(transport: MCPBuiltInPersonalDataTransport())
+        _ = try await personalClient.initialize(clientInfo: .init(name: "WatchTests", version: "0.1"))
+        let personalTools = try await personalClient.listTools()
+        let personalToolIDs = Set(personalTools.map(\.toolId))
+        #expect(personalToolIDs.isDisjoint(with: [
+            "calendar.create_event", "calendar.update_event", "calendar.delete_event",
+            "reminder.create_reminder", "reminder.update_reminder", "reminder.delete_reminder",
+            "contacts.create", "contacts.update", "contacts.delete",
+            "photos.search", "photos.export_asset", "photos.save_asset",
+            "photos.create_album", "photos.add_to_album"
+        ]))
+        await personalClient.disconnect()
+
+        let visionClient = MCPClient(
+            transport: MCPBuiltInAppToolTransport(category: .visionLanguage)
+        )
+        _ = try await visionClient.initialize(clientInfo: .init(name: "WatchTests", version: "0.1"))
+        let visionTools = try await visionClient.listTools()
+        let visionToolIDs = Set(visionTools.map(\.toolId))
+        #expect(visionToolIDs.isDisjoint(with: [
+            "vision.recognize_text", "vision.detect_barcodes",
+            "vision.classify_image", "vision.detect_document"
+        ]))
+        #expect(visionToolIDs.contains("language.detect"))
+        await visionClient.disconnect()
+    }
+
+    @Test("系统字体会叠加全局字号倍率且不同基准字号不会共用缓存")
+    func testSystemFontScaleKeepsDistinctPointSizes() {
+        let previousEnabled = FontLibrary.isCustomFontEnabled
+        let previousScope = FontLibrary.fallbackScope
+        let previousScale = FontLibrary.customFontScale
+        defer {
+            FontLibrary.updateRuntimeSettings(
+                isCustomFontEnabled: previousEnabled,
+                fallbackScope: previousScope,
+                customFontScale: previousScale
+            )
+        }
+
+        FontLibrary.updateRuntimeSettings(
+            isCustomFontEnabled: false,
+            fallbackScope: previousScope,
+            customFontScale: 1.5
+        )
+
+        #expect(AppFontAdapter.scaledSystemPointSize(from: .system(size: 12)) == 18)
+        #expect(AppFontAdapter.scaledSystemPointSize(from: .system(size: 14)) == 21)
+    }
 
     @Test("自动朗读触发条件判断")
     func testShouldAutoPlayAssistantMessage() {
@@ -341,6 +395,76 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         #expect(ChatViewModel.lazyLoadWeight(for: messages[1]) == 0)
     }
 
+    @Test("自动历史窗口在短列表边缘可见时仍会加载")
+    func testAutomaticHistoryLoadsAtVisibleBoundary() {
+        #expect(ContentView.automaticHistoryDirectionForVisibleBoundary(
+            usesAutomaticHistoryWindow: true,
+            isLoadInFlight: false,
+            isFirstDisplayedMessage: true,
+            isLastDisplayedMessage: true,
+            isEarlierHistoryFullyLoaded: false,
+            isLaterHistoryFullyLoaded: true
+        ) == .earlier)
+        #expect(ContentView.automaticHistoryDirectionForVisibleBoundary(
+            usesAutomaticHistoryWindow: true,
+            isLoadInFlight: false,
+            isFirstDisplayedMessage: false,
+            isLastDisplayedMessage: true,
+            isEarlierHistoryFullyLoaded: true,
+            isLaterHistoryFullyLoaded: false
+        ) == .later)
+        #expect(ContentView.automaticHistoryDirectionForVisibleBoundary(
+            usesAutomaticHistoryWindow: false,
+            isLoadInFlight: false,
+            isFirstDisplayedMessage: true,
+            isLastDisplayedMessage: false,
+            isEarlierHistoryFullyLoaded: false,
+            isLaterHistoryFullyLoaded: true
+        ) == nil)
+    }
+
+    @Test("现代 watchOS 不会把消息行重建当作历史滚动")
+    func testAutomaticHistoryRowAppearanceIsLegacyFallbackOnly() {
+        #expect(!ContentView.shouldLoadAutomaticHistoryFromRowAppearance(
+            supportsScrollGeometry: true
+        ))
+        #expect(ContentView.shouldLoadAutomaticHistoryFromRowAppearance(
+            supportsScrollGeometry: false
+        ))
+    }
+
+    @Test("显式回底和布局归位期间不会触发边界扩窗")
+    func testAutomaticHistoryBoundaryWaitsForNavigationToFinish() {
+        #expect(ContentView.isAutomaticHistoryBoundaryNavigationBlocked(
+            hasPendingHistoryReset: true,
+            hasPendingBottomSnap: false,
+            needsImmediateBottomSnap: false,
+            isInputLayoutSettling: false,
+            hasBlockedBoundaryAnchor: false
+        ))
+        #expect(ContentView.isAutomaticHistoryBoundaryNavigationBlocked(
+            hasPendingHistoryReset: false,
+            hasPendingBottomSnap: true,
+            needsImmediateBottomSnap: false,
+            isInputLayoutSettling: false,
+            hasBlockedBoundaryAnchor: false
+        ))
+        #expect(ContentView.isAutomaticHistoryBoundaryNavigationBlocked(
+            hasPendingHistoryReset: false,
+            hasPendingBottomSnap: false,
+            needsImmediateBottomSnap: false,
+            isInputLayoutSettling: false,
+            hasBlockedBoundaryAnchor: true
+        ))
+        #expect(!ContentView.isAutomaticHistoryBoundaryNavigationBlocked(
+            hasPendingHistoryReset: false,
+            hasPendingBottomSnap: false,
+            needsImmediateBottomSnap: false,
+            isInputLayoutSettling: false,
+            hasBlockedBoundaryAnchor: false
+        ))
+    }
+
     @Test("懒加载截断会以非工具消息作为权重单位")
     func testSuffixMessagesForLazyLoadUsesWeightedLimit() {
         let olderAssistant = ChatMessage(role: .assistant, content: "旧工具调用")
@@ -417,15 +541,23 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         #expect(abs(offset.height + 16) < 0.001)
     }
 
-    @Test("手表聊天输入主按钮会在停用、发送和语音输入之间切换")
+    @Test("手表聊天输入主按钮会在停止、并行发送和语音输入之间切换")
     func testWatchChatInputActionStateResolution() {
+        #expect(
+            WatchChatInputActionState.resolve(
+                isSending: true,
+                hasSendableContent: false,
+                canQuickRetry: true,
+                isSpeechInputEnabled: true
+            ) == .stop
+        )
         #expect(
             WatchChatInputActionState.resolve(
                 isSending: true,
                 hasSendableContent: true,
                 canQuickRetry: true,
                 isSpeechInputEnabled: true
-            ) == .stop
+            ) == .send
         )
         #expect(
             WatchChatInputActionState.resolve(
@@ -474,6 +606,14 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         #expect(WatchChatInputSubmission.shouldUseBoundEditor(for: "继续写"))
     }
 
+    @Test("手表聊天分页为每个终端保留独立标识")
+    func testWatchChatTerminalPageKeepsTerminalIdentity() {
+        let terminalID = UUID()
+
+        #expect(WatchChatPage.chat.terminalID == nil)
+        #expect(WatchChatPage.terminal(terminalID).terminalID == terminalID)
+    }
+
     @Test("Markdown 围栏闭合容错：重复语言标签闭合会被规范为标准围栏")
     func testMarkdownFenceNormalizationForRepeatedLanguageClosing() async {
         let source = """
@@ -510,6 +650,60 @@ let value = 42
 """
 
         #expect(ETPreparedMarkdownRenderPayload.extractThinkingTitle(from: source) == "定位展开状态")
+    }
+
+    @Test("watchOS 会为裸 TeX 提供二级公式预览内容")
+    func testBareTeXPreparesWatchMathPreview() async {
+        let source = #"答案是 \frac{1}{2}。"#
+
+        let prepared = await ETPreparedMarkdownRenderPayload.build(from: source)
+
+        #expect(prepared.containsMathContent)
+        #expect(prepared.mathRenderText == #"答案是 \(\frac{1}{2}\)。"#)
+    }
+
+    @Test("watchOS 官方社群二维码使用指定链接")
+    func testOfficialCommunityQRCodePayloads() {
+        #expect(WatchOfficialCommunity.qq.account == "974605250")
+        #expect(
+            WatchOfficialCommunity.qq.qrPayload
+                == "mqqapi://card/show_pslcard?src_type=internal&version=1&uin=974605250&card_type=group&source=qrcode"
+        )
+        #expect(WatchOfficialCommunity.qq.qrAssetName == "OfficialCommunityQQQRCode")
+
+        #expect(WatchOfficialCommunity.telegram.account == "@ETOSLLMStudio")
+        #expect(
+            WatchOfficialCommunity.telegram.qrPayload
+                == "https://t.me/ETOSLLMStudio"
+        )
+        #expect(WatchOfficialCommunity.telegram.qrAssetName == "OfficialCommunityTelegramQRCode")
+
+        #expect(WatchOfficialCommunity.testFlight.account == nil)
+        #expect(
+            WatchOfficialCommunity.testFlight.qrPayload
+                == "https://testflight.apple.com/join/d4PgF4CK"
+        )
+        #expect(
+            WatchOfficialCommunity.testFlight.qrAssetName
+                == "OfficialCommunityTestFlightQRCode"
+        )
+        #expect(
+            WatchOfficialCommunity.visibleCommunities(for: .appStore)
+                == [.qq, .telegram, .testFlight]
+        )
+        #expect(
+            WatchOfficialCommunity.visibleCommunities(for: .testFlight)
+                == [.qq, .telegram]
+        )
+    }
+
+    @Test("watchOS 工具执行失败使用红色失败状态")
+    func testFailedToolCallStatusPresentation() {
+        let status = ToolCallBubbleStatus.failed
+
+        #expect(status.title == NSLocalizedString("执行失败", comment: "Tool execution failed status"))
+        #expect(status.iconName == "xmark.circle.fill")
+        #expect(status.accentColor == .red)
     }
 
 }

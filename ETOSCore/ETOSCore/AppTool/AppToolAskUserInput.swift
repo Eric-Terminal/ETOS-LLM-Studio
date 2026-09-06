@@ -86,19 +86,25 @@ public struct AppToolAskUserInputRequest: Codable, Identifiable, Equatable, Send
     public let description: String?
     public let submitLabel: String
     public let questions: [AppToolAskUserInputQuestion]
+    public let sourceSessionID: UUID?
+    public let sourceMessageID: UUID?
 
     public init(
         requestID: String,
         title: String?,
         description: String?,
         submitLabel: String,
-        questions: [AppToolAskUserInputQuestion]
+        questions: [AppToolAskUserInputQuestion],
+        sourceSessionID: UUID? = nil,
+        sourceMessageID: UUID? = nil
     ) {
         self.requestID = requestID
         self.title = title
         self.description = description
         self.submitLabel = submitLabel
         self.questions = questions
+        self.sourceSessionID = sourceSessionID
+        self.sourceMessageID = sourceMessageID
     }
 
     public var id: String { requestID }
@@ -179,7 +185,11 @@ public enum AppToolAskUserInputSubmissionFormatter {
             return NSLocalizedString("用户取消了本次问答。", comment: "Ask user input tool cancelled result")
         }
 
-        let questionByID = Dictionary(uniqueKeysWithValues: request.questions.map { ($0.id, $0) })
+        let questionByID = request.questions.reduce(into: [String: AppToolAskUserInputQuestion]()) { result, question in
+            if result[question.id] == nil {
+                result[question.id] = question
+            }
+        }
         var blocks: [String] = []
         for answer in submission.answers {
             let answerText = formattedAnswerText(answer, question: questionByID[answer.questionID])
@@ -199,11 +209,11 @@ public enum AppToolAskUserInputSubmissionFormatter {
         var segments: [String] = []
 
         if let question {
-            let labelByOptionID = Dictionary(
-                uniqueKeysWithValues: question.options.map { option in
-                    (option.id, option.label)
+            let labelByOptionID = question.options.reduce(into: [String: String]()) { result, option in
+                if result[option.id] == nil {
+                    result[option.id] = option.label
                 }
-            )
+            }
             let selectedLabels = answer.selectedOptionIDs.compactMap { optionID in
                 labelByOptionID[optionID]
             }

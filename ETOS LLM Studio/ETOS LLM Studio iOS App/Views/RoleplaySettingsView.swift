@@ -7,28 +7,43 @@
 // ============================================================================
 
 import ETOSCore
+import PhotosUI
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
+
+private enum RoleplaySettingsTab: String {
+    case session
+    case characters
+    case personas
+}
 
 struct RoleplaySettingsView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @State private var selectedTab: RoleplaySettingsTab = .session
 
     var body: some View {
-        TabView {
-            RoleplaySessionBindingView(currentSession: $viewModel.currentSession)
+        TabView(selection: $selectedTab) {
+            RoleplaySessionBindingView(
+                currentSession: $viewModel.currentSession,
+                isGuideActive: selectedTab == .session
+            )
                 .tabItem {
                     Label(NSLocalizedString("当前会话", comment: "Roleplay current session tab"), systemImage: "link")
                 }
+                .tag(RoleplaySettingsTab.session)
 
-            RoleplayCharacterLibraryView()
+            RoleplayCharacterLibraryView(isGuideActive: selectedTab == .characters)
                 .tabItem {
                     Label(NSLocalizedString("角色卡", comment: "Roleplay character cards tab"), systemImage: "person.crop.rectangle.stack")
                 }
+                .tag(RoleplaySettingsTab.characters)
 
-            PersonaLibraryView()
+            PersonaLibraryView(isGuideActive: selectedTab == .personas)
                 .tabItem {
                     Label(NSLocalizedString("用户身份", comment: "Roleplay personas tab"), systemImage: "person.text.rectangle")
                 }
+                .tag(RoleplaySettingsTab.personas)
         }
         .navigationTitle(NSLocalizedString("角色扮演与酒馆兼容", comment: "Roleplay compatibility title"))
         .navigationBarTitleDisplayMode(.inline)
@@ -36,8 +51,11 @@ struct RoleplaySettingsView: View {
 }
 
 private struct RoleplayCharacterLibraryView: View {
+    let isGuideActive: Bool
     @State private var characters: [RoleplayCharacter] = []
     @State private var isImporting = false
+    @State private var isSelectingCardPhoto = false
+    @State private var selectedCardPhoto: PhotosPickerItem?
     @State private var importError: String?
     @State private var importedCharacter: RoleplayCharacter?
     @State private var characterToDelete: RoleplayCharacter?
@@ -68,8 +86,18 @@ private struct RoleplayCharacterLibraryView: View {
                     Label(NSLocalizedString("新增角色卡", comment: "Add character card"), systemImage: "person.badge.plus")
                 }
 
-                Button {
-                    isImporting = true
+                Menu {
+                    Button {
+                        isSelectingCardPhoto = true
+                    } label: {
+                        Label(NSLocalizedString("从照片选择", comment: "Choose roleplay card from Photos"), systemImage: "photo.on.rectangle")
+                    }
+
+                    Button {
+                        isImporting = true
+                    } label: {
+                        Label(NSLocalizedString("从文件选择", comment: "Choose roleplay card from Files"), systemImage: "folder")
+                    }
                 } label: {
                     Label(NSLocalizedString("导入角色卡", comment: "Import roleplay card"), systemImage: "square.and.arrow.down")
                 }
@@ -124,6 +152,16 @@ private struct RoleplayCharacterLibraryView: View {
             allowsMultipleSelection: false,
             onCompletion: importCard
         )
+        .photosPicker(
+            isPresented: $isSelectingCardPhoto,
+            selection: $selectedCardPhoto,
+            matching: .images,
+            preferredItemEncoding: .current
+        )
+        .onChange(of: selectedCardPhoto) { _, photo in
+            guard let photo else { return }
+            importCard(from: photo)
+        }
         .alert(
             NSLocalizedString("角色卡导入完成", comment: "Roleplay card import complete"),
             isPresented: Binding(
@@ -161,6 +199,27 @@ private struct RoleplayCharacterLibraryView: View {
         .onReceive(NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)) { _ in
             reload()
         }
+        .guideSettingsPageContext(
+            id: "settings-roleplay-characters",
+            title: NSLocalizedString("角色卡", comment: "角色卡向导标题"),
+            documents: [GuideDocumentReference(id: "roleplay", title: "Roleplay")],
+            isActive: isGuideActive,
+            settings: [
+                .readOnly("characters", label: NSLocalizedString("已安装角色卡", comment: "角色卡向导字段"), value: {
+                    .array(characters.map { character in
+                        .dictionary([
+                            "id": .string(character.id.uuidString),
+                            "name": .string(character.name),
+                            "creator": .string(character.creator),
+                            "format": .string([character.sourceSpec, character.sourceSpecVersion].compactMap { $0 }.joined(separator: " ")),
+                            "regex_rule_count": .int(character.regexRules.count),
+                            "helper_script_count": .int(character.helperScripts.count),
+                            "has_embedded_worldbook": .bool(character.embeddedWorldbookID != nil)
+                        ])
+                    })
+                })
+            ]
+        )
     }
 
     private func reload() {
@@ -181,16 +240,40 @@ private struct RoleplayCharacterLibraryView: View {
             defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
             do {
                 let data = try await Task.detached(priority: .userInitiated) { try Data(contentsOf: url) }.value
-                let imported = try await Task.detached(priority: .userInitiated) {
-                    try ChatService.shared.importRoleplayCard(data: data, fileName: url.lastPathComponent)
-                }.value
-                importError = nil
-                importedCharacter = imported.character
-                reload()
+                try await importCard(data: data, fileName: url.lastPathComponent)
             } catch {
                 importError = error.localizedDescription
             }
         }
+    }
+
+    private func importCard(from photo: PhotosPickerItem) {
+        Task {
+            defer { selectedCardPhoto = nil }
+            do {
+                guard let data = try await photo.loadTransferable(type: Data.self) else {
+                    importError = NSLocalizedString("无法读取图片数据。", comment: "Unable to read roleplay card image data")
+                    return
+                }
+                let pngSignature = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+                guard data.starts(with: pngSignature) else {
+                    importError = NSLocalizedString("请选择 PNG 格式的角色卡图片。", comment: "Roleplay card photo must be PNG")
+                    return
+                }
+                try await importCard(data: data, fileName: "photo-library-card.png")
+            } catch {
+                importError = error.localizedDescription
+            }
+        }
+    }
+
+    private func importCard(data: Data, fileName: String) async throws {
+        let imported = try await Task.detached(priority: .userInitiated) {
+            try ChatService.shared.importRoleplayCard(data: data, fileName: fileName)
+        }.value
+        importError = nil
+        importedCharacter = imported.character
+        reload()
     }
 }
 
@@ -291,6 +374,31 @@ private struct RoleplayCharacterDetailView: View {
         .onReceive(NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)) { _ in
             reload()
         }
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "roleplay-character-\(character.id.uuidString.lowercased())"),
+            title: String(format: NSLocalizedString("角色卡：%@", comment: "角色卡详情向导标题"), character.name),
+            documents: [GuideDocumentReference(id: "roleplay", title: "Roleplay")],
+            settings: [
+                .readOnly("id", label: NSLocalizedString("角色卡 ID", comment: "角色卡详情向导字段"), value: { .string(character.id.uuidString) }),
+                .readOnly("name", label: NSLocalizedString("名称", comment: "角色卡详情向导字段"), value: { .string(character.name) }),
+                .readOnly("creator", label: NSLocalizedString("作者", comment: "角色卡详情向导字段"), value: { .string(character.creator) }),
+                .readOnly("format", label: NSLocalizedString("格式", comment: "角色卡详情向导字段"), value: { .string([character.sourceSpec, character.sourceSpecVersion].compactMap { $0 }.joined(separator: " ")) }),
+                .readOnly("content_summary", label: NSLocalizedString("内容结构", comment: "角色卡详情向导字段"), value: {
+                    .dictionary([
+                        "description_characters": .int(character.description.count),
+                        "personality_characters": .int(character.personality.count),
+                        "scenario_characters": .int(character.scenario.count),
+                        "alternate_greeting_count": .int(character.alternateGreetings.count),
+                        "regex_rule_count": .int(character.regexRules.count),
+                        "helper_script_count": .int(character.helperScripts.count),
+                        "initial_variable_count": .int(character.initialVariables.count),
+                        "asset_count": .int(character.assets?.count ?? 0),
+                        "extension_field_count": .int(character.extensions.count),
+                        "embedded_worldbook_id": .string(character.embeddedWorldbookID?.uuidString ?? "")
+                    ])
+                })
+            ]
+        )
     }
 
     private func detail(_ title: String, _ value: String) -> some View {
@@ -370,6 +478,7 @@ private struct RoleplayCharacterDetailView: View {
 }
 
 private struct PersonaLibraryView: View {
+    let isGuideActive: Bool
     @State private var personas: [PersonaProfile] = []
     @State private var editingPersona: PersonaProfile?
     @State private var personaToDelete: PersonaProfile?
@@ -445,6 +554,23 @@ private struct PersonaLibraryView: View {
             }
         }
         .task { reload() }
+        .guideSettingsPageContext(
+            id: "settings-roleplay-personas",
+            title: NSLocalizedString("用户身份", comment: "用户身份向导标题"),
+            documents: [GuideDocumentReference(id: "roleplay", title: "Roleplay")],
+            isActive: isGuideActive,
+            settings: [
+                .readOnly("personas", label: NSLocalizedString("可用用户身份", comment: "用户身份向导字段"), value: {
+                    .array(personas.map { persona in
+                        .dictionary([
+                            "id": .string(persona.id.uuidString),
+                            "name": .string(persona.name),
+                            "description": .string(persona.description)
+                        ])
+                    })
+                })
+            ]
+        )
     }
 
     private func reload() {
@@ -461,6 +587,8 @@ private struct PersonaEditorView: View {
     @State private var persona: PersonaProfile
     @State private var avatarData: Data?
     @State private var isImportingAvatar = false
+    @State private var isSelectingAvatarPhoto = false
+    @State private var selectedAvatarPhoto: PhotosPickerItem?
     @State private var avatarError: String?
     let onSave: (PersonaProfile, Data?) -> Void
 
@@ -477,8 +605,18 @@ private struct PersonaEditorView: View {
                     TextField(NSLocalizedString("称谓或代词", comment: "Pronouns"), text: $persona.pronouns)
                 }
                 Section(NSLocalizedString("头像", comment: "Persona avatar section")) {
-                    Button {
-                        isImportingAvatar = true
+                    Menu {
+                        Button {
+                            isSelectingAvatarPhoto = true
+                        } label: {
+                            Label(NSLocalizedString("从照片选择", comment: "Choose persona avatar from Photos"), systemImage: "photo.on.rectangle")
+                        }
+
+                        Button {
+                            isImportingAvatar = true
+                        } label: {
+                            Label(NSLocalizedString("从文件选择", comment: "Choose persona avatar from Files"), systemImage: "folder")
+                        }
                     } label: {
                         Label(NSLocalizedString("选择头像", comment: "Choose persona avatar"), systemImage: "person.crop.circle.badge.plus")
                     }
@@ -526,19 +664,57 @@ private struct PersonaEditorView: View {
                 Task {
                     defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
                     do {
-                        avatarData = try await Task.detached(priority: .utility) { try Data(contentsOf: url) }.value
-                        avatarError = nil
+                        let data = try await Task.detached(priority: .utility) { try Data(contentsOf: url) }.value
+                        await selectAvatar(data: data)
                     } catch {
                         avatarError = error.localizedDescription
                     }
                 }
             }
+            .photosPicker(
+                isPresented: $isSelectingAvatarPhoto,
+                selection: $selectedAvatarPhoto,
+                matching: .images,
+                preferredItemEncoding: .current
+            )
+            .onChange(of: selectedAvatarPhoto) { _, photo in
+                guard let photo else { return }
+                importAvatar(from: photo)
+            }
         }
+    }
+
+    private func importAvatar(from photo: PhotosPickerItem) {
+        Task {
+            defer { selectedAvatarPhoto = nil }
+            do {
+                guard let data = try await photo.loadTransferable(type: Data.self) else {
+                    avatarError = NSLocalizedString("无法读取图片数据。", comment: "Unable to read persona avatar image data")
+                    return
+                }
+                await selectAvatar(data: data)
+            } catch {
+                avatarError = error.localizedDescription
+            }
+        }
+    }
+
+    private func selectAvatar(data: Data) async {
+        let pngData = await Task.detached(priority: .utility) {
+            UIImage(data: data)?.pngData()
+        }.value
+        guard let pngData else {
+            avatarError = NSLocalizedString("无法解析图片。", comment: "Unable to decode persona avatar image")
+            return
+        }
+        avatarData = pngData
+        avatarError = nil
     }
 }
 
 private struct RoleplaySessionBindingView: View {
     @Binding var currentSession: ChatSession?
+    let isGuideActive: Bool
 
     @State private var characters: [RoleplayCharacter] = []
     @State private var personas: [PersonaProfile] = []
@@ -576,14 +752,30 @@ private struct RoleplaySessionBindingView: View {
 
                 Section {
                     Toggle(
-                        NSLocalizedString("屏蔽记忆与工具", comment: "Session memory and tool isolation toggle"),
+                        NSLocalizedString("屏蔽记忆", comment: "Block memory for current session"),
                         isOn: Binding(
-                            get: { currentSession?.worldbookContextIsolationEnabled ?? false },
-                            set: { updateContextIsolation($0) }
+                            get: { currentSession?.memoryContextIsolationEnabled ?? false },
+                            set: { updateContextIsolation(\.memoryContextIsolationEnabled, isEnabled: $0) }
+                        )
+                    )
+
+                    Toggle(
+                        NSLocalizedString("屏蔽工具", comment: "Block tools for current session"),
+                        isOn: Binding(
+                            get: { currentSession?.toolContextIsolationEnabled ?? false },
+                            set: { updateContextIsolation(\.toolContextIsolationEnabled, isEnabled: $0) }
+                        )
+                    )
+
+                    Toggle(
+                        NSLocalizedString("屏蔽全局系统提示词", comment: "Block global system prompt for current session"),
+                        isOn: Binding(
+                            get: { currentSession?.globalSystemPromptIsolationEnabled ?? false },
+                            set: { updateContextIsolation(\.globalSystemPromptIsolationEnabled, isEnabled: $0) }
                         )
                     )
                 } footer: {
-                    Text(NSLocalizedString("开启后，当前会话不会向模型发送记忆上下文、工具定义或历史工具调用。", comment: "Session memory and tool isolation description"))
+                    Text(NSLocalizedString("分别控制当前会话是否发送记忆、工具和全局系统提示词。角色卡、会话提示词与世界书不受影响。", comment: "Independent session context isolation description"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -639,6 +831,57 @@ private struct RoleplaySessionBindingView: View {
         .onReceive(NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)) { _ in
             load()
         }
+        .guideSettingsPageContext(
+            id: "settings-roleplay-session",
+            title: NSLocalizedString("当前会话角色扮演", comment: "角色扮演会话向导标题"),
+            documents: [GuideDocumentReference(id: "roleplay", title: "Roleplay")],
+            isActive: isGuideActive,
+            settings: guideSettings
+        )
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        guard let session = currentSession else {
+            return [.readOnly("has_current_session", label: NSLocalizedString("存在当前会话", comment: "角色扮演向导字段"), value: { .bool(false) })]
+        }
+        return [
+            .readOnly("session_id", label: NSLocalizedString("会话 ID", comment: "角色扮演向导字段"), value: { .string(session.id.uuidString) }),
+            .string(
+                "character_id",
+                label: NSLocalizedString("绑定角色卡", comment: "角色扮演向导字段"),
+                allowedValues: [""] + characters.map { $0.id.uuidString },
+                get: { selectedCharacterID?.uuidString ?? "" },
+                set: { rawValue in selectedCharacterBinding.wrappedValue = UUID(uuidString: rawValue) }
+            ),
+            .string(
+                "persona_id",
+                label: NSLocalizedString("绑定用户身份", comment: "角色扮演向导字段"),
+                allowedValues: [""] + personas.map { $0.id.uuidString },
+                get: { selectedPersonaID?.uuidString ?? "" },
+                set: { rawValue in selectedPersonaBinding.wrappedValue = UUID(uuidString: rawValue) }
+            ),
+            .integer(
+                "greeting_index",
+                label: NSLocalizedString("开场白索引", comment: "角色扮演向导字段"),
+                range: 0...max(0, greetingOptions.map(\.index).max() ?? 0),
+                get: { selectedGreetingIndex },
+                set: { selectedGreetingBinding.wrappedValue = $0 }
+            ),
+            .bool("html_rendering_enabled", label: NSLocalizedString("自动渲染 HTML", comment: "角色扮演向导字段"), get: { htmlRenderingEnabled }, set: { htmlRenderingEnabled = $0; persist() }),
+            .bool("helper_scripts_enabled", label: NSLocalizedString("启用助手脚本", comment: "角色扮演向导字段"), get: { helperScriptsEnabled }, set: { helperScriptsEnabled = $0; persist() }),
+            .bool("isolate_memory", label: NSLocalizedString("屏蔽记忆", comment: "角色扮演向导字段"), get: { currentSession?.memoryContextIsolationEnabled ?? false }, set: { updateContextIsolation(\.memoryContextIsolationEnabled, isEnabled: $0) }),
+            .bool("isolate_tools", label: NSLocalizedString("屏蔽工具", comment: "角色扮演向导字段"), get: { currentSession?.toolContextIsolationEnabled ?? false }, set: { updateContextIsolation(\.toolContextIsolationEnabled, isEnabled: $0) }),
+            .bool("isolate_global_system_prompt", label: NSLocalizedString("屏蔽全局系统提示词", comment: "角色扮演向导字段"), get: { currentSession?.globalSystemPromptIsolationEnabled ?? false }, set: { updateContextIsolation(\.globalSystemPromptIsolationEnabled, isEnabled: $0) }),
+            .readOnly("available_characters", label: NSLocalizedString("可用角色卡", comment: "角色扮演向导字段"), value: {
+                .array(characters.map { .dictionary(["id": .string($0.id.uuidString), "name": .string($0.name)]) })
+            }),
+            .readOnly("available_personas", label: NSLocalizedString("可用用户身份", comment: "角色扮演向导字段"), value: {
+                .array(personas.map { .dictionary(["id": .string($0.id.uuidString), "name": .string($0.name)]) })
+            }),
+            .readOnly("available_greetings", label: NSLocalizedString("可用开场白", comment: "角色扮演向导字段"), value: {
+                .array(greetingOptions.map { .dictionary(["index": .int($0.index), "preview": .string($0.text)]) })
+            })
+        ]
     }
 
     private struct GreetingOption: Identifiable {
@@ -664,6 +907,7 @@ private struct RoleplaySessionBindingView: View {
             get: { selectedPersonaID },
             set: { personaID in
                 selectedPersonaID = personaID
+                ChatService.shared.setPreferredRoleplayPersonaID(personaID)
                 persist()
             }
         )
@@ -720,7 +964,7 @@ private struct RoleplaySessionBindingView: View {
         guard let sessionID = currentSession?.id,
               let binding = ChatService.shared.roleplayBinding(sessionID: sessionID) else {
             selectedCharacterID = nil
-            selectedPersonaID = nil
+            selectedPersonaID = ChatService.shared.preferredRoleplayPersonaID()
             selectedGreetingIndex = 0
             htmlRenderingEnabled = true
             helperScriptsEnabled = true
@@ -761,14 +1005,19 @@ private struct RoleplaySessionBindingView: View {
         )
     }
 
-    private func updateContextIsolation(_ isEnabled: Bool) {
+    private func updateContextIsolation(
+        _ keyPath: WritableKeyPath<ChatSession, Bool>,
+        isEnabled: Bool
+    ) {
         guard var session = currentSession else { return }
-        session.worldbookContextIsolationEnabled = isEnabled
+        session[keyPath: keyPath] = isEnabled
         currentSession = session
         ChatService.shared.updateWorldbookSessionSettings(
             sessionID: session.id,
             worldbookIDs: session.lorebookIDs,
-            worldbookContextIsolationEnabled: isEnabled
+            memoryContextIsolationEnabled: session.memoryContextIsolationEnabled,
+            toolContextIsolationEnabled: session.toolContextIsolationEnabled,
+            globalSystemPromptIsolationEnabled: session.globalSystemPromptIsolationEnabled
         )
     }
 }

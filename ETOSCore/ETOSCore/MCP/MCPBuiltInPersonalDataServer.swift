@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 将 HealthKit 与 EventKit 能力包装为内建 MCP Server。
+// 将健康、日历、提醒事项、联系人、照片与位置能力包装为内建 MCP Server。
 // 这里只公布工具清单；真正读取或写入数据时才触发系统权限请求。
 // ============================================================================
 
@@ -14,12 +14,26 @@ import MCP
 public enum MCPBuiltInPersonalDataServer {
     public static let serverID = UUID(uuidString: "45544F53-0000-0000-0000-504452534E4C")!
     public static let endpoint = "builtin://personal-data"
+    private static let nativeToolsMigrationFlagKey = "mcp.personalDataNativeToolsDisabled.v1"
 
-    public static let toolIDs = [
+    #if os(watchOS)
+    private static let unavailableToolIDs: Set<String> = [
+        "calendar.create_event", "calendar.update_event", "calendar.delete_event",
+        "reminder.create_reminder", "reminder.update_reminder", "reminder.delete_reminder",
+        "contacts.create", "contacts.update", "contacts.delete",
+        "photos.search", "photos.export_asset", "photos.save_asset",
+        "photos.create_album", "photos.add_to_album"
+    ]
+    #else
+    private static let unavailableToolIDs: Set<String> = []
+    #endif
+
+    private static let legacyToolIDs = [
         "health.list_types",
         "health.query_samples",
         "health.query_statistics",
         "health.write_quantity",
+        "health.write_blood_pressure",
         "health.write_category",
         "calendar.query_events",
         "calendar.create_event",
@@ -31,6 +45,14 @@ public enum MCPBuiltInPersonalDataServer {
         "reminder.delete_reminder"
     ]
 
+    public static var toolIDs: [String] {
+        legacyToolIDs + MCPNativePersonalDataToolDefinitions.toolIDs
+    }
+
+    static func isToolAvailableOnCurrentPlatform(_ toolID: String) -> Bool {
+        !unavailableToolIDs.contains(toolID)
+    }
+
     public static func isBuiltInPersonalDataServer(_ server: MCPServerConfiguration) -> Bool {
         server.id == serverID || server.transport == .builtInPersonalData
     }
@@ -39,9 +61,10 @@ public enum MCPBuiltInPersonalDataServer {
         MCPServerConfiguration(
             id: serverID,
             displayName: NSLocalizedString("内建个人数据", comment: "Built-in personal data MCP server name"),
-            notes: NSLocalizedString("提供 HealthKit 健康数据与 EventKit 日历/提醒事项工具。仅在工具正式调用时申请系统权限。", comment: "Built-in personal data MCP server notes"),
+            notes: NSLocalizedString("提供健康、日历、提醒事项、联系人、照片与位置工具。仅在工具正式调用时申请对应系统权限；新加入的工具默认关闭。", comment: "Built-in personal data MCP server notes"),
             transport: .builtInPersonalData,
             isSelectedForChat: true,
+            disabledToolIds: MCPNativePersonalDataToolDefinitions.toolIDs,
             sortIndex: 100
         )
     }
@@ -60,6 +83,7 @@ public enum MCPBuiltInPersonalDataServer {
                 return (servers, nil)
             }
             servers.append(defaultServer)
+            Persistence.writeAppConfig(key: nativeToolsMigrationFlagKey, integer: 1, typeHint: "integer")
             return (servers, defaultServer)
         }
 
@@ -73,12 +97,19 @@ public enum MCPBuiltInPersonalDataServer {
             server.displayName = defaultServer.displayName
             shouldPersist = true
         }
+        if Persistence.readAppConfigInteger(key: nativeToolsMigrationFlagKey) != 1 {
+            server.disabledToolIds = Array(
+                Set(server.disabledToolIds).union(MCPNativePersonalDataToolDefinitions.toolIDs)
+            ).sorted()
+            Persistence.writeAppConfig(key: nativeToolsMigrationFlagKey, integer: 1, typeHint: "integer")
+            shouldPersist = true
+        }
         servers[index] = server
         return (servers, shouldPersist ? server : nil)
     }
 
     static func toolDescriptions() -> [MCPToolDescription] {
-        [
+        let descriptions = [
             MCPToolDescription(
                 toolId: "health.list_types",
                 description: NSLocalizedString("列出当前内建 HealthKit 工具支持的健康数据类型、读写能力与默认单位。不会请求 HealthKit 权限。", comment: ""),
@@ -115,7 +146,7 @@ public enum MCPBuiltInPersonalDataServer {
             ),
             MCPToolDescription(
                 toolId: "health.write_quantity",
-                description: NSLocalizedString("写入允许记录的 HealthKit 数值样本，例如 dietary_water、dietary_caffeine、dietary_energy、body_mass。调用时仅请求该类型写入权限。", comment: ""),
+                description: NSLocalizedString("写入允许记录的 HealthKit 数值样本，例如 heart_rate、dietary_water、dietary_caffeine、dietary_energy、body_mass。调用时仅请求该类型写入权限。", comment: ""),
                 inputSchema: objectSchema(
                     properties: [
                         "type": stringSchema(NSLocalizedString("可写 HealthKit 数值类型名。", comment: "")),
@@ -125,6 +156,21 @@ public enum MCPBuiltInPersonalDataServer {
                         "note": stringSchema(NSLocalizedString("可选备注，会写入 HealthKit 元数据。", comment: ""))
                     ],
                     required: ["type", "value"]
+                )
+            ),
+            MCPToolDescription(
+                toolId: "health.write_blood_pressure",
+                description: NSLocalizedString("写入一条包含收缩压、舒张压及可选心率的 HealthKit 血压记录。调用时请求相关类型写入权限。", comment: ""),
+                inputSchema: objectSchema(
+                    properties: [
+                        "systolic": numberSchema(NSLocalizedString("收缩压，单位 mmHg。", comment: "")),
+                        "diastolic": numberSchema(NSLocalizedString("舒张压，单位 mmHg。", comment: "")),
+                        "heart_rate": numberSchema(NSLocalizedString("可选脉搏，单位 count/min。", comment: "")),
+                        "start_date": stringSchema(NSLocalizedString("ISO-8601 开始时间；省略时使用当前时间。", comment: "")),
+                        "end_date": stringSchema(NSLocalizedString("ISO-8601 结束时间；省略时等于开始时间。", comment: "")),
+                        "note": stringSchema(NSLocalizedString("可选备注，会写入 HealthKit 元数据。", comment: ""))
+                    ],
+                    required: ["systolic", "diastolic"]
                 )
             ),
             MCPToolDescription(
@@ -207,7 +253,10 @@ public enum MCPBuiltInPersonalDataServer {
                     required: ["reminder_id"]
                 )
             )
-        ]
+        ] + MCPNativePersonalDataToolDefinitions.descriptions
+
+        // 配置仍保留完整工具 ID，运行时目录只公布当前平台真正能执行的能力。
+        return descriptions.filter { isToolAvailableOnCurrentPlatform($0.toolId) }
     }
 
     static func objectSchema(
@@ -382,6 +431,9 @@ actor MCPBuiltInPersonalDataServerEngine {
     private let jsonrpcVersion = "2.0"
     private let healthExecutor = MCPBuiltInPersonalDataHealthExecutor()
     private let eventExecutor = MCPBuiltInPersonalDataEventKitExecutor()
+    private let contactsExecutor = MCPNativeContactsExecutor()
+    private let photosExecutor = MCPNativePhotosExecutor()
+    private let locationExecutor = MCPNativeLocationExecutor()
 
     func handleNotification(_ payload: Data) async throws {
         _ = try requestObject(from: payload)
@@ -449,7 +501,8 @@ actor MCPBuiltInPersonalDataServerEngine {
               let name = params["name"] as? String else {
             return errorToolResult(message: "Missing tool name")
         }
-        guard MCPBuiltInPersonalDataServer.toolIDs.contains(name) else {
+        guard MCPBuiltInPersonalDataServer.toolIDs.contains(name),
+              MCPBuiltInPersonalDataServer.isToolAvailableOnCurrentPlatform(name) else {
             return errorToolResult(message: "Unknown built-in personal data tool: \(name)")
         }
         let arguments = params["arguments"] as? [String: Any] ?? [:]
@@ -457,8 +510,14 @@ actor MCPBuiltInPersonalDataServerEngine {
             let structuredContent: [String: Any]
             if name.hasPrefix("health.") {
                 structuredContent = try await healthExecutor.execute(toolName: name, arguments: arguments)
-            } else {
+            } else if name.hasPrefix("calendar.") || name.hasPrefix("reminder.") {
                 structuredContent = try await eventExecutor.execute(toolName: name, arguments: arguments)
+            } else if name.hasPrefix("contacts.") {
+                structuredContent = try await contactsExecutor.execute(toolName: name, arguments: arguments)
+            } else if name.hasPrefix("photos.") {
+                structuredContent = try await photosExecutor.execute(toolName: name, arguments: arguments)
+            } else {
+                structuredContent = try await locationExecutor.execute(toolName: name, arguments: arguments)
             }
             return successToolResult(structuredContent)
         } catch {

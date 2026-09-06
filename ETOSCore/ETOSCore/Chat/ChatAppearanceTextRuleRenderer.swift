@@ -1,25 +1,43 @@
 // ============================================================================
 // ChatAppearanceTextRuleRenderer.swift
 // ============================================================================
-// 在后台生成可直接交给 SwiftUI Text 的规则着色文本
+// 在后台生成可直接交给 SwiftUI Text 的规则化颜色与字体文本
 // ============================================================================
 
 import Foundation
 import SwiftUI
+#if canImport(CoreText)
+import CoreText
+#endif
+#if canImport(UIKit)
+import UIKit
+#endif
 
 public struct ChatAppearanceTextRuleRenderRequest: Hashable, Sendable {
     public let source: String
     public let usesMarkdown: Bool
     public let styleColors: ChatAppearanceTextStyleColors
+    public let fontRules: [ChatAppearanceResolvedTextFontRule]
+    public let fontPointSize: Double
+    public let fontScale: Double
+    public let fontFallbackScope: FontFallbackScope
 
     public init(
         source: String,
         usesMarkdown: Bool,
-        styleColors: ChatAppearanceTextStyleColors
+        styleColors: ChatAppearanceTextStyleColors,
+        fontRules: [ChatAppearanceResolvedTextFontRule] = [],
+        fontPointSize: Double = 17,
+        fontScale: Double = 1,
+        fontFallbackScope: FontFallbackScope = .segment
     ) {
         self.source = source
         self.usesMarkdown = usesMarkdown
         self.styleColors = styleColors
+        self.fontRules = fontRules
+        self.fontPointSize = fontPointSize
+        self.fontScale = fontScale
+        self.fontFallbackScope = fontFallbackScope
     }
 }
 
@@ -59,8 +77,11 @@ public actor ChatAppearanceTextRuleRenderer {
     private nonisolated static func build(
         request: ChatAppearanceTextRuleRenderRequest
     ) -> AttributedString? {
-        let activeRules = request.styleColors.customRules.filter { $0.isEnabled && $0.isConfigured }
-        guard !activeRules.isEmpty else { return nil }
+        let activeColorRules = request.styleColors.customRules.filter { $0.isEnabled && $0.isConfigured }
+        let activeFontRules = request.fontRules.filter {
+            $0.rule.isEnabled && $0.rule.hasConfiguredMatch && !$0.postScriptNames.isEmpty
+        }
+        guard !activeColorRules.isEmpty || !activeFontRules.isEmpty else { return nil }
         if request.usesMarkdown && containsSpecializedMarkdownBlock(in: request.source) {
             return nil
         }
@@ -80,7 +101,13 @@ public actor ChatAppearanceTextRuleRenderer {
         }
 
         applySemanticColors(request.styleColors, to: &attributed)
-        applyCustomRules(activeRules, to: &attributed)
+        applyCustomColorRules(activeColorRules, to: &attributed)
+        applyCustomFontRules(
+            activeFontRules,
+            pointSize: request.fontPointSize * request.fontScale,
+            fallbackScope: request.fontFallbackScope,
+            to: &attributed
+        )
         return attributed
     }
 
@@ -108,7 +135,7 @@ public actor ChatAppearanceTextRuleRenderer {
         }
     }
 
-    private nonisolated static func applyCustomRules(
+    private nonisolated static func applyCustomColorRules(
         _ rules: [ChatAppearanceTextColorRule],
         to attributed: inout AttributedString
     ) {
@@ -132,6 +159,137 @@ public actor ChatAppearanceTextRuleRenderer {
                 fallback: .primary
             )
         }
+    }
+
+    private nonisolated static func applyCustomFontRules(
+        _ rules: [ChatAppearanceResolvedTextFontRule],
+        pointSize: Double,
+        fallbackScope: FontFallbackScope,
+        to attributed: inout AttributedString
+    ) {
+        let visibleText = String(attributed.characters)
+        let excludedRanges = inlineCodeRanges(in: attributed)
+        let spans = ChatAppearanceTextFontMatcher.spans(
+            in: visibleText,
+            rules: rules.map(\.rule),
+            excludedRanges: excludedRanges
+        )
+        let rulesByID = Dictionary(uniqueKeysWithValues: rules.map { ($0.rule.id, $0) })
+
+        for span in spans {
+            let nsRange = NSRange(location: span.location, length: span.length)
+            guard let stringRange = Range(nsRange, in: visibleText),
+                  let lowerBound = AttributedString.Index(stringRange.lowerBound, within: attributed),
+                  let upperBound = AttributedString.Index(stringRange.upperBound, within: attributed),
+                  let rule = rulesByID[span.ruleID] else {
+                continue
+            }
+            let sample = String(visibleText[stringRange])
+            guard let font = resolvedFont(
+                postScriptNames: rule.postScriptNames,
+                sample: sample,
+                pointSize: pointSize,
+                fallbackScope: fallbackScope
+            ) else {
+                continue
+            }
+            attributed[lowerBound..<upperBound].font = font
+        }
+    }
+
+    private nonisolated static func resolvedFont(
+        postScriptNames: [String],
+        sample: String,
+        pointSize: Double,
+        fallbackScope: FontFallbackScope
+    ) -> Font? {
+        let normalizedPointSize = max(1, pointSize)
+        switch fallbackScope {
+        case .segment:
+            guard let selected = postScriptNames.first(where: {
+                fontCanRenderSample(postScriptName: $0, sample: sample)
+            }) else {
+                return nil
+            }
+            return .custom(
+                selected,
+                size: CGFloat(normalizedPointSize),
+                relativeTo: .body
+            )
+        case .character:
+            return cascadedFont(
+                postScriptNames: postScriptNames,
+                pointSize: normalizedPointSize
+            )
+        }
+    }
+
+    private nonisolated static func fontCanRenderSample(
+        postScriptName: String,
+        sample: String
+    ) -> Bool {
+#if canImport(CoreText)
+        let font = CTFontCreateWithName(postScriptName as CFString, 16, nil)
+        let resolvedName = CTFontCopyPostScriptName(font) as String
+        guard resolvedName.caseInsensitiveCompare(postScriptName) == .orderedSame else {
+            return false
+        }
+        let characters = sample.unicodeScalars
+            .filter {
+                !$0.properties.isWhitespace && $0.properties.generalCategory != .control
+            }
+            .prefix(96)
+            .map { scalar -> UniChar in
+                scalar.value <= 0xFFFF ? UniChar(scalar.value) : UniChar(0xFFFD)
+            }
+        guard !characters.isEmpty else { return true }
+        var mutableCharacters = Array(characters)
+        var glyphs = Array(repeating: CGGlyph(), count: mutableCharacters.count)
+        let mapped = CTFontGetGlyphsForCharacters(
+            font,
+            &mutableCharacters,
+            &glyphs,
+            mutableCharacters.count
+        )
+        return mapped && !glyphs.contains(0)
+#else
+        _ = sample
+        return !postScriptName.isEmpty
+#endif
+    }
+
+    private nonisolated static func cascadedFont(
+        postScriptNames: [String],
+        pointSize: Double
+    ) -> Font? {
+#if canImport(UIKit) && canImport(CoreText)
+        let size = CGFloat(pointSize)
+        let availableNames = postScriptNames.filter {
+            UIFont(name: $0, size: size) != nil
+        }
+        guard let primaryName = availableNames.first else {
+            return nil
+        }
+        let cascadeDescriptors = availableNames.dropFirst().map { name in
+            return CTFontDescriptorCreateWithNameAndSize(name as CFString, size)
+        }
+        guard !cascadeDescriptors.isEmpty else {
+            return .custom(primaryName, size: size, relativeTo: .body)
+        }
+
+        let cascadeKey = UIFontDescriptor.AttributeName(
+            rawValue: kCTFontCascadeListAttribute as String
+        )
+        let descriptor = UIFontDescriptor(fontAttributes: [
+            .name: primaryName,
+            .size: size,
+            cascadeKey: cascadeDescriptors
+        ])
+        return Font(UIFont(descriptor: descriptor, size: size))
+#else
+        guard let primaryName = postScriptNames.first else { return nil }
+        return .custom(primaryName, size: CGFloat(pointSize), relativeTo: .body)
+#endif
     }
 
     private nonisolated static func inlineCodeRanges(

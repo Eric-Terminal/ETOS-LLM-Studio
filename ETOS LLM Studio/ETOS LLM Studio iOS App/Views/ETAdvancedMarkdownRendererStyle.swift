@@ -22,6 +22,7 @@ extension View {
         prefersDarkPalette: Bool,
         sampleText: String,
         fontScale: Double,
+        lineSpacing: CGFloat,
         codeHighlightLimit: Int = 12_000
     ) -> some View {
         let codeBlockBackground = isOutgoing
@@ -33,9 +34,8 @@ extension View {
         let codeBorderColor = isOutgoing
             ? Color.white.opacity(0.24)
             : Color.primary.opacity(0.16)
-        let codeHeaderTextColor = isOutgoing
-            ? Color.white.opacity(0.9)
-            : Color.secondary
+        // 标题与操作按钮沿用正文色，避免自定义气泡颜色下固定白色失去对比度。
+        let codeHeaderTextColor = textColor
         let bodyFontName = FontLibrary.resolvePostScriptName(for: .body, sampleText: sampleText)
         let emphasisFontName = FontLibrary.resolvePostScriptName(for: .emphasis, sampleText: sampleText)
         let strongFontName = FontLibrary.resolvePostScriptName(for: .strong, sampleText: sampleText)
@@ -79,6 +79,7 @@ extension View {
                    !strongFontName.isEmpty {
                     FontFamily(.custom(strongFontName))
                 }
+                FontWeight(.bold)
                 ForegroundColor(strongTextColor)
             }
             .markdownTextStyle(\.code) {
@@ -90,6 +91,11 @@ extension View {
                     FontFamily(.system(.monospaced))
                 }
                 ForegroundColor(codeTextColor)
+            }
+            .markdownBlockStyle(\.paragraph) { configuration in
+                configuration.label
+                    .fixedSize(horizontal: false, vertical: true)
+                    .markdownMargin(top: .zero, bottom: .em(1))
             }
             .markdownBlockStyle(\.blockquote) { configuration in
                 configuration.label
@@ -130,7 +136,6 @@ extension View {
                 } bodyContent: {
                     ScrollView(.horizontal, showsIndicators: false) {
                         configuration.label
-                            .relativeLineSpacing(.em(0.15))
                             .fixedSize(horizontal: true, vertical: true)
                             .markdownTextStyle {
                                 if !usesCharacterFallback,
@@ -156,6 +161,18 @@ extension View {
                 }
                 .markdownMargin(top: .zero, bottom: .em(1))
             }
+            .markdownBlockStyle(\.tableCell) { configuration in
+                configuration.label
+                    .markdownTextStyle {
+                        if configuration.row == 0 {
+                            FontWeight(.semibold)
+                        }
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .relativePadding(.horizontal, length: .em(0.72))
+                    .relativePadding(.vertical, length: .em(0.35))
+            }
+            .lineSpacing(lineSpacing)
     }
 }
 
@@ -264,29 +281,20 @@ struct ETCodeCopyButton: View {
     let normalColor: Color
     let successColor: Color
 
-    @State private var didCopy = false
-
     var body: some View {
-        Button {
+        CopyConfirmationButton {
             ETCodeClipboard.copy(content)
-            #if os(iOS)
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-            #endif
-
-            withAnimation(.easeInOut(duration: 0.15)) {
-                didCopy = true
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    didCopy = false
-                }
-            }
-        } label: {
+        } label: { didCopy in
             Image(systemName: didCopy ? "checkmark.circle.fill" : "doc.on.doc")
                 .etFont(.system(size: 12, weight: .semibold))
                 .foregroundStyle(didCopy ? successColor : normalColor)
+                .contentTransition(.symbolEffect(.replace))
+                .accessibilityLabel(
+                    didCopy
+                        ? NSLocalizedString("已复制", comment: "")
+                        : NSLocalizedString("复制代码", comment: "")
+                )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(NSLocalizedString("复制代码", comment: ""))
     }
 }

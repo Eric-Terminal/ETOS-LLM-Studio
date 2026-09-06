@@ -31,7 +31,23 @@ extension ShortcutToolManager {
         var lastFailure: ShortcutToolExecutionResult?
 
         for transport in order {
+            if Task.isCancelled {
+                return cancelledExecutionResult(
+                    requestID: UUID().uuidString,
+                    toolName: tool.name,
+                    transport: transport,
+                    startedAt: Date()
+                )
+            }
             let localResult = await executeLocally(tool: tool, argumentsJSON: argumentsJSON, transport: transport)
+            if Task.isCancelled {
+                return cancelledExecutionResult(
+                    requestID: localResult.requestID,
+                    toolName: tool.name,
+                    transport: transport,
+                    startedAt: localResult.startedAt
+                )
+            }
             if localResult.success {
                 return localResult
             }
@@ -46,6 +62,14 @@ extension ShortcutToolManager {
                 )
                 do {
                     let relayResult = try await ShortcutExecutionRelay.shared.executeViaCompanion(request: relayRequest)
+                    if Task.isCancelled {
+                        return cancelledExecutionResult(
+                            requestID: relayResult.requestID,
+                            toolName: tool.name,
+                            transport: .relay,
+                            startedAt: relayResult.startedAt
+                        )
+                    }
                     if relayResult.success {
                         return relayResult
                     }
@@ -135,44 +159,70 @@ extension ShortcutToolManager {
             )
         }
 
-        let result = await withCheckedContinuation { (continuation: CheckedContinuation<ShortcutToolExecutionResult, Never>) in
-            var pending = PendingExecution(
-                requestID: requestID,
-                toolName: originalToolName,
-                transport: transport,
-                startedAt: startAt,
-                continuation: continuation,
-                timeoutTask: nil
-            )
-
-            let timeoutTask = Task { [weak self] in
-                guard let self else { return }
-                try? await Task.sleep(nanoseconds: self.executionTimeoutSeconds * 1_000_000_000)
-                self.resolvePendingAsTimeout(requestID: requestID)
+        return await withTaskCancellationHandler {
+            guard !Task.isCancelled else {
+                return cancelledExecutionResult(
+                    requestID: requestID,
+                    toolName: originalToolName,
+                    transport: transport,
+                    startedAt: startAt
+                )
             }
-            pending.timeoutTask = timeoutTask
-            pendingExecutions[requestID] = pending
-
-            Task { [weak self] in
-                guard let self else { return }
-                let opened = await self.openSystemURL(launchURL)
-                if !opened {
-                    let failure = ShortcutToolExecutionResult(
+            return await withCheckedContinuation { (continuation: CheckedContinuation<ShortcutToolExecutionResult, Never>) in
+                guard !Task.isCancelled else {
+                    continuation.resume(returning: cancelledExecutionResult(
                         requestID: requestID,
                         toolName: originalToolName,
-                        success: false,
-                        result: nil,
-                        errorMessage: ShortcutToolError.cannotOpenShortcutApp.localizedDescription,
                         transport: transport,
-                        startedAt: startAt,
-                        finishedAt: Date()
-                    )
-                    self.resolvePending(requestID: requestID, result: failure)
+                        startedAt: startAt
+                    ))
+                    return
+                }
+
+                var pending = PendingExecution(
+                    requestID: requestID,
+                    toolName: originalToolName,
+                    transport: transport,
+                    startedAt: startAt,
+                    continuation: continuation,
+                    timeoutTask: nil
+                )
+
+                let timeoutTask = Task { [weak self] in
+                    guard let self else { return }
+                    do {
+                        try await Task.sleep(nanoseconds: self.executionTimeoutSeconds * 1_000_000_000)
+                    } catch {
+                        return
+                    }
+                    self.resolvePendingAsTimeout(requestID: requestID)
+                }
+                pending.timeoutTask = timeoutTask
+                pendingExecutions[requestID] = pending
+
+                Task { [weak self] in
+                    guard let self else { return }
+                    let opened = await self.openSystemURL(launchURL)
+                    if !opened {
+                        let failure = ShortcutToolExecutionResult(
+                            requestID: requestID,
+                            toolName: originalToolName,
+                            success: false,
+                            result: nil,
+                            errorMessage: ShortcutToolError.cannotOpenShortcutApp.localizedDescription,
+                            transport: transport,
+                            startedAt: startAt,
+                            finishedAt: Date()
+                        )
+                        self.resolvePending(requestID: requestID, result: failure)
+                    }
                 }
             }
+        } onCancel: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.resolvePendingAsCancelled(requestID: requestID)
+            }
         }
-
-        return result
     }
 
     func resolvePendingAsTimeout(requestID: String) {
@@ -188,6 +238,37 @@ extension ShortcutToolManager {
             finishedAt: Date()
         )
         resolvePending(requestID: requestID, result: result)
+    }
+
+    func resolvePendingAsCancelled(requestID: String) {
+        guard let pending = pendingExecutions[requestID] else { return }
+        resolvePending(
+            requestID: requestID,
+            result: cancelledExecutionResult(
+                requestID: requestID,
+                toolName: pending.toolName,
+                transport: pending.transport,
+                startedAt: pending.startedAt
+            )
+        )
+    }
+
+    func cancelledExecutionResult(
+        requestID: String,
+        toolName: String,
+        transport: ShortcutExecutionTransport,
+        startedAt: Date
+    ) -> ShortcutToolExecutionResult {
+        ShortcutToolExecutionResult(
+            requestID: requestID,
+            toolName: toolName,
+            success: false,
+            result: nil,
+            errorMessage: NSLocalizedString("工具调用已取消。", comment: "Shortcut execution cancelled"),
+            transport: transport,
+            startedAt: startedAt,
+            finishedAt: Date()
+        )
     }
 
     func resolvePending(requestID: String, result: ShortcutToolExecutionResult) {

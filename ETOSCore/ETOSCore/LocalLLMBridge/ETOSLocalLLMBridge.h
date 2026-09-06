@@ -34,6 +34,9 @@ typedef enum etos_local_llm_sampler_kind {
 
 typedef struct etos_local_llm_generation_config {
     const char * mmproj_path;
+    const char * lora_path;
+    float lora_scale;
+    const char * kv_cache_key;
     int32_t context_size;
     int32_t max_output_tokens;
     int32_t gpu_layers;
@@ -42,6 +45,7 @@ typedef struct etos_local_llm_generation_config {
     int32_t kv_offload;
     int32_t flash_attention;
     int32_t use_model_cache;
+    int32_t reuse_kv_cache;
     uint32_t seed;
     int32_t min_keep;
     int32_t top_k;
@@ -83,6 +87,35 @@ typedef struct etos_local_llm_generation_config {
     const char * const * media_ids;
     int32_t media_count;
 } etos_local_llm_generation_config;
+
+typedef struct etos_local_llm_embedding_config {
+    const char * mmproj_path;
+    const char * lora_path;
+    float lora_scale;
+    int32_t context_size;
+    int32_t n_gpu_layers;
+    int32_t flash_attention;
+    int32_t image_min_tokens;
+    int32_t image_max_tokens;
+    const unsigned char * const * media_data;
+    const int64_t * media_data_sizes;
+    const char * const * media_ids;
+    // 扁平附件在 texts 中所属的输入下标。
+    const int32_t * media_input_indices;
+    int32_t media_count;
+} etos_local_llm_embedding_config;
+
+typedef struct etos_local_speech_config {
+    const char * decoder_model_path;
+    const char * vad_model_path;
+    int32_t context_size;
+    int32_t max_output_tokens;
+    int32_t gpu_layers;
+    int32_t thread_count;
+    int32_t chunk_seconds;
+    int32_t vad_max_segment_milliseconds;
+    int32_t use_model_cache;
+} etos_local_speech_config;
 
 int32_t etos_local_llm_generate(
     const char * model_path,
@@ -161,17 +194,40 @@ int32_t etos_local_llm_parse_chat_response(
 int32_t etos_local_llm_embed(
     const char * model_path,
     const char * const * texts,
-    int32_t text_count,
-    int32_t context_size,
-    int32_t n_gpu_layers,
+    int32_t input_count,
+    const etos_local_llm_embedding_config * config,
     float ** output,
     int32_t * embedding_count,
     int32_t * embedding_dimension,
     char ** error_message
 );
 
+int32_t etos_local_gguf_architecture(
+    const char * model_path,
+    char ** architecture,
+    char ** error_message
+);
+
+int32_t etos_local_gguf_validate_lora_adapter(
+    const char * adapter_path,
+    const char * expected_architecture,
+    char ** error_message
+);
+
+int32_t etos_local_speech_transcribe(
+    const char * model_path,
+    const float * audio_samples,
+    int32_t sample_count,
+    const etos_local_speech_config * config,
+    etos_local_llm_cancel_callback cancel_callback,
+    void * user_data,
+    char ** output,
+    char ** error_message
+);
+
 void etos_local_llm_free(char * pointer);
 void etos_local_llm_free_float(float * pointer);
+void etos_local_llm_clear_kv_cache(const char * expected_cache_key);
 void etos_local_llm_clear_model_cache(void);
 
 #ifdef __cplusplus

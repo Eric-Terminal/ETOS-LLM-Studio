@@ -39,6 +39,7 @@ struct AppToolManagerExecutionTests {
             queue: nil
         ) { notification in
             latestRequest = AppToolInputDraftRequest.decode(from: notification.userInfo)
+            AppToolUIRequestDeliveryReceipt.decode(from: notification.userInfo)?.claim(.applied)
         }
         defer {
             NotificationCenter.default.removeObserver(observer)

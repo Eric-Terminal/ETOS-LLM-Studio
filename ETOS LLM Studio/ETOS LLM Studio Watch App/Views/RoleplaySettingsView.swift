@@ -56,14 +56,30 @@ struct RoleplaySettingsView: View {
 
                 Section {
                     Toggle(
-                        NSLocalizedString("屏蔽记忆与工具", comment: "Session memory and tool isolation toggle"),
+                        NSLocalizedString("屏蔽记忆", comment: "Block memory for current session"),
                         isOn: Binding(
-                            get: { viewModel.currentSession?.worldbookContextIsolationEnabled ?? false },
-                            set: { updateContextIsolation($0) }
+                            get: { viewModel.currentSession?.memoryContextIsolationEnabled ?? false },
+                            set: { updateContextIsolation(\.memoryContextIsolationEnabled, isEnabled: $0) }
                         )
                     )
 
-                    Text(NSLocalizedString("开启后，当前会话不会向模型发送记忆上下文、工具定义或历史工具调用。", comment: "Session memory and tool isolation description"))
+                    Toggle(
+                        NSLocalizedString("屏蔽工具", comment: "Block tools for current session"),
+                        isOn: Binding(
+                            get: { viewModel.currentSession?.toolContextIsolationEnabled ?? false },
+                            set: { updateContextIsolation(\.toolContextIsolationEnabled, isEnabled: $0) }
+                        )
+                    )
+
+                    Toggle(
+                        NSLocalizedString("屏蔽全局系统提示词", comment: "Block global system prompt for current session"),
+                        isOn: Binding(
+                            get: { viewModel.currentSession?.globalSystemPromptIsolationEnabled ?? false },
+                            set: { updateContextIsolation(\.globalSystemPromptIsolationEnabled, isEnabled: $0) }
+                        )
+                    )
+
+                    Text(NSLocalizedString("分别控制当前会话是否发送记忆、工具和全局系统提示词。角色卡、会话提示词与世界书不受影响。", comment: "Independent session context isolation description"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -127,6 +143,43 @@ struct RoleplaySettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)) { _ in
             reload()
         }
+        .guideSettingsPageContext(
+            id: "watch-settings-roleplay",
+            title: NSLocalizedString("酒馆兼容", comment: "角色扮演向导标题"),
+            documents: [GuideDocumentReference(id: "roleplay", title: "Roleplay")],
+            settings: guideSettings
+        )
+        .watchGuideEntry()
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        guard let session = viewModel.currentSession else {
+            return [.readOnly("has_current_session", label: NSLocalizedString("存在当前会话", comment: "角色扮演向导字段"), value: { .bool(false) })]
+        }
+        return [
+            .readOnly("session_id", label: NSLocalizedString("会话 ID", comment: "角色扮演向导字段"), value: { .string(session.id.uuidString) }),
+            .string("character_id", label: NSLocalizedString("绑定角色卡", comment: "角色扮演向导字段"), allowedValues: [""] + characters.map { $0.id.uuidString }, get: { selectedCharacterID?.uuidString ?? "" }, set: { rawValue in
+                selectedCharacterBinding.wrappedValue = UUID(uuidString: rawValue)
+            }),
+            .string("persona_id", label: NSLocalizedString("绑定用户身份", comment: "角色扮演向导字段"), allowedValues: [""] + personas.map { $0.id.uuidString }, get: { selectedPersonaID?.uuidString ?? "" }, set: { rawValue in
+                selectedPersonaBinding.wrappedValue = UUID(uuidString: rawValue)
+            }),
+            .integer("greeting_index", label: NSLocalizedString("开场白索引", comment: "角色扮演向导字段"), range: 0...max(0, greetingOptions.map(\.index).max() ?? 0), get: { selectedGreetingIndex }, set: { selectedGreetingBinding.wrappedValue = $0 }),
+            .bool("html_rendering_enabled", label: NSLocalizedString("自动渲染 HTML", comment: "角色扮演向导字段"), get: { htmlRenderingEnabled }, set: { htmlRenderingEnabled = $0; persist() }),
+            .bool("helper_scripts_enabled", label: NSLocalizedString("启用助手脚本", comment: "角色扮演向导字段"), get: { helperScriptsEnabled }, set: { helperScriptsEnabled = $0; persist() }),
+            .bool("isolate_memory", label: NSLocalizedString("屏蔽记忆", comment: "角色扮演向导字段"), get: { viewModel.currentSession?.memoryContextIsolationEnabled ?? false }, set: { updateContextIsolation(\.memoryContextIsolationEnabled, isEnabled: $0) }),
+            .bool("isolate_tools", label: NSLocalizedString("屏蔽工具", comment: "角色扮演向导字段"), get: { viewModel.currentSession?.toolContextIsolationEnabled ?? false }, set: { updateContextIsolation(\.toolContextIsolationEnabled, isEnabled: $0) }),
+            .bool("isolate_global_system_prompt", label: NSLocalizedString("屏蔽全局系统提示词", comment: "角色扮演向导字段"), get: { viewModel.currentSession?.globalSystemPromptIsolationEnabled ?? false }, set: { updateContextIsolation(\.globalSystemPromptIsolationEnabled, isEnabled: $0) }),
+            .readOnly("available_characters", label: NSLocalizedString("可用角色卡", comment: "角色扮演向导字段"), value: {
+                .array(characters.map { .dictionary(["id": .string($0.id.uuidString), "name": .string($0.name)]) })
+            }),
+            .readOnly("available_personas", label: NSLocalizedString("可用用户身份", comment: "角色扮演向导字段"), value: {
+                .array(personas.map { .dictionary(["id": .string($0.id.uuidString), "name": .string($0.name)]) })
+            }),
+            .readOnly("available_greetings", label: NSLocalizedString("可用开场白", comment: "角色扮演向导字段"), value: {
+                .array(greetingOptions.map { .dictionary(["index": .int($0.index), "preview": .string($0.text)]) })
+            })
+        ]
     }
 
     private func reload() {
@@ -166,6 +219,7 @@ struct RoleplaySettingsView: View {
             get: { selectedPersonaID },
             set: { personaID in
                 selectedPersonaID = personaID
+                ChatService.shared.setPreferredRoleplayPersonaID(personaID)
                 persist()
             }
         )
@@ -208,7 +262,7 @@ struct RoleplaySettingsView: View {
         guard let sessionID = viewModel.currentSession?.id,
               let binding = ChatService.shared.roleplayBinding(sessionID: sessionID) else {
             selectedCharacterID = nil
-            selectedPersonaID = nil
+            selectedPersonaID = ChatService.shared.preferredRoleplayPersonaID()
             selectedGreetingIndex = 0
             htmlRenderingEnabled = true
             helperScriptsEnabled = true
@@ -249,14 +303,19 @@ struct RoleplaySettingsView: View {
         )
     }
 
-    private func updateContextIsolation(_ isEnabled: Bool) {
+    private func updateContextIsolation(
+        _ keyPath: WritableKeyPath<ChatSession, Bool>,
+        isEnabled: Bool
+    ) {
         guard var session = viewModel.currentSession else { return }
-        session.worldbookContextIsolationEnabled = isEnabled
+        session[keyPath: keyPath] = isEnabled
         viewModel.currentSession = session
         ChatService.shared.updateWorldbookSessionSettings(
             sessionID: session.id,
             worldbookIDs: session.lorebookIDs,
-            worldbookContextIsolationEnabled: isEnabled
+            memoryContextIsolationEnabled: session.memoryContextIsolationEnabled,
+            toolContextIsolationEnabled: session.toolContextIsolationEnabled,
+            globalSystemPromptIsolationEnabled: session.globalSystemPromptIsolationEnabled
         )
     }
 }

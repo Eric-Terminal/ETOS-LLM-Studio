@@ -74,7 +74,9 @@ extension ChatBubble {
                     enableMathRendering: enableMathRendering,
                     reasoningStartedAt: reasoningStartedAt,
                     reasoningCompletedAt: reasoningCompletedAt,
-                    reasoningSummary: message.responseMetrics?.reasoningSummary
+                    reasoningSummary: message.responseMetrics?.reasoningSummary,
+                    streamingMarkdownState: messageState.streamingMarkdownState,
+                    isStreaming: showsStreamingIndicators
                 )
             }
 
@@ -180,7 +182,9 @@ extension ChatBubble {
                             enableMathRendering: enableMathRendering,
                             reasoningStartedAt: reasoningStartedAt,
                             reasoningCompletedAt: reasoningCompletedAt,
-                            reasoningSummary: message.responseMetrics?.reasoningSummary
+                            reasoningSummary: message.responseMetrics?.reasoningSummary,
+                            streamingMarkdownState: messageState.streamingMarkdownState,
+                            isStreaming: showsStreamingIndicators
                         )
                     }
                 }
@@ -326,7 +330,13 @@ extension ChatBubble {
         if let payload = showWidgetPayload(for: call) {
             ToolWidgetRendererCard(payload: payload)
         } else {
-            toolCallSummaryRow(for: call)
+            VStack(alignment: .leading, spacing: 0) {
+                toolCallSummaryRow(for: call)
+                ConversationToolRuntimeCard(
+                    toolCall: call,
+                    onOpenConversation: onOpenConversation
+                )
+            }
         }
     }
 
@@ -354,6 +364,10 @@ extension ChatBubble {
               let request = toolPermissionCenter.activeRequest else {
             return nil
         }
+        if let sourceSessionID = request.sourceSessionID,
+           sourceSessionID != roleplaySessionID {
+            return nil
+        }
         if let toolCallID = request.toolCallID {
             return call.id == toolCallID ? request : nil
         }
@@ -361,6 +375,10 @@ extension ChatBubble {
         let callArgs = call.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
         let isMatch = call.toolName == request.toolName && callArgs == trimmedArgs
         return isMatch ? request : nil
+    }
+
+    func pendingToolCallPresentationID(_ toolCallID: String) -> String {
+        "\(message.id.uuidString)#\(toolCallID)"
     }
 
     var toolCallAutoPresentationSignature: String {
@@ -389,7 +407,7 @@ extension ChatBubble {
         guard toolPermissionCenter.canAutoPresentRequestDetails else { return }
         guard selectedToolCallDetailSheetItem == nil else { return }
         guard let pendingCall = pendingToolCallForAutoPresentation else { return }
-        markPendingToolCallAutoOpened(pendingCall.id)
+        markPendingToolCallAutoOpened(pendingToolCallPresentationID(pendingCall.id))
         showRawToolResultInDetailSheet = false
         selectedToolCallDetailSheetItem = ToolCallDetailSheetItem(
             messageID: message.id,
@@ -429,18 +447,13 @@ extension ChatBubble {
         if resolvedResult.isEmpty {
             return .running
         }
-        if isDeniedToolResultText(resolvedResult) {
+        if call.wasRejected {
             return .rejected
         }
+        if call.executionFailed {
+            return .failed
+        }
         return .finished
-    }
-
-    private func isDeniedToolResultText(_ text: String) -> Bool {
-        let normalized = text.lowercased()
-        return normalized.contains("denied")
-            || normalized.contains("拒绝")
-            || normalized.contains("拒絕")
-            || normalized.contains("rejected")
     }
 
     func shouldShowPendingGuidance(for call: InternalToolCall) -> Bool {

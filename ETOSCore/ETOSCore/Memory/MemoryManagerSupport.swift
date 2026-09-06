@@ -640,6 +640,72 @@ extension MemoryManager {
         internalMemoriesPublisher.send(cachedMemories)
         persistRawMemories()
     }
+
+    @discardableResult
+    func commitMemoryMutation(
+        before: MemoryItem?,
+        after: MemoryItem?,
+        operation: MemoryMutationOperation,
+        context: MemoryMutationContext
+    ) -> Bool {
+        guard let memoryID = after?.id ?? before?.id else { return false }
+        let committedSnapshot: [MemoryItem]? = mutationQueue.sync {
+            let currentBefore = cachedMemories.first { $0.id == memoryID } ?? before
+            let record = MemoryMutationRecord(
+                memoryID: memoryID,
+                operation: resolvedMutationOperation(operation, context: context),
+                context: context,
+                before: currentBefore.map(MemoryVersionSnapshot.init(memory:)),
+                after: after.map(MemoryVersionSnapshot.init(memory:))
+            )
+            var resultingMemories = cachedMemories.filter { $0.id != memoryID }
+            if let after { resultingMemories.append(after) }
+            resultingMemories.sort { $0.createdAt > $1.createdAt }
+            guard rawStore.commitMutations(
+                [MemoryPendingMutation(before: currentBefore, after: after, record: record)],
+                resultingMemories: resultingMemories
+            ) else { return nil }
+            cachedMemories = resultingMemories
+            return cachedMemories
+        }
+        guard let committedSnapshot else { return false }
+        internalMemoriesPublisher.send(committedSnapshot)
+        return true
+    }
+
+    @discardableResult
+    func commitMemoryMutations(_ mutations: [MemoryPendingMutation]) -> Bool {
+        let committedSnapshot: [MemoryItem]? = mutationQueue.sync {
+            var mergedMemories = cachedMemories
+            for mutation in mutations {
+                mergedMemories.removeAll { $0.id == mutation.record.memoryID }
+                if let after = mutation.after { mergedMemories.append(after) }
+            }
+            mergedMemories.sort { $0.createdAt > $1.createdAt }
+            guard rawStore.commitMutations(mutations, resultingMemories: mergedMemories) else {
+                return nil
+            }
+            cachedMemories = mergedMemories
+            return cachedMemories
+        }
+        guard let committedSnapshot else { return false }
+        internalMemoriesPublisher.send(committedSnapshot)
+        return true
+    }
+
+    func resolvedMutationOperation(
+        _ operation: MemoryMutationOperation,
+        context: MemoryMutationContext
+    ) -> MemoryMutationOperation {
+        switch context.origin {
+        case .automaticConsolidation:
+            return .automaticConsolidation
+        case .imported:
+            return .imported
+        case .manual, .tool, .shortcut, .sync:
+            return operation
+        }
+    }
 }
 
 extension MemoryItem {

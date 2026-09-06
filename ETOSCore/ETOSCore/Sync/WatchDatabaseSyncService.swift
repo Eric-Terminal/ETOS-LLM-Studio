@@ -352,16 +352,49 @@ private extension WatchDatabaseSyncService {
                 throw SyncError.unavailable(kind.localizedTitle)
             }
             try Persistence.exportDatabaseForPlainSnapshot(sourcePool: store.dbPool, destinationURL: destinationURL)
+            try sanitizeDeviceLocalLinuxState(in: destinationURL)
         case .config:
             guard let store = Persistence.activeAuxiliaryStore(kind: .config) else {
                 throw SyncError.unavailable(kind.localizedTitle)
             }
             try Persistence.exportDatabaseForPlainSnapshot(sourcePool: store.dbPool, destinationURL: destinationURL)
+            try sanitizeLocalLinuxBookmarks(in: destinationURL)
         case .memory:
             guard let store = Persistence.activeAuxiliaryStore(kind: .memory) else {
                 throw SyncError.unavailable(kind.localizedTitle)
             }
             try Persistence.exportDatabaseForPlainSnapshot(sourcePool: store.dbPool, destinationURL: destinationURL)
+        }
+    }
+
+    /// 活跃 guest 状态属于当前设备；跨端只同步会话模式，由目标设备自行创建运行现场。
+    static func sanitizeDeviceLocalLinuxState(in databaseURL: URL) throws {
+        let queue = try DatabaseQueue(path: databaseURL.path)
+        try queue.write { db in
+            for table in [
+                "local_linux_audit",
+                "local_linux_diagnostics",
+                "local_linux_jobs",
+                "local_agent_runs",
+                "local_agent_workspaces",
+                "local_agent_runtime"
+            ] where try tableExists(table, in: db) {
+                try db.execute(sql: "DELETE FROM \(quoted(table))")
+            }
+        }
+    }
+
+    /// bookmark 与授权 lease 只能在创建它的设备上使用；保留缺失引用供另一端重新选择目录。
+    static func sanitizeLocalLinuxBookmarks(in databaseURL: URL) throws {
+        let queue = try DatabaseQueue(path: databaseURL.path)
+        try queue.write { db in
+            guard try tableExists("local_linux_mounts", in: db) else { return }
+            try db.execute(sql: """
+                UPDATE local_linux_mounts
+                SET bookmark = NULL,
+                    authorization_state = 'needs_reauthorization',
+                    active_lease_count = 0
+                """)
         }
     }
 
@@ -410,6 +443,10 @@ private extension WatchDatabaseSyncService {
             .init(table: "feedback_tickets", column: "last_known_updated_at"),
             .init(table: "global_system_prompt_entries", column: "updated_at"),
             .init(table: "global_system_prompt_selection", column: "updated_at"),
+            .init(table: "local_linux_environment_variables", column: "updated_at"),
+            .init(table: "local_agent_prompt_profiles", column: "updated_at"),
+            .init(table: "local_linux_command_rules", column: "updated_at"),
+            .init(table: "local_linux_mounts", column: "updated_at"),
             .init(
                 table: "app_config",
                 column: "updated_at",

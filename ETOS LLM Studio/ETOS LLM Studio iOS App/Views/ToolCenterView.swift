@@ -25,7 +25,11 @@ struct ToolCenterView: View {
     @State var isShowingBuiltInIntroDetails = false
 
     var currentSessionIsolationActive: Bool {
-        viewModel.currentSession?.isWorldbookContextIsolationActive ?? false
+        viewModel.currentSession?.isToolContextIsolationActive ?? false
+    }
+
+    var currentSessionMemoryIsolationActive: Bool {
+        viewModel.currentSession?.isMemoryContextIsolationActive ?? false
     }
 
     var enableMemory: Bool {
@@ -53,7 +57,8 @@ struct ToolCenterView: View {
             enableWidgetTool: appToolManager.isToolEnabled(.showWidget),
             enableAskUserInputTool: appToolManager.isToolEnabled(.askUserInput),
             enableGetSystemTimeTool: appToolManager.isToolEnabled(.getSystemTime),
-            isIsolatedSession: currentSessionIsolationActive
+            isMemoryIsolated: currentSessionMemoryIsolationActive,
+            isToolIsolated: currentSessionIsolationActive
         )
     }
 
@@ -221,7 +226,13 @@ struct ToolCenterView: View {
         return mcpCatalogTools.filter {
             mcpManager.isToolEnabled(serverID: $0.server.id, toolId: $0.tool.toolId)
             && mcpManager.approvalPolicy(serverID: $0.server.id, toolId: $0.tool.toolId) != .alwaysDeny
+            && !isBlockedMemoryManagementTool($0)
         }.count
+    }
+
+    func isBlockedMemoryManagementTool(_ available: MCPAvailableTool) -> Bool {
+        currentSessionMemoryIsolationActive
+            && MCPBuiltInAppToolServer.category(for: available.server.id) == .memory
     }
 
     var configuredShortcutCount: Int {
@@ -290,5 +301,25 @@ struct ToolCenterView: View {
         .onAppear {
             skillManager.reloadFromDisk()
         }
+        .guideSettingsPageContext(
+            id: "tool-center",
+            title: NSLocalizedString("工具中心", comment: "工具中心向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-tools", title: "Tool Center")],
+            settings: guideSettings
+        )
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        [
+            .bool("built_in_tools_enabled", label: NSLocalizedString("向模型暴露内置工具", comment: "向导设置字段"), get: { appToolManager.chatToolsEnabled }, set: { appToolManager.setChatToolsEnabled($0) }),
+            .bool("mcp_tools_enabled", label: NSLocalizedString("向模型暴露 MCP 工具", comment: "向导设置字段"), get: { mcpManager.chatToolsEnabled }, set: { mcpManager.setChatToolsEnabled($0) }),
+            .bool("shortcut_tools_enabled", label: NSLocalizedString("向模型暴露快捷指令工具", comment: "向导设置字段"), get: { shortcutManager.chatToolsEnabled }, set: { shortcutManager.setChatToolsEnabled($0) }),
+            .bool("agent_skills_enabled", label: NSLocalizedString("向模型暴露 Agent Skills", comment: "向导设置字段"), get: { skillManager.chatToolsEnabled }, set: { skillManager.setChatToolsEnabled($0) }),
+            .readOnly("session_tool_isolation", label: NSLocalizedString("当前会话工具隔离", comment: "向导设置字段"), value: { .bool(currentSessionIsolationActive) }),
+            .readOnly("configured_builtin_count", label: NSLocalizedString("已启用内置工具数", comment: "向导设置字段"), value: { .int(configuredBuiltInCount) }),
+            .readOnly("configured_mcp_count", label: NSLocalizedString("已启用 MCP 工具数", comment: "向导设置字段"), value: { .int(configuredMCPCount) }),
+            .readOnly("configured_shortcut_count", label: NSLocalizedString("已启用快捷指令工具数", comment: "向导设置字段"), value: { .int(configuredShortcutCount) }),
+            .readOnly("configured_skill_count", label: NSLocalizedString("已启用 Agent Skill 数", comment: "向导设置字段"), value: { .int(configuredSkillCount) })
+        ]
     }
 }

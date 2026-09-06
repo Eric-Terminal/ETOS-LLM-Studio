@@ -9,6 +9,16 @@
 import Foundation
 import ETOSCore
 
+enum WatchChatPage: Hashable {
+    case chat
+    case terminal(UUID)
+
+    var terminalID: UUID? {
+        guard case .terminal(let id) = self else { return nil }
+        return id
+    }
+}
+
 enum WatchChatInputActionState: Equatable {
     case stop
     case send
@@ -17,7 +27,7 @@ enum WatchChatInputActionState: Equatable {
     case inactive
 
     static func resolve(isSending: Bool, hasSendableContent: Bool, canQuickRetry: Bool, isSpeechInputEnabled: Bool) -> Self {
-        if isSending {
+        if isSending && !hasSendableContent {
             return .stop
         }
         if hasSendableContent {
@@ -67,6 +77,12 @@ struct WatchMessageActionsNavigationTarget: Identifiable, Hashable {
 
 struct WatchMessageRewriteNavigationTarget: Identifiable, Hashable {
     let id: UUID
+    let selectionTarget: MessageRewriteSelectionTarget?
+
+    init(id: UUID, selectionTarget: MessageRewriteSelectionTarget? = nil) {
+        self.id = id
+        self.selectionTarget = selectionTarget
+    }
 }
 
 struct WatchSelectedMessagesExportNavigationTarget: Identifiable, Hashable {

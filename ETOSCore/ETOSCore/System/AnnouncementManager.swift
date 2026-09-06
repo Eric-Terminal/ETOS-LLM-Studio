@@ -197,9 +197,11 @@ public class AnnouncementManager: ObservableObject {
         set { AppConfigStore.shared.hiddenAnnouncementKeys = newValue }
     }
     
-    // MARK: - 私有属性
+    // MARK: - 服务配置
     
-    private let announcementURL = URL(string: "https://notify.els.ericterminal.com/announcement.json")!
+    static let announcementURL = URL(
+        string: "https://feedback.els.ericterminal.com/v1/announcements"
+    )!
     private let timeoutInterval: TimeInterval = 10.0
     
     // MARK: - 计算属性
@@ -269,9 +271,9 @@ public class AnnouncementManager: ObservableObject {
     private func fetchAnnouncements() async throws -> [Announcement] {
         logger.info("正在从服务器获取公告...")
         
-        var request = URLRequest(url: announcementURL)
+        var request = URLRequest(url: Self.announcementURL)
         request.timeoutInterval = timeoutInterval
-        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.cachePolicy = .useProtocolCachePolicy
         
         let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
         

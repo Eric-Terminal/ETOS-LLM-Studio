@@ -87,33 +87,28 @@ public enum LocalLLMChatMessageBuilder {
     public static func templateCompatibleMessages(_ messages: [LocalLLMChatMessage]) -> [LocalLLMChatMessage] {
         guard !messages.isEmpty else { return [] }
 
-        var systemContents: [String] = []
-        var conversationMessages: [LocalLLMChatMessage] = []
-        conversationMessages.reserveCapacity(messages.count)
-
-        for message in messages {
-            if message.role == "system" {
-                let content = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !content.isEmpty {
-                    systemContents.append(content)
-                }
-            } else {
-                conversationMessages.append(message)
-            }
+        guard let firstUserIndex = messages.firstIndex(where: { $0.role == "user" }) else {
+            let systemContents = messages
+                .filter { $0.role == "system" }
+                .map(\.content)
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            guard !systemContents.isEmpty else { return [] }
+            return [LocalLLMChatMessage(role: "system", content: systemContents.joined(separator: "\n\n"))]
         }
 
-        // 多数 GGUF chat template 只接受开头 system，且第一条非 system 消息必须是 user。
-        while let first = conversationMessages.first, first.role != "user" {
-            conversationMessages.removeFirst()
-        }
+        let leadingSystemContents = messages[..<firstUserIndex]
+            .filter { $0.role == "system" }
+            .map(\.content)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        var conversationMessages = Array(messages[firstUserIndex...])
 
-        if !systemContents.isEmpty {
+        // 仅归并首轮 user 之前的系统提示；对话中的 system 保留原位，由 GGUF chat template 生成角色 token。
+        if !leadingSystemContents.isEmpty {
             conversationMessages.insert(
-                LocalLLMChatMessage(role: "system", content: systemContents.joined(separator: "\n\n")),
+                LocalLLMChatMessage(role: "system", content: leadingSystemContents.joined(separator: "\n\n")),
                 at: 0
             )
         }
-
         return conversationMessages
     }
 

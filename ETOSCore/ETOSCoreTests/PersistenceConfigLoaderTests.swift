@@ -12,6 +12,43 @@ import GRDB
 @testable import ETOSCore
 
 extension PersistenceTests {
+    @Test("提供商和模型适配器切换按最终格式收回缓存价格")
+    func cachePricingFollowsEffectiveAdapterWhenSaving() throws {
+        let pricing = ModelPricing(cacheWritePerMillionTokens: 3.75, cacheWriteOneHourPerMillionTokens: 6)
+        var provider = Provider(
+            name: "缓存价格适配器回归", baseURL: "https://example.com", apiKeys: [], apiFormat: "anthropic",
+            models: [
+                Model(modelName: "inherited", pricing: pricing),
+                Model(modelName: "overridden-anthropic", apiFormatOverride: "anthropic", pricing: pricing),
+                Model(modelName: "overridden-openai", apiFormatOverride: "openai-compatible", pricing: pricing)
+            ]
+        )
+        defer { ConfigLoader.deleteProvider(provider) }
+        ConfigLoader.saveProvider(provider)
+        var restored = try #require(ConfigLoader.loadProviders().first { $0.id == provider.id })
+        #expect(restored.models[0].pricing?.cacheWriteOneHourPerMillionTokens == 6)
+        #expect(restored.models[1].pricing?.cacheWriteOneHourPerMillionTokens == 6)
+        #expect(restored.models[2].pricing?.cacheWriteOneHourPerMillionTokens == nil)
+
+        provider = restored
+        provider.apiFormat = "openai-compatible"
+        ConfigLoader.saveProvider(provider)
+        restored = try #require(ConfigLoader.loadProviders().first { $0.id == provider.id })
+        #expect(restored.models[0].pricing?.cacheWritePerMillionTokens == 3.75)
+        #expect(restored.models[0].pricing?.cacheWriteOneHourPerMillionTokens == nil)
+        #expect(restored.models[1].pricing?.cacheWriteOneHourPerMillionTokens == 6)
+
+        restored.models[1].apiFormatOverride = nil
+        ConfigLoader.saveProvider(restored)
+        restored = try #require(ConfigLoader.loadProviders().first { $0.id == provider.id })
+        #expect(restored.models[1].pricing?.cacheWriteOneHourPerMillionTokens == nil)
+        restored.apiFormat = "anthropic"
+        ConfigLoader.saveProvider(restored)
+        restored = try #require(ConfigLoader.loadProviders().first { $0.id == provider.id })
+        #expect(restored.models.allSatisfy { $0.pricing?.cacheWriteOneHourPerMillionTokens == nil })
+        #expect(restored.models.allSatisfy { $0.pricing?.cacheWritePerMillionTokens == 3.75 })
+    }
+
     private struct LegacyProviderSnapshot: Encodable {
         let id: UUID
         let name: String
@@ -37,9 +74,137 @@ extension PersistenceTests {
         }
     }
 
+    @Test("可选采样参数与思考摘要默认关闭")
+    func testOptionalGenerationSettingsDefaultToDisabled() {
+        #expect(AppConfigKey.aiTemperatureEnabled.defaultValue == .bool(false))
+        #expect(AppConfigKey.aiTopPEnabled.defaultValue == .bool(false))
+        #expect(AppConfigKey.enableReasoningSummary.defaultValue == .bool(false))
+    }
+
+    @Test("性能遥测默认开启且仅保存在本机")
+    func performanceTelemetryDefaultsToEnabledAndLocalOnly() {
+        #expect(AppConfigKey.performanceTelemetryEnabled.defaultValue == .bool(true))
+        #expect(AppConfigKey.performanceTelemetryEnabled.participatesInSync == false)
+        #expect(AppConfigKey.requestLogPlainMessageEnabled.defaultValue == .bool(false))
+    }
+
+    @Test("对话 KV 缓存默认关闭且仅保存在本机")
+    @MainActor
+    func localModelKVCacheDefaultsToDisabledAndLocalOnly() {
+        let key = AppConfigKey.localModelKVCacheEnabled
+        let previousValue = AppConfigStore.shared.localModelKVCacheEnabled
+
+        defer {
+            AppConfigStore.shared.localModelKVCacheEnabled = previousValue
+        }
+
+        #expect(key.defaultValue == .bool(false))
+        #expect(key.participatesInSync == false)
+
+        AppConfigStore.shared.localModelKVCacheEnabled = true
+
+        #expect(AppConfigStore.shared.localModelKVCacheEnabled)
+        #expect(AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? Bool == true)
+    }
+
+    @Test("默认终端 Shell 使用本机数据库配置")
+    @MainActor
+    func localLinuxTerminalShellDefaultsToSHAndStaysLocal() {
+        let key = AppConfigKey.localLinuxDefaultShellPath
+        let previousValue = AppConfigStore.shared.localLinuxDefaultShellPath
+
+        defer {
+            AppConfigStore.shared.localLinuxDefaultShellPath = previousValue
+        }
+
+        #expect(key.defaultValue == .text("/bin/sh"))
+        #expect(key.participatesInSync == false)
+
+        AppConfigStore.shared.localLinuxDefaultShellPath = "/bin/bash"
+
+        #expect(AppConfigStore.shared.localLinuxDefaultShellPath == "/bin/bash")
+        #expect(AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? String == "/bin/bash")
+    }
+
+    @Test("新挂载权限默认只读并使用本机数据库配置")
+    @MainActor
+    func localLinuxDefaultMountAccessPersistsLocally() {
+        let key = AppConfigKey.localLinuxDefaultMountAccess
+        let previousValue = AppConfigStore.shared.localLinuxDefaultMountAccess
+
+        defer {
+            AppConfigStore.shared.localLinuxDefaultMountAccess = previousValue
+        }
+
+        #expect(key.defaultValue == .text(LocalLinuxMountAccess.readOnly.rawValue))
+        #expect(key.participatesInSync == false)
+
+        AppConfigStore.shared.localLinuxDefaultMountAccess = .readWrite
+
+        #expect(AppConfigStore.shared.localLinuxDefaultMountAccess == .readWrite)
+        #expect(
+            AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? String
+                == LocalLinuxMountAccess.readWrite.rawValue
+        )
+    }
+
+    @Test("iOS 与 watchOS 默认使用按提供商选择模型")
+    func modelPickerDefaultsToProviderGrouping() {
+        #expect(AppConfigKey.iOSModelPickerGroupsByProvider.defaultValue == .bool(true))
+        #expect(AppConfigKey.watchModelPickerGroupsByProvider.defaultValue == .bool(true))
+    }
+
+    @Test("模型选择器功能快捷入口默认隐藏并支持配置快照")
+    @MainActor
+    func modelPickerFeatureShortcutsDefaultToHidden() {
+        let promptKey = AppConfigKey.modelPickerPromptShortcutEnabled
+        let worldbookKey = AppConfigKey.modelPickerWorldbookShortcutEnabled
+        let previousPromptValue = AppConfigStore.shared.modelPickerPromptShortcutEnabled
+        let previousWorldbookValue = AppConfigStore.shared.modelPickerWorldbookShortcutEnabled
+
+        defer {
+            AppConfigStore.shared.apply(snapshot: [
+                promptKey.rawValue: previousPromptValue,
+                worldbookKey.rawValue: previousWorldbookValue
+            ])
+        }
+
+        #expect(promptKey.defaultValue == .bool(false))
+        #expect(worldbookKey.defaultValue == .bool(false))
+
+        AppConfigStore.shared.apply(snapshot: [
+            promptKey.rawValue: true,
+            worldbookKey.rawValue: true
+        ])
+
+        #expect(AppConfigStore.shared.modelPickerPromptShortcutEnabled)
+        #expect(AppConfigStore.shared.modelPickerWorldbookShortcutEnabled)
+        let snapshot = AppConfigStore.shared.snapshot(includeLocalOnly: true)
+        #expect(snapshot[promptKey.rawValue] as? Bool == true)
+        #expect(snapshot[worldbookKey.rawValue] as? Bool == true)
+    }
+
+    @Test("模型分组文件夹首次默认收起且展开状态仅保存在本机")
+    func modelPickerFolderExpansionDefaultsToLocalEmptyState() {
+        #expect(AppConfigKey.iOSModelPickerExpandedGroupIDs.defaultValue == .text("[]"))
+        #expect(AppConfigKey.watchModelPickerExpandedGroupIDs.defaultValue == .text("[]"))
+        #expect(AppConfigKey.iOSModelPickerExpandedGroupIDs.participatesInSync == false)
+        #expect(AppConfigKey.watchModelPickerExpandedGroupIDs.participatesInSync == false)
+    }
+
+    @Test("液态玻璃底色默认兼顾透明感与复杂背景可读性")
+    func liquidGlassTintDefaultsAndClamps() {
+        #expect(AppConfigKey.liquidGlassTintOpacity.defaultValue == .real(0.3))
+        #expect(AppConfigKey.liquidGlassTintOpacity.participatesInSync)
+        #expect(LiquidGlassTintSetting.normalized(.nan) == LiquidGlassTintSetting.defaultOpacity)
+        #expect(LiquidGlassTintSetting.normalized(-1) == LiquidGlassTintSetting.minimumOpacity)
+        #expect(LiquidGlassTintSetting.normalized(1) == LiquidGlassTintSetting.maximumOpacity)
+    }
+
     @Test("AppConfig 迁移标记已存在时仍补写缺失的专用模型键")
     @MainActor
     func testAppConfigBootstrapBackfillsMissingSpecializedModelKey() async throws {
+        await AppConfigStore.shared.waitForPersistentStoreLoaded()
         let suiteName = "AppConfigBackfill-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         let key = AppConfigKey.titleGenerationModelIdentifier
@@ -100,6 +265,60 @@ extension PersistenceTests {
         #expect(AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? Double == 0)
     }
 
+    @Test("OpenAI 尾部上下文默认使用 system 角色并支持配置快照")
+    @MainActor
+    func testOpenAITailContextSystemRoleDefaultAndPersistence() {
+        let key = AppConfigKey.openAITailContextUsesSystemRole
+        let previousSnapshot = AppConfigStore.shared.snapshot(includeLocalOnly: true)
+
+        defer {
+            AppConfigStore.shared.apply(snapshot: previousSnapshot)
+        }
+
+        #expect(key.defaultValue == .bool(true))
+
+        AppConfigStore.shared.apply(snapshot: [key.rawValue: false])
+
+        #expect(AppConfigStore.shared.openAITailContextUsesSystemRole == false)
+        #expect(AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? Bool == false)
+    }
+
+    @Test("视频背景离开聊天持续播放默认关闭并支持配置快照")
+    @MainActor
+    func continueVideoBackgroundPlaybackDefaultAndPersistence() {
+        let key = AppConfigKey.continueVideoBackgroundPlaybackWhenChatHidden
+        let previousSnapshot = AppConfigStore.shared.snapshot(includeLocalOnly: true)
+
+        defer {
+            AppConfigStore.shared.apply(snapshot: previousSnapshot)
+        }
+
+        #expect(key.defaultValue == .bool(false))
+
+        AppConfigStore.shared.apply(snapshot: [key.rawValue: true])
+
+        #expect(AppConfigStore.shared.continueVideoBackgroundPlaybackWhenChatHidden)
+        #expect(AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? Bool == true)
+    }
+
+    @Test("四键消息导航默认开启并支持配置快照")
+    @MainActor
+    func chatTimelineNavigationDefaultAndPersistence() {
+        let key = AppConfigKey.chatTimelineNavigationEnabled
+        let previousSnapshot = AppConfigStore.shared.snapshot(includeLocalOnly: true)
+
+        defer {
+            AppConfigStore.shared.apply(snapshot: previousSnapshot)
+        }
+
+        #expect(key.defaultValue == .bool(true))
+
+        AppConfigStore.shared.apply(snapshot: [key.rawValue: false])
+
+        #expect(AppConfigStore.shared.chatTimelineNavigationEnabled == false)
+        #expect(AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? Bool == false)
+    }
+
     private func restoreAppConfigValue(_ value: Any, for key: AppConfigKey) {
         switch key.defaultValue {
         case .bool:
@@ -118,7 +337,7 @@ extension PersistenceTests {
     }
 
     private var providersDirectory: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        StorageUtility.documentsDirectory
             .appendingPathComponent("Providers")
     }
 
@@ -169,7 +388,7 @@ extension PersistenceTests {
             baseURL: "https://test.com",
             apiKeys: ["key1", "key2"],
             apiFormat: "openai-compatible",
-            models: [Model(modelName: "test-model")]
+            models: [Model(modelName: "test-model", apiFormatOverride: "gemini")]
         )
 
         ConfigLoader.saveProvider(provider)
@@ -182,6 +401,7 @@ extension PersistenceTests {
         #expect(foundProvider?.name == "Test Provider")
         #expect(foundProvider?.apiKeys == ["key1", "key2"])
         #expect(foundProvider?.models.first?.modelName == "test-model")
+        #expect(foundProvider?.models.first?.apiFormatOverride == "gemini")
         #expect(!Persistence.auxiliaryBlobExists(forKey: "providers"))
     }
 
@@ -294,8 +514,9 @@ extension PersistenceTests {
                     Date().timeIntervalSince1970
                 ]
             )
+            return true
         }
-        #expect(inserted != nil)
+        #expect(inserted == true)
         defer {
             if let loaded = ConfigLoader.loadProviders().first(where: { $0.id == providerID }) {
                 ConfigLoader.deleteProvider(loaded)
@@ -334,6 +555,7 @@ extension PersistenceTests {
 
     @Test("加载旧版无 apiKeys 字段的 Provider 文件时会迁移到 SQLite")
     func testLoadProvidersMigratesLegacyCredentialStoreToSQLite() throws {
+        #expect(ConfigLoader.saveProvidersToSQLite([]))
         let provider = Provider(
             id: UUID(),
             name: "legacy-\(UUID().uuidString)",
@@ -362,6 +584,7 @@ extension PersistenceTests {
 
     @Test("加载提供商时会修复重复 ID 并规范化文件")
     func testLoadProvidersRepairDuplicateIDsAndNormalizeFiles() throws {
+        #expect(ConfigLoader.saveProvidersToSQLite([]))
         let token = "repair-\(UUID().uuidString)"
         let duplicateProviderID = UUID()
         let duplicateModelID = UUID()
@@ -388,6 +611,12 @@ extension PersistenceTests {
 
         let rawFileA = "\(token)-manual-a.json"
         let rawFileB = "\(token)-manual-b.json"
+        defer {
+            let createdProviders = ConfigLoader.loadProviders().filter { $0.name.hasPrefix(token) }
+            cleanup(providers: createdProviders)
+            try? FileManager.default.removeItem(at: providersDirectory.appendingPathComponent(rawFileA))
+            try? FileManager.default.removeItem(at: providersDirectory.appendingPathComponent(rawFileB))
+        }
 
         try writeLegacyProviderFile(providerA, fileName: rawFileA)
         try writeLegacyProviderFile(providerB, fileName: rawFileB)
@@ -411,8 +640,5 @@ extension PersistenceTests {
         #expect(secondLoad.count == 2)
         #expect(Set(secondLoad.map(\.id)).count == 2)
 
-        cleanup(providers: secondLoad)
-        try? FileManager.default.removeItem(at: providersDirectory.appendingPathComponent(rawFileA))
-        try? FileManager.default.removeItem(at: providersDirectory.appendingPathComponent(rawFileB))
     }
 }

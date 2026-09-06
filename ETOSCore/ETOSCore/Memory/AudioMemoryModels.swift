@@ -42,8 +42,10 @@ public enum AudioRecordingFormat: String, CaseIterable, Codable {
     /// 格式说明
     public var formatDescription: String {
         switch self {
-        case .aac: return "AAC 压缩格式，文件小，兼容性好"
-        case .wav: return "WAV 无压缩格式，音质最佳，文件较大"
+        case .aac:
+            return NSLocalizedString("AAC 压缩格式，文件小，兼容性好", comment: "AAC recording format description")
+        case .wav:
+            return NSLocalizedString("WAV 无压缩格式，音质最佳，文件较大", comment: "WAV recording format description")
         }
     }
 }
@@ -83,10 +85,20 @@ public enum MemorySource: String, Codable, Hashable, Sendable {
     case assistantAction
     case conversationSummary
     case imported
+
+    public var localizedTitle: String {
+        switch self {
+        case .manual: return NSLocalizedString("手动添加", comment: "Manual memory source")
+        case .userStatement: return NSLocalizedString("用户陈述", comment: "User statement memory source")
+        case .assistantAction: return NSLocalizedString("助手操作", comment: "Assistant action memory source")
+        case .conversationSummary: return NSLocalizedString("对话摘要", comment: "Conversation summary memory source")
+        case .imported: return NSLocalizedString("外部导入", comment: "Imported memory source")
+        }
+    }
 }
 
 /// 代表一条独立的记忆，包含内容和其向量表示。
-public struct MemoryItem: Codable, Identifiable, Hashable {
+public struct MemoryItem: Codable, Identifiable, Hashable, Sendable {
     public var id: UUID
     public var content: String
     public var embedding: [Float]

@@ -21,9 +21,24 @@ struct LocalModelManagementView: View {
     var body: some View {
         List {
             Section {
+                SettingsHelpCard(
+                    title: NSLocalizedString("本地模型", comment: ""),
+                    summary: NSLocalizedString("在设备上运行模型，并按内存余量选择缓存。", comment: "本地模型缓存简介"),
+                    details: "\(NSLocalizedString("对话 KV 缓存", comment: "对话缓存说明标题"))\n\(NSLocalizedString("打开后，本地文本模型会保留当前对话的 KV 缓存，让下一轮只处理新增内容；切换对话或关闭开关时释放。此功能会额外占用内存，且不复用于多模态对话。", comment: "对话缓存说明"))"
+                )
+            }
+            Section {
                 Toggle(NSLocalizedString("启用本地模型提供商", comment: "Enable local model provider"), isOn: localModelsEnabledBinding)
             } footer: {
                 Text(NSLocalizedString("关闭后不会删除权重；重新开启时会自动恢复到模型管理。", comment: "Watch local provider toggle footer"))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle(NSLocalizedString("对话 KV 缓存", comment: "Conversation KV cache toggle"), isOn: localModelKVCacheEnabledBinding)
+            } footer: {
+                Text(NSLocalizedString("加快连续文字对话，但会额外占用内存。", comment: "对话缓存简短提示"))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -79,6 +94,32 @@ struct LocalModelManagementView: View {
             }
         }
         .navigationTitle(NSLocalizedString("本地模型", comment: "Local models title"))
+        .guideSettingsPageContext(
+            id: "watch-settings-local-models",
+            title: NSLocalizedString("本地模型", comment: "本地模型向导上下文标题"),
+            documents: [GuideDocumentReference(id: "local-models", title: "Local Models")],
+            settings: [
+                .bool("provider_enabled", label: NSLocalizedString("启用本地模型提供商", comment: "向导设置字段"), get: { appConfig.localModelsEnabled }, set: { localModelsEnabledBinding.wrappedValue = $0 }),
+                .bool("conversation_kv_cache_enabled", label: NSLocalizedString("对话 KV 缓存", comment: "向导设置字段"), get: { appConfig.localModelKVCacheEnabled }, set: { localModelKVCacheEnabledBinding.wrappedValue = $0 }),
+                .string("download_url", label: NSLocalizedString("模型文件链接", comment: "向导设置字段"), get: { downloadURLText }, set: { downloadURLText = $0 }),
+                .string("download_display_name", label: NSLocalizedString("名称", comment: "向导设置字段"), get: { displayName }, set: { displayName = $0 }),
+                .readOnly("download_requires_user_action", label: NSLocalizedString("下载应用方式", comment: "向导设置字段"), value: { .string(NSLocalizedString("填写后需要点击下载权重", comment: "向导草稿应用方式")) }),
+                .readOnly("models", label: NSLocalizedString("权重", comment: "向导设置字段"), value: {
+                    .array(store.models.map { record in
+                        .dictionary([
+                            "id": .string(record.id.uuidString),
+                            "name": .string(record.sanitizedDisplayName),
+                            "file_name": .string(record.fileName),
+                            "file_size": .int(Int(clamping: record.fileSize)),
+                            "file_available": .bool(store.fileExists(for: record)),
+                            "activated": .bool(record.isActivated),
+                            "architecture": .string(record.ggufArchitecture ?? "")
+                        ])
+                    })
+                })
+            ]
+        )
+        .watchGuideEntry()
     }
 
     private var localModelsEnabledBinding: Binding<Bool> {
@@ -87,6 +128,19 @@ struct LocalModelManagementView: View {
         } set: { isEnabled in
             appConfig.localModelsEnabled = isEnabled
             ChatService.shared.setLocalModelsEnabled(isEnabled)
+        }
+    }
+
+    private var localModelKVCacheEnabledBinding: Binding<Bool> {
+        Binding {
+            appConfig.localModelKVCacheEnabled
+        } set: { isEnabled in
+            appConfig.localModelKVCacheEnabled = isEnabled
+            if !isEnabled {
+                Task.detached(priority: .utility) {
+                    LocalLLMEngine.shared.clearKVCache()
+                }
+            }
         }
     }
 
@@ -219,6 +273,16 @@ private struct LocalModelRow: View {
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
+            if record.hasLoRAAdapter {
+                Label(NSLocalizedString("已挂载 LoRA", comment: "Local model has LoRA"), systemImage: "link")
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            if let architecture = record.speechArchitecture {
+                Label(architecture.localizedTitle, systemImage: "waveform")
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
             if !record.isActivated {
                 Text(NSLocalizedString("未启用", comment: "Inactive local model"))
                     .etFont(.caption2)
@@ -240,6 +304,10 @@ private struct LocalModelDetailView: View {
     @State private var showUnsavedChangesAlert = false
     @State private var showCLIImport = false
     @State private var cliImportResult: LocalLLMCLIStyleImportResult?
+    @State private var loraDownloadURLText = ""
+    @State private var isDownloadingLoRA = false
+    @State private var loraDownloadProgress: SyncPackageDownloadProgress?
+    @State private var loraStatusMessage: String?
     @State private var contextSizeText: String
     @State private var maxOutputTokensText: String
     @State private var seedText: String
@@ -253,6 +321,7 @@ private struct LocalModelDetailView: View {
     @State private var presencePenaltyText: String
     @State private var imageMinTokensText: String
     @State private var imageMaxTokensText: String
+    @State private var loraScaleText: String
 
     private static let watchOSGPULayers = 0
     private let savedSnapshot: LocalModelRecord
@@ -275,6 +344,7 @@ private struct LocalModelDetailView: View {
         _presencePenaltyText = State(initialValue: LocalModelFormat.decimal(initialDraft.effectivePresencePenalty))
         _imageMinTokensText = State(initialValue: "\(initialDraft.effectiveImageMinTokens)")
         _imageMaxTokensText = State(initialValue: "\(initialDraft.effectiveImageMaxTokens)")
+        _loraScaleText = State(initialValue: LocalModelFormat.decimal(initialDraft.effectiveLoRAScale))
     }
 
     var body: some View {
@@ -293,10 +363,17 @@ private struct LocalModelDetailView: View {
 
             Section {
                 TextField(NSLocalizedString("名称", comment: "Local model display name"), text: $draft.displayName.watchKeyboardNewlineBinding())
-                Toggle(NSLocalizedString("加入候选模型", comment: "Activate local model"), isOn: $draft.isActivated)
+                if draft.isSpeechAuxiliaryModel {
+                    Label(NSLocalizedString("语音分段辅助模型", comment: "Speech VAD auxiliary model role"), systemImage: "waveform")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Toggle(NSLocalizedString("加入候选模型", comment: "Activate local model"), isOn: $draft.isActivated)
+                }
             }
 
+            speechSection
             runtimeSection
+            loraSection
             multimodalSection
             samplingSection
             grammarSection
@@ -334,13 +411,18 @@ private struct LocalModelDetailView: View {
         }
         .navigationTitle(draft.sanitizedDisplayName)
         .navigationBarBackButtonHidden(hasUnsavedChanges)
-        .sheet(isPresented: $showCLIImport) {
-            NavigationStack {
-                LocalModelCLIStyleImportView(record: draft) { result in
-                    draft = result.updatedRecord
-                    cliImportResult = result
-                    refreshTextFieldsFromDraft()
-                }
+        .guideSettingsPageContext(
+            id: "watch-settings-local-model-detail",
+            title: String(format: NSLocalizedString("本地模型：%@", comment: "本地模型详情向导标题"), draft.sanitizedDisplayName),
+            documents: [GuideDocumentReference(id: "local-models", title: "Local Models")],
+            settings: guideSettings
+        )
+        .watchGuideEntry()
+        .navigationDestination(isPresented: $showCLIImport) {
+            LocalModelCLIStyleImportView(record: draft) { result in
+                draft = result.updatedRecord
+                cliImportResult = result
+                refreshTextFieldsFromDraft()
             }
         }
         .toolbar {
@@ -369,19 +451,131 @@ private struct LocalModelDetailView: View {
                 dismiss()
             }
         } message: {
-            Text(NSLocalizedString("会同时删除手表上保存的权重文件和 mmproj 投影器。", comment: "Watch delete local model alert message"))
+            Text(NSLocalizedString("会同时删除手表上保存的权重文件、mmproj 投影器和 LoRA Adapter。", comment: "Watch delete local model alert message"))
         }
         .alert(NSLocalizedString("未保存更改", comment: "Unsaved changes alert title"), isPresented: $showUnsavedChangesAlert) {
             Button(NSLocalizedString("保存并离开", comment: "Save changes and leave")) {
                 saveAndDismiss()
             }
             Button(NSLocalizedString("放弃更改", comment: "Discard changes"), role: .destructive) {
-                dismiss()
+                discardAndDismiss()
             }
             Button(NSLocalizedString("继续编辑", comment: "Continue editing"), role: .cancel) {}
         } message: {
             Text(NSLocalizedString("要保存当前本地模型设置，还是放弃更改并离开？", comment: "Unsaved local model settings alert message"))
         }
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        var result: [GuidePageSetting] = [
+            .string("display_name", label: NSLocalizedString("名称", comment: "向导设置字段"), allowsEmpty: false, get: { draft.displayName }, set: { draft.displayName = $0 }),
+            .bool("activated", label: NSLocalizedString("加入候选模型", comment: "向导设置字段"), get: { draft.isActivated }, set: { draft.isActivated = $0 }),
+            .integer("context_size", label: NSLocalizedString("上下文长度", comment: "向导设置字段"), range: 1...1_048_576, get: { draft.effectiveContextSize }, set: { draft.contextSize = $0; contextSizeText = "\($0)" }),
+            .integer("max_output_tokens", label: NSLocalizedString("最大输出长度", comment: "向导设置字段"), range: 1...131_072, get: { draft.effectiveMaxOutputTokens }, set: { draft.maxOutputTokens = $0; maxOutputTokensText = "\($0)" }),
+            .integer("seed", label: NSLocalizedString("随机种子", comment: "向导设置字段"), range: 0...Int(UInt32.max), get: { Int(draft.effectiveSeed) }, set: { draft.seed = UInt32($0); seedText = "\($0)" }),
+            .double("temperature", label: NSLocalizedString("温度", comment: "向导设置字段"), range: 0...5, get: { draft.effectiveTemperature }, set: { draft.temperature = $0; temperatureText = LocalModelFormat.decimal($0) }),
+            .integer("top_k", label: NSLocalizedString("Top K", comment: "向导设置字段"), range: 0...1_000, get: { draft.effectiveTopK }, set: { draft.topK = $0; topKText = "\($0)" }),
+            .double("top_p", label: NSLocalizedString("Top P", comment: "向导设置字段"), range: 0...1, get: { draft.effectiveTopP }, set: { draft.topP = $0; topPText = LocalModelFormat.decimal($0) }),
+            .double("min_p", label: NSLocalizedString("Min P", comment: "向导设置字段"), range: 0...1, get: { draft.effectiveMinP }, set: { draft.minP = $0; minPText = LocalModelFormat.decimal($0) }),
+            .integer("repeat_last_n", label: NSLocalizedString("重复惩罚窗口", comment: "向导设置字段"), range: -1...1_048_576, get: { draft.effectiveRepeatLastN }, set: { draft.repeatLastN = $0; repeatLastNText = "\($0)" }),
+            .double("repeat_penalty", label: NSLocalizedString("重复惩罚", comment: "向导设置字段"), range: 0...4, get: { draft.effectiveRepeatPenalty }, set: { draft.repeatPenalty = $0; repeatPenaltyText = LocalModelFormat.decimal($0) }),
+            .double("frequency_penalty", label: NSLocalizedString("频率惩罚", comment: "向导设置字段"), range: -2...2, get: { draft.effectiveFrequencyPenalty }, set: { draft.frequencyPenalty = $0; frequencyPenaltyText = LocalModelFormat.decimal($0) }),
+            .double("presence_penalty", label: NSLocalizedString("存在惩罚", comment: "向导设置字段"), range: -2...2, get: { draft.effectivePresencePenalty }, set: { draft.presencePenalty = $0; presencePenaltyText = LocalModelFormat.decimal($0) }),
+            .string("grammar", label: NSLocalizedString("Grammar", comment: "向导设置字段"), get: { draft.grammar ?? "" }, set: { draft.grammar = $0 }),
+            .bool("ignore_eos", label: NSLocalizedString("忽略 EOS", comment: "向导设置字段"), get: { draft.effectiveIgnoreEOS }, set: { draft.ignoreEOS = $0 }),
+            .integer("image_min_tokens", label: NSLocalizedString("最少图片 Token", comment: "向导设置字段"), range: -1...1_048_576, get: { draft.effectiveImageMinTokens }, set: { draft.imageMinTokens = $0; imageMinTokensText = "\($0)" }),
+            .integer("image_max_tokens", label: NSLocalizedString("最多图片 Token", comment: "向导设置字段"), range: -1...1_048_576, get: { draft.effectiveImageMaxTokens }, set: { draft.imageMaxTokens = $0; imageMaxTokensText = "\($0)" }),
+            .string("sampler_chain", label: NSLocalizedString("采样链", comment: "向导设置字段"), allowsEmpty: false, get: { LocalLLMSamplerKind.chainString(draft.effectiveSamplerKinds) }, set: { draft.samplerKinds = LocalLLMSamplerKind.parse($0) }),
+            .readOnly("file_name", label: NSLocalizedString("文件", comment: "向导设置字段"), value: { .string(draft.fileName) }),
+            .readOnly("file_size", label: NSLocalizedString("大小", comment: "向导设置字段"), value: { .int(Int(clamping: draft.fileSize)) }),
+            .readOnly("file_available", label: NSLocalizedString("状态", comment: "向导设置字段"), value: { .bool(store.fileExists(for: draft)) }),
+            .readOnly("architecture", label: NSLocalizedString("GGUF 架构", comment: "向导设置字段"), value: { .string(draft.ggufArchitecture ?? "") }),
+            .readOnly("requires_save", label: NSLocalizedString("应用方式", comment: "向导设置字段"), value: { .string(NSLocalizedString("修改后需要保存", comment: "向导草稿应用方式")) })
+        ]
+        if draft.hasLoRAAdapter {
+            result.append(.double("lora_scale", label: NSLocalizedString("LoRA 强度", comment: "向导设置字段"), range: -100...100, get: { draft.effectiveLoRAScale }, set: { draft.loraScale = $0; loraScaleText = LocalModelFormat.decimal($0) }))
+        }
+        if draft.speechArchitecture?.requiresDecoderModel == true {
+            result.append(.string("speech_decoder_model_id", label: NSLocalizedString("解码模型", comment: "向导设置字段"), allowedValues: [""] + speechDecoderCandidates.map { $0.id.uuidString }, get: { draft.speechDecoderModelID?.uuidString ?? "" }, set: { draft.speechDecoderModelID = UUID(uuidString: $0) }))
+        }
+        if draft.speechArchitecture?.isTranscriptionModel == true {
+            result.append(.string("speech_vad_model_id", label: NSLocalizedString("VAD 模型", comment: "向导设置字段"), allowedValues: [""] + speechVADCandidates.map { $0.id.uuidString }, get: { draft.speechVADModelID?.uuidString ?? "" }, set: { draft.speechVADModelID = UUID(uuidString: $0) }))
+        }
+        return result
+    }
+
+    @ViewBuilder
+    private var speechSection: some View {
+        if let architecture = draft.speechArchitecture {
+            Section {
+                VStack(alignment: .leading) {
+                    Text(NSLocalizedString("GGUF 架构", comment: "Local GGUF architecture label"))
+                    Text(architecture.localizedTitle)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                if architecture.requiresDecoderModel {
+                    Picker(
+                        NSLocalizedString("解码模型", comment: "Local speech decoder model picker"),
+                        selection: $draft.speechDecoderModelID
+                    ) {
+                        Text(NSLocalizedString("未选择", comment: "No associated local model"))
+                            .tag(UUID?.none)
+                        ForEach(speechDecoderCandidates) { record in
+                            Text(record.sanitizedDisplayName)
+                                .tag(Optional(record.id))
+                        }
+                    }
+                }
+
+                if architecture.isTranscriptionModel {
+                    Picker(
+                        NSLocalizedString("VAD 模型", comment: "Local speech VAD model picker"),
+                        selection: $draft.speechVADModelID
+                    ) {
+                        Text(NSLocalizedString("不使用", comment: "Do not use an optional local model"))
+                            .tag(UUID?.none)
+                        ForEach(speechVADCandidates) { record in
+                            Text(record.sanitizedDisplayName)
+                                .tag(Optional(record.id))
+                        }
+                    }
+                }
+            } header: {
+                Text(NSLocalizedString("本地语音转写", comment: "Local speech transcription section"))
+            } footer: {
+                Text(speechSectionFooter(for: architecture))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var speechDecoderCandidates: [LocalModelRecord] {
+        store.models.filter {
+            $0.id != draft.id
+                && $0.ggufArchitecture == "qwen3"
+                && store.fileExists(for: $0)
+        }
+    }
+
+    private var speechVADCandidates: [LocalModelRecord] {
+        store.models.filter {
+            $0.id != draft.id
+                && $0.speechArchitecture == .fsmnVAD
+                && store.fileExists(for: $0)
+        }
+    }
+
+    private func speechSectionFooter(for architecture: LocalSpeechModelArchitecture) -> String {
+        if architecture == .funASRNanoEncoder {
+            return NSLocalizedString("Fun-ASR-Nano 必须关联本地 Qwen3 解码模型；FSMN-VAD 可选。", comment: "Fun-ASR-Nano local model association footer")
+        }
+        if architecture == .fsmnVAD {
+            return NSLocalizedString("FSMN-VAD 只负责切分语音，请在转写模型中关联使用。", comment: "FSMN-VAD auxiliary model footer")
+        }
+        return NSLocalizedString("SenseVoiceSmall 与 Paraformer 可直接转写，也可以关联 FSMN-VAD 处理长音频。", comment: "Local speech model footer")
     }
 
     private var runtimeSection: some View {
@@ -413,6 +607,85 @@ private struct LocalModelDetailView: View {
             Text(NSLocalizedString("watchOS 本地推理只能使用 CPU 路径，GPU 层数固定为 0。", comment: "Watch fixed GPU layers footer"))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var loraSection: some View {
+        if !draft.isSpeechTranscriptionModel && !draft.isSpeechAuxiliaryModel {
+            Section {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(NSLocalizedString("LoRA Adapter", comment: "Local model LoRA adapter label"))
+                    Text(draft.loraFileName ?? NSLocalizedString("未挂载", comment: "No local LoRA adapter"))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    if let size = draft.loraFileSize {
+                        Text(StorageUtility.formatSize(size))
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if draft.hasLoRAAdapter {
+                    TextField(
+                        NSLocalizedString("LoRA 强度", comment: "Local LoRA scale field"),
+                        text: $loraScaleText.watchKeyboardNewlineBinding()
+                    )
+                    .textInputAutocapitalization(.never)
+                }
+
+                TextField(
+                    NSLocalizedString("LoRA 文件链接", comment: "Watch LoRA download URL"),
+                    text: $loraDownloadURLText.watchKeyboardNewlineBinding()
+                )
+                .textInputAutocapitalization(.never)
+
+                Button {
+                    downloadLoRA()
+                } label: {
+                    if isDownloadingLoRA {
+                        ProgressView()
+                    } else {
+                        Label(draft.hasLoRAAdapter
+                            ? NSLocalizedString("下载并替换 LoRA", comment: "Watch replace LoRA")
+                            : NSLocalizedString("下载并挂载 LoRA", comment: "Watch attach LoRA"),
+                              systemImage: "arrow.down.circle")
+                    }
+                }
+                .disabled(isDownloadingLoRA || normalizedLoRAURL == nil)
+
+                if let loraDownloadProgress {
+                    LocalModelDownloadProgressView(progress: loraDownloadProgress)
+                }
+                if let loraStatusMessage {
+                    Text(loraStatusMessage)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                if draft.hasLoRAAdapter {
+                    Button(role: .destructive) {
+                        if let relativePath = draft.loraRelativePath,
+                           relativePath != savedSnapshot.loraRelativePath {
+                            store.deleteLoRAFile(relativePath: relativePath)
+                        }
+                        draft.loraFileName = nil
+                        draft.loraRelativePath = nil
+                        draft.loraFileSize = nil
+                        draft.loraScale = nil
+                        loraScaleText = LocalModelFormat.decimal(LocalModelRecord.defaultLoRAScale)
+                    } label: {
+                        Label(NSLocalizedString("移除 LoRA", comment: "Remove local LoRA adapter"), systemImage: "xmark.circle")
+                    }
+                }
+            } header: {
+                Text(NSLocalizedString("LoRA", comment: "Local LoRA section title"))
+            } footer: {
+                Text(NSLocalizedString("请下载与基础模型架构匹配的 LoRA GGUF。强度 1 使用原始效果，0 保留挂载但不改变输出。", comment: "Watch local LoRA footer"))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -640,6 +913,96 @@ private struct LocalModelDetailView: View {
         dismiss()
     }
 
+    private func discardAndDismiss() {
+        cleanupUnsavedLoRAIfNeeded()
+        dismiss()
+    }
+
+    private func cleanupUnsavedLoRAIfNeeded() {
+        guard let relativePath = draft.loraRelativePath,
+              relativePath != savedSnapshot.loraRelativePath else {
+            return
+        }
+        store.deleteLoRAFile(relativePath: relativePath)
+    }
+
+    private var normalizedLoRAURL: URL? {
+        let text = loraDownloadURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: text),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            return nil
+        }
+        return url
+    }
+
+    private func downloadLoRA() {
+        guard let url = normalizedLoRAURL else { return }
+        isDownloadingLoRA = true
+        loraDownloadProgress = nil
+        loraStatusMessage = nil
+        Task {
+            do {
+                var request = URLRequest(url: url)
+                request.timeoutInterval = NetworkSessionConfiguration.minimumRequestTimeout
+                let (downloadedURL, response) = try await SyncPackageUploadService.downloadTemporaryFile(
+                    request: request,
+                    progress: { progress in
+                        Task { @MainActor in
+                            loraDownloadProgress = progress
+                        }
+                    }
+                )
+                defer {
+                    Task.detached(priority: .utility) {
+                        try? FileManager.default.removeItem(at: downloadedURL)
+                    }
+                }
+                try validateLoRADownloadResponse(response)
+                let previousUnsavedLoRA = draft.loraRelativePath == savedSnapshot.loraRelativePath
+                    ? nil
+                    : draft.loraRelativePath
+                let responseFileName = response.suggestedFilename?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let suggestedFileName: String
+                if let responseFileName, !responseFileName.isEmpty {
+                    suggestedFileName = responseFileName
+                } else {
+                    suggestedFileName = url.lastPathComponent.isEmpty ? "adapter.gguf" : url.lastPathComponent
+                }
+                let updatedDraft = try await store.copyLoRAAdapter(
+                    from: downloadedURL,
+                    for: draft,
+                    suggestedFileName: suggestedFileName
+                )
+                if let previousUnsavedLoRA {
+                    store.deleteLoRAFile(relativePath: previousUnsavedLoRA)
+                }
+                draft = updatedDraft
+                loraScaleText = LocalModelFormat.decimal(updatedDraft.effectiveLoRAScale)
+                loraDownloadURLText = ""
+                loraStatusMessage = NSLocalizedString("LoRA 已挂载。", comment: "Watch LoRA attached")
+                isDownloadingLoRA = false
+            } catch {
+                loraStatusMessage = error.localizedDescription
+                loraDownloadProgress = nil
+                isDownloadingLoRA = false
+            }
+        }
+    }
+
+    private func validateLoRADownloadResponse(_ response: URLResponse) throws {
+        guard let httpResponse = response as? HTTPURLResponse,
+              !(200..<300).contains(httpResponse.statusCode) else {
+            return
+        }
+        throw NSError(domain: "ETOSWatchLoRADownload", code: httpResponse.statusCode, userInfo: [
+            NSLocalizedDescriptionKey: String(
+                format: NSLocalizedString("下载 LoRA 失败（HTTP %d）。", comment: "Watch LoRA download HTTP failure"),
+                httpResponse.statusCode
+            )
+        ])
+    }
+
     private func draftApplyingTextFields(_ source: LocalModelRecord, clearsAdvancedArguments: Bool) -> LocalModelRecord {
         var updatedDraft = source
         if updatedDraft.contextSize != nil, let contextSize = Int(contextSizeText.trimmingCharacters(in: .whitespacesAndNewlines)) {
@@ -682,6 +1045,10 @@ private struct LocalModelDetailView: View {
         if updatedDraft.imageMaxTokens != nil, let imageMaxTokens = Int(imageMaxTokensText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             updatedDraft.imageMaxTokens = imageMaxTokens
         }
+        if updatedDraft.hasLoRAAdapter,
+           let loraScale = Double(loraScaleText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            updatedDraft.loraScale = loraScale
+        }
         if clearsAdvancedArguments {
             updatedDraft.advancedArguments = ""
         }
@@ -704,6 +1071,7 @@ private struct LocalModelDetailView: View {
         presencePenaltyText = LocalModelFormat.decimal(draft.effectivePresencePenalty)
         imageMinTokensText = "\(draft.effectiveImageMinTokens)"
         imageMaxTokensText = "\(draft.effectiveImageMaxTokens)"
+        loraScaleText = LocalModelFormat.decimal(draft.effectiveLoRAScale)
     }
 
     private func parseSeed(_ rawValue: String) -> UInt32? {
@@ -775,6 +1143,10 @@ private struct LocalModelAdvancedIntroView: View {
                 LocalModelWatchGuideRow(
                     title: NSLocalizedString("采样", comment: "Local model sampling section"),
                     detail: NSLocalizedString("不确定时先只调 Temperature；复读明显时再看重复检查窗口和重复惩罚。", comment: "Watch local model guide sampling detail")
+                )
+                LocalModelWatchGuideRow(
+                    title: NSLocalizedString("LoRA Adapter", comment: "Local model LoRA adapter label"),
+                    detail: NSLocalizedString("请下载与基础模型架构匹配的 LoRA GGUF。强度 1 使用原始效果，0 保留挂载但不改变输出。", comment: "Watch local LoRA footer")
                 )
             } header: {
                 Text(NSLocalizedString("参数怎么调", comment: "Watch local model guide parameters section"))
@@ -1008,6 +1380,30 @@ private struct LocalModelCLIStyleImportView: View {
         }
         .navigationTitle(NSLocalizedString("参数导入", comment: "Local llama style import navigation title"))
         .navigationBarTitleDisplayMode(.inline)
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "settings-local-model-cli-import-\(record.id.uuidString.lowercased())"),
+            title: NSLocalizedString("参数导入", comment: "本地模型参数导入向导上下文标题"),
+            documents: [GuideDocumentReference(id: "local-models", title: "Local Models")],
+            settings: [
+                .string(
+                    "arguments",
+                    label: NSLocalizedString("llama.cpp-style 参数", comment: "本地模型参数导入向导字段"),
+                    get: { inputText },
+                    set: { inputText = $0 }
+                ),
+                .readOnly(
+                    "last_result",
+                    label: NSLocalizedString("最近一次导入结果", comment: "本地模型参数导入向导字段"),
+                    value: { guideResultValue }
+                ),
+                .readOnly(
+                    "apply_method",
+                    label: NSLocalizedString("应用方式", comment: "向导设置字段"),
+                    value: { .string(NSLocalizedString("填写后需要点击解析并应用到表单", comment: "本地模型参数导入应用方式")) }
+                )
+            ]
+        )
+        .watchGuideEntry()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button(NSLocalizedString("完成", comment: "Done")) {
@@ -1015,6 +1411,25 @@ private struct LocalModelCLIStyleImportView: View {
                 }
             }
         }
+    }
+
+    private var guideResultValue: JSONValue {
+        guard let result else { return .null }
+        return .dictionary([
+            "applied": .array(result.appliedParameters.map { item in
+                .dictionary([
+                    "option": .string(item.option),
+                    "field": .string(item.title),
+                    "value": .string(item.value)
+                ])
+            }),
+            "unsupported": .array(result.unsupportedParameters.map { item in
+                .dictionary(["option": .string(item.option), "message": .string(item.message)])
+            }),
+            "errors": .array(result.errorParameters.map { item in
+                .dictionary(["option": .string(item.option), "message": .string(item.message)])
+            })
+        ])
     }
 }
 
@@ -1179,6 +1594,46 @@ private struct LocalModelSamplerChainLabView: View {
         }
         .navigationTitle(NSLocalizedString("采样器链实验室", comment: "Sampler chain lab title"))
         .navigationBarTitleDisplayMode(.inline)
+        .guideSettingsPageContext(
+            id: "settings-local-model-sampler-chain",
+            title: NSLocalizedString("采样器链实验室", comment: "采样器链向导上下文标题"),
+            documents: [GuideDocumentReference(id: "local-models", title: "Local Models")],
+            settings: samplerGuideSettings
+        )
+        .watchGuideEntry()
+    }
+
+    private var samplerGuideSettings: [GuidePageSetting] {
+        [
+            .json(
+                "sampler_chain",
+                label: NSLocalizedString("采样器链", comment: "采样器链向导字段"),
+                schema: .dictionary([
+                    "type": .string("string"),
+                    "description": .string("按执行顺序排列的 sampler 代码；可用代码为 edskypmxta，空字符串表示空链")
+                ]),
+                get: { .string(LocalLLMSamplerKind.chainString(currentKinds)) },
+                normalize: { value in
+                    guard case .string(let rawValue) = value else { throw GuideError.invalidToolArguments }
+                    let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    let parsed = LocalLLMSamplerKind.parse(trimmed)
+                    guard trimmed.isEmpty || (!parsed.isEmpty && LocalLLMSamplerKind.chainString(parsed) == trimmed) else {
+                        throw GuideError.invalidToolArguments
+                    }
+                    return .string(trimmed)
+                },
+                set: { value in
+                    guard case .string(let rawValue) = value else { throw GuideError.invalidToolArguments }
+                    let parsed = LocalLLMSamplerKind.parse(rawValue)
+                    samplerKinds = parsed == LocalLLMSamplerKind.defaultChain ? nil : parsed
+                }
+            ),
+            .readOnly(
+                "requires_save",
+                label: NSLocalizedString("应用方式", comment: "向导设置字段"),
+                value: { .string(NSLocalizedString("修改后需要保存本地模型", comment: "本地模型草稿应用方式")) }
+            )
+        ]
     }
 
     private var currentKindsBinding: Binding<[LocalLLMSamplerKind]> {

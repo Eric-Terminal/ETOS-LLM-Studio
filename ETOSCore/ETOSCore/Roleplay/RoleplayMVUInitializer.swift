@@ -45,7 +45,7 @@ enum RoleplayMVUInitializer {
                 let failureCount = failures.count
                 mergePayload(
                     payload,
-                    sourceName: "开场白 <initvar>",
+                    sourceName: NSLocalizedString("开场白 <initvar>", comment: "Roleplay greeting initvar source"),
                     macroContext: macroContext,
                     into: &statData,
                     failures: &failures
@@ -124,7 +124,11 @@ enum RoleplayMVUInitializer {
             let failureCount = failures.count
             mergePayload(
                 payload,
-                sourceName: "世界书“\(worldbook.name)”条目“\(entry.comment)”",
+                sourceName: String(
+                    format: NSLocalizedString("世界书“%@”条目“%@”", comment: "Roleplay worldbook initvar source"),
+                    worldbook.name,
+                    entry.comment
+                ),
                 macroContext: macroContext,
                 into: &variables,
                 failures: &failures
@@ -150,12 +154,20 @@ enum RoleplayMVUInitializer {
         let resolved = RoleplayMacroResolver.resolve(payload, context: macroContext)
         do {
             guard case .dictionary(let parsed) = try RoleplayYAMLParser.parse(resolved) else {
-                failures.append("\(sourceName)的根节点不是对象。")
+                failures.append(
+                    String(format: NSLocalizedString("%@的根节点不是对象。", comment: "Roleplay initvar root is not an object"), sourceName)
+                )
                 return
             }
             RoleplayMVUData.merge(parsed, into: &variables)
         } catch {
-            failures.append("\(sourceName)解析失败：\(error.localizedDescription)")
+            failures.append(
+                String(
+                    format: NSLocalizedString("%@解析失败：%@", comment: "Roleplay initvar parse failure"),
+                    sourceName,
+                    error.localizedDescription
+                )
+            )
         }
     }
 

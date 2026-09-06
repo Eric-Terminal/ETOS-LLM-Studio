@@ -47,7 +47,11 @@ extension AppToolManager {
         return prettyPrintedJSONString(from: payload)
     }
 
-    func executeAskUserInput(argumentsJSON: String) throws -> String {
+    func executeAskUserInput(
+        argumentsJSON: String,
+        sourceSessionID: UUID?,
+        sourceMessageID: UUID?
+    ) throws -> String {
         struct AskUserInputArgs: Decodable {
             struct Question: Decodable {
                 struct Option: Decodable {
@@ -78,6 +82,7 @@ extension AppToolManager {
             )
         }
 
+        var seenQuestionIDs: Set<String> = []
         let normalizedQuestions = args.questions.enumerated().compactMap { questionIndex, question -> AppToolAskUserInputQuestion? in
             let questionText = question.question.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !questionText.isEmpty else { return nil }
@@ -85,7 +90,8 @@ extension AppToolManager {
             let normalizedTypeRaw = question.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             guard let type = AppToolAskUserInputQuestionType(rawValue: normalizedTypeRaw) else { return nil }
 
-            let questionID = Self.normalizedQuestionID(question.id, fallbackIndex: questionIndex)
+            let baseQuestionID = Self.normalizedQuestionID(question.id, fallbackIndex: questionIndex)
+            let questionID = Self.uniqueIdentifier(from: baseQuestionID, seen: &seenQuestionIDs)
             var seenOptionIDs: Set<String> = []
             let normalizedOptions = question.options.enumerated().compactMap { optionIndex, option -> AppToolAskUserInputOption? in
                 let label = option.label.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -122,19 +128,28 @@ extension AppToolManager {
             title: Self.normalizedOptionalText(args.title),
             description: Self.normalizedOptionalText(args.description),
             submitLabel: Self.normalizedOptionalText(args.submit_label) ?? NSLocalizedString("提交", comment: "Ask user input default submit label"),
-            questions: normalizedQuestions
+            questions: normalizedQuestions,
+            sourceSessionID: sourceSessionID,
+            sourceMessageID: sourceMessageID
         )
 
+        let receipt = AppToolUIRequestDeliveryReceipt()
+        var userInfo = request.userInfo
+        userInfo[AppToolUIRequestDeliveryReceipt.userInfoKey] = receipt
         NotificationCenter.default.post(
             name: .appToolAskUserInputRequested,
             object: nil,
-            userInfo: request.userInfo
+            userInfo: userInfo
         )
+        guard let delivery = receipt.delivery else {
+            throw AppToolExecutionError.uiRequestUnavailable
+        }
 
         let payload: [String: Any] = [
             "request_id": request.requestID,
             "question_count": request.questions.count,
-            "displayed": true,
+            "displayed": delivery == .displayed,
+            "queued": delivery == .queued,
             "await_user_supplement": true
         ]
         return prettyPrintedJSONString(from: payload)
@@ -165,7 +180,11 @@ extension AppToolManager {
         )
     }
 
-    func executeFillUserInput(argumentsJSON: String) throws -> String {
+    func executeFillUserInput(
+        argumentsJSON: String,
+        sourceSessionID: UUID?,
+        sourceMessageID: UUID?
+    ) throws -> String {
         struct FillUserInputArgs: Decodable {
             let text: String
             let mode: String?
@@ -186,17 +205,29 @@ extension AppToolManager {
         }
 
         let mode = AppToolInputDraftMode(rawValue: (args.mode ?? AppToolInputDraftMode.replace.rawValue).lowercased()) ?? .replace
-        let request = AppToolInputDraftRequest(text: args.text, mode: mode)
+        let request = AppToolInputDraftRequest(
+            text: args.text,
+            mode: mode,
+            sourceSessionID: sourceSessionID,
+            sourceMessageID: sourceMessageID
+        )
+        let receipt = AppToolUIRequestDeliveryReceipt()
+        var userInfo = request.userInfo
+        userInfo[AppToolUIRequestDeliveryReceipt.userInfoKey] = receipt
         NotificationCenter.default.post(
             name: .appToolFillUserInputRequested,
             object: nil,
-            userInfo: request.userInfo
+            userInfo: userInfo
         )
+        guard let delivery = receipt.delivery else {
+            throw AppToolExecutionError.uiRequestUnavailable
+        }
 
         let payload: [String: Any] = [
             "mode": mode.rawValue,
             "characterCount": args.text.count,
-            "applied": true
+            "applied": delivery == .applied,
+            "queued": delivery == .queued
         ]
         return prettyPrintedJSONString(from: payload)
     }

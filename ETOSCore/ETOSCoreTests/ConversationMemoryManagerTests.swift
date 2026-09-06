@@ -53,7 +53,7 @@ struct ConversationMemoryManagerTests {
     }
 
     @Test("persist user profile in memory json")
-    func persistUserProfileInMemoryJSON() throws {
+    func persistUserProfileInMemoryJSON() async throws {
         let previousProfile = ConversationMemoryManager.loadUserProfile()
         defer {
             if let previousProfile {
@@ -91,6 +91,9 @@ struct ConversationMemoryManagerTests {
         #expect(loaded?.needsLLMDedup == true)
         #expect(loaded?.facts == [fact])
         #expect(loaded?.schemaVersion == 2)
+
+        let snapshot = await ConversationMemoryManager.loadStateSnapshotAsync()
+        #expect(snapshot.userProfile == loaded)
 
         try ConversationMemoryManager.clearUserProfile()
         #expect(ConversationMemoryManager.loadUserProfile() == nil)

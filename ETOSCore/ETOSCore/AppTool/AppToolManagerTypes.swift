@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 本文件承载本地拓展工具管理器共用的通知名、数据库枚举、目录项与错误类型。
+// 本文件承载本地拓展工具管理器共用的通知名、数据库枚举与错误类型。
 // ============================================================================
 
 import Foundation
@@ -11,6 +11,44 @@ import Foundation
 public extension Notification.Name {
     static let appToolFillUserInputRequested = Notification.Name("com.ETOS.LLM.Studio.appTool.fillUserInput")
     static let appToolAskUserInputRequested = Notification.Name("com.ETOS.LLM.Studio.appTool.askUserInput")
+}
+
+public enum AppToolUIRequestDelivery: String, Sendable {
+    case displayed
+    case queued
+    case applied
+}
+
+/// NotificationCenter 的投递是同步的；回执让工具执行方只在某个聊天界面
+/// 真正接收请求后报告成功，同时用原子 claim 防止多个 ViewModel 重复消费。
+public final class AppToolUIRequestDeliveryReceipt: @unchecked Sendable {
+    public static let userInfoKey = "appToolUIRequestDeliveryReceipt"
+
+    private let lock = NSLock()
+    private var storedDelivery: AppToolUIRequestDelivery?
+
+    public init() {}
+
+    @discardableResult
+    public func claim(_ delivery: AppToolUIRequestDelivery) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard storedDelivery == nil else { return false }
+        storedDelivery = delivery
+        return true
+    }
+
+    public var delivery: AppToolUIRequestDelivery? {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedDelivery
+    }
+
+    public static func decode(
+        from userInfo: [AnyHashable: Any]?
+    ) -> AppToolUIRequestDeliveryReceipt? {
+        userInfo?[userInfoKey] as? AppToolUIRequestDeliveryReceipt
+    }
 }
 
 public enum AppToolSQLiteDatabase: String, CaseIterable, Identifiable, Hashable, Sendable {
@@ -32,17 +70,6 @@ public enum AppToolSQLiteDatabase: String, CaseIterable, Identifiable, Hashable,
     }
 }
 
-public struct AppToolCatalogItem: Identifiable, Equatable, Sendable {
-    public let kind: AppToolKind
-    public let isEnabled: Bool
-
-    public var id: AppToolKind { kind }
-
-    public init(kind: AppToolKind, isEnabled: Bool) {
-        self.kind = kind
-        self.isEnabled = isEnabled
-    }
-}
 
 public enum AppToolApprovalPolicy: String, Codable, Hashable, CaseIterable, Sendable {
     case askEveryTime = "ask_every_time"
@@ -67,6 +94,7 @@ public enum AppToolExecutionError: LocalizedError {
     case toolDeniedByPolicy(String)
     case unknownTool
     case invalidArguments(String)
+    case uiRequestUnavailable
 
     public var errorDescription: String? {
         switch self {
@@ -86,6 +114,8 @@ public enum AppToolExecutionError: LocalizedError {
             return NSLocalizedString("未找到对应的拓展工具。", comment: "Unknown app tool")
         case .invalidArguments(let message):
             return message
+        case .uiRequestUnavailable:
+            return NSLocalizedString("没有可接收该请求的聊天界面。", comment: "App tool UI request has no consumer")
         }
     }
 }

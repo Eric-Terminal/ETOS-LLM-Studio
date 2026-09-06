@@ -1,0 +1,6 @@
+"NSLocationWhenInUseUsageDescription" = "Lee tu ubicación cuando usas explícitamente una herramienta de ubicación y puede mantener una respuesta activa con la generación en segundo plano.";
+"NSHealthShareUsageDescription" = "Lee datos autorizados de salud, sueño y actividad cuando usas explícitamente una herramienta de Salud.";
+"NSHealthUpdateUsageDescription" = "Escribe registros de salud autorizados cuando usas explícitamente una herramienta de Salud.";
+"NSBluetoothAlwaysUsageDescription" = "Busca y conecta dispositivos Bluetooth cercanos solo cuando usas explícitamente una herramienta Bluetooth.";
+"NSHomeKitUsageDescription" = "Lee y controla hogares y accesorios autorizados solo cuando usas explícitamente una herramienta de Casa.";
+"NSContactsUsageDescription" = "Lee los contactos autorizados solo cuando utilizas explícitamente una herramienta de contactos.";

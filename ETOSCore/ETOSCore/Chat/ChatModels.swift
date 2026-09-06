@@ -137,6 +137,31 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
     }
 }
 
+/// 视频理解模型生成并持久化的附件语义。
+public struct VideoAnalysisResult: Identifiable, Codable, Hashable, Sendable {
+    public let fileName: String
+    public let content: String
+    public let modelIdentifier: String
+    public let modelDisplayName: String
+    public let generatedAt: Date
+
+    public var id: String { fileName }
+
+    public init(
+        fileName: String,
+        content: String,
+        modelIdentifier: String,
+        modelDisplayName: String,
+        generatedAt: Date = Date()
+    ) {
+        self.fileName = fileName
+        self.content = content
+        self.modelIdentifier = modelIdentifier
+        self.modelDisplayName = modelDisplayName
+        self.generatedAt = generatedAt
+    }
+}
+
 /// 聊天消息数据结构 (App的"官方语言")
 /// 这是一个纯粹的数据模型，不包含任何UI状态
 /// 支持多版本历史记录功能 - 重试时保留旧版本，用户可在版本间切换
@@ -194,7 +219,10 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var costEstimate: MessageCostEstimate? // 基于本地模型价格配置计算的费用快照
     public var audioFileName: String? // 关联的音频文件名，存储在 AudioFiles 目录下
     public var imageFileNames: [String]? // 关联的图片文件名列表，存储在 ImageFiles 目录下
+    /// 只在本地显示、不应作为历史图片输入发送给模型的附件文件名子集。
+    public var modelExcludedImageFileNames: [String]?
     public var fileFileNames: [String]? // 关联的文件名列表，存储在 FileAttachments 目录下
+    public var videoAnalysisResults: [VideoAnalysisResult]? // 视频附件的持久化语义解析结果
     public var fullErrorContent: String? // 错误消息的完整原始内容（当内容被截断时使用）
     public var sentSystemPromptSnapshot: String? // 该回复请求实际发送的 system 角色消息快照；nil 表示旧消息未记录
     public var responseMetrics: MessageResponseMetrics? // 单次请求的响应测速信息
@@ -202,6 +230,14 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var responseAttemptID: UUID? // 当前消息所属的一次回复尝试
     public var responseAttemptIndex: Int? // 当前回复尝试在组内的序号
     public var selectedResponseAttemptID: UUID? // 锚点 user 消息当前选中的回复尝试
+    /// 消息在数据库中的真实作者类型；跨会话输入提交给模型时仍可映射为 user role。
+    public var authorKind: ConversationMessageAuthorKind
+    /// 跨会话消息的实际来源会话。
+    public var sourceSessionID: UUID?
+    /// 复制或转发消息在来源会话中的原消息 ID。
+    public var sourceMessageID: UUID?
+    /// 触发当前消息落库的持久邮箱事件。
+    public var conversationEventID: UUID?
 
     public init(
         id: UUID = UUID(),
@@ -218,14 +254,20 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         costEstimate: MessageCostEstimate? = nil,
         audioFileName: String? = nil,
         imageFileNames: [String]? = nil,
+        modelExcludedImageFileNames: [String]? = nil,
         fileFileNames: [String]? = nil,
+        videoAnalysisResults: [VideoAnalysisResult]? = nil,
         fullErrorContent: String? = nil,
         sentSystemPromptSnapshot: String? = nil,
         responseMetrics: MessageResponseMetrics? = nil,
         responseGroupID: UUID? = nil,
         responseAttemptID: UUID? = nil,
         responseAttemptIndex: Int? = nil,
-        selectedResponseAttemptID: UUID? = nil
+        selectedResponseAttemptID: UUID? = nil,
+        authorKind: ConversationMessageAuthorKind? = nil,
+        sourceSessionID: UUID? = nil,
+        sourceMessageID: UUID? = nil,
+        conversationEventID: UUID? = nil
     ) {
         self.id = id
         self.role = role
@@ -242,7 +284,9 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.costEstimate = costEstimate
         self.audioFileName = audioFileName
         self.imageFileNames = imageFileNames
+        self.modelExcludedImageFileNames = modelExcludedImageFileNames
         self.fileFileNames = fileFileNames
+        self.videoAnalysisResults = videoAnalysisResults
         self.fullErrorContent = fullErrorContent
         self.sentSystemPromptSnapshot = sentSystemPromptSnapshot
         self.responseMetrics = responseMetrics
@@ -250,6 +294,10 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.responseAttemptID = responseAttemptID
         self.responseAttemptIndex = responseAttemptIndex
         self.selectedResponseAttemptID = selectedResponseAttemptID
+        self.authorKind = authorKind ?? ConversationMessageAuthorKind.defaultValue(for: role)
+        self.sourceSessionID = sourceSessionID
+        self.sourceMessageID = sourceMessageID
+        self.conversationEventID = conversationEventID
     }
 
     // MARK: - 版本管理方法
@@ -289,14 +337,27 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         }
     }
 
+    /// 删除正文气泡时清空所有文本版本，避免切换版本后旧正文重新出现。
+    public mutating func clearContentVersions() {
+        contentVersions = [""]
+        currentVersionIndex = 0
+    }
+
+    /// 只有真正参与模型上下文的图片才会进入请求附件映射。
+    public var modelVisibleImageFileNames: [String] {
+        let excluded = Set(modelExcludedImageFileNames ?? [])
+        return (imageFileNames ?? []).filter { !excluded.contains($0) }
+    }
+
     // MARK: - Codable 支持（向后兼容）
 
     enum CodingKeys: String, CodingKey {
         case id, role, requestedAt, content, currentVersionIndex
         case reasoningContent, reasoningProviderSpecificFields, providerResponseMetadata, toolCalls, toolCallsPlacement, tokenUsage
         case modelReference, costEstimate
-        case audioFileName, imageFileNames, fileFileNames, fullErrorContent, sentSystemPromptSnapshot, responseMetrics
+        case audioFileName, imageFileNames, modelExcludedImageFileNames, fileFileNames, videoAnalysisResults, fullErrorContent, sentSystemPromptSnapshot, responseMetrics
         case responseGroupID, responseAttemptID, responseAttemptIndex, selectedResponseAttemptID
+        case authorKind, sourceSessionID, sourceMessageID, conversationEventID
     }
 
     public init(from decoder: Decoder) throws {
@@ -332,7 +393,9 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.costEstimate = try container.decodeIfPresent(MessageCostEstimate.self, forKey: .costEstimate)
         self.audioFileName = try container.decodeIfPresent(String.self, forKey: .audioFileName)
         self.imageFileNames = try container.decodeIfPresent([String].self, forKey: .imageFileNames)
+        self.modelExcludedImageFileNames = try container.decodeIfPresent([String].self, forKey: .modelExcludedImageFileNames)
         self.fileFileNames = try container.decodeIfPresent([String].self, forKey: .fileFileNames)
+        self.videoAnalysisResults = try container.decodeIfPresent([VideoAnalysisResult].self, forKey: .videoAnalysisResults)
         self.fullErrorContent = try container.decodeIfPresent(String.self, forKey: .fullErrorContent)
         self.sentSystemPromptSnapshot = try container.decodeIfPresent(String.self, forKey: .sentSystemPromptSnapshot)
         self.responseMetrics = try container.decodeIfPresent(MessageResponseMetrics.self, forKey: .responseMetrics)
@@ -340,6 +403,11 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.responseAttemptID = try container.decodeIfPresent(UUID.self, forKey: .responseAttemptID)
         self.responseAttemptIndex = try container.decodeIfPresent(Int.self, forKey: .responseAttemptIndex)
         self.selectedResponseAttemptID = try container.decodeIfPresent(UUID.self, forKey: .selectedResponseAttemptID)
+        self.authorKind = try container.decodeIfPresent(ConversationMessageAuthorKind.self, forKey: .authorKind)
+            ?? ConversationMessageAuthorKind.defaultValue(for: role)
+        self.sourceSessionID = try container.decodeIfPresent(UUID.self, forKey: .sourceSessionID)
+        self.sourceMessageID = try container.decodeIfPresent(UUID.self, forKey: .sourceMessageID)
+        self.conversationEventID = try container.decodeIfPresent(UUID.self, forKey: .conversationEventID)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -366,7 +434,9 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         try container.encodeIfPresent(costEstimate, forKey: .costEstimate)
         try container.encodeIfPresent(audioFileName, forKey: .audioFileName)
         try container.encodeIfPresent(imageFileNames, forKey: .imageFileNames)
+        try container.encodeIfPresent(modelExcludedImageFileNames, forKey: .modelExcludedImageFileNames)
         try container.encodeIfPresent(fileFileNames, forKey: .fileFileNames)
+        try container.encodeIfPresent(videoAnalysisResults, forKey: .videoAnalysisResults)
         try container.encodeIfPresent(fullErrorContent, forKey: .fullErrorContent)
         try container.encodeIfPresent(sentSystemPromptSnapshot, forKey: .sentSystemPromptSnapshot)
         try container.encodeIfPresent(responseMetrics, forKey: .responseMetrics)
@@ -374,15 +444,23 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         try container.encodeIfPresent(responseAttemptID, forKey: .responseAttemptID)
         try container.encodeIfPresent(responseAttemptIndex, forKey: .responseAttemptIndex)
         try container.encodeIfPresent(selectedResponseAttemptID, forKey: .selectedResponseAttemptID)
+        try container.encode(authorKind, forKey: .authorKind)
+        try container.encodeIfPresent(sourceSessionID, forKey: .sourceSessionID)
+        try container.encodeIfPresent(sourceMessageID, forKey: .sourceMessageID)
+        try container.encodeIfPresent(conversationEventID, forKey: .conversationEventID)
     }
 }
 
 /// 消息所关联的一次 API 调用的 Token 统计
 public struct MessageTokenUsage: Codable, Hashable, Sendable {
     public var promptTokens: Int?
+    /// 服务商明确返回的非缓存输入量，避免对 Anthropic 的独立输入量再次扣除缓存命中。
+    public var uncachedInputTokens: Int?
     public var completionTokens: Int?
     public var thinkingTokens: Int?
     public var cacheWriteTokens: Int?
+    public var cacheWriteFiveMinuteTokens: Int?
+    public var cacheWriteOneHourTokens: Int?
     public var cacheReadTokens: Int?
     public var totalTokens: Int?
 
@@ -392,12 +470,18 @@ public struct MessageTokenUsage: Codable, Hashable, Sendable {
         totalTokens: Int?,
         thinkingTokens: Int? = nil,
         cacheWriteTokens: Int? = nil,
-        cacheReadTokens: Int? = nil
+        cacheWriteFiveMinuteTokens: Int? = nil,
+        cacheWriteOneHourTokens: Int? = nil,
+        cacheReadTokens: Int? = nil,
+        uncachedInputTokens: Int? = nil
     ) {
         self.promptTokens = promptTokens
+        self.uncachedInputTokens = uncachedInputTokens
         self.completionTokens = completionTokens
         self.thinkingTokens = thinkingTokens
         self.cacheWriteTokens = cacheWriteTokens
+        self.cacheWriteFiveMinuteTokens = cacheWriteFiveMinuteTokens
+        self.cacheWriteOneHourTokens = cacheWriteOneHourTokens
         self.cacheReadTokens = cacheReadTokens
         self.totalTokens = totalTokens
     }
@@ -408,9 +492,12 @@ public struct MessageTokenUsage: Codable, Hashable, Sendable {
 
     public var hasAnyData: Bool {
         promptTokens != nil
+            || uncachedInputTokens != nil
             || completionTokens != nil
             || thinkingTokens != nil
             || cacheWriteTokens != nil
+            || cacheWriteFiveMinuteTokens != nil
+            || cacheWriteOneHourTokens != nil
             || cacheReadTokens != nil
             || totalTokens != nil
     }

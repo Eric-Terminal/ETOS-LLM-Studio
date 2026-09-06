@@ -17,6 +17,7 @@ struct StorageDirectoryBrowserView: View {
     let emptyTitle: String
     let emptyDescription: String
     let footerText: String?
+    let allowsDeletion: Bool
     let itemFilter: (FileItem) -> Bool
 
     @State private var files: [FileItem] = []
@@ -35,6 +36,7 @@ struct StorageDirectoryBrowserView: View {
         emptyTitle: String,
         emptyDescription: String,
         footerText: String? = nil,
+        allowsDeletion: Bool = true,
         itemFilter: @escaping (FileItem) -> Bool = { _ in true }
     ) {
         self.title = title
@@ -43,6 +45,7 @@ struct StorageDirectoryBrowserView: View {
         self.emptyTitle = emptyTitle
         self.emptyDescription = emptyDescription
         self.footerText = footerText
+        self.allowsDeletion = allowsDeletion
         self.itemFilter = itemFilter
     }
 
@@ -80,7 +83,7 @@ struct StorageDirectoryBrowserView: View {
         .navigationTitle(title)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                if !files.isEmpty {
+                if allowsDeletion && !files.isEmpty {
                     Button(isEditing ? NSLocalizedString("完成", comment: "") : NSLocalizedString("编辑", comment: "")) {
                         withAnimation {
                             isEditing.toggle()
@@ -160,7 +163,7 @@ struct StorageDirectoryBrowserView: View {
         }
         .environment(\.editMode, .constant(isEditing ? .active : .inactive))
         .safeAreaInset(edge: .bottom) {
-            if isEditing && !selectedFiles.isEmpty {
+            if allowsDeletion && isEditing && !selectedFiles.isEmpty {
                 batchDeleteButton
             }
         }
@@ -194,7 +197,9 @@ struct StorageDirectoryBrowserView: View {
                     toggleSelection(file)
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    deleteAction(for: file)
+                    if allowsDeletion {
+                        deleteAction(for: file)
+                    }
                 }
         } else if file.isDirectory {
             NavigationLink {
@@ -205,13 +210,16 @@ struct StorageDirectoryBrowserView: View {
                     emptyTitle: NSLocalizedString("空文件夹", comment: "Empty folder title"),
                     emptyDescription: NSLocalizedString("这个文件夹里还没有内容。", comment: "Empty folder description"),
                     footerText: footerText,
+                    allowsDeletion: allowsDeletion,
                     itemFilter: itemFilter
                 )
             } label: {
                 FileRowView(file: file, isEditing: false, isSelected: false)
             }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                deleteAction(for: file)
+                if allowsDeletion {
+                    deleteAction(for: file)
+                }
             }
         } else if StorageBrowserSupport.isImageFile(file.url) || StorageBrowserSupport.isSQLiteDatabaseFile(file.url) {
             Button {
@@ -221,7 +229,9 @@ struct StorageDirectoryBrowserView: View {
             }
             .buttonStyle(.plain)
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                deleteAction(for: file)
+                if allowsDeletion {
+                    deleteAction(for: file)
+                }
             }
         } else {
             Button {
@@ -231,7 +241,9 @@ struct StorageDirectoryBrowserView: View {
             }
             .buttonStyle(.plain)
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                deleteAction(for: file)
+                if allowsDeletion {
+                    deleteAction(for: file)
+                }
             }
         }
     }
@@ -277,28 +289,34 @@ struct StorageDirectoryBrowserView: View {
     }
 
     private func deleteFile(_ file: FileItem) {
+        guard allowsDeletion else { return }
         Task {
-            do {
-                try StorageUtility.deleteFile(at: file.url)
-                await MainActor.run {
-                    files.removeAll { $0.id == file.id }
+            let url = file.url
+            let didDelete = await Task.detached(priority: .userInitiated) {
+                do {
+                    try StorageUtility.deleteFile(at: url)
+                    return true
+                } catch {
+                    return false
                 }
-            } catch {
-                // 当前界面暂不展示额外错误提示，保持与现有存储管理交互一致。
+            }.value
+            if didDelete {
+                files.removeAll { $0.id == file.id }
             }
         }
     }
 
     private func deleteSelectedFiles() {
+        guard allowsDeletion else { return }
         Task {
             let urlsToDelete = files.filter { selectedFiles.contains($0.id) }.map(\.url)
-            _ = StorageUtility.deleteFiles(urlsToDelete)
+            _ = await Task.detached(priority: .userInitiated) {
+                StorageUtility.deleteFiles(urlsToDelete)
+            }.value
 
-            await MainActor.run {
-                files.removeAll { selectedFiles.contains($0.id) }
-                selectedFiles.removeAll()
-                isEditing = false
-            }
+            files.removeAll { selectedFiles.contains($0.id) }
+            selectedFiles.removeAll()
+            isEditing = false
         }
     }
 }

@@ -92,9 +92,27 @@ struct ReasoningMarkdownContentView: View {
     let textColor: Color
     let customTextStyleColors: ChatAppearanceTextStyleColors
     let font: Font
+    let streamingMarkdownState: ETStreamingMarkdownRenderState?
+    let isStreaming: Bool
 
     var body: some View {
-        if enableMarkdown,
+        if isStreaming, let streamingMarkdownState {
+            ETAdvancedMarkdownRenderer(
+                content: reasoning,
+                preparedContent: nil,
+                enableMarkdown: enableMarkdown,
+                isOutgoing: isOutgoing,
+                enableAdvancedRenderer: enableAdvancedRenderer,
+                enableMathRendering: enableMathRendering,
+                customTextColor: textColor,
+                customTextStyleColors: customTextStyleColors,
+                isStreaming: true,
+                streamingState: streamingMarkdownState,
+                streamingChannel: .reasoning
+            )
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else if enableMarkdown,
            let preparedReasoningContent,
            preparedReasoningContent.sourceText == reasoning {
             ETAdvancedMarkdownRenderer(
@@ -105,7 +123,10 @@ struct ReasoningMarkdownContentView: View {
                 enableAdvancedRenderer: enableAdvancedRenderer,
                 enableMathRendering: enableMathRendering,
                 customTextColor: textColor,
-                customTextStyleColors: customTextStyleColors
+                customTextStyleColors: customTextStyleColors,
+                isStreaming: isStreaming,
+                streamingState: streamingMarkdownState,
+                streamingChannel: .reasoning
             )
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -139,6 +160,8 @@ struct ReasoningDisclosureView: View, Equatable {
     let reasoningStartedAt: Date?
     let reasoningCompletedAt: Date?
     let reasoningSummary: String?
+    let streamingMarkdownState: ETStreamingMarkdownRenderState?
+    let isStreaming: Bool
 
     static func == (lhs: ReasoningDisclosureView, rhs: ReasoningDisclosureView) -> Bool {
         lhs.reasoning == rhs.reasoning
@@ -159,6 +182,8 @@ struct ReasoningDisclosureView: View, Equatable {
             && lhs.reasoningStartedAt == rhs.reasoningStartedAt
             && lhs.reasoningCompletedAt == rhs.reasoningCompletedAt
             && lhs.reasoningSummary == rhs.reasoningSummary
+            && lhs.streamingMarkdownState === rhs.streamingMarkdownState
+            && lhs.isStreaming == rhs.isStreaming
     }
 
     var body: some View {
@@ -225,7 +250,9 @@ struct ReasoningDisclosureView: View, Equatable {
                         isOutgoing: isOutgoing,
                         textColor: contentColor,
                         customTextStyleColors: customTextStyleColors,
-                        font: .subheadline
+                        font: .subheadline,
+                        streamingMarkdownState: streamingMarkdownState,
+                        isStreaming: isStreaming
                     )
                     .padding(.top, 8)
                 }
