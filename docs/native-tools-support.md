@@ -51,9 +51,15 @@
 | `com.ericterminal.els` | WeatherKit、HomeKit、HealthKit、NFC Tag Reading；保留已有其他能力 | WeatherKit |
 | `com.ericterminal.els.watchkitapp` | WeatherKit、HomeKit、HealthKit；保留已有其他能力 | WeatherKit |
 
-WeatherKit 必须同时启用 App Capabilities 和 App Services 中的对应选项。若手表 App ID 在列表中找不到，先按完整 Bundle ID 搜索并确认团队；确实不存在时，才注册对应的明确 App ID。修改后需更新 provisioning profile，并在后续获准构建时检查实际签名产物的 entitlement，重新安装后验证。
+WeatherKit 必须同时启用 App Capabilities 和 App Services 中的对应选项。两个 App ID 均已存在，无需重新注册。修改后需更新 provisioning profile；当前 iOS 与 watchOS 的 Debug、Release 均使用 Xcode 自动签名，在后续获准构建时由 Xcode 更新描述文件，并检查实际签名产物的 entitlement，重新安装后验证。
 
-本次后台核对：已通过 Computer Use 找到两个 App ID，并确认 `com.ericterminal.els` 的 Capabilities 中 WeatherKit、HomeKit、HealthKit 和 NFC Tag Reading 均已开启。iOS 的 App Services 与手表 App ID 的能力仍待核对，尚未提交网页变更。后台与签名核对完成前，不能把 WeatherKit 鉴权错误标记为已修复。
+2026-09-06 已通过 Computer Use 完成团队 `K9LDK6LF4H` 的后台配置，并在保存后重新打开两个 App ID 核对持久化状态：
+
+- iOS：Capabilities 中的 WeatherKit、HomeKit、HealthKit 和 NFC Tag Reading 原本已开启；补开 App Services 中遗漏的 WeatherKit。
+- watchOS：HealthKit 原本已开启；补开 Capabilities 中的 HomeKit、WeatherKit，以及 App Services 中的 WeatherKit。
+- 保留其他已有能力；未创建新的 App ID、证书或密钥。
+
+手机缺少 WeatherKit 服务开关与截图中的 JWT 鉴权错误相符，但实际请求尚未在真机上复验。后台缺项已修正，签名描述文件更新、重新安装和 WeatherKit 请求验证仍需在后续获准构建与测试时完成；不能仅凭网页保存成功就认定运行时错误已消失。
 
 ## 文档依据
 
