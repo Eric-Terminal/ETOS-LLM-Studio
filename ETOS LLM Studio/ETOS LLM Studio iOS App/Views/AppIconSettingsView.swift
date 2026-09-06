@@ -1,31 +1,26 @@
 // ============================================================================
 // AppIconSettingsView.swift
 // ============================================================================
-// 自定义主屏幕图标的选择、裁切、预览与安装引导
+// 自定义主屏幕图标的选图、导出与快捷指令设置引导
 // ============================================================================
 
+import ETOSCore
 import PhotosUI
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct AppIconSettingsView: View {
-    @ObservedObject private var installer = CustomAppIconInstaller.shared
+    @Environment(\.openURL) private var openURL
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var pendingImage: PreparedCustomAppIconImage?
     @State private var renderedIcon: RenderedCustomAppIcon?
-    @State private var iconName: String
     @State private var isShowingCropEditor = false
     @State private var isShowingIntroDetails = false
     @State private var isProcessingImage = false
-    @State private var isGeneratingProfile = false
+    @State private var isExporting = false
+    @State private var hasExportedIcon = false
     @State private var localErrorMessage: String?
-
-    init() {
-        let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
-        _iconName = State(
-            initialValue: displayName ?? NSLocalizedString("ETOS LLM Studio", comment: "App 名称")
-        )
-    }
 
     var body: some View {
         Form {
@@ -39,93 +34,94 @@ struct AppIconSettingsView: View {
                 PhotosPicker(selection: $selectedPhoto, matching: .images) {
                     Label(
                         renderedIcon == nil
-                            ? NSLocalizedString("选择图标图片", comment: "自定义主屏幕图标选择图片按钮")
-                            : NSLocalizedString("重新选择图片", comment: "自定义主屏幕图标重新选择图片按钮"),
+                            ? NSLocalizedString("选择图标图片", comment: "主屏幕图标选图按钮")
+                            : NSLocalizedString("重新选择图片", comment: "主屏幕图标重新选图按钮"),
                         systemImage: "photo.on.rectangle"
                     )
                 }
-                .disabled(isWorking)
+                .disabled(isProcessingImage || isExporting)
+
+                Button {
+                    isExporting = true
+                } label: {
+                    Label(NSLocalizedString("导出图标图片", comment: "保存裁切后的 PNG"), systemImage: "square.and.arrow.up")
+                }
+                .disabled(renderedIcon == nil || isProcessingImage || isExporting)
             } header: {
-                Text(NSLocalizedString("图标图片", comment: "自定义主屏幕图标图片分组"))
+                Text(NSLocalizedString("图标图片", comment: "主屏幕图标图片分组"))
             } footer: {
-                Text(NSLocalizedString("图片会在设备上裁切为正方形并缩放，不会上传到服务器。", comment: "自定义主屏幕图标图片处理说明"))
+                Text(NSLocalizedString("将裁好的 PNG 存到“文件”，稍后在快捷指令中选取。图片仅在设备上处理。", comment: "图标导出说明"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
-            Section {
-                TextField(
-                    NSLocalizedString("主屏幕名称", comment: "自定义主屏幕图标名称输入框"),
-                    text: $iconName
-                )
-                .textInputAutocapitalization(.words)
-                .onChange(of: iconName) { _, newValue in
-                    if newValue.count > 30 {
-                        iconName = String(newValue.prefix(30))
-                    }
+            if isProcessingImage {
+                Section {
+                    ProgressView(NSLocalizedString("正在处理图片…", comment: "图标图片处理进度"))
                 }
-            } header: {
-                Text(NSLocalizedString("名称", comment: "自定义主屏幕图标名称分组"))
-            } footer: {
-                Text(NSLocalizedString("名称会显示在图标下方，最多 30 个字符。", comment: "自定义主屏幕图标名称说明"))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
+            } else if hasExportedIcon {
+                Section {
+                    Label(NSLocalizedString("图片已导出，请继续设置快捷指令。", comment: "导出成功提示"), systemImage: "checkmark.circle")
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section {
                 Button {
-                    generateAndDownloadProfile()
-                } label: {
-                    HStack {
-                        Label(
-                            NSLocalizedString("生成并下载描述文件", comment: "自定义主屏幕图标下载按钮"),
-                            systemImage: "square.and.arrow.down"
-                        )
-                        Spacer()
-                        if isGeneratingProfile || installer.isBusy {
-                            ProgressView()
+                    openURL(URL(string: "shortcuts://create-shortcut")!) { accepted in
+                        if !accepted {
+                            localErrorMessage = NSLocalizedString("无法打开快捷指令，请确认已安装“快捷指令”App。", comment: "快捷指令启动失败")
                         }
                     }
+                } label: {
+                    Label(NSLocalizedString("前往快捷指令创建", comment: "打开系统快捷指令编辑器"), systemImage: "arrow.up.forward.app")
                 }
-                .disabled(renderedIcon == nil || normalizedIconName.isEmpty || isWorking)
+                .disabled(isProcessingImage)
             } footer: {
-                Text(NSLocalizedString("浏览器收到描述文件后，本地下载服务会立即关闭。再次安装会更新此前由 ETOS 创建的主屏幕图标。", comment: "自定义主屏幕图标下载说明"))
+                Text(NSLocalizedString("打开后需手动添加“打开 App”动作，并选择 ETOS LLM Studio。", comment: "新建快捷指令说明"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
-            if let statusPresentation {
-                Section {
-                    Label(statusPresentation.text, systemImage: statusPresentation.systemImage)
-                        .foregroundStyle(statusPresentation.color)
-                } header: {
-                    Text(NSLocalizedString("当前状态", comment: "自定义主屏幕图标当前状态分组"))
-                }
-            }
-
-            Section(NSLocalizedString("安装步骤", comment: "自定义主屏幕图标安装步骤分组")) {
-                Label(
-                    NSLocalizedString("在浏览器中允许下载描述文件。", comment: "自定义主屏幕图标安装步骤一"),
-                    systemImage: "1.circle.fill"
-                )
-                Label(
-                    NSLocalizedString("打开系统“设置”，轻点“已下载描述文件”。", comment: "自定义主屏幕图标安装步骤二"),
-                    systemImage: "2.circle.fill"
-                )
-                Label(
-                    NSLocalizedString("检查内容后轻点“安装”，主屏幕随后会出现新图标。", comment: "自定义主屏幕图标安装步骤三"),
-                    systemImage: "3.circle.fill"
-                )
-            }
-
             Section {
-                Text(NSLocalizedString("如需移除，请前往“设置”→“通用”→“VPN 与设备管理”，删除 ETOS LLM Studio 图标描述文件。", comment: "自定义主屏幕图标移除说明"))
+                Label(
+                    NSLocalizedString("添加“打开 App”动作，将目标设为 ETOS LLM Studio。", comment: "设置快捷指令动作"),
+                    systemImage: "1.circle"
+                )
+                Label(
+                    NSLocalizedString("打开快捷指令的详情或名称菜单，选择“添加到主屏幕”。", comment: "添加主屏幕图标"),
+                    systemImage: "2.circle"
+                )
+                Label(
+                    NSLocalizedString("轻点图标，选择“选取文件”，再选择导出的 PNG。", comment: "选取主屏幕图标图片"),
+                    systemImage: "3.circle"
+                )
+                Label(
+                    NSLocalizedString("填写主屏幕名称并轻点“添加”。", comment: "完成主屏幕图标设置"),
+                    systemImage: "4.circle"
+                )
+            } header: {
+                Text(NSLocalizedString("设置步骤", comment: "主屏幕图标快捷指令步骤"))
+            } footer: {
+                Text(NSLocalizedString("请使用“打开 App”，不要使用“打开 URL”。", comment: "避免浏览器中转"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle(NSLocalizedString("主屏幕图标", comment: "自定义主屏幕图标页面标题"))
+        .navigationTitle(NSLocalizedString("主屏幕图标", comment: "主屏幕图标页面标题"))
         .navigationBarTitleDisplayMode(.inline)
+        .guideSettingsPageContext(
+            id: "settings-app-icon",
+            title: NSLocalizedString("主屏幕图标", comment: "主屏幕图标向导标题"),
+            documents: [GuideDocumentReference(id: "settings-app-icon", title: NSLocalizedString("主屏幕图标", comment: ""))],
+            isActive: !isShowingCropEditor && !isShowingIntroDetails && !isExporting,
+            settings: [
+                .readOnly("image_ready", label: NSLocalizedString("图标图片", comment: ""), value: { .bool(renderedIcon != nil) }),
+                .readOnly("processing_image", label: NSLocalizedString("正在处理图片…", comment: ""), value: { .bool(isProcessingImage) }),
+                .readOnly("image_exported", label: NSLocalizedString("导出图标图片", comment: ""), value: { .bool(hasExportedIcon) })
+            ]
+        )
         .onChange(of: selectedPhoto) { _, item in
             guard let item else { return }
             Task {
@@ -139,56 +135,77 @@ struct AppIconSettingsView: View {
             if let pendingImage {
                 CustomAppIconCropEditorView(
                     sourceImage: pendingImage.image,
-                    onCancel: {
-                        isShowingCropEditor = false
-                    },
+                    onCancel: { isShowingCropEditor = false },
                     onConfirm: { cropRect in
                         renderSelectedIcon(from: pendingImage, cropRect: cropRect)
                     }
                 )
-            } else {
-                ProgressView()
-                    .presentationDetents([.medium])
             }
         }
         .sheet(isPresented: $isShowingIntroDetails) {
             NavigationStack {
                 ScrollView {
-                    Text(NSLocalizedString("自定义主屏幕图标说明正文", comment: "自定义主屏幕图标介绍详情"))
+                    Text(NSLocalizedString("自定义主屏幕图标说明正文", comment: "主屏幕图标完整教程"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
                 }
-                .navigationTitle(NSLocalizedString("主屏幕图标", comment: "自定义主屏幕图标介绍标题"))
+                .navigationTitle(NSLocalizedString("主屏幕图标", comment: "主屏幕图标教程标题"))
                 .navigationBarTitleDisplayMode(.inline)
+                .guideSettingsPageContext(
+                    id: "settings-app-icon-intro",
+                    title: NSLocalizedString("主屏幕图标", comment: ""),
+                    documents: [GuideDocumentReference(id: "settings-app-icon", title: NSLocalizedString("主屏幕图标", comment: ""))],
+                    settings: [
+                        .readOnly("instructions", label: NSLocalizedString("设置步骤", comment: ""), value: {
+                            .string(NSLocalizedString("自定义主屏幕图标说明正文", comment: ""))
+                        })
+                    ]
+                )
             }
         }
-        .alert(NSLocalizedString("无法创建主屏幕图标", comment: "自定义主屏幕图标错误标题"), isPresented: errorPresented) {
-            Button(NSLocalizedString("确定", comment: "确认自定义主屏幕图标错误"), role: .cancel) {}
+        // 导出器由系统管理文件位置与写入；页面只交付后台编码完成的 PNG 数据。
+        .fileExporter(
+            isPresented: $isExporting,
+            document: renderedIcon.map { CustomAppIconExportDocument(data: $0.pngData) },
+            contentType: .png,
+            defaultFilename: "ETOS-Icon.png"
+        ) { result in
+            switch result {
+            case .success:
+                hasExportedIcon = true
+            case .failure(let error):
+                guard (error as? CocoaError)?.code != .userCancelled else { return }
+                localErrorMessage = String(
+                    format: NSLocalizedString("图标导出失败：%@", comment: "图标导出错误"),
+                    error.localizedDescription
+                )
+            }
+        }
+        .alert(NSLocalizedString("无法创建主屏幕图标", comment: "主屏幕图标错误标题"), isPresented: errorPresented) {
+            Button(NSLocalizedString("确定", comment: "关闭错误提示"), role: .cancel) {}
         } message: {
-            Text(presentedErrorMessage ?? "")
+            Text(localErrorMessage ?? "")
         }
     }
 
     private var settingsIntroCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(NSLocalizedString("使用自己的图片", comment: "自定义主屏幕图标介绍卡片标题"))
+        VStack(alignment: .leading) {
+            Text(NSLocalizedString("使用自己的图片", comment: "主屏幕图标介绍标题"))
                 .etFont(.headline.weight(.semibold))
-            Text(NSLocalizedString("选择图片并生成只在本机传输的主屏幕图标。", comment: "自定义主屏幕图标介绍卡片摘要"))
+            Text(NSLocalizedString("裁切并导出图片，再通过快捷指令设置主屏幕图标。", comment: "主屏幕图标介绍摘要"))
                 .etFont(.subheadline)
                 .foregroundStyle(.secondary)
             Button {
                 isShowingIntroDetails = true
             } label: {
-                Text(NSLocalizedString("进一步了解…", comment: "打开自定义主屏幕图标详细说明"))
-                    .etFont(.footnote.weight(.medium))
-                    .foregroundStyle(.blue)
+                Text(NSLocalizedString("进一步了解…", comment: "打开主屏幕图标教程"))
+                    .etFont(.footnote)
             }
             .buttonStyle(.plain)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 4)
     }
 
     private var iconPreview: some View {
@@ -207,79 +224,22 @@ struct AppIconSettingsView: View {
             }
             .frame(width: 112, height: 112)
             .clipShape(RoundedRectangle(cornerRadius: 25, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 25, style: .continuous)
-                    .strokeBorder(Color(uiColor: .separator).opacity(0.5), lineWidth: 0.5)
-            }
-            .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
-            .accessibilityLabel(NSLocalizedString("图标预览", comment: "自定义主屏幕图标预览辅助功能标签"))
+            .accessibilityLabel(NSLocalizedString("图标预览", comment: "主屏幕图标预览辅助功能标签"))
             Spacer()
         }
         .padding(.vertical)
     }
 
-    private var normalizedIconName: String {
-        iconName.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var isWorking: Bool {
-        isProcessingImage || isGeneratingProfile || installer.isBusy
-    }
-
-    private var statusPresentation: (text: String, systemImage: String, color: Color)? {
-        if isProcessingImage {
-            return (
-                NSLocalizedString("正在处理图片…", comment: "自定义主屏幕图标处理图片状态"),
-                "photo",
-                .secondary
-            )
-        }
-        if isGeneratingProfile || installer.phase == .startingServer {
-            return (
-                NSLocalizedString("正在准备描述文件…", comment: "自定义主屏幕图标准备状态"),
-                "doc.text",
-                .secondary
-            )
-        }
-        if installer.phase == .waitingForDownload {
-            return (
-                NSLocalizedString("正在等待浏览器下载…", comment: "自定义主屏幕图标等待下载状态"),
-                "safari",
-                .secondary
-            )
-        }
-        if installer.phase == .profileDelivered {
-            return (
-                NSLocalizedString("描述文件已发送到浏览器，请继续前往系统设置安装。", comment: "自定义主屏幕图标描述文件已发送状态"),
-                "checkmark.circle.fill",
-                .green
-            )
-        }
-        return nil
-    }
-
-    private var presentedErrorMessage: String? {
-        localErrorMessage ?? installer.errorMessage
-    }
-
     private var errorPresented: Binding<Bool> {
         Binding(
-            get: { presentedErrorMessage != nil },
-            set: { isPresented in
-                if !isPresented {
-                    localErrorMessage = nil
-                    installer.clearError()
-                }
-            }
+            get: { localErrorMessage != nil },
+            set: { if !$0 { localErrorMessage = nil } }
         )
     }
 
     private func prepareSelectedPhoto(_ item: PhotosPickerItem) async {
-        installer.resetStatus()
         isProcessingImage = true
-        defer {
-            isProcessingImage = false
-        }
+        defer { isProcessingImage = false }
 
         do {
             guard let data = try await item.loadTransferable(type: Data.self) else {
@@ -292,62 +252,23 @@ struct AppIconSettingsView: View {
             isShowingCropEditor = true
         } catch {
             selectedPhoto = nil
-            localErrorMessage = NSLocalizedString("无法读取所选图片，请重新选择。", comment: "自定义主屏幕图标读取图片失败")
+            localErrorMessage = NSLocalizedString("无法读取所选图片，请重新选择。", comment: "主屏幕图标读取图片失败")
         }
     }
 
-    private func renderSelectedIcon(
-        from preparedImage: PreparedCustomAppIconImage,
-        cropRect: CGRect
-    ) {
+    private func renderSelectedIcon(from preparedImage: PreparedCustomAppIconImage, cropRect: CGRect) {
         isShowingCropEditor = false
         isProcessingImage = true
         Task {
-            defer {
-                isProcessingImage = false
-            }
+            defer { isProcessingImage = false }
             do {
                 let icon = try await Task.detached(priority: .userInitiated) {
-                    try CustomAppIconImageProcessor.renderIcon(
-                        from: preparedImage,
-                        cropRect: cropRect
-                    )
+                    try CustomAppIconImageProcessor.renderIcon(from: preparedImage, cropRect: cropRect)
                 }.value
                 renderedIcon = icon
+                hasExportedIcon = false
             } catch {
-                localErrorMessage = NSLocalizedString("无法处理所选图片，请重新选择。", comment: "自定义主屏幕图标处理图片失败")
-            }
-        }
-    }
-
-    private func generateAndDownloadProfile() {
-        guard let renderedIcon else { return }
-        let label = normalizedIconName
-        guard !label.isEmpty else {
-            localErrorMessage = NSLocalizedString("请输入主屏幕名称。", comment: "自定义主屏幕图标名称为空")
-            return
-        }
-
-        let profileDescription = NSLocalizedString(
-            "为 ETOS LLM Studio 添加一个可移除的自定义主屏幕图标。",
-            comment: "自定义主屏幕图标描述文件说明"
-        )
-        isGeneratingProfile = true
-        Task {
-            defer {
-                isGeneratingProfile = false
-            }
-            do {
-                let profileData = try await Task.detached(priority: .userInitiated) {
-                    try CustomAppIconProfileBuilder.makeProfile(
-                        iconPNGData: renderedIcon.pngData,
-                        label: label,
-                        profileDescription: profileDescription
-                    )
-                }.value
-                installer.install(profileData: profileData)
-            } catch {
-                localErrorMessage = error.localizedDescription
+                localErrorMessage = NSLocalizedString("无法处理所选图片，请重新选择。", comment: "主屏幕图标处理图片失败")
             }
         }
     }
@@ -437,6 +358,17 @@ private struct CustomAppIconCropEditorView: View {
         }
         .presentationDragIndicator(.visible)
         .presentationDetents([.large])
+        .guideSettingsPageContext(
+            id: "settings-app-icon-crop",
+            title: NSLocalizedString("裁切图标", comment: "图标裁切向导标题"),
+            documents: [GuideDocumentReference(id: "settings-app-icon", title: NSLocalizedString("主屏幕图标", comment: ""))],
+            // 构图依赖用户查看图片；向导只读取取景状态，不接收图片，也不替用户确认裁切。
+            settings: [
+                .readOnly("zoom_scale", label: NSLocalizedString("缩放", comment: "图标裁切缩放状态"), value: { .double(Double(zoomScale)) }),
+                .readOnly("offset_x", label: NSLocalizedString("水平偏移", comment: "图标裁切偏移状态"), value: { .double(Double(imageOffset.width)) }),
+                .readOnly("offset_y", label: NSLocalizedString("垂直偏移", comment: "图标裁切偏移状态"), value: { .double(Double(imageOffset.height)) })
+            ]
+        )
     }
 
     private var cropCanvasBackground: Color {
