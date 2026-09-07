@@ -40,7 +40,7 @@ struct CloudEmbeddingServiceTests {
         )
         ConfigLoader.saveProvider(provider)
 
-        let expectedURL = try #require(URL(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=test-key"))
+        let expectedURL = try #require(URL(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent"))
         let response = try #require(HTTPURLResponse(
             url: expectedURL,
             statusCode: 200,

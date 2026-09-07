@@ -38,20 +38,20 @@ extension GeminiAdapter {
         )
         var chatURL = baseURL.appendingPathComponent("models/\(requestModelName):\(action)")
         
-        // Gemini 使用 URL 参数传递 API Key
-        var urlComponents = URLComponents(url: chatURL, resolvingAgainstBaseURL: false)!
-        var queryItems = urlComponents.queryItems ?? []
-        queryItems.append(URLQueryItem(name: "key", value: apiKey))
         if isStreaming {
+            var urlComponents = URLComponents(url: chatURL, resolvingAgainstBaseURL: false)!
+            var queryItems = urlComponents.queryItems ?? []
             queryItems.append(URLQueryItem(name: "alt", value: "sse"))
+            urlComponents.queryItems = queryItems
+            chatURL = urlComponents.url!
         }
-        urlComponents.queryItems = queryItems
-        chatURL = urlComponents.url!
         
         var request = URLRequest(url: chatURL)
         request.timeoutInterval = 600
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // 密钥使用官方认证请求头，避免随 URL 出现在访问日志中；自定义请求头仍可覆盖默认值。
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         applyHeaderOverrides(model.provider.headerOverrides, apiKey: apiKey, to: &request)
         
         // 分离系统消息和普通消息
@@ -294,13 +294,11 @@ extension GeminiAdapter {
             return nil
         }
         
-        var modelsURL = baseURL.appendingPathComponent("models")
-        var urlComponents = URLComponents(url: modelsURL, resolvingAgainstBaseURL: false)!
-        urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
-        modelsURL = urlComponents.url!
+        let modelsURL = baseURL.appendingPathComponent("models")
         
         var request = URLRequest(url: modelsURL)
         request.httpMethod = "GET"
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         applyHeaderOverrides(provider.headerOverrides, apiKey: apiKey, to: &request)
         return request
     }
@@ -522,15 +520,13 @@ extension GeminiAdapter {
             for: model,
             overrides: model.effectiveOverrideParameters.mapValues { $0.toAny() }
         )
-        var embeddingsURL = baseURL.appendingPathComponent("models/\(requestModelName):\(action)")
-        var urlComponents = URLComponents(url: embeddingsURL, resolvingAgainstBaseURL: false)!
-        urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
-        embeddingsURL = urlComponents.url!
+        let embeddingsURL = baseURL.appendingPathComponent("models/\(requestModelName):\(action)")
         
         var request = URLRequest(url: embeddingsURL)
         request.httpMethod = "POST"
         request.timeoutInterval = 300
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         applyHeaderOverrides(model.provider.headerOverrides, apiKey: apiKey, to: &request)
         
         var payload: [String: Any]

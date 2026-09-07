@@ -53,7 +53,8 @@ struct GeminiAdapterTests {
         #expect(fileData["mime_type"] as? String == "video/mp4")
         #expect(fileData["file_uri"] as? String == "https://generativelanguage.googleapis.com/v1beta/files/video-1")
         #expect(parts.dropFirst().first?["text"] as? String == "概括这段视频")
-        #expect(request.url?.query?.contains("key=selected-key") == true)
+        #expect(request.url?.query == nil)
+        #expect(request.value(forHTTPHeaderField: "x-goog-api-key") == "selected-key")
     }
 
     @Test("Gemini 原生模型列表会保留嵌入模型")
@@ -163,7 +164,8 @@ struct GeminiAdapterTests {
         let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
         let requests = try #require(payload["requests"] as? [[String: Any]])
 
-        #expect(request.url?.absoluteString == "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents?key=test-key")
+        #expect(request.url?.absoluteString == "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents")
+        #expect(request.value(forHTTPHeaderField: "x-goog-api-key") == "test-key")
         #expect(requests.count == 2)
         #expect(requests.first?["model"] as? String == "models/gemini-embedding-001")
     }
@@ -786,7 +788,7 @@ struct GeminiAdapterTests {
         #expect(failedPart.streamTermination == .failed(reason: "服务暂时不可用"))
     }
 
-    @Test("Gemini 文生图请求走 generateContent 端点并带 key 参数")
+    @Test("Gemini 文生图请求走 generateContent 端点并使用密钥请求头")
     func testGeminiImageGenerationRequestUsesGenerateContentEndpoint() throws {
         let request = try #require(
             adapter.buildImageGenerationRequest(
@@ -801,7 +803,8 @@ struct GeminiAdapterTests {
         let parts = try #require(contents.first?["parts"] as? [[String: Any]])
 
         #expect(request.url?.absoluteString.contains("/models/gemini-2.5-pro:generateContent") == true)
-        #expect(request.url?.query?.contains("key=test-key") == true)
+        #expect(request.url?.query == nil)
+        #expect(request.value(forHTTPHeaderField: "x-goog-api-key") == "test-key")
         #expect(parts.count == 1)
         #expect(parts.first?["text"] as? String == "画一只宇航员猫")
     }

@@ -25,15 +25,13 @@ extension GeminiAdapter {
             for: model,
             overrides: model.effectiveOverrideParameters.mapValues { $0.toAny() }
         )
-        var imageURL = baseURL.appendingPathComponent("models/\(requestModelName):generateContent")
-        var urlComponents = URLComponents(url: imageURL, resolvingAgainstBaseURL: false)!
-        urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
-        imageURL = urlComponents.url!
+        let imageURL = baseURL.appendingPathComponent("models/\(requestModelName):generateContent")
 
         var request = URLRequest(url: imageURL)
         request.httpMethod = "POST"
         request.timeoutInterval = 300
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         applyHeaderOverrides(model.provider.headerOverrides, apiKey: apiKey, to: &request)
 
         let overrides = model.effectiveOverrideParameters.mapValues { $0.toAny() }
