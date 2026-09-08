@@ -47,36 +47,29 @@ extension TTSManager {
         return data
     }
 
-    func preprocessText(_ text: String, settings: TTSSettingsSnapshot) -> String {
-        let normalized = text.replacingOccurrences(of: "\u{00A0}", with: " ")
-        let configuredMode = TTSTextSelectionMode(rawValue: AppConfigStore.shared.ttsTextSelectionMode)
-        let mode = configuredMode ?? (settings.onlyReadQuotedContent ? .quotedOnly : .fullText)
-        let selected = Self.selectTextForPlayback(normalized, mode: mode)
+    nonisolated static func preprocessText(
+        _ text: String,
+        mode: TTSTextSelectionMode,
+        filterCodeAndHTML: Bool,
+        lightweight: Bool,
+        maxCharacters: Int
+    ) -> String {
+        // 先过滤再筛选，避免属性引号被当作台词；长度预算只计算过滤后可朗读的内容。
+        let source = filterCodeAndHTML
+            ? TTSSpeechTextFilter.filter(text)
+            : String(text.prefix(maxCharacters))
+        let normalized = source.replacingOccurrences(of: "\u{00A0}", with: " ")
+        var selected = Self.selectTextForPlayback(normalized, mode: mode)
+        if filterCodeAndHTML {
+            selected = TTSSpeechTextFilter.removePreservedItalicTags(selected)
+        }
         let stripped: String
-#if os(watchOS)
-        if settings.watchUseLightweightPreprocess {
+        if lightweight {
             stripped = selected
         } else {
             stripped = stripMarkdown(selected)
         }
-#else
-        stripped = stripMarkdown(selected)
-#endif
-        return stripped.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    func boundedSpeechInput(_ text: String, settings: TTSSettingsSnapshot) -> String {
-#if os(watchOS)
-        let maxLength = min(max(settings.watchSpeechMaxCharacters, 500), 6_000)
-#else
-        let maxLength = 12_000
-#endif
-        guard text.count > maxLength else { return text }
-        return String(text.prefix(maxLength))
-    }
-
-    func splitText(_ text: String, maxLength: Int = 160) -> [String] {
-        Self.splitTextForPlayback(text, maxLength: maxLength)
+        return String(stripped.trimmingCharacters(in: .whitespacesAndNewlines).prefix(maxCharacters))
     }
 
     nonisolated public static func splitTextForPlayback(_ text: String, maxLength: Int = 160) -> [String] {
@@ -423,7 +416,7 @@ extension TTSManager {
         character.unicodeScalars.allSatisfy { CharacterSet.alphanumerics.contains($0) }
     }
 
-    func stripMarkdown(_ text: String) -> String {
+    nonisolated static func stripMarkdown(_ text: String) -> String {
         var output = text
         let patterns: [(String, String)] = [
             (#"```[\s\S]*?```|`[^`]*?`"#, ""),

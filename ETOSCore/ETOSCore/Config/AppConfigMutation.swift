@@ -125,6 +125,7 @@ extension AppConfigStore {
         case .backgroundGenerationAudioKeepAliveEnabled: backgroundGenerationAudioKeepAliveEnabled = value
         case .continueTTSPlaybackInBackground: continueTTSPlaybackInBackground = value
         case .ttsCacheNetworkAudioForReplay: ttsCacheNetworkAudioForReplay = value
+        case .ttsFilterCodeAndHTML: ttsFilterCodeAndHTML = value
         case .enableBackgroundReplyNotification: enableBackgroundReplyNotification = value
         case .hasRequestedBackgroundReplyNotificationPermission: hasRequestedBackgroundReplyNotificationPermission = value
         case .hasRequestedBackgroundReplyNotificationPermissionWatch: hasRequestedBackgroundReplyNotificationPermissionWatch = value

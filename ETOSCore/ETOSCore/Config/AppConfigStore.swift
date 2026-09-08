@@ -252,6 +252,9 @@ public final class AppConfigStore: ObservableObject {
     @Published public var ttsTextSelectionMode: String {
         didSet { write(.ttsTextSelectionMode, ttsTextSelectionMode) }
     }
+    @Published public var ttsFilterCodeAndHTML: Bool {
+        didSet { write(.ttsFilterCodeAndHTML, ttsFilterCodeAndHTML) }
+    }
     @Published public var memoryEmbeddingModelIdentifier: String { didSet { write(.memoryEmbeddingModelIdentifier, memoryEmbeddingModelIdentifier) } }
     @Published public var titleGenerationModelIdentifier: String { didSet { write(.titleGenerationModelIdentifier, titleGenerationModelIdentifier) } }
     @Published public var dailyPulseModelIdentifier: String { didSet { write(.dailyPulseModelIdentifier, dailyPulseModelIdentifier) } }
@@ -682,6 +685,7 @@ public final class AppConfigStore: ObservableObject {
         ttsServiceConfiguration = Self.textValue(.ttsServiceConfiguration, userDefaults: userDefaults)
         ttsCacheNetworkAudioForReplay = Self.boolValue(.ttsCacheNetworkAudioForReplay, userDefaults: userDefaults)
         ttsTextSelectionMode = Self.textValue(.ttsTextSelectionMode, userDefaults: userDefaults)
+        ttsFilterCodeAndHTML = Self.boolValue(.ttsFilterCodeAndHTML, userDefaults: userDefaults)
         memoryEmbeddingModelIdentifier = Self.textValue(.memoryEmbeddingModelIdentifier, userDefaults: userDefaults)
         titleGenerationModelIdentifier = Self.textValue(.titleGenerationModelIdentifier, userDefaults: userDefaults)
         dailyPulseModelIdentifier = Self.textValue(.dailyPulseModelIdentifier, userDefaults: userDefaults)

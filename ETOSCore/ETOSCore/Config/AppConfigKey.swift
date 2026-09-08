@@ -346,6 +346,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case ttsServiceConfiguration = "tts.serviceConfiguration"
     case ttsCacheNetworkAudioForReplay = "tts.cacheNetworkAudioForReplay"
     case ttsTextSelectionMode = "tts.textSelectionMode"
+    case ttsFilterCodeAndHTML = "tts.filterCodeAndHTML"
     case memoryEmbeddingModelIdentifier = "memoryEmbeddingModelIdentifier"
     case titleGenerationModelIdentifier = "titleGenerationModelIdentifier"
     case dailyPulseModelIdentifier = "dailyPulseModelIdentifier"
@@ -655,7 +656,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .text("")
         case .ttsServiceConfiguration:
             return .text("{\"services\":[],\"selectedServiceID\":null,\"didMigrateLegacyModel\":false}")
-        case .ttsCacheNetworkAudioForReplay:
+        case .ttsCacheNetworkAudioForReplay, .ttsFilterCodeAndHTML:
             return .bool(false)
         case .ttsTextSelectionMode:
             return .text("")

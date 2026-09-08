@@ -7555,3 +7555,9 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "继续朗读" = "Reanudar lectura";
 "快进 5 秒" = "Avanzar 5 segundos";
 "朗读速度" = "Velocidad de lectura";
+// TTS 代码与 HTML 内容过滤
+"过滤代码与 HTML 标签" = "Filtrar código y etiquetas HTML";
+"所选内容为空时会朗读正文；开启过滤后，不会恢复已过滤的代码。" = "Si la selección está vacía, se lee el texto principal. El código filtrado nunca se recupera.";
+"朗读内容过滤" = "Filtrado del contenido leído";
+"保留 HTML 正文，跳过代码、脚本和样式。" = "Conservar el texto HTML y omitir código, scripts y estilos.";
+"TTS 内容过滤使用说明" = "Activa Filtrar código y etiquetas HTML para conservar el texto de los bloques HTML y del HTML sin formato, omitiendo los demás bloques de código delimitados y el código en línea. El filtrado se aplica antes de seleccionar por comillas, paréntesis o cursiva. Si la selección está vacía, solo se lee el texto filtrado; si no queda texto, se omite la lectura. También se aplica al preprocesamiento ligero en Apple Watch.\n\nSolo se extrae el texto presente en el código fuente HTML. No se ejecutan scripts, por lo que no se puede extraer texto generado por scripts ni cargado desde fuentes externas.";

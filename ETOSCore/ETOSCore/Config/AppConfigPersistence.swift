@@ -450,6 +450,7 @@ extension AppConfigStore {
         case .ttsServiceConfiguration: return .text(ttsServiceConfiguration)
         case .ttsCacheNetworkAudioForReplay: return .bool(ttsCacheNetworkAudioForReplay)
         case .ttsTextSelectionMode: return .text(ttsTextSelectionMode)
+        case .ttsFilterCodeAndHTML: return .bool(ttsFilterCodeAndHTML)
         case .memoryEmbeddingModelIdentifier: return .text(memoryEmbeddingModelIdentifier)
         case .titleGenerationModelIdentifier: return .text(titleGenerationModelIdentifier)
         case .dailyPulseModelIdentifier: return .text(dailyPulseModelIdentifier)
