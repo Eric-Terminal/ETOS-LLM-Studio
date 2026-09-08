@@ -71,6 +71,29 @@ public enum FeedbackStore {
         NotificationCenter.default.post(name: .feedbackTicketsUpdated, object: nil)
     }
 
+    /// 将事件基线比较与落盘串行化，避免启动刷新和页面刷新同时发现同一条新引用。
+    static func mergeStatus(
+        _ snapshot: FeedbackStatusSnapshot,
+        fallbackTicket: FeedbackTicket
+    ) -> (previous: FeedbackTicket, updated: FeedbackTicket, tickets: [FeedbackTicket]) {
+        let result = lock.feedbackWithLock {
+            var current = loadTicketsWithoutLock()
+            let index = current.firstIndex { $0.issueNumber == snapshot.issueNumber }
+            let previous = index.map { current[$0] } ?? fallbackTicket
+            let updated = previous.merged(with: snapshot)
+            if let index {
+                current[index] = updated
+            } else {
+                current.append(updated)
+            }
+            let sorted = sortTickets(current)
+            writeTicketsWithoutLock(sorted)
+            return (previous, updated, sorted)
+        }
+        NotificationCenter.default.post(name: .feedbackTicketsUpdated, object: nil)
+        return result
+    }
+
     @discardableResult
     public static func mergeTickets(_ incoming: [FeedbackTicket]) -> (imported: Int, skipped: Int) {
         guard !incoming.isEmpty else { return (0, 0) }
@@ -189,7 +212,8 @@ public enum FeedbackStore {
                 submittedExtraContext: row.submittedExtraContext,
                 lastKnownCommentCount: row.lastKnownCommentCount,
                 lastKnownDeveloperCommentID: row.lastKnownDeveloperCommentID,
-                lastKnownDeveloperCommentAt: row.lastKnownDeveloperCommentAt.map(Date.init(timeIntervalSince1970:))
+                lastKnownDeveloperCommentAt: row.lastKnownDeveloperCommentAt.map(Date.init(timeIntervalSince1970:)),
+                lastKnownReferencedCommitIDs: row.lastKnownReferencedCommitIDs
             )
         }.sorted { lhs, rhs in
             let lhsDate = lhs.lastCheckedAt ?? lhs.createdAt
@@ -227,7 +251,8 @@ public enum FeedbackStore {
                     submittedExtraContext: ticket.submittedExtraContext,
                     lastKnownCommentCount: ticket.lastKnownCommentCount,
                     lastKnownDeveloperCommentID: ticket.lastKnownDeveloperCommentID,
-                    lastKnownDeveloperCommentAt: ticket.lastKnownDeveloperCommentAt?.timeIntervalSince1970
+                    lastKnownDeveloperCommentAt: ticket.lastKnownDeveloperCommentAt?.timeIntervalSince1970,
+                    lastKnownReferencedCommitIDs: ticket.lastKnownReferencedCommitIDs
                 )
                 try record.insert(db)
             }
@@ -339,6 +364,7 @@ public enum FeedbackStore {
             case lastKnownCommentCount = "last_known_comment_count"
             case lastKnownDeveloperCommentID = "last_known_developer_comment_id"
             case lastKnownDeveloperCommentAt = "last_known_developer_comment_at"
+            case lastKnownReferencedCommitIDs = "last_known_referenced_commit_ids"
         }
 
         var issueNumber: Int
@@ -362,6 +388,7 @@ public enum FeedbackStore {
         var lastKnownCommentCount: Int?
         var lastKnownDeveloperCommentID: String?
         var lastKnownDeveloperCommentAt: Double?
+        var lastKnownReferencedCommitIDs: [String]?
     }
 }
 

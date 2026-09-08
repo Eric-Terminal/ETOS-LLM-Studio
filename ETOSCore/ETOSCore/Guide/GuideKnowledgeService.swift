@@ -73,6 +73,18 @@ public actor GuideKnowledgeService {
 public enum GuideDocumentCatalog {
     public static let documents: [GuideDocument] = [
         GuideDocument(
+            id: "feedback-assistant",
+            title: "反馈助手与关联提交",
+            keywords: ["反馈", "工单", "开发者回复", "Markdown", "关联提交", "Commit", "通知"],
+            content: """
+            反馈助手位于设置的拓展功能中。新建反馈填写标题与详细描述，问题反馈还可填写复现步骤、预期与实际行为；提交后在“我的反馈”中查看工单。反馈正文及处理动态中的评论支持 Markdown 标题、列表、加粗、链接和代码块，iOS 与 watchOS 正文完整展开；列表标题和关联 Commit 卡片只作摘要，点击工单或 Commit 可查看详情。
+
+            开发者在提交信息中引用工单编号（例如 #133），GitHub 识别后的关联提交会进入处理动态，即使没有评论也可以提醒。引用代码不代表已发布或问题已解决，实际进度以工单状态和正式版本为准。提醒在 App 启动或用户刷新工单、成功获取新动态后通过本地通知发出，需要允许系统通知；并非 App 关闭后的即时远程推送。相同引用只提醒一次。已关闭工单不参与启动自动刷新，仍可手动刷新。
+
+            向导分别声明反馈列表、新建草稿、工单详情和关联 Commit 详情的只读页面上下文，只读取工单数量、编号、状态、动态数量、各输入是否已填写、提交进度及关联 Commit 的 SHA。反馈可能含日志与凭据，因此不向模型公开正文、评论内容或 ticket_token，也不提供发送、删除或修改工单工具。草稿在点击原生提交或发送按钮前不会提交，用户需要自行审阅内容并操作。没有可由向导修改的持久化设置。
+            """
+        ),
+        GuideDocument(
             id: "settings-app-icon",
             title: "主屏幕图标与快捷指令",
             keywords: ["主屏幕图标", "自定义图标", "图标图片", "图标", "快捷指令", "裁切", "PNG"],

@@ -93,12 +93,18 @@ Submitted tickets get a number. The feedback list shows:
 - **Comment thread**: developers reply on the ticket; you reply back
 - **Developer flags**: "Confirmed Bug", "Cannot Reproduce", "Fixed in Next Version", etc.
 
-State **auto-syncs**.
+Descriptions and comments support Markdown headings, lists, emphasis, links and code blocks. Both iPhone and Apple Watch let you scroll through the full text; submitted feedback on the watch is no longer limited to eight lines.
+
+When a developer references a ticket number in a commit message, such as `fix(tools): correct arguments #133`, GitHub-recognized commits appear in the timeline. Tap a commit for details. A new linked commit can trigger a notification even without a comment; it does not mean the fix has been released.
+
+The app refreshes tickets that are not closed at launch, and you can also refresh manually. After fetching new replies, status changes or linked commits, it sends a local notification if system permission is granted. Each reference is reported once. These are not instant remote notifications while the app is closed. Existing tickets establish a baseline without notifying you about references from before the last check.
+
+The feedback list, composer and ticket detail each declare their own page guide context. The guide can read status and whether fields are filled, but not feedback text, comments or ticket credentials. You review and submit the content yourself.
 
 #### Two-way Tickets
 
 - iPhone tickets sync to the Watch
-- System notifications push status updates
+- Local notifications report new activity after launch or a ticket refresh
 
 ### API Traffic Analysis
 

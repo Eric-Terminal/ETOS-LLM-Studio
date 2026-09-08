@@ -948,6 +948,12 @@ extension PersistenceAuxiliaryGRDBStore {
             migrator.registerMigration("v20_add_local_linux_command_rule_suffix") { db in
                 try Self.migrateLocalLinuxCommandRuleSuffix(db)
             }
+
+            migrator.registerMigration("v21_add_feedback_referenced_commit_tracking") { db in
+                try db.alter(table: "feedback_tickets") { table in
+                    table.add(column: "last_known_referenced_commit_ids", .text)
+                }
+            }
         }
 
         if supportsMemoryRelationalSchema {

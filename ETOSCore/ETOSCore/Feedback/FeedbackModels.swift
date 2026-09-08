@@ -424,6 +424,8 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
     public var lastKnownCommentCount: Int?
     public var lastKnownDeveloperCommentID: String?
     public var lastKnownDeveloperCommentAt: Date?
+    /// nil 表示旧版本尚未建立引用事件基线；空数组表示已检查且没有引用。
+    public var lastKnownReferencedCommitIDs: [String]?
 
     public init(
         issueNumber: Int,
@@ -446,7 +448,8 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
         submittedExtraContext: String? = nil,
         lastKnownCommentCount: Int? = nil,
         lastKnownDeveloperCommentID: String? = nil,
-        lastKnownDeveloperCommentAt: Date? = nil
+        lastKnownDeveloperCommentAt: Date? = nil,
+        lastKnownReferencedCommitIDs: [String]? = nil
     ) {
         self.issueNumber = issueNumber
         self.ticketToken = ticketToken
@@ -469,6 +472,7 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
         self.lastKnownCommentCount = lastKnownCommentCount
         self.lastKnownDeveloperCommentID = lastKnownDeveloperCommentID
         self.lastKnownDeveloperCommentAt = lastKnownDeveloperCommentAt
+        self.lastKnownReferencedCommitIDs = lastKnownReferencedCommitIDs
     }
 
     public func merged(with snapshot: FeedbackStatusSnapshot, checkedAt: Date = Date()) -> FeedbackTicket {
@@ -479,6 +483,14 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
         updated.lastKnownUpdatedAt = snapshot.updatedAt
         updated.publicURL = snapshot.publicURL
         updated.lastKnownCommentCount = snapshot.comments.count
+        let referencedIDs = snapshot.timelineEvents.compactMap { event -> String? in
+            guard case .referencedCommit = event else { return nil }
+            return event.id
+        }
+        // 保留已见事件，避免服务端暂时缺失事件或事件排序变化导致重复提醒。
+        updated.lastKnownReferencedCommitIDs = Array(
+            Set(lastKnownReferencedCommitIDs ?? []).union(referencedIDs)
+        ).sorted()
         if let latestDeveloperComment = snapshot.comments
             .filter({ $0.isDeveloper })
             .max(by: { lhs, rhs in

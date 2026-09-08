@@ -16,11 +16,12 @@ import os.log
 import UserNotifications
 #endif
 
-private struct FeedbackTicketUpdateEvent {
+struct FeedbackTicketUpdateEvent: Sendable {
     let hasStatusChange: Bool
     let oldStatus: FeedbackTicketStatus
     let newStatus: FeedbackTicketStatus
     let latestDeveloperComment: FeedbackComment?
+    let latestReferencedCommit: FeedbackReferencedCommit?
 }
 
 public struct FeedbackServiceConfig: Sendable {
@@ -269,7 +270,8 @@ public final class FeedbackService: ObservableObject {
             submittedReproductionSteps: prepared.draft.reproductionSteps,
             submittedExpectedBehavior: prepared.draft.expectedBehavior,
             submittedActualBehavior: prepared.draft.actualBehavior,
-            submittedExtraContext: prepared.draft.extraContext
+            submittedExtraContext: prepared.draft.extraContext,
+            lastKnownReferencedCommitIDs: []
         )
 
         tickets = await Task.detached(priority: .utility) {
@@ -297,7 +299,10 @@ public final class FeedbackService: ObservableObject {
 
         let statusResponse: IssueStatusResponse
         do {
-            statusResponse = try decoder.decode(IssueStatusResponse.self, from: data)
+            let decoder = decoder
+            statusResponse = try await Task.detached(priority: .userInitiated) {
+                try decoder.decode(IssueStatusResponse.self, from: data)
+            }.value
         } catch {
             logger.error("解析状态响应失败: \(error.localizedDescription)")
             throw FeedbackServiceError.decodeFailed
@@ -325,13 +330,13 @@ public final class FeedbackService: ObservableObject {
             )
         )
 
-        let baselineTicket = FeedbackStore
-            .loadTickets()
-            .first(where: { $0.issueNumber == ticket.issueNumber }) ?? ticket
-        let updateEvent = makeTicketUpdateEventIfNeeded(previousTicket: baselineTicket, snapshot: snapshot)
-        let mergedTicket = baselineTicket.merged(with: snapshot)
-        FeedbackStore.upsertTicket(mergedTicket)
-        tickets = FeedbackStore.loadTickets()
+        // 长正文和引用事件的比较、编码及数据库更新都在后台完成。
+        let (updateEvent, mergedTicket, loadedTickets) = await Task.detached(priority: .utility) {
+            let merge = FeedbackStore.mergeStatus(snapshot, fallbackTicket: ticket)
+            let updateEvent = Self.makeTicketUpdateEventIfNeeded(previousTicket: merge.previous, snapshot: snapshot)
+            return (updateEvent, merge.updated, merge.tickets)
+        }.value
+        tickets = loadedTickets
         if let updateEvent {
             await notifyTicketUpdateIfNeeded(event: updateEvent, ticket: mergedTicket)
         }
@@ -531,7 +536,7 @@ public final class FeedbackService: ObservableObject {
         }
     }
 
-    private func makeTicketUpdateEventIfNeeded(
+    nonisolated static func makeTicketUpdateEventIfNeeded(
         previousTicket: FeedbackTicket,
         snapshot: FeedbackStatusSnapshot
     ) -> FeedbackTicketUpdateEvent? {
@@ -543,7 +548,25 @@ public final class FeedbackService: ObservableObject {
             currentCommentCount: snapshot.comments.count
         )
 
-        guard hasStatusChange || hasNewDeveloperReply else {
+        let knownIDs = previousTicket.lastKnownReferencedCommitIDs.map { Set($0) }
+        let baselineDate = previousTicket.lastCheckedAt ?? previousTicket.createdAt
+        let latestReference = snapshot.timelineEvents.filter { event in
+            guard case .referencedCommit = event else { return false }
+            if let knownIDs { return !knownIDs.contains(event.id) }
+            // 升级后不补发历史引用，但保留上次检查后新增的事件；不能使用 Issue.updated_at。
+            return event.createdAt > baselineDate
+        }.max { lhs, rhs in
+            if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
+            return lhs.id < rhs.id
+        }
+        let referencedCommit: FeedbackReferencedCommit?
+        if let latestReference, case .referencedCommit(_, _, _, let commit) = latestReference {
+            referencedCommit = commit
+        } else {
+            referencedCommit = nil
+        }
+
+        guard hasStatusChange || hasNewDeveloperReply || referencedCommit != nil else {
             return nil
         }
 
@@ -551,11 +574,12 @@ public final class FeedbackService: ObservableObject {
             hasStatusChange: hasStatusChange,
             oldStatus: previousTicket.lastKnownStatus,
             newStatus: snapshot.status,
-            latestDeveloperComment: hasNewDeveloperReply ? latestDeveloperComment : nil
+            latestDeveloperComment: hasNewDeveloperReply ? latestDeveloperComment : nil,
+            latestReferencedCommit: referencedCommit
         )
     }
 
-    private func latestDeveloperComment(in comments: [FeedbackComment]) -> FeedbackComment? {
+    nonisolated private static func latestDeveloperComment(in comments: [FeedbackComment]) -> FeedbackComment? {
         comments
             .filter({ $0.isDeveloper })
             .max(by: { lhs, rhs in
@@ -566,7 +590,7 @@ public final class FeedbackService: ObservableObject {
             })
     }
 
-    private func hasNewDeveloperReply(
+    nonisolated private static func hasNewDeveloperReply(
         previousTicket: FeedbackTicket,
         latestDeveloperComment: FeedbackComment?,
         currentCommentCount: Int
@@ -646,7 +670,18 @@ public final class FeedbackService: ObservableObject {
                 event.newStatus.localizedTitle
             )
         } else {
-            return
+            guard event.latestReferencedCommit != nil else { return }
+            content.title = NSLocalizedString("反馈有新的关联提交", comment: "反馈引用提交通知标题")
+        }
+
+        if let commit = event.latestReferencedCommit {
+            let reference = String(
+                format: NSLocalizedString("工单 #%d 关联提交 %@：%@", comment: "反馈引用提交通知正文"),
+                ticket.issueNumber,
+                commit.displayShortSHA,
+                commit.displayHeadline
+            )
+            content.body = content.body.isEmpty ? reference : content.body + "\n" + reference
         }
 
         content.sound = .default
@@ -675,6 +710,9 @@ public final class FeedbackService: ObservableObject {
         if let developerCommentID = event.latestDeveloperComment?.id,
            !developerCommentID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             components.append(developerCommentID)
+        }
+        if let commit = event.latestReferencedCommit {
+            components.append(commit.sha)
         }
         return components
             .joined(separator: ".")

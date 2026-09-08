@@ -14,6 +14,9 @@ struct FeedbackCenterView: View {
 
     var body: some View {
         List {
+            Section {
+                settingsIntroCard
+            }
             NavigationLink {
                 WatchFeedbackComposeView()
             } label: {
@@ -52,12 +55,32 @@ struct FeedbackCenterView: View {
             }
         }
         .navigationTitle(NSLocalizedString("反馈助手", comment: "Feedback center title"))
+        .guideSettingsPageContext(
+            id: "feedback-center",
+            title: NSLocalizedString("反馈助手", comment: ""),
+            documents: [GuideDocumentReference(id: "feedback-assistant", title: NSLocalizedString("反馈助手", comment: ""))],
+            settings: [
+                .readOnly("ticket_count", label: NSLocalizedString("我的反馈", comment: ""), value: { .int(service.tickets.count) })
+            ]
+        )
+        .watchGuideEntry()
         .task {
             service.reloadTickets()
         }
         .refreshable {
             await service.refreshAllTickets()
         }
+    }
+
+    private var settingsIntroCard: some View {
+        DisclosureGroup(NSLocalizedString("反馈与处理进度", comment: "反馈介绍卡标题")) {
+            Text(NSLocalizedString("反馈助手使用说明", comment: "反馈介绍卡教程"))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -147,6 +170,22 @@ private struct WatchFeedbackComposeView: View {
             }
         }
         .navigationTitle(NSLocalizedString("新建反馈", comment: "Create feedback title"))
+        .guideSettingsPageContext(
+            id: "feedback-compose",
+            title: NSLocalizedString("新建反馈", comment: ""),
+            documents: [GuideDocumentReference(id: "feedback-assistant", title: NSLocalizedString("反馈助手", comment: ""))],
+            settings: [
+                .readOnly("category", label: NSLocalizedString("反馈类型", comment: ""), value: { .string(category.rawValue) }),
+                .readOnly("title_ready", label: NSLocalizedString("标题", comment: ""), value: { .bool(!title.isEmpty) }),
+                .readOnly("detail_ready", label: NSLocalizedString("详细描述", comment: ""), value: { .bool(!detail.isEmpty) }),
+                .readOnly("steps_ready", label: NSLocalizedString("可复现步骤（可选）", comment: ""), value: { .bool(category == .bug && !reproductionSteps.isEmpty) }),
+                .readOnly("expected_ready", label: NSLocalizedString("预期行为（可选）", comment: ""), value: { .bool(category == .bug && !expectedBehavior.isEmpty) }),
+                .readOnly("actual_ready", label: NSLocalizedString("实际行为（可选）", comment: ""), value: { .bool(category == .bug && !actualBehavior.isEmpty) }),
+                .readOnly("context_ready", label: NSLocalizedString("补充信息（可选）", comment: ""), value: { .bool(!extraContext.isEmpty) }),
+                .readOnly("submitting", label: NSLocalizedString("提交中...", comment: ""), value: { .bool(isSubmitting) })
+            ]
+        )
+        .watchGuideEntry()
         .alert(
             NSLocalizedString("提交失败", comment: "Submit failed title"),
             isPresented: Binding(
@@ -262,9 +301,7 @@ struct WatchFeedbackDetailView: View {
                             Text(field.label)
                                 .etFont(.system(size: 10, weight: .medium))
                                 .foregroundStyle(.secondary)
-                            Text(field.value)
-                                .etFont(.caption2)
-                                .lineLimit(8)
+                            FeedbackMarkdownView(content: field.value)
                         }
                         .padding(.vertical, 2)
                     }
@@ -349,8 +386,22 @@ struct WatchFeedbackDetailView: View {
             }
         }
         .navigationTitle(String(format: NSLocalizedString("工单 #%d", comment: "Issue number title"), issueNumber))
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "feedback-detail-\(issueNumber)"),
+            title: NSLocalizedString("反馈助手", comment: ""),
+            documents: [GuideDocumentReference(id: "feedback-assistant", title: NSLocalizedString("反馈助手", comment: ""))],
+            settings: [
+                .readOnly("issue_number", label: NSLocalizedString("我的反馈", comment: ""), value: { .int(issueNumber) }),
+                .readOnly("status", label: NSLocalizedString("状态", comment: ""), value: { .string((snapshot?.status ?? ticket?.lastKnownStatus ?? .unknown).rawValue) }),
+                .readOnly("refreshing", label: NSLocalizedString("刷新中...", comment: ""), value: { .bool(isRefreshing) }),
+                .readOnly("event_count", label: NSLocalizedString("处理动态", comment: ""), value: { .int(snapshot?.timelineEvents.count ?? 0) }),
+                .readOnly("comment_ready", label: NSLocalizedString("补充评论（会进入同一工单）", comment: ""), value: { .bool(!commentDraft.isEmpty) }),
+                .readOnly("sending", label: NSLocalizedString("发送中...", comment: ""), value: { .bool(isSendingComment) })
+            ]
+        )
+        .watchGuideEntry()
         .navigationDestination(item: $selectedReferencedCommit) { commit in
-            WatchUpdateTimelineView(highlightedCommit: commit)
+            WatchUpdateTimelineCommitDetailView(commit: commit)
         }
         .task {
             await refreshStatus()
@@ -494,10 +545,7 @@ private struct WatchFeedbackCommentTimelineRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            Text(comment.body)
-                .etFont(.caption2)
-                .foregroundStyle(.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            FeedbackMarkdownView(content: comment.body)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 7)

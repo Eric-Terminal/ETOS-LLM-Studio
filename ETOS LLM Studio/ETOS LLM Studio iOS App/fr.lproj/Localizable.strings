@@ -7563,3 +7563,8 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "TTS 内容过滤使用说明" = "Activez le filtrage du code et des balises HTML pour conserver le texte des blocs HTML et du HTML brut, en ignorant les autres blocs de code délimités et le code en ligne. Le filtrage précède la sélection par guillemets, parenthèses ou italique. Si la sélection est vide, seul le texte filtré est lu ; s’il ne reste aucun texte, la lecture est ignorée. Cette règle s’applique aussi au prétraitement léger sur Apple Watch.\n\nSeul le texte présent dans le source HTML est extrait. Les scripts ne sont pas exécutés : le texte généré par des scripts ou chargé depuis une source externe ne peut pas être extrait.";
 // 思考摘要使用紧凑耗时前缀
 "%ds: %@" = "%ds: %@";
+/* 反馈 Markdown 与关联提交通知 */
+"反馈与处理进度" = "Retours et suivi";
+"反馈助手使用说明" = "Envoyez un titre et une description, puis ajoutez des commentaires et suivez le ticket. Les descriptions et commentaires prennent en charge Markdown et restent lisibles en entier par défilement. Si un développeur cite le numéro du ticket dans un commit, celui-ci apparaît dans l’historique. Touchez-le pour voir les détails. Avec votre autorisation, de nouvelles réponses, des changements d’état et des commits liés déclenchent des notifications locales au démarrage de l’app ou à l’actualisation des tickets. Il ne s’agit pas de notifications instantanées lorsque l’app est fermée. Un commit lié ne signifie pas que le correctif a été publié.";
+"反馈有新的关联提交" = "Nouveau commit lié à votre retour";
+"工单 #%d 关联提交 %@：%@" = "Ticket nº %d, commit lié %@ : %@";

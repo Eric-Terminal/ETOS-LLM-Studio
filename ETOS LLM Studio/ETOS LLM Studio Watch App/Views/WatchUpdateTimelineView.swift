@@ -454,7 +454,7 @@ private struct WatchUpdateTimelineConnectorShape: Shape {
     }
 }
 
-private struct WatchUpdateTimelineCommitDetailView: View {
+struct WatchUpdateTimelineCommitDetailView: View {
     let commit: UpdateTimelineCommit
     @State private var webAuthLauncher = UpdateTimelineWatchWebAuthLauncher()
 
@@ -475,8 +475,7 @@ private struct WatchUpdateTimelineCommitDetailView: View {
             }
 
             Section(NSLocalizedString("Commit Message", comment: "Update timeline commit message section")) {
-                Text(commit.fullMessage)
-                    .etFont(.caption)
+                FeedbackMarkdownView(content: commit.fullMessage)
             }
 
             if let url = commit.url {
@@ -490,6 +489,15 @@ private struct WatchUpdateTimelineCommitDetailView: View {
             }
         }
         .navigationTitle(commit.shortOID)
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "feedback-commit-\(commit.oid)"),
+            title: NSLocalizedString("关联 Commit", comment: ""),
+            documents: [GuideDocumentReference(id: "feedback-assistant", title: NSLocalizedString("反馈助手", comment: ""))],
+            settings: [
+                .readOnly("commit_sha", label: NSLocalizedString("Commit", comment: ""), value: { .string(commit.oid) })
+            ]
+        )
+        .watchGuideEntry()
     }
 }
 

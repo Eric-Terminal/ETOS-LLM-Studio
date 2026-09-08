@@ -438,7 +438,7 @@ private struct UpdateTimelineConnectorShape: Shape {
     }
 }
 
-private struct UpdateTimelineCommitDetailView: View {
+struct UpdateTimelineCommitDetailView: View {
     @Environment(\.openURL) private var openURL
     let commit: UpdateTimelineCommit
 
@@ -457,7 +457,7 @@ private struct UpdateTimelineCommitDetailView: View {
             }
 
             Section(NSLocalizedString("Commit Message", comment: "Update timeline commit message section")) {
-                Text(commit.fullMessage)
+                FeedbackMarkdownView(content: commit.fullMessage)
                     .textSelection(.enabled)
             }
 
@@ -473,5 +473,13 @@ private struct UpdateTimelineCommitDetailView: View {
         }
         .navigationTitle(commit.shortOID)
         .navigationBarTitleDisplayMode(.inline)
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "feedback-commit-\(commit.oid)"),
+            title: NSLocalizedString("关联 Commit", comment: ""),
+            documents: [GuideDocumentReference(id: "feedback-assistant", title: NSLocalizedString("反馈助手", comment: ""))],
+            settings: [
+                .readOnly("commit_sha", label: NSLocalizedString("Commit", comment: ""), value: { .string(commit.oid) })
+            ]
+        )
     }
 }
