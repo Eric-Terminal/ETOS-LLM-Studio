@@ -7561,3 +7561,5 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "朗读内容过滤" = "Filtrage du texte lu";
 "保留 HTML 正文，跳过代码、脚本和样式。" = "Conserver le texte HTML et ignorer le code, les scripts et les styles.";
 "TTS 内容过滤使用说明" = "Activez le filtrage du code et des balises HTML pour conserver le texte des blocs HTML et du HTML brut, en ignorant les autres blocs de code délimités et le code en ligne. Le filtrage précède la sélection par guillemets, parenthèses ou italique. Si la sélection est vide, seul le texte filtré est lu ; s’il ne reste aucun texte, la lecture est ignorée. Cette règle s’applique aussi au prétraitement léger sur Apple Watch.\n\nSeul le texte présent dans le source HTML est extrait. Les scripts ne sont pas exécutés : le texte généré par des scripts ou chargé depuis une source externe ne peut pas être extrait.";
+// 思考摘要使用紧凑耗时前缀
+"%ds: %@" = "%ds: %@";

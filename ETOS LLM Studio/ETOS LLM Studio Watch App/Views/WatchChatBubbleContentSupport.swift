@@ -408,14 +408,18 @@ extension ChatBubble {
             return thinkingTitle
         }
 
+        let elapsedSeconds = reasoningElapsedSeconds(referenceDate: referenceDate)
         let baseTitle: String
-        if let elapsedSeconds = reasoningElapsedSeconds(referenceDate: referenceDate) {
+        if let elapsedSeconds {
             baseTitle = String(format: NSLocalizedString("已经思考%d秒", comment: ""), elapsedSeconds)
         } else {
             baseTitle = NSLocalizedString("思考过程", comment: "")
         }
 
         guard let reasoningSummaryText else { return baseTitle }
+        if let elapsedSeconds {
+            return String(format: NSLocalizedString("%ds: %@", value: "%ds: %@", comment: "思考耗时与摘要的紧凑标题"), elapsedSeconds, reasoningSummaryText)
+        }
         return String(format: NSLocalizedString("%@：%@", comment: ""), baseTitle, reasoningSummaryText)
     }
 
