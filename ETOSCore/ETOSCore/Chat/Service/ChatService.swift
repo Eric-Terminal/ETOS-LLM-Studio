@@ -418,10 +418,16 @@ public class ChatService {
     ) async throws -> [ChatMessage] {
         guard !additions.isEmpty else { return messagesSnapshot(for: sessionID) }
         let currentMessages = messagesSnapshot(for: sessionID)
-        let referenceAttemptID = currentMessages.first(where: { $0.id == referenceMessageID })?.responseAttemptID
-        var anchorMessageID = referenceAttemptID.flatMap { attemptID in
-            currentMessages.last(where: { $0.responseAttemptID == attemptID })?.id
-        } ?? referenceMessageID
+        var anchorMessageID = referenceMessageID
+        if let referenceIndex = currentMessages.firstIndex(where: { $0.id == referenceMessageID }) {
+            // 同一回复版本可以包含多轮工具调用。迟到的后台结果必须紧随原调用，
+            // 否则追加到版本末尾后，会被请求预处理当成孤立工具消息丢弃。
+            var nextIndex = currentMessages.index(after: referenceIndex)
+            while nextIndex < currentMessages.endIndex, currentMessages[nextIndex].role == .tool {
+                anchorMessageID = currentMessages[nextIndex].id
+                nextIndex += 1
+            }
+        }
 
         for message in additions {
             _ = try await upsertConversationMessage(

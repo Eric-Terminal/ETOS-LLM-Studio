@@ -839,7 +839,9 @@ extension ChatService {
 
         var nonBlockingResultsForFollowUp: [ChatMessage] = []
         if !nonBlockingCalls.isEmpty {
-            if hasAssistantContent {
+            // 已有阻塞工具时必然会续写；这一轮的其他结果也必须收齐后一起发送，
+            // 避免后台回写与续写占位消息竞争插入位置，或让模型看不到已执行的调用。
+            if hasAssistantContent && blockingCalls.isEmpty {
                 logger.info("在后台启动 \(nonBlockingCalls.count) 个非阻塞式工具...")
                 Task {
                     for toolCall in nonBlockingCalls {
@@ -870,7 +872,7 @@ extension ChatService {
                     }
                 }
             } else {
-                logger.info("非阻塞式工具返回但没有正文，将等待工具执行结果再发起二次调用。")
+                logger.info("本轮需要工具续写，将等待非阻塞式工具执行结果后一起发起二次调用。")
                 for toolCall in nonBlockingCalls {
                     let outcome = await handleToolCall(
                         toolCall,
