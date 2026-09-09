@@ -11,6 +11,7 @@ import ETOSCore
 
 struct FeedbackCenterView: View {
     @ObservedObject private var service = FeedbackService.shared
+    @State private var showsIntro = false
 
     var body: some View {
         List {
@@ -72,15 +73,19 @@ struct FeedbackCenterView: View {
         }
     }
 
+    @ViewBuilder
     private var settingsIntroCard: some View {
-        DisclosureGroup(NSLocalizedString("反馈与处理进度", comment: "反馈介绍卡标题")) {
+        Button(NSLocalizedString("反馈与处理进度", comment: "反馈介绍卡标题")) {
+            showsIntro.toggle()
+        }
+        .buttonStyle(.plain)
+        if showsIntro {
             Text(NSLocalizedString("反馈助手使用说明", comment: "反馈介绍卡教程"))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .buttonStyle(.plain)
     }
 }
 
