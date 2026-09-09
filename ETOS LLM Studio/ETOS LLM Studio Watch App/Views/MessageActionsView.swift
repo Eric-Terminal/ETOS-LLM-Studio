@@ -115,6 +115,7 @@ struct MessageActionsView: View {
     @State private var videoAnalysisOverrides: [String: VideoAnalysisResult] = [:]
     @State private var retryingVideoFileNames: Set<String> = []
     @State private var videoAnalysisError: String?
+    @State private var inlineContents: [InlineHTMLContent] = []
     @ObservedObject private var appConfig = AppConfigStore.shared
     @ObservedObject private var ttsManager = TTSManager.shared
     @Environment(\.colorScheme) private var colorScheme
@@ -155,6 +156,29 @@ struct MessageActionsView: View {
         
         Form {
             Section {
+                if !inlineContents.isEmpty {
+                    NavigationLink {
+                        if inlineContents.count == 1, let content = inlineContents.first {
+                            WatchInlineHTMLActionsPage(content: content, onCopy: onInsertText)
+                        } else {
+                        List(inlineContents) { content in
+                            NavigationLink(content.title) {
+                                WatchInlineHTMLActionsPage(content: content, onCopy: onInsertText)
+                            }
+                        }
+                        .navigationTitle(NSLocalizedString("内联内容", comment: ""))
+                        .guideSettingsPageContext(
+                            id: GuidePageID(rawValue: "inline-html-list-\(message.id)"),
+                            title: NSLocalizedString("内联内容", comment: ""),
+                            documents: [GuideDocumentReference(id: "inline-html-actions", title: NSLocalizedString("内联内容", comment: ""))],
+                            settings: [.readOnly("count", label: NSLocalizedString("内联内容", comment: ""), value: { .int(inlineContents.count) })]
+                        )
+                        .watchGuideEntry()
+                        }
+                    } label: {
+                        Label(NSLocalizedString("内联内容", comment: ""), systemImage: "curlybraces.square")
+                    }
+                }
                 if message.role == .user, !message.content.isEmpty {
                     NavigationLink {
                         FullMessageContentView(content: message.content)
@@ -477,6 +501,9 @@ struct MessageActionsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("操作", comment: ""))
+        .task(id: message.id) {
+            inlineContents = InlineHTMLContentRegistry.shared.contents(messageID: message.id, versionIndex: message.getCurrentVersionIndex())
+        }
         .navigationBarTitleDisplayMode(.inline)
         .alert(NSLocalizedString("确认删除消息", comment: ""), isPresented: $showDeleteConfirm) {
             Button(NSLocalizedString("删除", comment: ""), role: .destructive) {

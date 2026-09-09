@@ -7340,3 +7340,15 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "反馈助手使用说明" = "Envoyez un titre et une description, puis ajoutez des commentaires et suivez le ticket. Les descriptions et commentaires prennent en charge Markdown et restent lisibles en entier par défilement. Si un développeur cite le numéro du ticket dans un commit, celui-ci apparaît dans l’historique. Touchez-le pour voir les détails. Avec votre autorisation, de nouvelles réponses, des changements d’état et des commits liés déclenchent des notifications locales au démarrage de l’app ou à l’actualisation des tickets. Il ne s’agit pas de notifications instantanées lorsque l’app est fermée. Un commit lié ne signifie pas que le correctif a été publié.";
 "反馈有新的关联提交" = "Nouveau commit lié à votre retour";
 "工单 #%d 关联提交 %@：%@" = "Ticket nº %d, commit lié %@ : %@";
+
+/* 内联网页复制与导出 */
+"内联内容" = "Contenu intégré";
+"下载当前渲染 PNG" = "Exporter le rendu actuel en PNG";
+"下载 HTML" = "Exporter le HTML";
+"复制页面纯文本" = "Copier le texte de la page";
+"保存或分享文件" = "Enregistrer ou partager le fichier";
+"PNG 保存当前画面；HTML 保留代码与样式，外部资源仍需联网，App 内的工具交互无法在外部运行。" = "Le PNG enregistre la vue actuelle. Le HTML conserve le code et les styles ; les ressources externes nécessitent une connexion et les outils de l’app ne fonctionnent pas en dehors de celle-ci.";
+"手表上的复制会将内容填入聊天输入框。" = "Sur Apple Watch, copier insère le contenu dans le champ de saisie du chat.";
+"网页尚未就绪，请打开网页并等待加载完成。" = "La page n’est pas prête. Ouvrez-la et attendez la fin du chargement.";
+"网页图片过大，请改为下载 HTML。" = "L’image de la page est trop grande. Exportez le HTML.";
+"无法生成网页图片，请重试。" = "Impossible de créer l’image de la page. Réessayez.";

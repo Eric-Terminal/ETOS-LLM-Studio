@@ -19,6 +19,7 @@ struct WatchRoleplayHTMLCardView: View {
 
     @State private var documents: [WatchPreparedRoleplayHTMLDocument] = []
     @State private var variableRevision = 0
+    @State private var inlineContents: [Int: InlineHTMLContent] = [:]
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -29,7 +30,8 @@ struct WatchRoleplayHTMLCardView: View {
                         html: document.html,
                         sessionID: sessionID,
                         messageID: messageID,
-                        versionIndex: versionIndex
+                        versionIndex: versionIndex,
+                        inlineContent: inlineContents[document.id]
                     ))
                 } label: {
                     HStack(alignment: .top) {
@@ -74,6 +76,7 @@ struct WatchRoleplayHTMLCardView: View {
                 return extraction.documents.enumerated().map { offset, document in
                     WatchPreparedRoleplayHTMLDocument(
                         id: document.id,
+                        source: document.source,
                         title: hasMultipleDocuments
                             ? String(
                                 format: NSLocalizedString("角色卡 HTML %d", comment: "Numbered roleplay HTML page title"),
@@ -102,10 +105,24 @@ struct WatchRoleplayHTMLCardView: View {
                 }
             }.value
             guard !Task.isCancelled, key == preparationKey else { return }
+            for content in inlineContents.values { InlineHTMLContentRegistry.shared.remove(content) }
+            inlineContents = Dictionary(uniqueKeysWithValues: prepared.map { document in
+                let content = InlineHTMLContent()
+                content.messageID = messageID
+                content.versionIndex = versionIndex
+                content.title = document.title
+                content.code = document.source
+                content.html = document.html
+                InlineHTMLContentRegistry.shared.register(content)
+                return (document.id, content)
+            })
             documents = prepared
         }
         .onReceive(NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)) { _ in
             variableRevision &+= 1
+        }
+        .onDisappear {
+            for content in inlineContents.values { InlineHTMLContentRegistry.shared.remove(content) }
         }
     }
 
@@ -213,6 +230,7 @@ struct WatchRoleplaySessionScriptHost: View {
 
 private struct WatchPreparedRoleplayHTMLDocument: Identifiable, Sendable {
     let id: Int
+    let source: String
     let title: String
     let html: String
 }

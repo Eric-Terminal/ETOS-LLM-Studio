@@ -307,7 +307,7 @@ struct ChatBubble: View {
             refreshChatBubbleLocalPresentationBlocker()
         }) { item in
             NavigationStack {
-                WatchWebHTMLPage(item: item)
+                WatchWebHTMLPage(item: item, onCopy: onCodeBlockHeaderTap)
             }
         }
         .onAppear {

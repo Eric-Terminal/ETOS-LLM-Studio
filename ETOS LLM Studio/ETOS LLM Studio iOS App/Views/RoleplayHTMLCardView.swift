@@ -33,6 +33,8 @@ struct RoleplayHTMLCardView: View {
                     scriptID: nil,
                     contentIdentity: document.contentIdentity,
                     variableUpdateJavaScript: document.variableUpdateJavaScript,
+                    sourceCode: document.source,
+                    sourceTitle: document.title,
                     height: Binding(
                         get: { heights[document.id] ?? 180 },
                         set: { heights[document.id] = max(1, $0) }
@@ -66,9 +68,11 @@ struct RoleplayHTMLCardView: View {
                 let additionalWorldbookNames = binding?.additionalWorldbookIDs.compactMap { id in
                     worldbooks.first(where: { $0.id == id })?.name
                 } ?? []
-                return extraction.documents.map { document in
+                return extraction.documents.enumerated().map { index, document in
                     PreparedRoleplayHTMLDocument(
                         id: document.id,
+                        source: document.source,
+                        title: String(format: NSLocalizedString("角色卡 HTML %d", comment: ""), index + 1),
                         contentIdentity: "\(sessionID.uuidString)|\(messageID.uuidString)|\(versionIndex)|\(document.id)|\(extraction.hashValue)|\(contentRevision)",
                         variableUpdateJavaScript: RoleplayHTMLDocumentFactory.makeVariableUpdateScript(
                             variableSnapshot: snapshot,
@@ -292,6 +296,8 @@ private struct RoleplayScriptButtonAction: Identifiable, Sendable {
 
 private struct PreparedRoleplayHTMLDocument: Identifiable, Sendable {
     let id: Int
+    let source: String
+    let title: String
     let contentIdentity: String
     let variableUpdateJavaScript: String
     let html: String
@@ -312,6 +318,8 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
     let scriptID: UUID?
     var contentIdentity: String? = nil
     var variableUpdateJavaScript: String? = nil
+    var sourceCode: String? = nil
+    var sourceTitle: String? = nil
     @Binding var height: CGFloat
 
     func makeCoordinator() -> Coordinator {
@@ -349,10 +357,22 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
         webView.scrollView.isScrollEnabled = false
         webView.scrollView.bounces = false
         context.coordinator.webView = webView
+        if scriptID == nil, sourceCode != nil {
+            let content = InlineHTMLContent()
+            content.messageID = messageID
+            content.versionIndex = versionIndex
+            content.title = sourceTitle ?? NSLocalizedString("角色卡 HTML", comment: "")
+            context.coordinator.inlineContent = content
+            InlineHTMLWebViewSupport.connect(content, to: webView)
+        }
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
+        context.coordinator.inlineContent?.messageID = messageID
+        context.coordinator.inlineContent?.versionIndex = versionIndex
+        context.coordinator.inlineContent?.code = sourceCode ?? ""
+        context.coordinator.inlineContent?.html = html
         let identity = contentIdentity ?? html
         if context.coordinator.loadedContentIdentity != identity {
             context.coordinator.loadedContentIdentity = identity
@@ -373,6 +393,7 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
         webView.uiDelegate = nil
         webView.stopLoading()
         coordinator.webView = nil
+        if let content = coordinator.inlineContent { InlineHTMLContentRegistry.shared.remove(content) }
     }
 
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
@@ -384,6 +405,7 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
         var loadedContentIdentity: String?
         var loadedVariableUpdateJavaScript: String?
         weak var webView: WKWebView?
+        var inlineContent: InlineHTMLContent?
         private var navigationFinished = false
         private var pendingVariableUpdateJavaScript: String?
         private var buttonObserver: NSObjectProtocol? = nil

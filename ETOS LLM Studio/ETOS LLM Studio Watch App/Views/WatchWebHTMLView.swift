@@ -23,37 +23,51 @@ struct WatchWebHTMLPageItem: Identifiable, Hashable {
     let sessionID: UUID?
     let messageID: UUID?
     let versionIndex: Int
+    let inlineContent: InlineHTMLContent?
 
     init(
         title: String,
         html: String,
         sessionID: UUID? = nil,
         messageID: UUID? = nil,
-        versionIndex: Int = 0
+        versionIndex: Int = 0,
+        inlineContent: InlineHTMLContent? = nil
     ) {
         self.title = title
         self.html = html
         self.sessionID = sessionID
         self.messageID = messageID
         self.versionIndex = versionIndex
+        self.inlineContent = inlineContent
     }
 }
 
 struct WatchWebHTMLPage: View {
     let item: WatchWebHTMLPageItem
+    var onCopy: ((String) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
+    @State private var showsInlineActions = false
 
     var body: some View {
         WatchRuntimeHTMLWebView(
             html: item.html,
             sessionID: item.sessionID,
             messageID: item.messageID,
-            versionIndex: item.versionIndex
+            versionIndex: item.versionIndex,
+            inlineContent: item.inlineContent
         )
             .ignoresSafeArea()
             .navigationTitle(item.title)
             .toolbar {
+                if item.inlineContent != nil {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button { showsInlineActions = true } label: {
+                            Image(systemName: "ellipsis")
+                        }
+                        .accessibilityLabel(NSLocalizedString("内联内容", comment: ""))
+                    }
+                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
                         dismiss()
@@ -61,6 +75,14 @@ struct WatchWebHTMLPage: View {
                         Image(systemName: "xmark")
                     }
                     .accessibilityLabel(NSLocalizedString("关闭", comment: "Close web preview"))
+                }
+            }
+            .sheet(isPresented: $showsInlineActions) {
+                if let content = item.inlineContent {
+                    NavigationStack {
+                        InlineHTMLActionsView(content: content, onCopy: onCopy) { EmptyView() }
+                            .watchGuideEntry()
+                    }
                 }
             }
     }
@@ -74,19 +96,22 @@ struct WatchRuntimeHTMLWebView: _UIViewRepresentable {
     let messageID: UUID?
     let versionIndex: Int
     let scriptID: UUID?
+    let inlineContent: InlineHTMLContent?
 
     init(
         html: String,
         sessionID: UUID? = nil,
         messageID: UUID? = nil,
         versionIndex: Int = 0,
-        scriptID: UUID? = nil
+        scriptID: UUID? = nil,
+        inlineContent: InlineHTMLContent? = nil
     ) {
         self.html = html
         self.sessionID = sessionID
         self.messageID = messageID
         self.versionIndex = versionIndex
         self.scriptID = scriptID
+        self.inlineContent = inlineContent
     }
 
     func makeCoordinator() -> Coordinator {
@@ -98,6 +123,10 @@ struct WatchRuntimeHTMLWebView: _UIViewRepresentable {
         context.coordinator.webView = view
         context.coordinator.loadedHTML = html
         WatchWebKitRuntime.load(html, into: view)
+        if let inlineContent {
+            context.coordinator.inlineContent = inlineContent
+            WatchInlineHTMLExportSupport.connect(inlineContent, to: view)
+        }
         return view
     }
 
@@ -110,12 +139,15 @@ struct WatchRuntimeHTMLWebView: _UIViewRepresentable {
     static func dismantleUIView(_ uiView: NSObject, coordinator: Coordinator) {
         WatchWebKitRuntime.removeMessageHandler(from: uiView)
         coordinator.webView = nil
+        coordinator.inlineContent?.capturePNG = nil
+        coordinator.inlineContent?.readText = nil
     }
 
     final class Coordinator {
         var loadedHTML: String?
         let messageHandler: WatchRoleplayScriptMessageHandler
         weak var webView: NSObject?
+        var inlineContent: InlineHTMLContent?
         private var buttonObserver: NSObjectProtocol? = nil
         private var requestObserver: NSObjectProtocol? = nil
         private var macroObserver: NSObjectProtocol? = nil
@@ -499,7 +531,7 @@ enum WatchWebHTMLDocumentFactory {
 """
     }
 
-    static func widgetDocument(
+    nonisolated static func widgetDocument(
         payload: ToolWidgetPayload,
         prefersDarkPalette: Bool
     ) -> String {

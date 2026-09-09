@@ -334,6 +334,9 @@ struct ChatBubble: View {
             refreshChatBubbleLocalPresentationBlocker()
             autoPresentPendingToolCallIfNeeded()
         }
+        .environment(\.inlineHTMLMessageIdentity, InlineHTMLMessageIdentity(
+            messageID: message.id, versionIndex: message.getCurrentVersionIndex()
+        ))
         .onDisappear {
             setChatBubbleLocalPresentationBlocked(false)
         }

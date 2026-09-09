@@ -51,6 +51,7 @@ struct MessageActionSheet: View {
     @State private var retryingVideoFileNames: Set<String> = []
     @State private var videoAnalysisErrorMessage: String?
     @State private var hasInlineMarkdownImages = false
+    @State private var inlineContents: [InlineHTMLContent] = []
 
     private var message: ChatMessage {
         payload.message
@@ -108,6 +109,8 @@ struct MessageActionSheet: View {
         NavigationStack {
             List {
                 Section {
+                    InlineHTMLMessageActionsLink(message: message, contents: inlineContents)
+
                     if message.role == .user, !message.content.isEmpty {
                         NavigationLink {
                             FullMessageContentView(content: message.content)
@@ -280,6 +283,7 @@ struct MessageActionSheet: View {
             Text(videoAnalysisErrorMessage ?? "")
         }
         .task(id: message.content) {
+            inlineContents = InlineHTMLContentRegistry.shared.contents(messageID: message.id, versionIndex: message.getCurrentVersionIndex())
             let content = message.content
             let containsImage = await Task.detached(priority: .utility) {
                 MarkdownImageReferenceSupport.hasDownloadableImage(in: content)

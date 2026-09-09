@@ -7263,3 +7263,15 @@
 "反馈助手使用说明" = "Submit feedback with a title and description, then add comments and follow progress in the ticket. Descriptions and comments support Markdown, and you can scroll through the full text. When a developer references the ticket number in a commit message, the linked commit appears in the timeline. Tap it for details. New replies, status changes and linked commits trigger local notifications when the app starts or you refresh tickets, if notifications are allowed. These are not instant push notifications while the app is closed. A linked commit does not mean a fix has been released.";
 "反馈有新的关联提交" = "New commit linked to your feedback";
 "工单 #%d 关联提交 %@：%@" = "Ticket #%d linked commit %@: %@";
+
+/* 内联网页复制与导出 */
+"内联内容" = "Inline Content";
+"下载当前渲染 PNG" = "Export Current Rendering as PNG";
+"下载 HTML" = "Export HTML";
+"复制页面纯文本" = "Copy Page Text";
+"保存或分享文件" = "Save or Share File";
+"PNG 保存当前画面；HTML 保留代码与样式，外部资源仍需联网，App 内的工具交互无法在外部运行。" = "PNG saves the current view. HTML preserves code and styles; external resources still require a connection, and app tool interactions cannot run outside the app.";
+"手表上的复制会将内容填入聊天输入框。" = "On Apple Watch, copying inserts the content into the chat input.";
+"网页尚未就绪，请打开网页并等待加载完成。" = "The page is not ready. Open it and wait for it to finish loading.";
+"网页图片过大，请改为下载 HTML。" = "The page image is too large. Export HTML instead.";
+"无法生成网页图片，请重试。" = "Could not create the page image. Please try again.";

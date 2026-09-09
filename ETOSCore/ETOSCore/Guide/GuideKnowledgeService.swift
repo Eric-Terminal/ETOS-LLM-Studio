@@ -73,6 +73,18 @@ public actor GuideKnowledgeService {
 public enum GuideDocumentCatalog {
     public static let documents: [GuideDocument] = [
         GuideDocument(
+            id: "inline-html-actions",
+            title: "内联 HTML 的复制与导出",
+            keywords: ["HTML", "酒馆", "Widget", "app_show_widget", "PNG", "复制代码", "纯文本", "下载"],
+            content: """
+            对已显示的酒馆 HTML 或内置 app_show_widget，长按聊天消息进入“更多”→“内联内容”，选择要操作的网页。Widget 也有独立的省略号入口；手表完整网页右上角可以进入同一操作页。支持查看及复制生成方的代码、复制当前 DOM 的可见纯文本、下载带承载样式的 HTML、导出当前渲染的 PNG。PNG 不会重新执行工具；iPhone 按内联画布截图，手表保存网页当前可见区域。未打开的手表网页会在操作页提供预览，加载完成后再导出或复制纯文本。
+
+            生成文件后点击“保存或分享文件”，由系统分享界面选择相册、文件或其他目的地，实际选项由系统提供。HTML 保留页面的脚本和兼容上下文，外部资源仍需可访问，依赖 App 的原生工具交互无法在外部运行。复制代码不包含 App 注入的兼容桥；复制纯文本不会返回脚本或样式源码。手表没有系统剪贴板，复制操作沿用聊天的填充行为，将内容放入聊天输入框。
+
+            内容列表及操作页只有只读向导状态，不向向导公开代码、聊天正文、网页上下文或导出路径，也不允许向导自动执行网页脚本、复制或导出。系统分享面板属于系统页面。导出过程不改写原始消息，临时文件在下次启动时清理。
+            """
+        ),
+        GuideDocument(
             id: "feedback-assistant",
             title: "反馈助手与关联提交",
             keywords: ["反馈", "工单", "开发者回复", "Markdown", "关联提交", "Commit", "通知"],

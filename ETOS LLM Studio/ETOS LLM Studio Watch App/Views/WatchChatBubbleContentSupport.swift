@@ -144,45 +144,11 @@ extension ChatBubble {
         return String(format: "%d:%02d", minutes, seconds)
     }
 
-    func openWidgetWebPage(payload: ToolWidgetPayload) {
-        let title = payload.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        webHTMLPageItem = WatchWebHTMLPageItem(
-            title: title?.isEmpty == false ? (title ?? "") : NSLocalizedString("可视化 Widget", comment: ""),
-            html: WatchWebHTMLDocumentFactory.widgetDocument(
-                payload: payload,
-                prefersDarkPalette: colorScheme == .dark
-            )
-        )
-    }
-
     @ViewBuilder
     func widgetInlineSummaryView(payload: ToolWidgetPayload) -> some View {
-        Button {
-            openWidgetWebPage(payload: payload)
-        } label: {
-            HStack(alignment: .top, spacing: 6) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(NSLocalizedString("可视化 Widget", comment: ""))
-                        .etFont(.caption2.weight(.semibold))
-                        .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.9))
-                    if let title = payload.title,
-                       !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text(title)
-                            .etFont(.caption2)
-                            .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.85))
-                    }
-                    Text(NSLocalizedString("点按在手表上查看完整渲染。", comment: ""))
-                        .etFont(.caption2)
-                        .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
-                }
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.forward")
-                    .etFont(.caption2.weight(.semibold))
-                    .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.75))
-            }
+        WatchInlineWidgetCard(payload: payload, messageID: message.id, versionIndex: message.getCurrentVersionIndex()) { item in
+            webHTMLPageItem = item
         }
-        .buttonStyle(.plain)
-        .padding(.leading, 4)
     }
 
     @ViewBuilder

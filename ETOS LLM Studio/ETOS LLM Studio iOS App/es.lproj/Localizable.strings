@@ -7568,3 +7568,17 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "反馈助手使用说明" = "Envía un título y una descripción y después añade comentarios y consulta el progreso del ticket. Las descripciones y los comentarios admiten Markdown y se pueden leer completos desplazándote. Si un desarrollador cita el número del ticket en un commit, este aparece en el historial. Tócalo para ver los detalles. Si permites las notificaciones, las nuevas respuestas, los cambios de estado y los commits vinculados generan avisos locales al iniciar la app o actualizar los tickets. No son notificaciones instantáneas con la app cerrada. Un commit vinculado no significa que la corrección ya esté publicada.";
 "反馈有新的关联提交" = "Nuevo commit vinculado a tus comentarios";
 "工单 #%d 关联提交 %@：%@" = "Ticket n.º %d, commit vinculado %@: %@";
+
+/* 内联网页复制与导出 */
+"内联内容" = "Contenido integrado";
+"下载当前渲染 PNG" = "Exportar vista actual como PNG";
+"下载 HTML" = "Exportar HTML";
+"复制页面纯文本" = "Copiar texto de la página";
+"保存或分享文件" = "Guardar o compartir archivo";
+"PNG 保存当前画面；HTML 保留代码与样式，外部资源仍需联网，App 内的工具交互无法在外部运行。" = "PNG guarda la vista actual. HTML conserva código y estilos; los recursos externos requieren conexión y las herramientas de la app no funcionan fuera de ella.";
+"手表上的复制会将内容填入聊天输入框。" = "En Apple Watch, copiar inserta el contenido en el campo del chat.";
+"网页尚未就绪，请打开网页并等待加载完成。" = "La página no está lista. Ábrela y espera a que termine de cargar.";
+"网页图片过大，请改为下载 HTML。" = "La imagen es demasiado grande. Exporta HTML.";
+"无法生成网页图片，请重试。" = "No se pudo generar la imagen de la página. Inténtalo de nuevo.";
+"角色卡 HTML" = "HTML de personaje";
+"角色卡 HTML %d" = "HTML de personaje %d";
