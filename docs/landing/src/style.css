@@ -129,14 +129,65 @@ img {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
-  background: var(--bg);
-  color: var(--fg);
+  background: #dce8ee;
   animation: loaderEnter 0.2s ease both;
   overflow: hidden;
 }
+.dark .loader-screen { background: var(--bg); }
 .loader-screen.is-leaving {
   animation: loaderLeave 0.62s cubic-bezier(0.8, 0, 0.2, 1) forwards;
+}
+
+/* SVG 拉满整个屏幕（无 viewBox，像素 1:1）；矩形坐标以屏幕中心为基准，尺寸固定像素 */
+.loader-mark-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  animation: loaderMarkIn 0.75s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.loader-mark-svg rect {
+  height: 100px;
+  rx: 50px;
+  transition:
+    x 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    y 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    width 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    height 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    rx 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    fill 0.7s ease;
+}
+/* first 布局：白块 + 右上蓝块 + 底部浅色条（600×600 设计稿以中心平移而来） */
+.lm-white { x: calc(50% - 220px); y: calc(50% - 100px); width: 365px; height: 200px; fill: #f8f9fb; }
+.lm-blue { x: calc(50% + 20px); y: calc(50% - 220px); width: 200px; fill: #3477d3; }
+.lm-feeder { x: calc(50% - 260px); y: calc(50% + 160px); width: 520px; fill: #ecf5fb; }
+/* next 布局：白块与蓝块上移（蓝块滑出屏幕顶部），底部浅色条收窄上移到屏幕中心并染成蓝 */
+.lm-white.is-next { y: calc(50% - 220px); }
+.lm-blue.is-next { y: calc(50% - 340px); }
+.lm-feeder.is-next { x: calc(50% + 20px); y: 50%; width: 200px; fill: #3477d3; }
+/* 补位：新的浅色条原地淡入，终态与 next.svg 一致 */
+.lm-feeder-in {
+  x: calc(50% - 260px);
+  y: calc(50% + 160px);
+  width: 520px;
+  fill: #ecf5fb;
+  opacity: 0;
+  transition:
+    opacity 0.4s ease,
+    x 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    y 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    width 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    fill 0.7s ease;
+  transition-delay: 0.3s;
+}
+.lm-feeder-in.is-next { opacity: 1; }
+/* 终章：变蓝后的块真正几何铺满整个屏幕，随后遮罩走 clip-path 收尾 */
+.lm-feeder.is-expand {
+  x: 0px;
+  y: 0px;
+  width: 100%;
+  height: 100%;
+  rx: 0px;
 }
 
 .loader-waves {
@@ -211,95 +262,14 @@ img {
   }
 }
 
-.loader-frame {
-  width: min(520px, 100%);
-  border: 1px solid var(--hairline);
-  background: var(--bg);
-  box-shadow: 0 24px 64px rgba(0, 102, 204, 0.18), 0 8px 20px rgba(0, 0, 0, 0.06);
-  overflow: hidden;
-  position: relative;
-  z-index: 1;
-  animation: loaderFrameIn 0.75s cubic-bezier(0.8, 0, 0.2, 1) both;
-}
-.dark .loader-frame {
-  box-shadow: 0 24px 64px rgba(41, 151, 255, 0.22), 0 8px 20px rgba(0, 0, 0, 0.5);
-}
-
-.loader-mark {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  height: 84px;
-  border-bottom: 1px solid var(--hairline);
-}
-.loader-mark span {
-  display: block;
-  background: var(--color-primary);
-  transform: scaleY(0);
-  transform-origin: bottom;
-  animation: loaderPillar 0.75s cubic-bezier(0.8, 0, 0.2, 1) forwards;
-}
-.dark .loader-mark span { background: var(--color-primary-on-dark); }
-.loader-mark span:nth-child(2) { animation-delay: 0.12s; }
-.loader-mark span:nth-child(3) { animation-delay: 0.24s; }
-.loader-mark span:nth-child(4) { animation-delay: 0.36s; }
-
-.loader-copy { padding: 20px; }
-
-.loader-kicker,
-.loader-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 17px;
-  font-weight: 500;
-  color: var(--fg-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.loader-title {
-  margin: 10px 0 12px;
-  font-size: clamp(3rem, 14vw, 5.5rem);
-  line-height: 0.9;
-  font-weight: 600;
-  color: var(--fg);
-  letter-spacing: -0.04em;
-}
-
-.loader-progress {
-  height: 8px;
-  background: var(--divider-soft);
-  border-top: 1px solid var(--hairline);
-  overflow: hidden;
-}
-.loader-progress span {
-  display: block;
-  width: 100%;
-  height: 100%;
-  background: var(--color-primary);
-  transform: translateX(-100%);
-  animation: loaderProgress 1.6s cubic-bezier(0.8, 0, 0.2, 1) 0.2s forwards;
-}
-
 @keyframes loaderEnter { from { opacity: 0; } to { opacity: 1; } }
 @keyframes loaderLeave {
   0% { opacity: 1; clip-path: inset(0 0 0 0); }
   100% { opacity: 1; clip-path: inset(0 0 100% 0); }
 }
-@keyframes loaderFrameIn {
-  from { opacity: 0; transform: translateY(18px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes loaderPillar {
-  from { transform: scaleY(0); }
-  to { transform: scaleY(1); }
-}
-@keyframes loaderProgress {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(0); }
+@keyframes loaderMarkIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 /* ---------- 四边收束边框 ---------- */
@@ -615,6 +585,11 @@ img {
   white-space: pre;
   animation: titleSettle 0.75s cubic-bezier(0.8, 0, 0.2, 1) both;
   animation-delay: calc(var(--letter-index) * 0.028s + 0.1s);
+  /* 开屏期间暂停在首帧（字母隐藏），遮罩开始收尾时整段逐字播放 */
+  animation-play-state: paused;
+}
+.hero-title.is-ready .title-letter {
+  animation-play-state: running;
 }
 @keyframes titleSettle {
   from { opacity: 0; transform: translateY(20px); }
@@ -901,515 +876,6 @@ img {
   border-color: rgba(255, 255, 255, 0.1);
 }
 
-/* ---------- 个性化外观 ----------
- * 左侧外观色卡 + 右侧纯 CSS 仿 iPhone 聊天界面，点色卡实时换壁纸/强调色/气泡。
- * 壁纸预设统一走中深色，保证玻璃气泡上的白字始终可读。
- */
-.persona-stage {
-  display: grid;
-  grid-template-columns: 1fr minmax(280px, 320px);
-  gap: 56px;
-  align-items: center;
-}
-
-.persona-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.persona-picker-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--fg-muted);
-}
-.persona-live-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--color-primary);
-  animation: pulse 2s infinite;
-}
-.dark .persona-live-dot { background: var(--color-primary-on-dark); }
-
-.persona-control {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.persona-control-row {
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.persona-control-label {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--fg);
-}
-
-/* 1. 上传壁纸 */
-.persona-upload {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  align-self: flex-start;
-  padding: 9px 16px;
-  border-radius: 9999px;
-  background: var(--canvas);
-  border: 1px solid var(--hairline);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--fg-secondary);
-  transition: border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
-}
-.persona-upload:hover {
-  transform: translateY(-1px);
-  border-color: var(--color-primary);
-  color: var(--fg);
-}
-.persona-upload svg { width: 16px; height: 16px; }
-.dark .persona-upload {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-/* 2. 调色盘 */
-.persona-colorpicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-}
-.persona-colorpicker input[type='color'] {
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: none;
-  cursor: pointer;
-  box-shadow: 0 0 0 1px var(--hairline), inset 0 0 0 2px #fff;
-}
-.persona-colorpicker input[type='color']::-webkit-color-swatch-wrapper { padding: 0; }
-.persona-colorpicker input[type='color']::-webkit-color-swatch { border: none; border-radius: 50%; }
-.persona-colorpicker input[type='color']::-moz-color-swatch { border: none; border-radius: 50%; }
-.persona-color-hex {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--fg-muted);
-}
-
-/* 3. 去掉 AI 气泡：开关 */
-.persona-toggle {
-  flex-shrink: 0;
-  width: 46px;
-  height: 28px;
-  padding: 0;
-  border: none;
-  border-radius: 9999px;
-  background: var(--hairline);
-  cursor: pointer;
-  position: relative;
-  transition: background 0.2s ease;
-}
-.persona-toggle.on { background: var(--color-primary); }
-.dark .persona-toggle.on { background: var(--color-primary-on-dark); }
-.persona-toggle-knob {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.persona-toggle.on .persona-toggle-knob { transform: translateX(18px); }
-
-/* 恢复默认 */
-.persona-reset {
-  align-self: flex-start;
-  margin-top: 2px;
-  padding: 0;
-  background: none;
-  border: none;
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-primary);
-}
-.persona-reset:hover { text-decoration: underline; }
-.dark .persona-reset { color: var(--color-primary-on-dark); }
-
-/* ---- iPhone mock ---- */
-.persona-phone-wrap {
-  position: relative;
-  justify-self: center;
-}
-
-.persona-phone {
-  --persona-accent: #8b6dff;
-  --persona-accent-dark: #785edb;
-  --persona-wall: linear-gradient(180deg, #2e2756 0%, #1a1733 60%, #0d0b1f 100%);
-  position: relative;
-  width: 285px;
-  max-width: 80vw;
-  aspect-ratio: 285 / 587;
-  container-type: inline-size;
-  filter: drop-shadow(0 30px 70px rgba(0, 0, 0, 0.32));
-}
-.dark .persona-phone {
-  filter: drop-shadow(0 30px 70px rgba(0, 0, 0, 0.6));
-}
-/* 用户提供的边框 SVG：外银框 + 白屏区(rx45) + 侧键/天线 */
-.persona-frame {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
-  pointer-events: none;
-}
-.persona-screen {
-  position: absolute;
-  /* 对齐 SVG 白屏 rect：x7 y5 w271 h577，viewBox 285×587 */
-  left: 2.456%;
-  top: 0.852%;
-  width: 95.088%;
-  height: 98.296%;
-  border-radius: 44px;
-  border-radius: 15.79cqw; /* 45/285，跟随尺寸缩放 */
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  isolation: isolate;
-  z-index: 1;
-}
-.persona-wall {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background: var(--persona-wall);
-  transition: background 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-}
-/* 默认壁纸上的隐纹：仿 TelegramPatternView 平铺的 气泡/心/星/纸飞机 SF Symbols */
-.persona-wall-pattern {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0.09;
-  pointer-events: none;
-}
-
-.persona-statusbar {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 18px 16px;
-  color: #1c1c1e;
-}
-.persona-status-left {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.persona-silent { width: 13px; height: 13px; opacity: 0.92; }
-.persona-net {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  line-height: 1;
-}
-.persona-time {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-  padding-left: 12px;
-}
-.persona-island {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 78px;
-  height: 23px;
-  border-radius: 9999px;
-  background: #000;
-}
-.persona-statusbar-right {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding-right: 4px;
-}
-.persona-signal { width: 15px; height: 10px; }
-.persona-batt { width: 22px; height: 10px; }
-
-/* 顶部向下渐隐：对应 navBarFadeBlurOverlay。浅色壁纸下用淡白渐隐提亮顶部，
-   让深色状态栏/导航在任意壁纸上可读 */
-.persona-scrim {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 124px;
-  z-index: 1;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.22) 45%, rgba(255, 255, 255, 0) 100%);
-  pointer-events: none;
-}
-
-/* 顶栏：左右圆形玻璃按钮 + 中间标题/副标题胶囊（仿 telegramNavBar） */
-.persona-nav {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 2px 12px 0;
-  color: #2b2b2e;
-}
-/* 玻璃 chrome 基底：浅色磨砂白玻璃 + 回退；v-liquid-glass 指令在支持时叠加 SVG 折射 */
-.persona-nav-btn,
-.persona-nav-pill,
-.persona-input {
-  position: relative;
-  z-index: 0;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.5);
-  border: none;
-  -webkit-backdrop-filter: blur(14px) saturate(1.6);
-  backdrop-filter: blur(14px) saturate(1.6);
-}
-/* 玻璃高光描边：在折射层之上、内容之下 */
-.persona-nav-btn::before,
-.persona-nav-pill::before,
-.persona-input::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  border-radius: inherit;
-  pointer-events: none;
-  box-shadow:
-    inset 1.5px 1.5px 0 -1px rgba(255, 255, 255, 0.85),
-    inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.5),
-    inset 0 0 4px 0 rgba(255, 255, 255, 0.3);
-}
-.persona-nav-btn > *,
-.persona-nav-pill > *,
-.persona-input > * {
-  position: relative;
-  z-index: 2;
-}
-
-.persona-nav-btn {
-  flex-shrink: 0;
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-}
-.persona-nav-btn svg { width: 18px; height: 18px; }
-.persona-nav-pill {
-  flex: 0 1 auto;
-  min-width: 54%;
-  max-width: calc(100% - 96px);
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 40px;
-  padding: 0 12px 0 16px;
-  border-radius: 9999px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
-}
-.persona-nav-texts {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  line-height: 1.15;
-}
-.persona-nav-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1c1c1e;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-.persona-nav-sub {
-  font-size: 10px;
-  font-weight: 500;
-  color: rgba(0, 0, 0, 0.5);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-.persona-nav-chevron {
-  width: 11px;
-  height: 11px;
-  flex-shrink: 0;
-  color: rgba(0, 0, 0, 0.45);
-}
-
-.persona-messages {
-  position: relative;
-  z-index: 1;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 1.5cqw;
-  padding: 3.5cqw 2cqw;
-}
-.persona-row { display: flex; }
-.persona-row-user { justify-content: flex-end; }
-.persona-row-bot { justify-content: flex-start; }
-.persona-bubble-bot { max-width: 91%; }
-.persona-bubble {
-  position: relative;
-  overflow: hidden;
-  max-width: 88%;
-  /* 比例还原真机设计（1pt≈0.244cqw）：内距 12/8pt、正文 17pt、圆角 18pt、阴影 r3/y1 */
-  padding: 1.95cqw 2.9cqw;
-  font-size: 4.15cqw;
-  line-height: 1.35;
-  letter-spacing: -0.005em;
-  border-radius: 4.4cqw;
-  box-shadow: 0 0.24cqw 0.73cqw rgba(0, 0, 0, 0.08);
-  animation: personaBubbleIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-/* 液态玻璃边缘高光：在折射层之上、正文之下的一圈内描边 specular rim */
-.persona-bubble::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  border-radius: inherit;
-  pointer-events: none;
-  box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.55),
-    inset 1.5px 1.5px 0 -1px rgba(255, 255, 255, 0.85),
-    inset -1px -1.5px 1px -0.5px rgba(255, 255, 255, 0.4),
-    inset 0 0 5px 0 rgba(255, 255, 255, 0.22);
-}
-/* 正文置于折射层与高光描边之上，保证清晰、居中；保留换行 */
-.persona-btext { position: relative; z-index: 2; white-space: pre-line; }
-/* 用户气泡：可自定义强调色渐变 + 白字（默认 Telegram 蓝）。
-   渐变留一点透明度，让 v-liquid-glass 折射出底下壁纸——对应 Swift
-   .fill(bubbleGradient).glassEffect(.clear, in: Capsule()) 的玻璃质感。 */
-.persona-bubble-user {
-  color: #fff;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--persona-accent) 88%, transparent) 0%,
-    color-mix(in srgb, var(--persona-accent-dark) 88%, transparent) 100%
-  );
-  transition: background 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-}
-/* 助手气泡：secondarySystemBackground 风格的浅色磨砂 + 深色正文 */
-.persona-bubble-bot {
-  color: #1d1d1f;
-  background: rgba(252, 252, 253, 0.88);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-}
-/* 去掉 AI 气泡：正文直接落在壁纸上（仿 enableNoBubbleUI），白字加投影保证可读 */
-.persona-bubble-bot--bare {
-  max-width: 100%;
-  padding: 2px 2px;
-  color: #1d1d1f;
-  background: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  border-radius: 0;
-  box-shadow: none;
-  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.7);
-}
-.persona-bubble-bot--bare::before { display: none; }
-@keyframes personaBubbleIn {
-  from { opacity: 0; transform: translateY(8px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-/* 输入栏：左右两个一样的玻璃圆（回形针 / 发送）+ 中间圆角输入框。
-   按真机比例（1pt≈0.244cqw）：圆钮 40pt、输入框 44pt、字号 16pt、图标 18pt、间距 12pt */
-.persona-inputbar {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 2.5cqw;
-  padding: 2cqw 5.5cqw 4.5cqw;
-}
-/* 回形针与发送：完全相同的玻璃圆钮 */
-.persona-circle {
-  flex-shrink: 0;
-  position: relative;
-  z-index: 0;
-  overflow: hidden;
-  width: 9.6cqw;
-  height: 9.6cqw;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  color: rgba(0, 0, 0, 0.55);
-  background: rgba(255, 255, 255, 0.5);
-  -webkit-backdrop-filter: blur(14px) saturate(1.6);
-  backdrop-filter: blur(14px) saturate(1.6);
-  box-shadow: 0 0.5cqw 1.6cqw rgba(0, 0, 0, 0.12);
-}
-.persona-circle::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  border-radius: inherit;
-  pointer-events: none;
-  box-shadow:
-    inset 1.5px 1.5px 0 -1px rgba(255, 255, 255, 0.85),
-    inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.5),
-    inset 0 0 4px 0 rgba(255, 255, 255, 0.3);
-}
-.persona-circle > * { position: relative; z-index: 2; }
-.persona-circle svg { width: 4.4cqw; height: 4.4cqw; }
-.persona-input {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  height: 10.4cqw;
-  padding: 0 3.6cqw;
-  border-radius: 9999px;
-  font-size: 3.9cqw;
-}
-.persona-input-text { color: rgba(0, 0, 0, 0.42); }
-
-/* ---------- Privacy ---------- */
 .privacy-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -2146,12 +1612,6 @@ img {
   .privacy-grid { grid-template-columns: repeat(2, 1fr); }
   .tech-grid { grid-template-columns: repeat(2, 1fr); }
   .screenshots-grid { grid-template-columns: 1fr; }
-  .persona-stage {
-    grid-template-columns: 1fr;
-    gap: 48px;
-    justify-items: center;
-  }
-  .persona-controls { width: 100%; max-width: 420px; }
 }
 
 @media (max-width: 720px) {
@@ -2178,13 +1638,10 @@ img {
 
 @media (prefers-reduced-motion: reduce) {
   .loader-screen,
-  .loader-frame,
-  .loader-mark span,
-  .loader-progress span,
+  .loader-mark-svg,
   .title-letter,
   .marquee-track,
   .reveal-block,
-  .persona-bubble,
   .site-frame-side {
     animation: none !important;
   }
