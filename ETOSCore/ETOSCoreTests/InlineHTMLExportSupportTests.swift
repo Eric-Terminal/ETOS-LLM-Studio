@@ -26,6 +26,23 @@ struct InlineHTMLExportSupportTests {
     }
 
     @MainActor
+    @Test("导出登记不会强持有已经退出的网页内容")
+    func registryFollowsContentLifetime() {
+        let registry = InlineHTMLContentRegistry.shared
+        let messageID = UUID()
+        weak var releasedContent: InlineHTMLContent?
+        do {
+            let content = InlineHTMLContent()
+            content.messageID = messageID
+            registry.register(content)
+            releasedContent = content
+            #expect(registry.contents(messageID: messageID, versionIndex: 0).count == 1)
+        }
+        #expect(releasedContent == nil)
+        #expect(registry.contents(messageID: messageID, versionIndex: 0).isEmpty)
+    }
+
+    @MainActor
     @Test("内联来源按消息和版本隔离，移除后不再保留网页操作")
     func sourceIsolation() {
         let registry = InlineHTMLContentRegistry.shared

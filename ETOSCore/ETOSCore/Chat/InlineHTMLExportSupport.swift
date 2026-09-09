@@ -78,12 +78,23 @@ public final class InlineHTMLContent: Identifiable, Hashable {
 @MainActor
 public final class InlineHTMLContentRegistry {
     public static let shared = InlineHTMLContentRegistry()
-    private var contents: [UUID: (order: Int, content: InlineHTMLContent)] = [:]
+    private final class Entry {
+        let order: Int
+        weak var content: InlineHTMLContent?
+
+        init(order: Int, content: InlineHTMLContent) {
+            self.order = order
+            self.content = content
+        }
+    }
+
+    // 弹出页面会让手表底层视图暂时消失，但其状态仍然有效；登记应跟随对象寿命。
+    private var contents: [UUID: Entry] = [:]
     private var nextOrder = 0
 
     public func register(_ content: InlineHTMLContent) {
         guard contents[content.id] == nil else { return }
-        contents[content.id] = (nextOrder, content)
+        contents[content.id] = Entry(order: nextOrder, content: content)
         nextOrder += 1
     }
 
@@ -94,9 +105,10 @@ public final class InlineHTMLContentRegistry {
     }
 
     public func contents(messageID: UUID, versionIndex: Int) -> [InlineHTMLContent] {
-        contents.values
-            .filter { $0.content.messageID == messageID && $0.content.versionIndex == versionIndex }
+        contents = contents.filter { $0.value.content != nil }
+        return contents.values
             .sorted { $0.order < $1.order }
-            .map(\.content)
+            .compactMap(\.content)
+            .filter { $0.messageID == messageID && $0.versionIndex == versionIndex }
     }
 }

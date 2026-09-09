@@ -105,7 +105,6 @@ struct WatchInlineWidgetCard: View {
             InlineHTMLContentRegistry.shared.register(content)
             isPrepared = true
         }
-        .onDisappear { InlineHTMLContentRegistry.shared.remove(content) }
     }
 
     private struct PreparationID: Equatable {

@@ -105,9 +105,9 @@ struct WatchRoleplayHTMLCardView: View {
                 }
             }.value
             guard !Task.isCancelled, key == preparationKey else { return }
-            for content in inlineContents.values { InlineHTMLContentRegistry.shared.remove(content) }
             inlineContents = Dictionary(uniqueKeysWithValues: prepared.map { document in
-                let content = InlineHTMLContent()
+                // 变量刷新保留当前网页持有的导出对象，避免交互一次后截图闭包丢失。
+                let content = inlineContents[document.id] ?? InlineHTMLContent()
                 content.messageID = messageID
                 content.versionIndex = versionIndex
                 content.title = document.title
@@ -120,9 +120,6 @@ struct WatchRoleplayHTMLCardView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)) { _ in
             variableRevision &+= 1
-        }
-        .onDisappear {
-            for content in inlineContents.values { InlineHTMLContentRegistry.shared.remove(content) }
         }
     }
 
