@@ -7582,3 +7582,16 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "无法生成网页图片，请重试。" = "Impossible de créer l’image de la page. Réessayez.";
 "角色卡 HTML" = "HTML de la fiche personnage";
 "角色卡 HTML %d" = "HTML de la fiche personnage %d";
+
+/* 消息工具调用编辑 */
+"工具调用 JSON" = "JSON des appels d’outils";
+"添加工具调用" = "Ajouter un appel d’outil";
+"编辑说明" = "Aide à la modification";
+"返回后点击“保存”才会更新消息；保存不会执行工具。" = "Revenez puis touchez Enregistrer pour mettre à jour le message. Aucun outil n’est exécuté.";
+"可以添加、修改或移除调用；正文为空也可以保存。" = "Ajoutez, modifiez ou supprimez des appels. Le corps du message peut être vide.";
+"工具调用必须是有效的 JSON 数组。" = "Les appels doivent former un tableau JSON valide.";
+"每个调用需要非空的 id、toolName，以及 JSON 对象格式的 arguments；请检查字段类型。" = "Chaque appel nécessite un id et un toolName non vides, et un objet JSON dans arguments. Vérifiez les types des champs.";
+"工具调用的 id 不能重复。" = "Les id des appels doivent être uniques.";
+"消息已发生变化，请重新打开编辑器。" = "Le message a changé. Rouvrez l’éditeur.";
+"一条工具结果消息只能关联一个调用；多个调用请添加到助手消息。" = "Un résultat d’outil ne peut être lié qu’à un appel. Ajoutez plusieurs appels à un message de l’assistant.";
+"使用 JSON 数组编辑调用。每项包含 id、toolName 和 arguments（JSON 对象或包含对象的字符串）；可选 result、resultDisposition 和 providerSpecificFields。新增一项即可添加调用，删除一项可移除调用，[] 表示清空。id 必须唯一，建议保留现有 id 以维持结果关联。result 为字符串，状态可为 completed、failed 或 rejected。修改会同步同轮对话中的关联结果；这些记录会用于后续聊天历史。" = "Modifiez les appels sous forme de tableau JSON. Chaque élément contient id, toolName et arguments (objet JSON ou chaîne le contenant). result, resultDisposition et providerSpecificFields sont facultatifs. Ajoutez ou supprimez des éléments ; [] vide la liste. Les id doivent être uniques ; conservez ceux existants pour maintenir les liens avec les résultats. result est une chaîne ; le statut peut être completed, failed ou rejected. Les résultats liés du même tour sont mis à jour et utilisés dans l’historique suivant.";

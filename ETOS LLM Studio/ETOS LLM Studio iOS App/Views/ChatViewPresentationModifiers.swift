@@ -20,7 +20,7 @@ extension ChatView {
             .sheet(item: $editingMessage) { message in
                 NavigationStack {
                     EditMessageView(message: message) { updatedMessage in
-                        viewModel.commitEditedMessage(updatedMessage)
+                        try await viewModel.commitEditedMessage(updatedMessage, original: message)
                     }
                 }
                 .presentationDetents([.medium, .large])

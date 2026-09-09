@@ -233,8 +233,8 @@ extension ChatViewModel {
         chatService.setSessionTags(sessionID: session.id, tagIDs: tagIDs)
     }
 
-    func commitEditedMessage(_ updatedMessage: ChatMessage) {
-        chatService.updateMessage(updatedMessage)
+    func commitEditedMessage(_ updatedMessage: ChatMessage, original: ChatMessage) async throws {
+        try await chatService.updateEditedMessage(updatedMessage, original: original)
         messageToEdit = nil
     }
 

@@ -596,7 +596,7 @@ extension ContentView {
         case .editMessage:
             if let messageToEdit = viewModel.messageToEdit {
                 EditMessageView(message: messageToEdit, onSave: { updatedMessage in
-                    viewModel.commitEditedMessage(updatedMessage)
+                    try await viewModel.commitEditedMessage(updatedMessage)
                 })
             }
         case .settings:

@@ -7275,3 +7275,16 @@
 "网页尚未就绪，请打开网页并等待加载完成。" = "The page is not ready. Open it and wait for it to finish loading.";
 "网页图片过大，请改为下载 HTML。" = "The page image is too large. Export HTML instead.";
 "无法生成网页图片，请重试。" = "Could not create the page image. Please try again.";
+
+/* 消息工具调用编辑 */
+"工具调用 JSON" = "Tool Call JSON";
+"添加工具调用" = "Add Tool Call";
+"编辑说明" = "Editing Help";
+"返回后点击“保存”才会更新消息；保存不会执行工具。" = "Return and tap Save to update the message. Saving does not run tools.";
+"可以添加、修改或移除调用；正文为空也可以保存。" = "Add, edit, or remove calls. Messages can be saved with an empty body.";
+"工具调用必须是有效的 JSON 数组。" = "Tool calls must be a valid JSON array.";
+"每个调用需要非空的 id、toolName，以及 JSON 对象格式的 arguments；请检查字段类型。" = "Each call needs a nonempty id and toolName, plus arguments containing a JSON object. Check the field types.";
+"工具调用的 id 不能重复。" = "Tool call IDs must be unique.";
+"消息已发生变化，请重新打开编辑器。" = "The message has changed. Reopen the editor.";
+"一条工具结果消息只能关联一个调用；多个调用请添加到助手消息。" = "A tool result message can reference only one call. Add multiple calls to an assistant message.";
+"使用 JSON 数组编辑调用。每项包含 id、toolName 和 arguments（JSON 对象或包含对象的字符串）；可选 result、resultDisposition 和 providerSpecificFields。新增一项即可添加调用，删除一项可移除调用，[] 表示清空。id 必须唯一，建议保留现有 id 以维持结果关联。result 为字符串，状态可为 completed、failed 或 rejected。修改会同步同轮对话中的关联结果；这些记录会用于后续聊天历史。" = "Edit calls as a JSON array. Each item contains id, toolName, and arguments (a JSON object or a string containing one). Optional fields are result, resultDisposition, and providerSpecificFields. Add or remove items to add or remove calls; [] clears the list. IDs must be unique; keep existing IDs to preserve result links. result is a string; status can be completed, failed, or rejected. Changes update linked results in the same conversation turn and are used in subsequent chat history.";

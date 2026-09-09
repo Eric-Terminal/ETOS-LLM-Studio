@@ -7582,3 +7582,16 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "无法生成网页图片，请重试。" = "No se pudo generar la imagen de la página. Inténtalo de nuevo.";
 "角色卡 HTML" = "HTML de personaje";
 "角色卡 HTML %d" = "HTML de personaje %d";
+
+/* 消息工具调用编辑 */
+"工具调用 JSON" = "JSON de llamadas a herramientas";
+"添加工具调用" = "Añadir llamada a herramienta";
+"编辑说明" = "Ayuda de edición";
+"返回后点击“保存”才会更新消息；保存不会执行工具。" = "Vuelve y toca Guardar para actualizar el mensaje. Guardar no ejecuta herramientas.";
+"可以添加、修改或移除调用；正文为空也可以保存。" = "Añade, edita o elimina llamadas. Se puede guardar con el cuerpo vacío.";
+"工具调用必须是有效的 JSON 数组。" = "Las llamadas deben ser un array JSON válido.";
+"每个调用需要非空的 id、toolName，以及 JSON 对象格式的 arguments；请检查字段类型。" = "Cada llamada necesita id y toolName no vacíos, y arguments con un objeto JSON. Comprueba los tipos de campo.";
+"工具调用的 id 不能重复。" = "Los ID de llamada no pueden repetirse.";
+"消息已发生变化，请重新打开编辑器。" = "El mensaje ha cambiado. Vuelve a abrir el editor.";
+"一条工具结果消息只能关联一个调用；多个调用请添加到助手消息。" = "Un mensaje de resultado solo puede vincular una llamada. Añade varias llamadas a un mensaje del asistente.";
+"使用 JSON 数组编辑调用。每项包含 id、toolName 和 arguments（JSON 对象或包含对象的字符串）；可选 result、resultDisposition 和 providerSpecificFields。新增一项即可添加调用，删除一项可移除调用，[] 表示清空。id 必须唯一，建议保留现有 id 以维持结果关联。result 为字符串，状态可为 completed、failed 或 rejected。修改会同步同轮对话中的关联结果；这些记录会用于后续聊天历史。" = "Edita las llamadas como un array JSON. Cada elemento contiene id, toolName y arguments (objeto JSON o cadena que lo contiene). result, resultDisposition y providerSpecificFields son opcionales. Añade o elimina elementos; [] vacía la lista. Los ID deben ser únicos; conserva los existentes para mantener los resultados vinculados. result es una cadena; el estado puede ser completed, failed o rejected. Los cambios actualizan los resultados vinculados del mismo turno y se usan en el historial posterior.";

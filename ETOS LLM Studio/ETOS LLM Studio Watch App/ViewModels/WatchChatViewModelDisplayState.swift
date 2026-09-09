@@ -173,8 +173,9 @@ extension ChatViewModel {
         }
     }
 
-    func commitEditedMessage(_ message: ChatMessage) {
-        chatService.updateMessage(message)
+    func commitEditedMessage(_ message: ChatMessage) async throws {
+        guard let original = messageToEdit else { throw MessageToolCallEditingError.messageChanged }
+        try await chatService.updateEditedMessage(message, original: original)
         messageToEdit = nil
     }
 

@@ -73,6 +73,18 @@ public actor GuideKnowledgeService {
 public enum GuideDocumentCatalog {
     public static let documents: [GuideDocument] = [
         GuideDocument(
+            id: "message-tool-call-editing",
+            title: "消息工具调用 JSON 编辑",
+            keywords: ["工具调用", "JSON", "编辑消息", "参数", "arguments", "result", "空消息"],
+            content: """
+            iOS 与 watchOS 在消息“更多”→“编辑消息”中提供“工具调用 JSON”。助手和工具结果消息可进入此编辑器。正文或思考为空不会阻止保存；助手消息可以从 [] 开始添加调用。点击“添加工具调用”会生成带唯一 id 的草稿，必须填写 toolName 后才能保存；arguments 接受 JSON 对象或包含对象的字符串。result 是字符串，resultDisposition 可选 completed、failed、rejected，providerSpecificFields 保留服务商专有字段。不支持的字段、重复 id、错误类型及无效 JSON 会阻止保存。[] 清空调用，单个工具结果消息只能关联一个调用，多个调用应添加到助手消息。
+
+            从 JSON 编辑器返回不会保存，只有父消息编辑器的原生“保存”才更新记录，取消会丢弃草稿。编辑或添加调用不会执行工具。保留调用 id 可以维持结果关联；修改助手调用的结果会同步同轮对话、同次回复的结果消息，移除调用会移除其结果，手工填写的新结果会补充到聊天历史。编辑工具结果正文会同步对应助手调用。若消息或会话在保存期间变化，则要求重新打开编辑器，避免覆盖新内容。被编辑的响应不再复用旧 Responses 输出缓存。
+
+            编辑器与其 JSON 子页面分别声明向导上下文。消息正文、思考、工具参数、结果及服务商字段可能含凭据，全部不向向导读取，向导只知道保存状态。此页面不提供修改提案或执行工具，仅帮助用户理解格式与操作；向导的工具集合和普通聊天工具中心不变。
+            """
+        ),
+        GuideDocument(
             id: "inline-html-actions",
             title: "内联 HTML 的复制与导出",
             keywords: ["HTML", "酒馆", "Widget", "app_show_widget", "PNG", "复制代码", "纯文本", "下载"],
