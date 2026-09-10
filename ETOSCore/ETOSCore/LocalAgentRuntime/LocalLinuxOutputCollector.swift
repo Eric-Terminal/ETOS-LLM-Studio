@@ -44,6 +44,7 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     private var writeError: Error?
     private var isFinished = false
     private var userPreview = Data()
+    private var userPreviewNeedsRefresh = false
     private var lastUserPreviewStream: LocalLinuxOutputStream?
     private let userPreviewLimit = 262_144
     private var terminalScreen: LocalLinuxTerminalScreen?
@@ -196,7 +197,18 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     public func userVisiblePreview() -> String {
         lock.lock()
         defer { lock.unlock() }
+        refreshUserPreviewIfNeeded()
         return String(decoding: userPreview, as: UTF8.self)
+    }
+
+    private func refreshUserPreviewIfNeeded() {
+        if userPreviewNeedsRefresh, let terminalScreen {
+            userPreview = Data(terminalScreen.renderedText().utf8)
+            if userPreview.count > userPreviewLimit {
+                userPreview.removeFirst(userPreview.count - userPreviewLimit)
+            }
+            userPreviewNeedsRefresh = false
+        }
     }
 
     public func userVisibleTerminalPresentation(
@@ -241,7 +253,7 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         terminalScreen?.resize(columns: columns, rows: rows)
-        replaceUserPreviewWithTerminalSnapshot()
+        invalidateTerminalPresentations()
     }
 
     private func writeRawFrame(stream: LocalLinuxOutputStream, data: Data) throws {
@@ -261,12 +273,13 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     private func appendUserPreview(stream: LocalLinuxOutputStream, data: Data) {
         if stream == .terminal, let terminalScreen {
             terminalScreen.append(data)
-            replaceUserPreviewWithTerminalSnapshot()
+            invalidateTerminalPresentations()
             let responses = terminalScreen.drainResponses()
             if !responses.isEmpty { terminalResponseHandler?(responses) }
             lastUserPreviewStream = stream
             return
         }
+        refreshUserPreviewIfNeeded()
         if stream != .terminal, lastUserPreviewStream != stream {
             let label = stream == .stdout ? "\n[stdout]\n" : "\n[stderr]\n"
             userPreview.append(contentsOf: label.utf8)
@@ -278,14 +291,12 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
         }
     }
 
-    private func replaceUserPreviewWithTerminalSnapshot() {
-        guard let terminalScreen else { return }
+    private func invalidateTerminalPresentations() {
+        // 协议解析和回包必须持续进行；完整历史的拼接只在读取预览时执行，
+        // 避免隐藏终端的每个输出分片都重复复制最多 2,000 行文本。
+        userPreviewNeedsRefresh = true
         terminalPresentationNeedsRefresh = true
         terminalPreviewNeedsRefresh = true
-        userPreview = Data(terminalScreen.renderedText().utf8)
-        if userPreview.count > userPreviewLimit {
-            userPreview.removeFirst(userPreview.count - userPreviewLimit)
-        }
     }
 
     private func presentationWithDiagnostics(

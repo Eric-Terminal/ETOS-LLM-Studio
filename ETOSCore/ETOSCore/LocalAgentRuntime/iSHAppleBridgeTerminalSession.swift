@@ -9,6 +9,24 @@
 
 import Foundation
 
+struct LocalLinuxTerminalReadPacing {
+    private var idleDelayNanoseconds: UInt64 = 5_000_000
+
+    mutating func delayNanoseconds(bytesRead: Int, droppedBytes: UInt64) -> UInt64 {
+        if bytesRead > 0 || droppedBytes > 0 {
+            idleDelayNanoseconds = 5_000_000
+            // 满块意味着队列里可能还有积压，先让出执行权再继续 drain，
+            // 不要用固定休眠给大量输出人为增加吞吐上限。
+            return bytesRead == LocalLinuxBridgeConstants.outputChunkBytes ? 0 : idleDelayNanoseconds
+        }
+        let delay = idleDelayNanoseconds
+        // 公共 PTY ABI 只有非阻塞读取；空闲时退让到每秒约 20 次检查，
+        // 将新输出的额外等待限制在 50 毫秒内，兼顾 watchOS 耗电与响应。
+        idleDelayNanoseconds = min(idleDelayNanoseconds * 2, 50_000_000)
+        return delay
+    }
+}
+
 private final class LocalLinuxTerminalResultState: @unchecked Sendable {
     private let lock = NSLock()
     private var value: Result<LocalLinuxBridgeTerminalResult, Error>?
@@ -80,6 +98,7 @@ public final class iSHAppleBridgeTerminalSession: @unchecked Sendable {
         let resultState = resultState
         let task = Task.detached(priority: .utility) {
             var buffer = [UInt8](repeating: 0, count: LocalLinuxBridgeConstants.outputChunkBytes)
+            var pacing = LocalLinuxTerminalReadPacing()
             while !Task.isCancelled {
                 var count: UInt32 = 0
                 var dropped: UInt64 = 0
@@ -141,7 +160,12 @@ public final class iSHAppleBridgeTerminalSession: @unchecked Sendable {
                     )
                     return
                 }
-                try? await Task<Never, Never>.sleep(nanoseconds: 5_000_000)
+                let delay = pacing.delayNanoseconds(bytesRead: Int(count), droppedBytes: dropped)
+                if delay == 0 {
+                    await Task.yield()
+                } else {
+                    try? await Task<Never, Never>.sleep(nanoseconds: delay)
+                }
             }
         }
         taskLock.lock()

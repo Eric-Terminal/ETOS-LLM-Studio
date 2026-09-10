@@ -92,6 +92,51 @@ struct LocalLinuxTerminalScreenTests {
         #expect(presentation.attributedText != AttributedString(presentation.plainText))
     }
 
+    @Test("缩略图跨越历史与屏幕边界并保留中间空行")
+    func previewSpansScrollbackAndScreen() {
+        let screen = LocalLinuxTerminalScreen(columns: 20, rows: 2)
+        screen.append(Data("one\r\ntwo\r\n\r\n\u{1B}[32mthree\u{1B}[0m".utf8))
+
+        #expect(screen.renderedPresentation(maximumLines: 3).plainText == "two\n\nthree")
+        #expect(screen.renderedPresentation(maximumLines: 0).plainText == "three")
+
+        // 末尾屏幕全空时，尾部范围还需跳过历史里的空行。
+        screen.append(Data("\r\n\r\n\r\n".utf8))
+        let preview = screen.renderedPresentation(maximumLines: 3)
+        #expect(preview.plainText == "two\n\nthree")
+        #expect(preview.attributedText != AttributedString(preview.plainText))
+        #expect(screen.renderedPresentation().plainText == screen.renderedText())
+    }
+
+    @Test("备用屏缩略图不带入主屏历史且保留有背景的空格")
+    func alternatePreviewExcludesHistoryAndKeepsStyledBlanks() {
+        let screen = LocalLinuxTerminalScreen(columns: 20, rows: 2)
+        screen.append(Data("one\r\ntwo\r\nthree".utf8))
+        screen.append(Data("\u{1B}[?1049h".utf8))
+        #expect(screen.renderedPresentation(maximumLines: 3).plainText.isEmpty)
+
+        screen.append(Data("\u{1B}[42m \u{1B}[0m\r\n".utf8))
+        #expect(screen.renderedPresentation(maximumLines: 1).plainText == " ")
+        screen.append(Data("\u{1B}[?1049l".utf8))
+        #expect(screen.renderedPresentation(maximumLines: 3).plainText == "one\ntwo\nthree")
+    }
+
+    @Test("原地写入、自动换行及缩放不修改已交付的快照")
+    func bufferMutationsPreservePublishedSnapshots() {
+        let screen = LocalLinuxTerminalScreen(columns: 4, rows: 2)
+        screen.append(Data("abcdEFGH".utf8))
+        let original = screen.renderedPresentation()
+        #expect(original.plainText == "abcd\nEFGH")
+
+        screen.append(Data("ij\rXY\u{1B}[K".utf8))
+        #expect(screen.renderedText() == "abcd\nEFGH\nXY")
+        screen.resize(columns: 6, rows: 3)
+        screen.append(Data("Z".utf8))
+        #expect(screen.renderedText() == "abcd\nEFGH\nXYZ")
+        #expect(original.plainText == "abcd\nEFGH")
+        #expect(String(original.attributedText.characters) == "abcd\nEFGH")
+    }
+
     @Test("光标、设备属性和窗口尺寸查询返回 PTY 协议响应")
     func terminalQueriesProduceResponses() {
         let screen = LocalLinuxTerminalScreen(columns: 80, rows: 24)

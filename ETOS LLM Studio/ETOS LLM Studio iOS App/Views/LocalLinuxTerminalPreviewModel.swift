@@ -49,13 +49,16 @@ final class LocalLinuxTerminalPreviewModel: ObservableObject {
         guard let terminalID = activeTerminalID else { return }
         while !Task.isCancelled, activeTerminalID == terminalID {
             do {
-                presentation = try await LocalLinuxJobScheduler.shared
+                let nextPresentation = try await LocalLinuxJobScheduler.shared
                     .userVisibleTerminalPreviewPresentation(
                         jobID: terminalID,
                         maximumLines: maximumLines,
                         appearance: appearance
                     )
+                guard !Task.isCancelled, activeTerminalID == terminalID else { return }
+                presentation = nextPresentation
             } catch {
+                guard !Task.isCancelled, activeTerminalID == terminalID else { return }
                 reset()
                 return
             }

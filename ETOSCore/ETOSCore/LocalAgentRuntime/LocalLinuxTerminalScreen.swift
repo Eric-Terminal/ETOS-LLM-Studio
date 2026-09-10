@@ -111,14 +111,26 @@ final class LocalLinuxTerminalScreen: @unchecked Sendable {
         maximumLines: Int? = nil,
         appearance: LocalLinuxTerminalAppearance = .dark
     ) -> LocalLinuxTerminalPresentation {
-        var values = usesAlternateScreen ? [] : scrollback
-        values.append(contentsOf: activeBuffer.lines.map(renderedLine))
-        while values.last?.isEmpty == true {
-            values.removeLast()
+        let lines = activeBuffer.lines
+        var screenEnd = lines.endIndex
+        while screenEnd > 0, visibleCellEndIndex(in: lines[screenEnd - 1]) == 0 {
+            screenEnd -= 1
         }
-        if let maximumLines {
-            values = Array(values.suffix(max(1, maximumLines)))
+        var historyEnd = usesAlternateScreen ? 0 : scrollback.endIndex
+        if screenEnd == 0 {
+            while historyEnd > 0, scrollback[historyEnd - 1].isEmpty {
+                historyEnd -= 1
+            }
         }
+
+        // 先确定实际需要的尾部行，再生成富文本；缩略图不应复制整个历史，
+        // 也不必为最终会被丢弃的屏幕行构造两套外观样式。
+        let limit = maximumLines.map { max(1, $0) }
+        let screenStart = limit.map { max(0, screenEnd - $0) } ?? 0
+        let historyCount = limit.map { min(historyEnd, max(0, $0 - (screenEnd - screenStart))) }
+            ?? historyEnd
+        var values = Array(scrollback[(historyEnd - historyCount)..<historyEnd])
+        values.append(contentsOf: lines[screenStart..<screenEnd].map(renderedLine))
         var plainText = ""
         var attributedText = AttributedString()
         for (index, line) in values.enumerated() {
@@ -136,14 +148,7 @@ final class LocalLinuxTerminalScreen: @unchecked Sendable {
     }
 
     private var activeBuffer: Buffer {
-        get { usesAlternateScreen ? alternate : primary }
-        set {
-            if usesAlternateScreen {
-                alternate = newValue
-            } else {
-                primary = newValue
-            }
-        }
+        usesAlternateScreen ? alternate : primary
     }
 
     private func consume(_ byte: UInt8) {
@@ -558,50 +563,50 @@ final class LocalLinuxTerminalScreen: @unchecked Sendable {
     }
 
     private func put(_ character: Character) {
-        var buffer = activeBuffer
-        if buffer.pendingWrap {
-            buffer.pendingWrap = false
-            if usesAutoWrap {
+        mutateBuffer { buffer in
+            if buffer.pendingWrap {
+                buffer.pendingWrap = false
+                if usesAutoWrap {
+                    buffer.cursor.column = 0
+                    index(&buffer)
+                }
+            }
+
+            let width = characterWidth(character)
+            if width == 2, buffer.cursor.column == columns - 1, usesAutoWrap {
                 buffer.cursor.column = 0
                 index(&buffer)
             }
-        }
-
-        let width = characterWidth(character)
-        if width == 2, buffer.cursor.column == columns - 1, usesAutoWrap {
-            buffer.cursor.column = 0
-            index(&buffer)
-        }
-        let row = buffer.cursor.row
-        let column = buffer.cursor.column
-        if usesInsertMode {
-            let shift = min(width, columns - column)
-            if shift > 0 {
-                for target in stride(from: columns - 1, through: column + shift, by: -1) {
-                    buffer.lines[row][target] = buffer.lines[row][target - shift]
+            let row = buffer.cursor.row
+            let column = buffer.cursor.column
+            if usesInsertMode {
+                let shift = min(width, columns - column)
+                if shift > 0 {
+                    for target in stride(from: columns - 1, through: column + shift, by: -1) {
+                        buffer.lines[row][target] = buffer.lines[row][target - shift]
+                    }
                 }
             }
-        }
-        buffer.lines[row][column] = Cell(
-            text: String(character),
-            isContinuation: false,
-            style: currentStyle
-        )
-        if width == 2, column + 1 < columns {
-            buffer.lines[row][column + 1] = Cell(
-                text: "",
-                isContinuation: true,
+            buffer.lines[row][column] = Cell(
+                text: String(character),
+                isContinuation: false,
                 style: currentStyle
             )
+            if width == 2, column + 1 < columns {
+                buffer.lines[row][column + 1] = Cell(
+                    text: "",
+                    isContinuation: true,
+                    style: currentStyle
+                )
+            }
+            let next = column + width
+            if next >= columns {
+                buffer.cursor.column = columns - 1
+                buffer.pendingWrap = usesAutoWrap
+            } else {
+                buffer.cursor.column = next
+            }
         }
-        let next = column + width
-        if next >= columns {
-            buffer.cursor.column = columns - 1
-            buffer.pendingWrap = usesAutoWrap
-        } else {
-            buffer.cursor.column = next
-        }
-        activeBuffer = buffer
     }
 
     private func lineFeed() {
@@ -874,9 +879,13 @@ final class LocalLinuxTerminalScreen: @unchecked Sendable {
     }
 
     private func mutateBuffer(_ mutation: (inout Buffer) -> Void) {
-        var buffer = activeBuffer
-        mutation(&buffer)
-        activeBuffer = buffer
+        // 直接借用当前缓冲区，避免局部副本与原值同时持有嵌套数组，
+        // 导致每写一个字符都触发屏幕数组和当前行的写时复制。
+        if usesAlternateScreen {
+            mutation(&alternate)
+        } else {
+            mutation(&primary)
+        }
     }
 
     private func blankLine() -> [Cell] {

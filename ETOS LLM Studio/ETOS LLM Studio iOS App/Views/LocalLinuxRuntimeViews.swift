@@ -229,15 +229,19 @@ struct LocalLinuxTerminalView: View {
         output = .empty
         outputTask?.cancel()
         outputTask = Task {
-            inputOwner = try? await LocalLinuxJobScheduler.shared.terminalInputOwner(jobID: selected.id)
+            let owner = try? await LocalLinuxJobScheduler.shared.terminalInputOwner(jobID: selected.id)
+            guard !Task.isCancelled else { return }
+            inputOwner = owner
             while !Task.isCancelled {
                 if let presentation = try? await LocalLinuxJobScheduler.shared.userVisibleTerminalPresentation(
                     jobID: selected.id,
                     appearance: appearance
                 ) {
+                    guard !Task.isCancelled else { return }
                     output = presentation
                 }
                 if let current = await LocalLinuxJobScheduler.shared.job(id: selected.id) {
+                    guard !Task.isCancelled else { return }
                     job = current
                     if current.state.isTerminal { break }
                 } else {
@@ -245,7 +249,9 @@ struct LocalLinuxTerminalView: View {
                 }
                 try? await Task<Never, Never>.sleep(nanoseconds: 250_000_000)
             }
-            terminalJobs = visibleTerminalJobs(in: await LocalLinuxJobScheduler.shared.activeJobs())
+            let jobs = await LocalLinuxJobScheduler.shared.activeJobs()
+            guard !Task.isCancelled else { return }
+            terminalJobs = visibleTerminalJobs(in: jobs)
         }
     }
 

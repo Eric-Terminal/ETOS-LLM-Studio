@@ -157,8 +157,11 @@ public actor LocalLinuxJobScheduler {
     }
 
     public func userVisibleOutput(jobID: UUID) async throws -> String {
-        if let command = activeCommands[jobID] { return command.collector.userVisiblePreview() }
-        if let terminal = activeTerminals[jobID] { return terminal.collector.userVisiblePreview() }
+        if let collector = activeCommands[jobID]?.collector ?? activeTerminals[jobID]?.collector {
+            return await Task.detached(priority: .utility) {
+                collector.userVisiblePreview()
+            }.value
+        }
         guard let job = job(id: jobID) else { throw LocalLinuxRuntimeError.jobNotFound(jobID) }
         guard let relativePath = job.outputRelativePath else { return "" }
         return try await storage.readRawOutput(relativePath: relativePath, maximumBytes: 262_144)
@@ -167,25 +170,33 @@ public actor LocalLinuxJobScheduler {
     public func userVisibleTerminalPresentation(
         jobID: UUID,
         appearance: LocalLinuxTerminalAppearance = .dark
-    ) throws -> LocalLinuxTerminalPresentation {
+    ) async throws -> LocalLinuxTerminalPresentation {
         guard let terminal = activeTerminals[jobID] else {
             throw LocalLinuxRuntimeError.jobNotFound(jobID)
         }
-        return terminal.collector.userVisibleTerminalPresentation(appearance: appearance) ?? .empty
+        let collector = terminal.collector
+        // 收集器的锁同时保护日志写入和屏幕解析。等待它或拼接富文本时释放
+        // 调度器 actor，才能让用户输入、中断和其他会话继续被及时调度。
+        return await Task.detached(priority: .utility) {
+            collector.userVisibleTerminalPresentation(appearance: appearance) ?? .empty
+        }.value
     }
 
     public func userVisibleTerminalPreviewPresentation(
         jobID: UUID,
         maximumLines: Int,
         appearance: LocalLinuxTerminalAppearance = .dark
-    ) throws -> LocalLinuxTerminalPresentation {
+    ) async throws -> LocalLinuxTerminalPresentation {
         guard let terminal = activeTerminals[jobID] else {
             throw LocalLinuxRuntimeError.jobNotFound(jobID)
         }
-        return terminal.collector.userVisibleTerminalPreviewPresentation(
-            maximumLines: maximumLines,
-            appearance: appearance
-        ) ?? .empty
+        let collector = terminal.collector
+        return await Task.detached(priority: .utility) {
+            collector.userVisibleTerminalPreviewPresentation(
+                maximumLines: maximumLines,
+                appearance: appearance
+            ) ?? .empty
+        }.value
     }
 
     public func userVisibleOutputPage(
