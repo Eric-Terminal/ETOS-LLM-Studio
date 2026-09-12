@@ -15,8 +15,16 @@ enum TelemetryBoundedJSONReader {
             var position = 0
             let range = try reader.valueRange(at: &position)
             reader.skipWhitespace(&position)
-            guard position == reader.bytes.count, reader.bytes[range.lowerBound] == 0x7B,
-                  let object = try reader.decode(range, depth: 0, key: nil) as? [String: Any] else {
+            guard position == reader.bytes.count, reader.bytes[range.lowerBound] == 0x7B else {
+                throw TelemetryEnvelopeError.payloadIsNotJSONObject
+            }
+            for (key, value) in try reader.objectMembers(range)
+                where key.hasSuffix("Diagnostics") && reader.bytes[value.lowerBound] == 0x5B {
+                var count = 0
+                let retained = try reader.arrayElements(value, sourceCount: &count)
+                reader.remainingDiagnostics += retained.count
+            }
+            guard let object = try reader.decode(range, depth: 0, key: nil) as? [String: Any] else {
                 throw TelemetryEnvelopeError.payloadIsNotJSONObject
             }
             return object
@@ -27,6 +35,7 @@ enum TelemetryBoundedJSONReader {
         let bytes: UnsafeBufferPointer<UInt8>
         var remainingValues = 30_000
         var remainingScalarBytes = 2 * 1_024 * 1_024
+        var remainingDiagnostics = 0
         let maximumDepth = 96
         let maximumChildren = 4_096
 
@@ -176,7 +185,21 @@ enum TelemetryBoundedJSONReader {
                 }
                 var array: [Any] = []
                 for element in elements where remainingValues > 0 {
-                    let decoded = try decode(element.element, depth: depth + 1, key: nil)
+                    let decoded: Any
+                    if depth == 1, key?.hasSuffix("Diagnostics") == true {
+                        // 有限解码也需按事件预留预算；仅在压平阶段分配已经来不及恢复原文。
+                        let count = max(1, remainingDiagnostics)
+                        let reservedValues = remainingValues - max(1, remainingValues / count)
+                        let reservedBytes = remainingScalarBytes - remainingScalarBytes / count
+                        remainingValues -= reservedValues
+                        remainingScalarBytes -= reservedBytes
+                        remainingDiagnostics -= 1
+                        decoded = try decode(element.element, depth: depth + 1, key: nil)
+                        remainingValues += reservedValues
+                        remainingScalarBytes += reservedBytes
+                    } else {
+                        decoded = try decode(element.element, depth: depth + 1, key: nil)
+                    }
                     if key == "callStacks", var stack = decoded as? [String: Any] {
                         var counts = stack["_etos"] as? SourceArrayCounts ?? SourceArrayCounts()
                         counts.stackIndex = element.offset

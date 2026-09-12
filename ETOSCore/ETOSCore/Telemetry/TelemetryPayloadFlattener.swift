@@ -29,6 +29,7 @@ enum TelemetryPayloadFlattener {
     private struct TransformationState {
         var remainingFrames = maximumCallStackFrames
         var remainingValues = maximumConvertedValues
+        var remainingDiagnostics = 0
         var emittedFrames = 0
         var didTruncate = false
     }
@@ -54,6 +55,9 @@ enum TelemetryPayloadFlattener {
         }
 
         var state = TransformationState()
+        state.remainingDiagnostics = dictionary.reduce(0) { count, entry in
+            count + (entry.key.hasSuffix("Diagnostics") ? (entry.value as? [Any])?.count ?? 0 : 0)
+        }
         state.didTruncate = truncationReason != nil
         var flattened: [String: JSONValue] = [:]
         flattened.reserveCapacity(dictionary.count + 1)
@@ -149,7 +153,21 @@ enum TelemetryPayloadFlattener {
                     state.didTruncate = true
                     break
                 }
-                result.append(convert(child, key: nil, depth: depth + 1, state: &state))
+                if depth == 0, key?.hasSuffix("Diagnostics") == true {
+                    // 同一回调可带回多条甚至多类诊断；为尚未处理的事件预留份额，
+                    // 防止第一棵大栈耗尽整份信封预算，连后续版本元数据也一起丢失。
+                    let count = max(1, state.remainingDiagnostics)
+                    let reservedValues = state.remainingValues - max(1, state.remainingValues / count)
+                    let reservedFrames = state.remainingFrames - min(state.remainingFrames, max(1, state.remainingFrames / count))
+                    state.remainingValues -= reservedValues
+                    state.remainingFrames -= reservedFrames
+                    state.remainingDiagnostics -= 1
+                    result.append(convert(child, key: nil, depth: depth + 1, state: &state))
+                    state.remainingValues += reservedValues
+                    state.remainingFrames += reservedFrames
+                } else {
+                    result.append(convert(child, key: nil, depth: depth + 1, state: &state))
+                }
             }
             return .array(result)
         case is NSNull:

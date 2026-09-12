@@ -55,6 +55,32 @@ struct TelemetryCallStackStructureTests {
         #expect(tree["truncated"] as? Bool == true)
     }
 
+    @Test("同一信封多条诊断各自保留版本元数据和归因栈", arguments: [false, true], [false, true])
+    func laterDiagnosticRetainsEvidence(_ oversized: Bool, _ mixedKinds: Bool) throws {
+        let frame = #"{"binaryName":"other","values":[\#(Array(repeating: "1", count: 32).joined(separator: ","))]}"#
+        let noise = Array(repeating: frame, count: TelemetryPayloadFlattener.maximumCallStackFrames).joined(separator: ",")
+        let first = #"{"diagnosticMetaData":{"appBuildVersion":"441"},"callStackTree":{"callStacks":[{"threadAttributed":true,"callStackRootFrames":[\#(noise)]}]}}"#
+        let second = #"{"diagnosticMetaData":{"appBuildVersion":"442"},"callStackTree":{"callStacks":[{"threadAttributed":true,"callStackRootFrames":[{"binaryName":"later-attributed","sampleCount":1}]}]}}"#
+        let reports = mixedKinds
+            ? #""cpuExceptionDiagnostics":[\#(first)],"crashDiagnostics":[\#(second)]"#
+            : #""crashDiagnostics":[\#(first),\#(second)]"#
+        let padding = oversized ? String(repeating: "x", count: TelemetryPayloadFlattener.maximumSourceBytes + 1) : ""
+        let raw = Data(#"{"padding":"\#(padding)",\#(reports)}"#.utf8)
+        let flattened = try TelemetryPayloadFlattener.flatten(raw)
+        let object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(flattened)) as? [String: Any])
+        let crashes = try #require(object["crashDiagnostics"] as? [[String: Any]])
+        #expect(crashes.count == (mixedKinds ? 1 : 2))
+        let last = try #require(crashes.last)
+        let metadata = try #require(last["diagnosticMetaData"] as? [String: Any])
+        #expect(metadata["appBuildVersion"] as? String == "442")
+        let tree = try #require(last["callStackTree"] as? [String: Any])
+        let stacks = try #require(tree["callStacks"] as? [[String: Any]])
+        let frames = try #require(stacks.first?["callStackFrames"] as? [[String: Any]])
+        #expect(frames.first?["binaryName"] as? String == "later-attributed")
+        let counts = try #require(object["_etos"] as? [String: Any])
+        #expect(try #require(counts["call_stack_frames_emitted"] as? Int) <= TelemetryPayloadFlattener.maximumCallStackFrames)
+    }
+
     private func flattenTree(_ tree: String, oversized: Bool = false) throws -> [String: Any] {
         let padding = oversized ? String(repeating: "x", count: TelemetryPayloadFlattener.maximumSourceBytes + 1) : ""
         let raw = Data(#"{"padding":"\#(padding)","crashDiagnostics":[{"callStackTree":\#(tree)}]}"#.utf8)
