@@ -27,7 +27,7 @@ final class LocalLinuxTerminalDisplayCache {
 
     func render(
         screen: [[LocalLinuxTerminalScreen.Cell]],
-        history: [LocalLinuxTerminalLinePresentation],
+        history: Slice<LocalLinuxTerminalHistory>,
         maximumLines: Int?,
         appearance: LocalLinuxTerminalAppearance,
         visibleEnd: ([LocalLinuxTerminalScreen.Cell]) -> Int,

@@ -51,12 +51,11 @@ final class LocalLinuxTerminalScreen: @unchecked Sendable {
         case ignoredStringEscape
     }
 
-    private let scrollbackLimit: Int
     private var columns: Int
     private var rows: Int
     private var primary: Buffer
     private var alternate: Buffer
-    private var scrollback: [LocalLinuxTerminalLinePresentation] = []
+    private var scrollback: LocalLinuxTerminalHistory
     private let primaryDisplayCache = LocalLinuxTerminalDisplayCache()
     private let alternateDisplayCache = LocalLinuxTerminalDisplayCache()
     private var usesAlternateScreen = false
@@ -73,7 +72,7 @@ final class LocalLinuxTerminalScreen: @unchecked Sendable {
     init(columns: Int, rows: Int, scrollbackLimit: Int = 2_000) {
         self.columns = max(1, columns)
         self.rows = max(1, rows)
-        self.scrollbackLimit = max(0, scrollbackLimit)
+        scrollback = LocalLinuxTerminalHistory(capacity: scrollbackLimit)
         primary = Buffer(columns: self.columns, rows: self.rows)
         alternate = Buffer(columns: self.columns, rows: self.rows)
     }
@@ -123,7 +122,7 @@ final class LocalLinuxTerminalScreen: @unchecked Sendable {
         let cache = usesAlternateScreen ? alternateDisplayCache : primaryDisplayCache
         return cache.render(
             screen: activeBuffer.lines,
-            history: usesAlternateScreen ? [] : scrollback,
+            history: scrollback.prefix(usesAlternateScreen ? 0 : scrollback.count),
             maximumLines: maximumLines,
             appearance: appearance,
             visibleEnd: visibleCellEndIndex,
@@ -755,7 +754,7 @@ final class LocalLinuxTerminalScreen: @unchecked Sendable {
             let removed = buffer.lines.remove(at: buffer.scrollTop)
             buffer.lines.insert(blankLine(), at: buffer.scrollBottom)
             if !usesAlternateScreen && buffer.scrollTop == 0 && buffer.scrollBottom == rows - 1 {
-                appendScrollback(renderedLine(removed))
+                scrollback.append(renderedLine(removed))
             }
         }
     }
@@ -837,7 +836,7 @@ final class LocalLinuxTerminalScreen: @unchecked Sendable {
         if lines.count > targetRows {
             let removed = lines.prefix(lines.count - targetRows)
             if preservesHistory {
-                removed.map(renderedLine).forEach(appendScrollback)
+                for line in removed { scrollback.append(renderedLine(line)) }
             }
             lines.removeFirst(lines.count - targetRows)
         } else if lines.count < targetRows {
@@ -941,14 +940,6 @@ final class LocalLinuxTerminalScreen: @unchecked Sendable {
             end -= 1
         }
         return end
-    }
-
-    private func appendScrollback(_ line: LocalLinuxTerminalLinePresentation) {
-        guard scrollbackLimit > 0 else { return }
-        scrollback.append(line)
-        if scrollback.count > scrollbackLimit {
-            scrollback.removeFirst(scrollback.count - scrollbackLimit)
-        }
     }
 
     private func characterWidth(_ character: Character) -> Int {
