@@ -310,6 +310,9 @@ struct EnumConstraintMigrationTests {
         let queue = try DatabaseQueue(path: databaseURL.path)
         let repairedColumns = try queue.read { db -> [Bool] in
             [
+                try tableHasColumn(db, tableName: "sessions", columnName: "worldbook_context_isolation_enabled"),
+                try tableHasColumn(db, tableName: "sessions", columnName: "memory_context_isolation_enabled"),
+                try tableHasColumn(db, tableName: "sessions", columnName: "tool_context_isolation_enabled"),
                 try tableHasColumn(db, tableName: "messages", columnName: "response_metrics_json"),
                 try tableHasColumn(db, tableName: "messages", columnName: "file_file_names_json"),
                 try tableHasColumn(db, tableName: "messages", columnName: "response_group_id"),
@@ -367,7 +370,10 @@ private func prepareConfigDatabaseBeforeV5(
             "v16_add_provider_model_api_format_override",
             "v17_create_official_data_action_state",
             "v18_create_local_linux_configuration",
-            "v19_add_mcp_local_stdio_transport"
+            "v19_add_mcp_local_stdio_transport",
+            // 此夹具只构造 v5 枚举约束所需的旧表，跳过无关领域的后续迁移。
+            "v20_add_local_linux_command_rule_suffix",
+            "v21_add_feedback_referenced_commit_tracking"
         ] {
             try db.execute(
                 sql: "INSERT OR IGNORE INTO grdb_migrations(identifier) VALUES (?)",
@@ -466,7 +472,8 @@ private func prepareChatDatabaseWithMissingColumns(at databaseURL: URL) throws {
     let queue = try DatabaseQueue(path: databaseURL.path)
     try queue.write { db in
         try db.execute(sql: "CREATE TABLE IF NOT EXISTS grdb_migrations (identifier TEXT NOT NULL PRIMARY KEY)")
-        for migration in ["v1_create_core_tables", "v2_enforce_message_enum_constraints", "v3_usage_analytics_tables"] {
+        // 夹具没有创建用量表，让 v3 正常执行；不能声明不存在的结构已经迁移完成。
+        for migration in ["v1_create_core_tables", "v2_enforce_message_enum_constraints"] {
             try db.execute(
                 sql: "INSERT OR IGNORE INTO grdb_migrations(identifier) VALUES (?)",
                 arguments: [migration]

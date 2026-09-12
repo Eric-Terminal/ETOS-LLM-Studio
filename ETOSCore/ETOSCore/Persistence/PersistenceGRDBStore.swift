@@ -591,13 +591,16 @@ final class PersistenceGRDBStore {
                 try db.execute(sql: "ALTER TABLE sessions ADD COLUMN \(column) INTEGER NOT NULL DEFAULT 0")
                 columnNames.insert(column)
             }
-            // 旧开关同时控制记忆与工具；迁移后必须保持原有会话行为不变。
-            try db.execute(sql: """
-                UPDATE sessions
-                SET memory_context_isolation_enabled = worldbook_context_isolation_enabled,
-                    tool_context_isolation_enabled = worldbook_context_isolation_enabled
-                WHERE worldbook_context_isolation_enabled != 0
-            """)
+            // 缺失的旧可选列由后续结构修复补回默认值；不能在修复前读取它而中断启动。
+            // 旧开关存在时同时控制记忆与工具，迁移后保持原有会话行为。
+            if columnNames.contains("worldbook_context_isolation_enabled") {
+                try db.execute(sql: """
+                    UPDATE sessions
+                    SET memory_context_isolation_enabled = worldbook_context_isolation_enabled,
+                        tool_context_isolation_enabled = worldbook_context_isolation_enabled
+                    WHERE worldbook_context_isolation_enabled != 0
+                """)
+            }
         }
 
         migrator.registerMigration("v18_anthropic_cache_pricing_usage") { db in

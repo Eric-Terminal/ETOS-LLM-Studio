@@ -260,7 +260,16 @@ private func prepareConfigDatabase(
             "v10_add_provider_model_pricing",
             "v11_add_mcp_server_order",
             "v12_allow_personal_data_mcp_transport",
-            "v13_add_provider_chat_endpoint_path"
+            "v13_add_provider_chat_endpoint_path",
+            // 此夹具只构造 v4 清理所需的 MCP 旧表，跳过无关领域的后续迁移。
+            "v14_add_provider_model_picker_group",
+            "v15_remove_speech_to_text_model_marker",
+            "v16_add_provider_model_api_format_override",
+            "v17_create_official_data_action_state",
+            "v18_create_local_linux_configuration",
+            "v19_add_mcp_local_stdio_transport",
+            "v20_add_local_linux_command_rule_suffix",
+            "v21_add_feedback_referenced_commit_tracking"
         ]
         for migration in appliedMigrations + migrationsAfterV4 {
             try db.execute(
