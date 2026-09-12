@@ -130,6 +130,10 @@ public actor ETFontResolver {
         case .caption2: uiStyle = .caption2
         default: uiStyle = .body
         }
+#if os(watchOS)
+        // watchOS 支持字体缩放，但没有 iOS 的 UITraitCollection 字号覆盖接口。
+        return Font(UIFontMetrics(forTextStyle: uiStyle).scaledFont(for: font))
+#else
         let category: UIContentSizeCategory
         switch request.sizeCategory {
         case .extraSmall: category = .extraSmall
@@ -146,6 +150,7 @@ public actor ETFontResolver {
         default: category = .large
         }
         return Font(UIFontMetrics(forTextStyle: uiStyle).scaledFont(for: font, compatibleWith: UITraitCollection(preferredContentSizeCategory: category)))
+#endif
     }
 
     private func uiWeight(_ weight: Font.Weight) -> UIFont.Weight {

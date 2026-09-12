@@ -14,7 +14,7 @@ extension ContentView {
     func refreshRootBodyFont() {
         rootFontPreparationTask?.cancel()
         rootFontPreparationTask = Task { @MainActor in
-            let font = await AppFontAdapter.adaptedFont(from: .body)
+            let font = await ETFontResolver.shared.font(for: .body, sizeCategory: sizeCategory)
             guard !Task.isCancelled else { return }
             rootBodyFont = font
             rootFontPreparationTask = nil

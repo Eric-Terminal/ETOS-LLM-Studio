@@ -8,6 +8,7 @@
 
 import Foundation
 import SwiftUI
+import ETOSCore
 import MarkdownUI
 
 struct ETWatchMarkdownImagePreviewItem: Identifiable {

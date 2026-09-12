@@ -7,6 +7,7 @@
 // ============================================================================
 
 import SwiftUI
+import ETOSCore
 
 /// 手表端的语音录制与转写面板
 struct SpeechRecorderView: View {

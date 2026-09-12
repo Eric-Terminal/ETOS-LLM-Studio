@@ -58,6 +58,7 @@ struct ContentView: View {
     @State var launchRecoveryNoticeMessage: String?
     @State var launchRecoveryRequest: Persistence.LaunchRecoveryRequest?
     @State var launchRecoveryErrorMessage: String?
+    @Environment(\.sizeCategory) var sizeCategory
     @State var rootBodyFont: Font = .body
     @State var rootFontPreparationTask: Task<Void, Never>?
     @State var legacyMigrationErrorMessage: String?
@@ -185,6 +186,9 @@ struct ContentView: View {
             showChatTransientNotice(.copyCompleted, duration: .seconds(1.4))
         }
         .environment(\.font, rootBodyFont)
+        .onChange(of: sizeCategory) { _, _ in
+            refreshRootBodyFont()
+        }
         .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage))
         .onAppear {
             AppLanguageRuntime.apply(rawValue: appConfig.appLanguage)

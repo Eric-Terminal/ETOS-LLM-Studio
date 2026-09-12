@@ -8,6 +8,7 @@
 
 import Foundation
 import SwiftUI
+import ETOSCore
 #if os(iOS)
 import UIKit
 #endif

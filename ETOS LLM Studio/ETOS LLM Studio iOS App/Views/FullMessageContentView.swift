@@ -5,6 +5,7 @@
 // ============================================================================
 
 import SwiftUI
+import ETOSCore
 import UIKit
 
 struct FullMessageContentView: View {

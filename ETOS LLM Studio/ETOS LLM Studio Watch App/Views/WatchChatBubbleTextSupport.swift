@@ -7,6 +7,7 @@
 // ============================================================================
 
 import SwiftUI
+import ETOSCore
 
 struct CappedScrollableText: View {
     let text: String

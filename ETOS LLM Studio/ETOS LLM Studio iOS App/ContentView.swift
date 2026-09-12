@@ -25,6 +25,7 @@ enum GuideOverlayPresentationPolicy {
 
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.sizeCategory) private var sizeCategory
     @EnvironmentObject private var viewModel: ChatViewModel
     @StateObject private var announcementManager = AnnouncementManager.shared
     @StateObject private var surveyManager = SurveyManager.shared
@@ -249,6 +250,9 @@ struct ContentView: View {
     private var fontAndLanguageAwareContent: some View {
         appNavigationContent
             .environment(\.font, rootBodyFont)
+            .onChange(of: sizeCategory) { _, _ in
+                refreshRootBodyFont()
+            }
             .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage))
             .onAppear {
                 AppLanguageRuntime.apply(rawValue: appConfig.appLanguage)
@@ -712,7 +716,7 @@ struct ContentView: View {
     private func refreshRootBodyFont() {
         rootFontPreparationTask?.cancel()
         rootFontPreparationTask = Task { @MainActor in
-            let font = await AppFontAdapter.adaptedFont(from: .body)
+            let font = await ETFontResolver.shared.font(for: .body, sizeCategory: sizeCategory)
             guard !Task.isCancelled else { return }
             rootBodyFont = font
             rootFontPreparationTask = nil

@@ -7,6 +7,7 @@
 // ============================================================================
 
 import SwiftUI
+import ETOSCore
 
 struct ModelConfigurationIntroCard: View {
     @State private var isShowingDetails = false
