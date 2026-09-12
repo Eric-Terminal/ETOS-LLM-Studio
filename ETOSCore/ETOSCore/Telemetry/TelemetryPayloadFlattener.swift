@@ -197,27 +197,28 @@ enum TelemetryPayloadFlattener {
         var result: [String: JSONValue] = [
             "format": .string(callStackFormat)
         ]
-        for key in tree.keys.sorted() where key != "callStacks" {
+        for key in tree.keys.sorted() where key != "callStacks" && key != metadataKey {
             guard let child = tree[key] else { continue }
             result[key] = convert(child, key: key, depth: 0, state: &state)
         }
 
         let sourceStacks = tree["callStacks"] as? [Any] ?? []
-        let rawStacks = sourceStacks.filter { ($0 as? [String: Any])?["threadAttributed"] as? Bool == true }
-            + sourceStacks.filter { ($0 as? [String: Any])?["threadAttributed"] as? Bool != true }
+        let indexedStacks = Array(sourceStacks.enumerated())
+        let rawStacks = indexedStacks.filter { ($0.element as? [String: Any])?["threadAttributed"] as? Bool == true }
+            + indexedStacks.filter { ($0.element as? [String: Any])?["threadAttributed"] as? Bool != true }
         var flattenedStacks: [JSONValue] = []
         flattenedStacks.reserveCapacity(rawStacks.count)
         var treeWasTruncated = false
 
         for rawStack in rawStacks {
-            guard let stack = rawStack as? [String: Any] else {
+            guard let stack = rawStack.element as? [String: Any] else {
                 treeWasTruncated = true
                 state.didTruncate = true
                 continue
             }
 
             var flattenedStack: [String: JSONValue] = [:]
-            for key in stack.keys.sorted() where key != "callStackRootFrames" {
+            for key in stack.keys.sorted() where key != "callStackRootFrames" && key != metadataKey {
                 guard let child = stack[key] else { continue }
                 flattenedStack[key] = convert(child, key: key, depth: 0, state: &state)
             }
@@ -233,6 +234,7 @@ enum TelemetryPayloadFlattener {
             }
 
             var frames: [JSONValue] = []
+            var emittedRootFrames = 0
             while let current = pending.popLast() {
                 guard state.remainingFrames > 0 else {
                     treeWasTruncated = true
@@ -242,6 +244,7 @@ enum TelemetryPayloadFlattener {
                 state.remainingFrames -= 1
                 let frameID = state.emittedFrames
                 state.emittedFrames += 1
+                if current.depth == 0 { emittedRootFrames += 1 }
 
                 var flattenedFrame: [String: JSONValue] = [
                     "frameID": .int(frameID),
@@ -276,6 +279,17 @@ enum TelemetryPayloadFlattener {
             }
 
             flattenedStack["callStackFrames"] = .array(frames)
+            let sourceCounts = stack[metadataKey] as? TelemetryBoundedJSONReader.SourceArrayCounts
+            let sourceRootCount = sourceCounts?.values["callStackRootFrames"]
+                ?? (stack["callStackRootFrames"] as? [Any])?.count
+            // 原始计数来自裁剪之前；null 表示字段缺失或结构未知，不能解释成系统给了空栈。
+            flattenedStack[metadataKey] = .dictionary([
+                "source_stack_index": .int(sourceCounts?.stackIndex ?? rawStack.offset),
+                "source_root_frames": sourceRootCount.map(JSONValue.int) ?? .null,
+                "decoded_root_frames": .int(rootFrames.count),
+                "emitted_root_frames": .int(emittedRootFrames),
+                "emitted_frames": .int(frames.count)
+            ])
             flattenedStacks.append(.dictionary(flattenedStack))
 
             guard state.remainingFrames > 0 else {
@@ -288,6 +302,13 @@ enum TelemetryPayloadFlattener {
         }
 
         result["callStacks"] = .array(flattenedStacks)
+        let sourceCounts = tree[metadataKey] as? TelemetryBoundedJSONReader.SourceArrayCounts
+        let sourceStackCount = sourceCounts?.values["callStacks"] ?? (tree["callStacks"] as? [Any])?.count
+        result[metadataKey] = .dictionary([
+            "source_stacks": sourceStackCount.map(JSONValue.int) ?? .null,
+            "decoded_stacks": .int(sourceStacks.count),
+            "emitted_stacks": .int(flattenedStacks.count)
+        ])
         result["truncated"] = .bool(treeWasTruncated)
         return .dictionary(result)
     }

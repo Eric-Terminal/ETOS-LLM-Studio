@@ -3,6 +3,12 @@ import Foundation
 /// 仅供 MetricKit 超限报告恢复使用。先扫描值边界，再解码有限深度和大小的片段；
 /// 跳过的子树不交给 Foundation，避免深层 JSON 在解析和释放时耗尽栈。
 enum TelemetryBoundedJSONReader {
+    /// 只在内存中传递原始数组计数，不把有限解码后的数组长度冒充系统报告的长度。
+    struct SourceArrayCounts {
+        var values: [String: Int] = [:]
+        var stackIndex: Int?
+    }
+
     static func read(_ data: Data) throws -> [String: Any] {
         try data.withUnsafeBytes { rawBuffer in
             var reader = Reader(bytes: rawBuffer.bindMemory(to: UInt8.self))
@@ -103,13 +109,14 @@ enum TelemetryBoundedJSONReader {
             throw corruptJSON()
         }
 
-        func arrayElements(_ range: Range<Int>) throws -> [Range<Int>] {
+        func arrayElements(_ range: Range<Int>, sourceCount: inout Int) throws -> [Range<Int>] {
             var elements: [Range<Int>] = []
             var position = range.lowerBound + 1
             skipWhitespace(&position)
             if position < range.upperBound, bytes[position] == 0x5D { return elements }
             while position < range.upperBound {
                 let value = try valueRange(at: &position)
+                sourceCount += 1
                 if elements.count < maximumChildren { elements.append(value) }
                 skipWhitespace(&position)
                 guard position < range.upperBound else { throw corruptJSON() }
@@ -139,19 +146,28 @@ enum TelemetryBoundedJSONReader {
                     return left == right ? $0.0 < $1.0 : left < right
                 }
                 var object: [String: Any] = [:]
-                for (key, value) in members where remainingValues > 0 {
+                var sourceCounts = SourceArrayCounts()
+                for (key, value) in members {
+                    if (key == "callStacks" || key == "callStackRootFrames"), bytes[value.lowerBound] == 0x5B {
+                        var count = 0
+                        _ = try arrayElements(value, sourceCount: &count)
+                        sourceCounts.values[key] = count
+                    }
+                    guard remainingValues > 0 else { continue }
                     object[key] = try decode(value, depth: depth + 1, key: key)
                 }
+                if !sourceCounts.values.isEmpty { object["_etos"] = sourceCounts }
                 return object
             case 0x5B:
-                var elements = try arrayElements(range)
+                var count = 0
+                var elements = Array(try arrayElements(range, sourceCount: &count).enumerated())
                 if key == "callStacks" {
                     // 线程顺序不是归因依据；只提升明确标记的线程，并保留其余线程的相对顺序。
-                    var attributed: [Range<Int>] = []
-                    var other: [Range<Int>] = []
+                    var attributed: [(offset: Int, element: Range<Int>)] = []
+                    var other: [(offset: Int, element: Range<Int>)] = []
                     for element in elements {
-                        if bytes[element.lowerBound] == 0x7B,
-                           let marker = try objectMembers(element).first(where: { $0.0 == "threadAttributed" }),
+                        if bytes[element.element.lowerBound] == 0x7B,
+                           let marker = try objectMembers(element.element).first(where: { $0.0 == "threadAttributed" }),
                            marker.1.count == 4, bytes[marker.1.lowerBound] == 0x74 {
                             attributed.append(element)
                         } else { other.append(element) }
@@ -160,7 +176,15 @@ enum TelemetryBoundedJSONReader {
                 }
                 var array: [Any] = []
                 for element in elements where remainingValues > 0 {
-                    array.append(try decode(element, depth: depth + 1, key: nil))
+                    let decoded = try decode(element.element, depth: depth + 1, key: nil)
+                    if key == "callStacks", var stack = decoded as? [String: Any] {
+                        var counts = stack["_etos"] as? SourceArrayCounts ?? SourceArrayCounts()
+                        counts.stackIndex = element.offset
+                        stack["_etos"] = counts
+                        array.append(stack)
+                    } else {
+                        array.append(decoded)
+                    }
                 }
                 return array
             default:
