@@ -16,9 +16,10 @@ struct CustomAppIconImageTests {
             space: colorSpace,
             bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
         ))
-        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        // 精确通道断言要求源色也使用 sRGB；Device RGB 会在设备色彩管理后改变数值。
+        context.setFillColor(try #require(CGColor(colorSpace: colorSpace, components: [1, 0, 0, 1])))
         context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
-        context.setFillColor(CGColor(red: 0, green: 0, blue: 1, alpha: 1))
+        context.setFillColor(try #require(CGColor(colorSpace: colorSpace, components: [0, 0, 1, 1])))
         context.fill(CGRect(x: 8, y: 0, width: 8, height: 8))
         let source = try #require(context.makeImage())
         let input = try #require(UIImage(cgImage: source).pngData())
