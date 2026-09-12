@@ -11,6 +11,50 @@ import Foundation
 @testable import ETOSCore
 
 extension PersistenceTests {
+    @Test("启动备份跨启动复用未变副本，提交变化或副本损坏后重建")
+    func testLaunchBackupReusesOnlyUnchangedHealthySnapshot() throws {
+        cleanup(sessions: [])
+        let previousBackupEnabled = enableLaunchBackupForTest()
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        let session = ChatSession(id: UUID(), name: "备份版本测试", isTemporary: false)
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            restoreLaunchBackupAfterTest(previousBackupEnabled)
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [session])
+        }
+
+        Persistence.saveChatSessions([session])
+        Persistence.saveMessages([ChatMessage(role: .user, content: "原内容")], for: session.id)
+        Persistence.createLaunchBackupPointIfEnabled()
+        let backupDate = Date(timeIntervalSince1970: 1_700_000_000)
+        try FileManager.default.setAttributes([.modificationDate: backupDate], ofItemAtPath: chatStoreBackupSQLiteURL.path)
+        let originalBackup = try Data(contentsOf: chatStoreBackupSQLiteURL)
+
+        Persistence.resetGRDBStoreForTests()
+        Persistence.createLaunchBackupPointIfEnabled()
+        #expect(try Data(contentsOf: chatStoreBackupSQLiteURL) == originalBackup)
+        #expect(try FileManager.default.attributesOfItem(atPath: chatStoreBackupSQLiteURL.path)[.modificationDate] as? Date == backupDate)
+
+        Persistence.saveMessages([ChatMessage(role: .user, content: "新内容")], for: session.id)
+        Persistence.resetLaunchBackupStateForSnapshotRestore()
+        Persistence.createLaunchBackupPointIfEnabled()
+        #expect(sqliteCount(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM messages WHERE content = '新内容'") == 1)
+
+        try Data("损坏的副本".utf8).write(to: chatStoreBackupSQLiteURL, options: .atomic)
+        Persistence.resetLaunchBackupStateForSnapshotRestore()
+        Persistence.createLaunchBackupPointIfEnabled()
+        #expect(Persistence.isDatabaseHealthy(at: chatStoreBackupSQLiteURL))
+        #expect(sqliteCount(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM messages WHERE content = '新内容'") == 1)
+
+        try FileManager.default.removeItem(at: chatStoreBackupSQLiteURL)
+        Persistence.resetLaunchBackupStateForSnapshotRestore()
+        Persistence.createLaunchBackupPointIfEnabled()
+        #expect(sqliteCount(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM messages WHERE content = '新内容'") == 1)
+    }
+
     @Test("GRDB 启动迁移后自动清理旧 JSON 会话文件")
     func testBootstrapGRDBImportAndCleanupLegacyJSON() async throws {
         cleanup(sessions: [])

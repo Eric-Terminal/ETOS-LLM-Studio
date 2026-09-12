@@ -450,6 +450,11 @@ extension Persistence {
 
         let backupURL = launchBackupURL(for: kind)
         cleanupInterruptedLaunchBackupInstall(for: kind)
+        let sourceRevision = try LaunchBackupRevisionTracking.prepare(at: sourceURL)
+        if LaunchBackupRevisionTracking.matches(sourceRevision, backupURL: backupURL) {
+            logger.info("启动备份内容未变化，复用已校验副本(\(kind.displayName))。")
+            return
+        }
         let tempBackupURL = launchBackupTemporaryURL(for: backupURL)
         try ensureDirectoryExists(backupURL.deletingLastPathComponent())
         try removeSQLiteDatabaseAndSidecarsIfPresent(at: tempBackupURL)
