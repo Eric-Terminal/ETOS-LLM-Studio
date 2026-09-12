@@ -24,6 +24,15 @@ struct DailyPulseView: View {
     @State private var didHandleInitialCardTarget = false
     private let initialCardTarget: DailyPulseCardNavigationTarget?
 
+    private static let cardCountFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.allowsFloats = false
+        formatter.minimum = 1
+        formatter.usesGroupingSeparator = false
+        return formatter
+    }()
+
     init(
         viewModel: ChatViewModel,
         initialRunID: UUID? = nil,
@@ -268,14 +277,14 @@ struct DailyPulseView: View {
             Toggle(NSLocalizedString("定时送达", comment: "Daily Pulse scheduled delivery toggle"), isOn: $deliveryCoordinator.reminderEnabled)
 
             if deliveryCoordinator.reminderEnabled {
-                Stepper(value: cardCountBinding, step: 1) {
-                    Text(
-                        String(
-                            format: NSLocalizedString("%d 张卡片", comment: "Daily Pulse configured card count"),
-                            deliveryCoordinator.deliveryTimes.count
-                        )
-                    )
-                }
+                // 提交输入后再更新数量，避免编辑多位数时临时删减卡片及其送达时间。
+                TextField(
+                    NSLocalizedString("卡片数量", value: "Card Count", comment: "手表每日脉冲卡片数量输入框"),
+                    value: cardCountBinding,
+                    formatter: Self.cardCountFormatter
+                )
+                .multilineTextAlignment(.trailing)
+                .monospacedDigit()
 
                 ForEach(Array(deliveryCoordinator.deliveryTimes.enumerated()), id: \.element.id) { index, deliveryTime in
                     NavigationLink {
