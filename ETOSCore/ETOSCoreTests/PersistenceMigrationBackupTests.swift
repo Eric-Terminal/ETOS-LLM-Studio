@@ -8,6 +8,7 @@
 
 import Testing
 import Foundation
+import GRDB
 @testable import ETOSCore
 
 extension PersistenceTests {
@@ -28,12 +29,33 @@ extension PersistenceTests {
 
         Persistence.saveChatSessions([session])
         Persistence.saveMessages([ChatMessage(role: .user, content: "原内容")], for: session.id)
+        Persistence.bootstrapGRDBStoreOnLaunch()
         Persistence.createLaunchBackupPointIfEnabled()
         let backupDate = Date(timeIntervalSince1970: 1_700_000_000)
         try FileManager.default.setAttributes([.modificationDate: backupDate], ofItemAtPath: chatStoreBackupSQLiteURL.path)
         let originalBackup = try Data(contentsOf: chatStoreBackupSQLiteURL)
+        let originalRevision = try Persistence.withRawDatabase(at: chatStoreSQLiteURL, readOnly: true) {
+            try LaunchBackupRevisionTracking.read(in: $0)
+        }
+        let originalSchema = sqliteCount(chatStoreSQLiteURL, sql: "PRAGMA schema_version")
+        #expect(sqliteCount(chatStoreSQLiteURL, sql: "SELECT schema_version FROM _etos_launch_backup_revision") == originalSchema)
+        let originalSchemaSQL = try Persistence.withRawDatabase(at: chatStoreSQLiteURL, readOnly: true) {
+            try String.fetchAll($0, sql: "SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name")
+        }
 
         Persistence.resetGRDBStoreForTests()
+        Persistence.bootstrapGRDBStoreOnLaunch()
+        let reopenedRevision = try Persistence.withRawDatabase(at: chatStoreSQLiteURL, readOnly: true) {
+            try LaunchBackupRevisionTracking.read(in: $0)
+        }
+        #expect(reopenedRevision == originalRevision)
+        let reopenedSchemaSQL = try Persistence.withRawDatabase(at: chatStoreSQLiteURL, readOnly: true) {
+            try String.fetchAll($0, sql: "SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name")
+        }
+        #expect(reopenedSchemaSQL == originalSchemaSQL)
+        #expect(LaunchBackupRevisionTracking.matches(try #require(reopenedRevision), backupURL: chatStoreBackupSQLiteURL))
+        let preparedRevision = try LaunchBackupRevisionTracking.prepare(at: chatStoreSQLiteURL)
+        #expect(preparedRevision == reopenedRevision)
         Persistence.createLaunchBackupPointIfEnabled()
         #expect(try Data(contentsOf: chatStoreBackupSQLiteURL) == originalBackup)
         #expect(try FileManager.default.attributesOfItem(atPath: chatStoreBackupSQLiteURL.path)[.modificationDate] as? Date == backupDate)
