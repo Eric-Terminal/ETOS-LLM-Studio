@@ -26,10 +26,13 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     }
 
     private let lock = NSLock()
+    // 写入者先取得输出锁，再短暂取得屏幕锁；预览读取只取得屏幕锁，不等待磁盘 I/O。
+    private let presentationLock = NSLock()
     private let rawHandle: FileHandle
     private let modelHandle: FileHandle
     private let patterns: [RedactionPattern]
     private let privacyEnabled: Bool
+    private let maximumPatternBytes: Int
     private let modelByteLimit: UInt64
     private let terminalResponseHandler: (@Sendable (Data) -> Void)?
 
@@ -86,6 +89,7 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
             return RedactionPattern(value: Data(value.utf8), replacement: Data(replacement.utf8))
         }.sorted { $0.value.count > $1.value.count }
         self.privacyEnabled = privacyEnabled
+        maximumPatternBytes = privacyEnabled ? (patterns.first?.value.count ?? 0) : 0
         self.modelByteLimit = modelByteLimit
         self.terminalResponseHandler = terminalResponseHandler
         if let terminalColumns, let terminalRows {
@@ -136,10 +140,12 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         guard !isFinished else { return }
+        presentationLock.lock()
         if terminalDiagnosticSummaries.last != summary {
             terminalDiagnosticSummaries.append(summary)
             terminalDiagnosticSummaries = Array(terminalDiagnosticSummaries.suffix(3))
         }
+        presentationLock.unlock()
         appendModelBytes(
             stream: .terminal,
             data: Data("\n\(summary)\n".utf8),
@@ -212,8 +218,8 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     }
 
     func terminalDisplayLines(appearance: LocalLinuxTerminalAppearance) -> [LocalLinuxTerminalDisplayLine] {
-        lock.lock()
-        defer { lock.unlock() }
+        presentationLock.lock()
+        defer { presentationLock.unlock() }
         var lines = terminalScreen?.renderedDisplayLines(appearance: appearance) ?? []
         if !terminalDiagnosticSummaries.isEmpty {
             for (index, summary) in (terminalDiagnosticSummaries + [LocalLinuxDiagnosticPresentation.userGuidance]).enumerated() {
@@ -240,8 +246,8 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     }
 
     public func userVisiblePreview() -> String {
-        lock.lock()
-        defer { lock.unlock() }
+        presentationLock.lock()
+        defer { presentationLock.unlock() }
         refreshUserPreviewIfNeeded()
         return String(decoding: userPreview, as: UTF8.self)
     }
@@ -259,8 +265,8 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     public func userVisibleTerminalPresentation(
         appearance: LocalLinuxTerminalAppearance = .dark
     ) -> LocalLinuxTerminalPresentation? {
-        lock.lock()
-        defer { lock.unlock() }
+        presentationLock.lock()
+        defer { presentationLock.unlock() }
         if terminalPresentationNeedsRefresh
             || terminalPresentationAppearance != appearance,
            let terminalScreen {
@@ -276,8 +282,8 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
         maximumLines: Int,
         appearance: LocalLinuxTerminalAppearance = .dark
     ) -> LocalLinuxTerminalPresentation? {
-        lock.lock()
-        defer { lock.unlock() }
+        presentationLock.lock()
+        defer { presentationLock.unlock() }
         let normalizedMaximumLines = max(1, maximumLines)
         if terminalPreviewNeedsRefresh
             || terminalPreviewMaximumLines != normalizedMaximumLines
@@ -295,8 +301,8 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     }
 
     public func resizeTerminalPreview(columns: Int, rows: Int) {
-        lock.lock()
-        defer { lock.unlock() }
+        presentationLock.lock()
+        defer { presentationLock.unlock() }
         terminalScreen?.resize(columns: columns, rows: rows)
         invalidateTerminalPresentations()
     }
@@ -309,13 +315,16 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
         case .terminal: marker = 3
         }
         var length = UInt32(data.count).bigEndian
-        var header = Data([marker])
-        withUnsafeBytes(of: &length) { header.append(contentsOf: $0) }
-        try rawHandle.write(contentsOf: header)
-        try rawHandle.write(contentsOf: data)
+        var frame = Data(capacity: 5 + data.count)
+        frame.append(marker)
+        withUnsafeBytes(of: &length) { frame.append(contentsOf: $0) }
+        frame.append(data)
+        try rawHandle.write(contentsOf: frame)
     }
 
     private func appendUserPreview(stream: LocalLinuxOutputStream, data: Data) {
+        presentationLock.lock()
+        defer { presentationLock.unlock() }
         if stream == .terminal, let terminalScreen {
             terminalScreen.append(data)
             invalidateTerminalPresentations()
@@ -362,9 +371,16 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     }
 
     private func appendModelBytes(stream: LocalLinuxOutputStream, data: Data, flush: Bool) {
+        // 模型副本满额后不再扫描或保留跨分片尾部；原始输出和终端协议仍照常处理。
+        guard modelBytes < modelByteLimit else {
+            if !data.isEmpty || pendingByStream.values.contains(where: { !$0.isEmpty }) {
+                didTruncate = true
+            }
+            pendingByStream.removeAll(keepingCapacity: true)
+            return
+        }
         var combined = pendingByStream[stream, default: Data()]
         combined.append(data)
-        let maximumPatternBytes = privacyEnabled ? patterns.map(\.value.count).max() ?? 0 : 0
         var cutoff = flush || maximumPatternBytes == 0
             ? combined.count
             : max(0, combined.count - maximumPatternBytes + 1)
@@ -390,7 +406,12 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
                 try writeModel(Data(label.utf8))
                 lastModelStream = stream
             }
-            try writeModel(redacted(ready))
+            if modelBytes < modelByteLimit {
+                try writeModel(redacted(ready))
+            } else {
+                // stream 标签本身也计入预算，可能已经占满最后的可用字节。
+                didTruncate = true
+            }
         } catch {
             writeError = writeError ?? error
         }
