@@ -35,18 +35,32 @@ public class SimilarityIndex: Identifiable, Hashable {
         hasher.combine(id)
     }
 
-    /// 存储在索引中的项目。
-    public var indexItems: [IndexItem] = []
+    // 数组的引用保留也必须受保护；异步保存取得快照时，重嵌入可能正在清空或追加。
+    // 锁只覆盖内存状态，嵌入生成、相似度计算和磁盘读写均在锁外完成。
+    private let stateLock = NSRecursiveLock()
+    private var storedItems: [IndexItem] = []
+    public var indexItems: [IndexItem] {
+        get { stateLock.withLock { storedItems } }
+        set { stateLock.withLock { storedItems = newValue } }
+    }
 
     /// 索引中嵌入向量的维度。
     /// 用于验证嵌入更新。
-    public private(set) var dimension: Int = 0
+    private var storedDimension = 0
+    public private(set) var dimension: Int {
+        get { stateLock.withLock { storedDimension } }
+        set { stateLock.withLock { storedDimension = newValue } }
+    }
 
     /// 索引的名称。
     public var indexName: String
 
     public let indexModel: any EmbeddingsProtocol
-    public var indexMetric: any DistanceMetricProtocol
+    private var storedMetric: any DistanceMetricProtocol
+    public var indexMetric: any DistanceMetricProtocol {
+        get { stateLock.withLock { storedMetric } }
+        set { stateLock.withLock { storedMetric = newValue } }
+    }
     public let vectorStore: any VectorStoreProtocol
 
     /// 代表索引中一个项的对象。
@@ -118,7 +132,7 @@ public class SimilarityIndex: Identifiable, Hashable {
         // 使用默认值设置索引
         self.indexName = name ?? "SimilaritySearchKitIndex"
         self.indexModel = model ?? NativeEmbeddings()
-        self.indexMetric = metric ?? CosineSimilarity()
+        self.storedMetric = metric ?? CosineSimilarity()
         self.vectorStore = vectorStore ?? JsonStore()
 
         // 运行一次模型以发现维度大小
@@ -162,46 +176,31 @@ public class SimilarityIndex: Identifiable, Hashable {
     
     public func search(usingQueryEmbedding queryEmbedding: [Float], top resultCount: Int? = nil, metric: DistanceMetricProtocol? = nil) -> [SearchResult] {
         let resultCount = resultCount ?? 5
-        guard !indexItems.isEmpty else { return [] }
-        if queryEmbedding.isEmpty {
-            return []
-        }
-        var indexIds: [String] = []
-        var indexEmbeddings: [[Float]] = []
-
-        for item in indexItems {
-            indexIds.append(item.id)
-            indexEmbeddings.append(item.embedding)
-        }
-
-        if dimension == 0 {
-            dimension = queryEmbedding.count
-        } else if dimension != queryEmbedding.count {
-            logger.warning("查询嵌入维度 (\(queryEmbedding.count)) 与索引维度 (\(self.dimension)) 不匹配。")
-            return []
-        }
-
-        if let customMetric = metric {
-            indexMetric = customMetric
-        }
-
-        let searchResults = indexMetric.findNearest(for: queryEmbedding, in: indexEmbeddings, resultsCount: resultCount)
-
-        // 将结果映射到索引ID
-        return searchResults.compactMap { [self] in
-            let (score, index) = $0
-            let id = indexIds[index]
-
-            if let item = self.getItem(id: id) {
-                return SearchResult(id: item.id, score: score, text: item.text, metadata: item.metadata)
-            } else {
-                logger.error("在 indexItems 中未找到ID为 '\(id)' 的项。")
-                return SearchResult(id: "000000", score: 0.0, text: "fail", metadata: [:])
+        guard !queryEmbedding.isEmpty else { return [] }
+        let snapshot = stateLock.withLock { () -> ([IndexItem], any DistanceMetricProtocol)? in
+            guard !storedItems.isEmpty else { return nil }
+            if storedDimension == 0 {
+                storedDimension = queryEmbedding.count
+            } else if storedDimension != queryEmbedding.count {
+                logger.warning("查询嵌入维度 (\(queryEmbedding.count)) 与索引维度 (\(self.storedDimension)) 不匹配。")
+                return nil
             }
+            if let metric { storedMetric = metric }
+            return (storedItems, storedMetric)
+        }
+        guard let (items, searchMetric) = snapshot else { return [] }
+        let searchResults = searchMetric.findNearest(for: queryEmbedding, in: items.map(\.embedding), resultsCount: resultCount)
+
+        // 分数和正文必须来自同一快照，不能在计算后用 ID 查询已被重嵌入替换的索引。
+        return searchResults.map { score, index in
+            let item = items[index]
+            return SearchResult(id: item.id, score: score, text: item.text, metadata: item.metadata)
         }
     }
 
     private func updateDimensionIfNeeded(with newValue: Int) {
+        stateLock.lock()
+        defer { stateLock.unlock() }
         guard newValue > 0 else { return }
         if dimension == 0 {
             dimension = newValue
@@ -212,6 +211,8 @@ public class SimilarityIndex: Identifiable, Hashable {
     }
 
     private func refreshDimensionFromIndexItems() {
+        stateLock.lock()
+        defer { stateLock.unlock() }
         guard let storedDimension = indexItems.first(where: { !$0.embedding.isEmpty })?.embedding.count else {
             dimension = 0
             return
@@ -235,7 +236,10 @@ public extension SimilarityIndex {
         let embeddingResult = await getEmbedding(for: text, embedding: embedding)
 
         let item = IndexItem(id: id, text: text, embedding: embeddingResult, metadata: metadata)
-        indexItems.append(item)
+        stateLock.withLock {
+            updateDimensionIfNeeded(with: embeddingResult.count)
+            storedItems.append(item)
+        }
     }
 
     func addItems(ids: [String], texts: [String], metadata: [[String: String]], embeddings: [[Float]?]? = nil, onProgress: ((String) -> Void)? = nil) async {
@@ -287,26 +291,28 @@ public extension SimilarityIndex {
     // MARK: 更新
 
     func updateItem(id: String, text: String? = nil, embedding: [Float]? = nil, metadata: [String: String]? = nil) {
+        stateLock.lock()
+        defer { stateLock.unlock() }
         // 检查提供的嵌入是否具有正确的维度
         if let embedding = embedding, embedding.count != dimension {
             logger.warning("维度不匹配，期望 \(self.dimension)，实际为 \(embedding.count)")
         }
 
         // 查找具有指定ID的项
-        if let index = indexItems.firstIndex(where: { $0.id == id }) {
+        if let index = storedItems.firstIndex(where: { $0.id == id }) {
             // 如果提供了文本，则更新文本
             if let text = text {
-                indexItems[index].text = text
+                storedItems[index].text = text
             }
 
             // 如果提供了嵌入，则更新嵌入
             if let embedding = embedding {
-                indexItems[index].embedding = embedding
+                storedItems[index].embedding = embedding
             }
 
             // 如果提供了元数据，则更新元数据
             if let metadata = metadata {
-                indexItems[index].metadata = metadata
+                storedItems[index].metadata = metadata
             }
         }
     }
@@ -314,12 +320,14 @@ public extension SimilarityIndex {
     // MARK: 删除
 
     func removeItem(id: String) {
-        indexItems.removeAll { $0.id == id }
+        stateLock.withLock { storedItems.removeAll { $0.id == id } }
     }
 
     func removeAll() {
-        indexItems.removeAll()
-        dimension = 0
+        stateLock.withLock {
+            storedItems.removeAll()
+            storedDimension = 0
+        }
     }
 }
 
@@ -337,18 +345,22 @@ public extension SimilarityIndex {
             basePath = try getDefaultStoragePath()
         }
 
-        let savedVectorStore = try vectorStore.saveIndex(items: indexItems, to: basePath, as: indexName)
+        let items = indexItems
+        let savedVectorStore = try vectorStore.saveIndex(items: items, to: basePath, as: indexName)
 
-        logger.info("已将 \(self.indexItems.count) 个索引项保存到 \(savedVectorStore.absoluteString)")
+        logger.info("已将 \(items.count) 个索引项保存到 \(savedVectorStore.absoluteString)")
 
         return savedVectorStore
     }
 
     func loadIndex(fromDirectory path: URL? = nil, name: String? = nil) throws -> [IndexItem]? {
         if let indexPath = try getIndexPath(fromDirectory: path, name: name) {
-            indexItems = try vectorStore.loadIndex(from: indexPath)
-            refreshDimensionFromIndexItems()
-            return indexItems
+            let items = try vectorStore.loadIndex(from: indexPath)
+            stateLock.withLock {
+                storedItems = items
+                refreshDimensionFromIndexItems()
+            }
+            return items
         }
 
         return nil
