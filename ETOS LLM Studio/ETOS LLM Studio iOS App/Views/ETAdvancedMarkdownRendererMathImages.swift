@@ -137,22 +137,26 @@ struct ETIOSMathColorComponents: Hashable, Sendable {
     }
 }
 
-private enum ETIOSMathImageRenderer {
+enum ETIOSMathImageRenderer {
 #if canImport(SwiftMath)
     private static let cache = NSCache<NSString, NSData>()
+    // SwiftMath 共享字体及排版缓存；整个渲染操作必须串行，且不能占用主线程。
+    private static let renderQueue = DispatchQueue(label: "com.ericterminal.els.math-render", qos: .userInitiated)
 
     static func imageData(
         for request: ETNativeMathMarkdownCodec.Request,
         textColor: ETIOSMathColorComponents,
         fontScale: Double
     ) async -> Data? {
-        let cacheKey = "\(request.renderKind.rawValue)|\(request.latex)|\(textColor.cacheKey)|\(fontScale)" as NSString
-        if let cachedData = cache.object(forKey: cacheKey) {
-            return cachedData as Data
-        }
-
-        let renderedData: Data? = await withCheckedContinuation { (continuation: CheckedContinuation<Data?, Never>) in
-            DispatchQueue.global(qos: .userInitiated).async {
+        guard !Task.isCancelled else { return nil }
+        return await withCheckedContinuation { (continuation: CheckedContinuation<Data?, Never>) in
+            renderQueue.async {
+                let cacheKey = "\(request.renderKind.rawValue)|\(request.latex)|\(textColor.cacheKey)|\(fontScale)" as NSString
+                // 队列内复查，使并发请求同一公式时只实际渲染一次。
+                if let cachedData = cache.object(forKey: cacheKey) {
+                    continuation.resume(returning: cachedData as Data)
+                    return
+                }
                 let image = MTMathImage(
                     latex: request.latex,
                     fontSize: request.renderKind.fontSize(fontScale: fontScale),
@@ -166,15 +170,13 @@ private enum ETIOSMathImageRenderer {
                     continuation.resume(returning: nil)
                     return
                 }
-                continuation.resume(returning: renderedImage.pngData())
+                let data = renderedImage.pngData()
+                if let data {
+                    cache.setObject(data as NSData, forKey: cacheKey)
+                }
+                continuation.resume(returning: data)
             }
         }
-
-        if let renderedData {
-            cache.setObject(renderedData as NSData, forKey: cacheKey)
-        }
-
-        return renderedData
     }
 #else
     static func imageData(
