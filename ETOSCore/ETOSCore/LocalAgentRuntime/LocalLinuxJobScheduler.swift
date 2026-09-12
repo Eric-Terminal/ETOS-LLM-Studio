@@ -186,7 +186,7 @@ public actor LocalLinuxJobScheduler {
             throw LocalLinuxRuntimeError.jobNotFound(jobID)
         }
         let collector = terminal.collector
-        // 收集器的锁同时保护日志写入和屏幕解析。等待它或拼接富文本时释放
+        // 屏幕解析与快照仍共用锁。等待它或拼接富文本时释放
         // 调度器 actor，才能让用户输入、中断和其他会话继续被及时调度。
         return await Task.detached(priority: .utility) {
             collector.userVisibleTerminalPresentation(appearance: appearance) ?? .empty
@@ -806,7 +806,7 @@ public actor LocalLinuxJobScheduler {
             runtime: runtimeSnapshot
         )
         _ = Persistence.saveLocalLinuxJob(active.job)
-        _ = try? await storage.refreshWorkspaceSize(active.workspace)
+        storage.scheduleWorkspaceSizeRefresh(active.workspace)
         await verifyCriticalSystemPathsAfterGuestTask()
         await publishActivityCounts()
         return active.job
@@ -850,7 +850,7 @@ public actor LocalLinuxJobScheduler {
         )
         _ = Persistence.saveLocalLinuxJob(active.job)
         active.collector.finishTerminalUpdates()
-        _ = try? await storage.refreshWorkspaceSize(active.workspace)
+        storage.scheduleWorkspaceSizeRefresh(active.workspace)
         await verifyCriticalSystemPathsAfterGuestTask()
         await publishActivityCounts()
     }
@@ -889,7 +889,7 @@ public actor LocalLinuxJobScheduler {
         )
         _ = Persistence.saveLocalLinuxJob(active.job)
         active.collector.finishTerminalUpdates()
-        _ = try? await storage.refreshWorkspaceSize(active.workspace)
+        storage.scheduleWorkspaceSizeRefresh(active.workspace)
         await verifyCriticalSystemPathsAfterGuestTask()
         await publishActivityCounts()
     }

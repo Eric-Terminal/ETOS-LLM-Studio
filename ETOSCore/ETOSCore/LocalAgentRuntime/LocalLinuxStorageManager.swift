@@ -128,6 +128,7 @@ public actor LocalLinuxStorageManager {
     private static let receiptPrefix = "format=ish-rootfs-install-v1\nseed_archive_sha256="
     private static let damageMarkerName = "ETOS-System-Damaged.txt"
     private let fileManager: FileManager
+    private nonisolated let workspaceSizeRefresher: LocalLinuxWorkspaceSizeRefresher
     public nonisolated let layout: LocalLinuxStorageLayout
 
     public init(
@@ -136,6 +137,17 @@ public actor LocalLinuxStorageManager {
         appGroupLayout: ETOSSharedStorageLayout? = .resolve()
     ) {
         self.fileManager = fileManager
+        workspaceSizeRefresher = LocalLinuxWorkspaceSizeRefresher(
+            // 后台扫描自建 FileManager，避免跨隔离域捕获调用方可能带 delegate 的实例。
+            measure: { directory in Self.directorySize(at: directory, fileManager: FileManager()) },
+            persist: { workspace, size in
+                guard Persistence.updateLocalAgentWorkspaceSize(workspace, sizeBytes: size) else {
+                    throw LocalLinuxRuntimeError.runtimeUnavailable(
+                        NSLocalizedString("无法更新 Linux 工作区统计。", comment: "Update Linux workspace size failure")
+                    )
+                }
+            }
+        )
         layout = LocalLinuxStorageLayout(
             documentsDirectory: documentsDirectory,
             sharedDirectory: appGroupLayout?.shared,
@@ -376,7 +388,7 @@ public actor LocalLinuxStorageManager {
         return workspace
     }
 
-    public func hostURL(for workspace: LocalAgentWorkspace) throws -> URL {
+    public nonisolated func hostURL(for workspace: LocalAgentWorkspace) throws -> URL {
         let candidate = layout.root.appendingPathComponent(workspace.hostRelativePath, isDirectory: true)
         return try checkedDescendant(candidate, of: layout.workspaces)
     }
@@ -563,14 +575,16 @@ public actor LocalLinuxStorageManager {
         )
     }
 
-    public func refreshWorkspaceSize(_ workspace: LocalAgentWorkspace) throws -> LocalAgentWorkspace {
-        var updated = workspace
-        updated.sizeBytes = directorySize(at: try hostURL(for: workspace))
-        guard Persistence.saveLocalAgentWorkspace(updated) else {
-            throw LocalLinuxRuntimeError.runtimeUnavailable(
-                NSLocalizedString("无法更新 Linux 工作区统计。", comment: "Update Linux workspace size failure")
-            )
+    nonisolated func scheduleWorkspaceSizeRefresh(_ workspace: LocalAgentWorkspace) {
+        guard let directory = try? hostURL(for: workspace) else { return }
+        Task { [workspaceSizeRefresher] in
+            await workspaceSizeRefresher.schedule(workspace, directory: directory)
         }
+    }
+
+    public func refreshWorkspaceSize(_ workspace: LocalAgentWorkspace) async throws -> LocalAgentWorkspace {
+        var updated = workspace
+        updated.sizeBytes = try await workspaceSizeRefresher.refresh(workspace, directory: hostURL(for: workspace))
         return updated
     }
 
@@ -678,7 +692,7 @@ public actor LocalLinuxStorageManager {
         return directory
     }
 
-    private func checkedDescendant(_ candidate: URL, of parent: URL) throws -> URL {
+    private nonisolated func checkedDescendant(_ candidate: URL, of parent: URL) throws -> URL {
         let resolvedCandidate = candidate.standardizedFileURL
         let resolvedParent = parent.standardizedFileURL
         let prefix = resolvedParent.path.hasSuffix("/") ? resolvedParent.path : resolvedParent.path + "/"
@@ -689,6 +703,10 @@ public actor LocalLinuxStorageManager {
     }
 
     private func directorySize(at directory: URL) -> UInt64 {
+        Self.directorySize(at: directory, fileManager: fileManager)
+    }
+
+    private nonisolated static func directorySize(at directory: URL, fileManager: FileManager) -> UInt64 {
         guard let enumerator = fileManager.enumerator(
             at: directory,
             includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey, .totalFileAllocatedSizeKey],

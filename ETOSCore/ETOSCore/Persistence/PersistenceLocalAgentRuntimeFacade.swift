@@ -125,6 +125,18 @@ public extension Persistence {
     }
 
     @discardableResult
+    static func updateLocalAgentWorkspaceSize(_ workspace: LocalAgentWorkspace, sizeBytes: UInt64) -> Bool {
+        do {
+            guard let store = activeGRDBStore() else { return false }
+            try store.updateLocalAgentWorkspaceSize(workspace, sizeBytes: sizeBytes)
+            return true
+        } catch {
+            logger.error("更新 Linux 工作区统计失败：\(error.localizedDescription)")
+            return false
+        }
+    }
+
+    @discardableResult
     static func deleteLocalAgentWorkspace(id: UUID) -> Bool {
         do {
             guard let store = activeGRDBStore() else { return false }
