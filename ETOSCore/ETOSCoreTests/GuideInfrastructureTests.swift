@@ -930,6 +930,7 @@ struct GuideInfrastructureTests {
         #expect(restored.userDescription == "旧描述")
     }
 
+    @MainActor
     @Test("声明式设置拒绝页面未公开的字段")
     func declarativeSettingsRejectUndeclaredFields() throws {
         let settings = [GuidePageSetting.bool("enabled", label: "启用", get: { false }, set: { _ in })]

@@ -83,7 +83,7 @@ extension GuideInfrastructureTests {
             ]
         )
         let state = ModelRequestBodyControlState(selectedOptionIDsByControlID: ["group": "second"])
-        let proposal = try requestControlProposal(#"{"controls":[{"id":"group","options":[{"id":"second","title":"高","payload":{"budget":20}},{"id":"first","title":"低","payload":{"budget":10}}],"slider_enabled":true,"slider_granularity":0.5,"slider_start_color":"#aabbcc","slider_end_color":"11223344","rainbow_at_maximum":true}]}"#, controls: [control], state: state)
+        let proposal = try requestControlProposal(##"{"controls":[{"id":"group","options":[{"id":"second","title":"高","payload":{"budget":20}},{"id":"first","title":"低","payload":{"budget":10}}],"slider_enabled":true,"slider_granularity":0.5,"slider_start_color":"#aabbcc","slider_end_color":"11223344","rainbow_at_maximum":true}]}"##, controls: [control], state: state)
         let applied = try GuideModelRequestBodyControls.apply(proposal, controls: [control], state: state)
         #expect(applied.controls[0].defaultOptionID == "first")
         #expect(applied.controls[0].options.map(\.id) == ["second", "first"])
