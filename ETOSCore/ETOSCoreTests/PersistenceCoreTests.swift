@@ -94,11 +94,17 @@ struct PersistenceCoreTests {
         for session in sessions {
             Persistence.deleteSessionArtifacts(sessionID: session.id)
         }
+        // SQLite 连接仍持有被删除文件时，后续套件会复用失效连接并报 SQLITE_CANTOPEN。
+        Persistence.resetGRDBStoreForTests()
         removeIfExists(currentIndexFileURL)
         removeIfExists(foldersFileURL)
         removeIfExists(currentSessionsDirectory)
         removeIfExists(chatStoreSQLiteURL)
         removeIfExists(memoryStoreSQLiteURL)
+        for databaseURL in [chatStoreSQLiteURL, memoryStoreSQLiteURL] {
+            removeIfExists(URL(fileURLWithPath: databaseURL.path + "-wal"))
+            removeIfExists(URL(fileURLWithPath: databaseURL.path + "-shm"))
+        }
     }
 
     @Test("Save and Load Chat Sessions")

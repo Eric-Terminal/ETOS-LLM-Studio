@@ -416,6 +416,7 @@ struct MCPManagerToolExposureTests {
             (server.id, MCPServerStore.loadMetadata(for: server.id))
         })
         let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalStatuses = manager.serverStatuses
 
         defer {
             for server in MCPServerStore.loadServers() {
@@ -429,6 +430,7 @@ struct MCPManagerToolExposureTests {
             }
             manager.chatToolsEnabled = originalGlobalSwitch
             AppConfigStore.persistSynchronously(.bool(originalGlobalSwitch), for: .mcpChatToolsEnabled)
+            manager.serverStatuses = originalStatuses
             manager.reloadServers()
         }
 
@@ -442,6 +444,8 @@ struct MCPManagerToolExposureTests {
         let conversationServer = MCPBuiltInAppToolServer.defaultConfiguration(for: .conversation)
         let linuxServer = MCPBuiltInAppToolServer.defaultConfiguration(for: .linux)
         for server in [browserServer, conversationServer, linuxServer] {
+            // 直接写入存储的目录需要从新状态加载，不能复用单例中已有的 ready 连接目录。
+            manager.serverStatuses.removeValue(forKey: server.id)
             let category = try #require(MCPBuiltInAppToolServer.category(for: server.id))
             MCPServerStore.save(server)
             MCPServerStore.saveMetadata(
