@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import Testing
 @testable import ETOSCore
 
@@ -78,34 +79,64 @@ struct LocalLinuxTerminalOutputPipelineTests {
         #expect(collector.userVisiblePreview() == "one\ntwo\nthr")
     }
 
-    @Test("空闲检查降低唤醒频率且新输出恢复快速读取")
-    func idleReadBackoffIsBoundedAndResetsOnOutput() {
-        var pacing = LocalLinuxTerminalReadPacing()
-        var elapsed: UInt64 = 0
-        var reads = 0
-        while elapsed < 1_000_000_000 {
-            let delay = pacing.delayNanoseconds(bytesRead: 0, droppedBytes: 0)
-            #expect((5_000_000...50_000_000).contains(delay))
-            elapsed += delay
-            reads += 1
+    @Test("输出描述符唤醒后仍能接收下一次输出及 EOF", .timeLimit(.minutes(1)))
+    func activityDescriptorDeliversOutputAndEOF() async throws {
+        var descriptors: [Int32] = [-1, -1]
+        try #require(pipe(&descriptors) == 0)
+        try #require(fcntl(descriptors[0], F_SETFL, O_NONBLOCK) == 0)
+        let activity = LocalLinuxTerminalActivity(descriptor: descriptors[0])
+        defer { activity.cancel() }
+        var iterator = activity.events.makeAsyncIterator()
+        for _ in 0..<2 {
+            var byte: UInt8 = 1
+            #expect(write(descriptors[1], &byte, 1) == 1)
+            #expect(await iterator.next() != nil)
         }
-        #expect(reads <= 25)
-        #expect(pacing.delayNanoseconds(bytesRead: 1, droppedBytes: 0) == 5_000_000)
-        #expect(pacing.delayNanoseconds(bytesRead: 0, droppedBytes: 0) == 5_000_000)
+        close(descriptors[1])
+        #expect(await iterator.next() != nil)
+        #expect(await iterator.next() == nil)
     }
 
-    @Test("满块输出继续排空且丢字节事件重置空闲退让")
-    func fullChunksAvoidArtificialThroughputLimit() {
-        var pacing = LocalLinuxTerminalReadPacing()
-        for _ in 0..<10 { _ = pacing.delayNanoseconds(bytesRead: 0, droppedBytes: 0) }
-        #expect(pacing.delayNanoseconds(
-            bytesRead: LocalLinuxBridgeConstants.outputChunkBytes,
-            droppedBytes: 0
-        ) == 0)
-        #expect(pacing.delayNanoseconds(bytesRead: 0, droppedBytes: 0) == 5_000_000)
-        for _ in 0..<10 { _ = pacing.delayNanoseconds(bytesRead: 0, droppedBytes: 0) }
-        #expect(pacing.delayNanoseconds(bytesRead: 0, droppedBytes: 128) == 5_000_000)
-        #expect(pacing.delayNanoseconds(bytesRead: 0, droppedBytes: 0) == 5_000_000)
+    @Test("取消空闲输出订阅不等待下一次输出", .timeLimit(.minutes(1)))
+    func idleActivityCancellationFinishesStream() async throws {
+        var descriptors: [Int32] = [-1, -1]
+        try #require(pipe(&descriptors) == 0)
+        try #require(fcntl(descriptors[0], F_SETFL, O_NONBLOCK) == 0)
+        let activity = LocalLinuxTerminalActivity(descriptor: descriptors[0])
+        defer { close(descriptors[1]) }
+        let waiting = Task {
+            var iterator = activity.events.makeAsyncIterator()
+            return await iterator.next() != nil
+        }
+        waiting.cancel()
+        #expect(await waiting.value == false)
+        activity.cancel()
+    }
+
+    @Test("页面订阅合并积压变化并在结束前保留最后一帧", .timeLimit(.minutes(1)))
+    func outputUpdatesKeepFinalFrame() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let collector = try LocalLinuxOutputCollector(
+            rawURL: directory.appendingPathComponent("raw.log"),
+            modelURL: directory.appendingPathComponent("model.log"),
+            redactionValues: [], privacyEnabled: false, modelByteLimit: 4096,
+            terminalColumns: 20, terminalRows: 2
+        )
+        defer { collector.finish() }
+        var iterator = collector.terminalDisplayUpdates(appearance: .dark, minimumInterval: .zero).makeAsyncIterator()
+        #expect(await iterator.next()?.isEmpty == true)
+        for index in 0..<100 { collector.append(stream: .terminal, data: Data("\r\(index)".utf8)) }
+        collector.append(stream: .terminal, data: Data("\rfinal\u{1B}[K".utf8))
+        collector.finish(completeTerminalUpdates: false)
+        collector.finishTerminalUpdates()
+        var last: [LocalLinuxTerminalDisplayLine] = []
+        while let lines = await iterator.next() { last = lines }
+        #expect(last.map(\.plainText).joined(separator: "\n") == "final")
+        var lateSubscriber = collector.terminalDisplayUpdates(appearance: .light, minimumInterval: .zero).makeAsyncIterator()
+        #expect(await lateSubscriber.next()?.map(\.plainText) == ["final"])
+        #expect(await lateSubscriber.next() == nil)
     }
 
     private final class ResponseCapture: @unchecked Sendable {

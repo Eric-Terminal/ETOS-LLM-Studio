@@ -42,7 +42,7 @@ struct LocalLinuxTerminalView: View {
     @State private var terminalJobs: [LocalLinuxJob] = []
     @State private var inputOwner: LocalLinuxTerminalInputOwner?
     @State private var terminalShortcuts = LocalLinuxTerminalShortcutConfiguration.defaults
-    @State private var output = LocalLinuxTerminalPresentation.empty
+    @State private var output: [LocalLinuxTerminalDisplayLine] = []
     @State private var input = ""
     @State private var errorMessage: String?
     @State private var outputTask: Task<Void, Never>?
@@ -64,12 +64,15 @@ struct LocalLinuxTerminalView: View {
 
             GeometryReader { proxy in
                 ScrollView {
-                    Group {
-                        if output.plainText.isEmpty {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        if output.isEmpty {
                             Text(NSLocalizedString("终端正在启动…", comment: "Linux terminal starting placeholder"))
                                 .foregroundStyle(.secondary)
                         } else {
-                            Text(output.attributedText)
+                            ForEach(output) { line in
+                                Text(line.displayText)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                         }
                     }
                         .font(.system(.body, design: .monospaced))
@@ -78,6 +81,21 @@ struct LocalLinuxTerminalView: View {
                         .padding()
                 }
                 .background(terminalCanvasColor)
+                .contextMenu {
+                    Button {
+                        let lines = output
+                        Task {
+                            let text = await Task.detached(priority: .utility) {
+                                lines.map(\.plainText).joined(separator: "\n")
+                            }.value
+                            guard !Task.isCancelled else { return }
+                            UIPasteboard.general.string = text
+                        }
+                    } label: {
+                        Label(NSLocalizedString("复制", comment: "Copy terminal output"), systemImage: "doc.on.doc")
+                    }
+                    .disabled(output.isEmpty)
+                }
                 .defaultScrollAnchor(.bottom)
                 .onAppear { resize(for: proxy.size) }
                 .onChange(of: proxy.size) { _, size in resize(for: size) }
@@ -226,29 +244,25 @@ struct LocalLinuxTerminalView: View {
     private func attach(to selected: LocalLinuxJob) {
         let appearance = terminalAppearance
         job = selected
-        output = .empty
+        output = []
         outputTask?.cancel()
         outputTask = Task {
             let owner = try? await LocalLinuxJobScheduler.shared.terminalInputOwner(jobID: selected.id)
             guard !Task.isCancelled else { return }
             inputOwner = owner
-            while !Task.isCancelled {
-                if let presentation = try? await LocalLinuxJobScheduler.shared.userVisibleTerminalPresentation(
-                    jobID: selected.id,
-                    appearance: appearance
-                ) {
+            if let updates = try? await LocalLinuxJobScheduler.shared.terminalDisplayUpdates(
+                jobID: selected.id,
+                appearance: appearance,
+                minimumInterval: .milliseconds(100)
+            ) {
+                for await presentation in updates {
                     guard !Task.isCancelled else { return }
                     output = presentation
                 }
-                if let current = await LocalLinuxJobScheduler.shared.job(id: selected.id) {
-                    guard !Task.isCancelled else { return }
-                    job = current
-                    if current.state.isTerminal { break }
-                } else {
-                    break
-                }
-                try? await Task<Never, Never>.sleep(nanoseconds: 250_000_000)
             }
+            let current = await LocalLinuxJobScheduler.shared.job(id: selected.id)
+            guard !Task.isCancelled else { return }
+            job = current
             let jobs = await LocalLinuxJobScheduler.shared.activeJobs()
             guard !Task.isCancelled else { return }
             terminalJobs = visibleTerminalJobs(in: jobs)

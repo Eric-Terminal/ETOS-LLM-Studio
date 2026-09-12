@@ -167,6 +167,17 @@ public actor LocalLinuxJobScheduler {
         return try await storage.readRawOutput(relativePath: relativePath, maximumBytes: 262_144)
     }
 
+    public func terminalDisplayUpdates(
+        jobID: UUID,
+        appearance: LocalLinuxTerminalAppearance,
+        minimumInterval: Duration
+    ) throws -> AsyncStream<[LocalLinuxTerminalDisplayLine]> {
+        guard let active = activeTerminals[jobID] else {
+            throw LocalLinuxRuntimeError.jobNotFound(jobID)
+        }
+        return active.collector.terminalDisplayUpdates(appearance: appearance, minimumInterval: minimumInterval)
+    }
+
     public func userVisibleTerminalPresentation(
         jobID: UUID,
         appearance: LocalLinuxTerminalAppearance = .dark
@@ -818,7 +829,7 @@ public actor LocalLinuxJobScheduler {
         for event in remainingDiagnostics {
             active.collector.appendTerminalDiagnostic(event)
         }
-        active.collector.finish()
+        active.collector.finish(completeTerminalUpdates: false)
         let completionReason = suspensionInterruptedJobIDs.remove(jobID) != nil
             ? LocalLinuxCompletionReason.interruptedBySuspension
             : result.completionReason
@@ -838,6 +849,7 @@ public actor LocalLinuxJobScheduler {
             runtime: runtimeSnapshot
         )
         _ = Persistence.saveLocalLinuxJob(active.job)
+        active.collector.finishTerminalUpdates()
         _ = try? await storage.refreshWorkspaceSize(active.workspace)
         await verifyCriticalSystemPathsAfterGuestTask()
         await publishActivityCounts()
@@ -860,7 +872,7 @@ public actor LocalLinuxJobScheduler {
         for event in remainingDiagnostics {
             active.collector.appendTerminalDiagnostic(event)
         }
-        active.collector.finish()
+        active.collector.finish(completeTerminalUpdates: false)
         let wasInterruptedBySuspension = suspensionInterruptedJobIDs.remove(jobID) != nil
         active.job.state = wasInterruptedBySuspension ? .interrupted : .failed
         active.job.completionReason = wasInterruptedBySuspension ? .interruptedBySuspension : .runtimeFailure
@@ -876,6 +888,7 @@ public actor LocalLinuxJobScheduler {
             runtime: runtimeSnapshot
         )
         _ = Persistence.saveLocalLinuxJob(active.job)
+        active.collector.finishTerminalUpdates()
         _ = try? await storage.refreshWorkspaceSize(active.workspace)
         await verifyCriticalSystemPathsAfterGuestTask()
         await publishActivityCounts()

@@ -10,7 +10,7 @@
 import Foundation
 
 final class LocalLinuxTerminalScreen: @unchecked Sendable {
-    private struct Cell: Equatable {
+    struct Cell: Equatable {
         var text = ""
         var isContinuation = false
         var style = LocalLinuxTerminalStyle.default
@@ -57,6 +57,8 @@ final class LocalLinuxTerminalScreen: @unchecked Sendable {
     private var primary: Buffer
     private var alternate: Buffer
     private var scrollback: [LocalLinuxTerminalLinePresentation] = []
+    private let primaryDisplayCache = LocalLinuxTerminalDisplayCache()
+    private let alternateDisplayCache = LocalLinuxTerminalDisplayCache()
     private var usesAlternateScreen = false
     private var usesAutoWrap = true
     private var usesInsertMode = false
@@ -111,39 +113,21 @@ final class LocalLinuxTerminalScreen: @unchecked Sendable {
         maximumLines: Int? = nil,
         appearance: LocalLinuxTerminalAppearance = .dark
     ) -> LocalLinuxTerminalPresentation {
-        let lines = activeBuffer.lines
-        var screenEnd = lines.endIndex
-        while screenEnd > 0, visibleCellEndIndex(in: lines[screenEnd - 1]) == 0 {
-            screenEnd -= 1
-        }
-        var historyEnd = usesAlternateScreen ? 0 : scrollback.endIndex
-        if screenEnd == 0 {
-            while historyEnd > 0, scrollback[historyEnd - 1].isEmpty {
-                historyEnd -= 1
-            }
-        }
+        LocalLinuxTerminalPresentation(lines: renderedDisplayLines(maximumLines: maximumLines, appearance: appearance))
+    }
 
-        // 先确定实际需要的尾部行，再生成富文本；缩略图不应复制整个历史，
-        // 也不必为最终会被丢弃的屏幕行构造两套外观样式。
-        let limit = maximumLines.map { max(1, $0) }
-        let screenStart = limit.map { max(0, screenEnd - $0) } ?? 0
-        let historyCount = limit.map { min(historyEnd, max(0, $0 - (screenEnd - screenStart))) }
-            ?? historyEnd
-        var values = Array(scrollback[(historyEnd - historyCount)..<historyEnd])
-        values.append(contentsOf: lines[screenStart..<screenEnd].map(renderedLine))
-        var plainText = ""
-        var attributedText = AttributedString()
-        for (index, line) in values.enumerated() {
-            if index != 0 {
-                plainText.append("\n")
-                attributedText.append(AttributedString("\n"))
-            }
-            plainText.append(line.plainText)
-            attributedText.append(line.attributedText(for: appearance))
-        }
-        return LocalLinuxTerminalPresentation(
-            plainText: plainText,
-            attributedText: attributedText
+    func renderedDisplayLines(
+        maximumLines: Int? = nil,
+        appearance: LocalLinuxTerminalAppearance = .dark
+    ) -> [LocalLinuxTerminalDisplayLine] {
+        let cache = usesAlternateScreen ? alternateDisplayCache : primaryDisplayCache
+        return cache.render(
+            screen: activeBuffer.lines,
+            history: usesAlternateScreen ? [] : scrollback,
+            maximumLines: maximumLines,
+            appearance: appearance,
+            visibleEnd: visibleCellEndIndex,
+            renderLine: renderedLine
         )
     }
 

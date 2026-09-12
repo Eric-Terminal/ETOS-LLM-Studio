@@ -3,29 +3,11 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 完整 PTY 会话使用独立控制终端。轮询任务始终在后台 drain raw output，
+// 完整 PTY 会话使用独立控制终端。输出通知在后台驱动 raw output 读取，
 // 页面关闭或未显示时也不会停止读取。
 // ============================================================================
 
 import Foundation
-
-struct LocalLinuxTerminalReadPacing {
-    private var idleDelayNanoseconds: UInt64 = 5_000_000
-
-    mutating func delayNanoseconds(bytesRead: Int, droppedBytes: UInt64) -> UInt64 {
-        if bytesRead > 0 || droppedBytes > 0 {
-            idleDelayNanoseconds = 5_000_000
-            // 满块意味着队列里可能还有积压，先让出执行权再继续 drain，
-            // 不要用固定休眠给大量输出人为增加吞吐上限。
-            return bytesRead == LocalLinuxBridgeConstants.outputChunkBytes ? 0 : idleDelayNanoseconds
-        }
-        let delay = idleDelayNanoseconds
-        // 公共 PTY ABI 只有非阻塞读取；空闲时退让到每秒约 20 次检查，
-        // 将新输出的额外等待限制在 50 毫秒内，兼顾 watchOS 耗电与响应。
-        idleDelayNanoseconds = min(idleDelayNanoseconds * 2, 50_000_000)
-        return delay
-    }
-}
 
 private final class LocalLinuxTerminalResultState: @unchecked Sendable {
     private let lock = NSLock()
@@ -84,7 +66,7 @@ public final class iSHAppleBridgeTerminalSession: @unchecked Sendable {
     private let native: UnsafeMutableRawPointer
     private let resultState = LocalLinuxTerminalResultState()
     private let taskLock = NSLock()
-    private var pollingTask: Task<Void, Never>?
+    private var readingTask: Task<Void, Never>?
 
     private init(
         native: UnsafeMutableRawPointer,
@@ -95,89 +77,106 @@ public final class iSHAppleBridgeTerminalSession: @unchecked Sendable {
         guard let retained = LocalLinuxRetainedTerminalHandle(native) else {
             throw LocalLinuxRuntimeError.bridgeFailure(operation: "保留交互终端", linuxError: -1)
         }
+        var descriptor: Int32 = -1
+        let subscriptionStatus = etosISHTerminalCopyActivityFD(native, &descriptor)
+        guard subscriptionStatus == 0 else {
+            throw LocalLinuxRuntimeError.bridgeFailure(operation: "读取交互终端输出", linuxError: subscriptionStatus)
+        }
+        let activity = LocalLinuxTerminalActivity(descriptor: descriptor)
         let resultState = resultState
         let task = Task.detached(priority: .utility) {
-            var buffer = [UInt8](repeating: 0, count: LocalLinuxBridgeConstants.outputChunkBytes)
-            var pacing = LocalLinuxTerminalReadPacing()
-            while !Task.isCancelled {
-                var count: UInt32 = 0
-                var dropped: UInt64 = 0
-                let readStatus = buffer.withUnsafeMutableBytes { bytes in
-                    etosISHTerminalRead(
-                        retained.native,
-                        bytes.baseAddress,
-                        UInt32(bytes.count),
-                        &count,
-                        &dropped
-                    )
-                }
-                if readStatus == 0, count != 0 || dropped != 0 {
-                    onOutput(Data(buffer.prefix(Int(count))), dropped)
-                } else if readStatus != 0, readStatus != LocalLinuxBridgeConstants.linuxESHUTDOWN {
-                    resultState.fail(
-                        LocalLinuxRuntimeError.bridgeFailure(operation: "读取交互终端输出", linuxError: readStatus)
-                    )
-                    return
-                }
+            defer { activity.cancel() }
+            await withTaskCancellationHandler {
+                var buffer = [UInt8](repeating: 0, count: LocalLinuxBridgeConstants.outputChunkBytes)
+                for await _ in activity.events {
+                    var exitObserved = false
+                    while !Task.isCancelled {
+                        var count: UInt32 = 0
+                        var dropped: UInt64 = 0
+                        let readStatus = buffer.withUnsafeMutableBytes { bytes in
+                            etosISHTerminalRead(
+                                retained.native,
+                                bytes.baseAddress,
+                                UInt32(bytes.count),
+                                &count,
+                                &dropped
+                            )
+                        }
+                        if readStatus == 0, count != 0 || dropped != 0 {
+                            onOutput(Data(buffer.prefix(Int(count))), dropped)
+                        } else if readStatus != 0, readStatus != LocalLinuxBridgeConstants.linuxESHUTDOWN {
+                            resultState.fail(
+                                LocalLinuxRuntimeError.bridgeFailure(operation: "读取交互终端输出", linuxError: readStatus)
+                            )
+                            return
+                        }
 
-                var resultTerminalID: UInt64 = 0
-                var reason: Int32 = 0
-                var exitCode: Int32 = 0
-                var signal: Int32 = 0
-                var linuxError: Int32 = 0
-                var outputBytes: UInt64 = 0
-                var droppedBytes: UInt64 = 0
-                var elapsedMilliseconds: UInt64 = 0
-                let resultStatus = etosISHTerminalResult(
-                    retained.native,
-                    &resultTerminalID,
-                    &reason,
-                    &exitCode,
-                    &signal,
-                    &linuxError,
-                    &outputBytes,
-                    &droppedBytes,
-                    &elapsedMilliseconds
-                )
-                if resultStatus == 0, count == 0, dropped == 0 {
-                    resultState.complete(
-                        LocalLinuxBridgeTerminalResult(
-                            terminalID: resultTerminalID,
-                            completionReason: LocalLinuxCompletionReason(terminalBridgeRawValue: reason),
-                            exitCode: exitCode,
-                            terminationSignal: signal,
-                            linuxError: linuxError,
-                            outputBytes: outputBytes,
-                            droppedBytes: droppedBytes,
-                            elapsedMilliseconds: elapsedMilliseconds
+                        var resultTerminalID: UInt64 = 0
+                        var reason: Int32 = 0
+                        var exitCode: Int32 = 0
+                        var signal: Int32 = 0
+                        var linuxError: Int32 = 0
+                        var outputBytes: UInt64 = 0
+                        var droppedBytes: UInt64 = 0
+                        var elapsedMilliseconds: UInt64 = 0
+                        let resultStatus = etosISHTerminalResult(
+                            retained.native,
+                            &resultTerminalID,
+                            &reason,
+                            &exitCode,
+                            &signal,
+                            &linuxError,
+                            &outputBytes,
+                            &droppedBytes,
+                            &elapsedMilliseconds
                         )
-                    )
-                    return
+                        // 退出可能发生在读取到空之后；确认退出后再读空一次，保留最后的输出。
+                        if resultStatus == 0, exitObserved, count == 0, dropped == 0 {
+                            resultState.complete(
+                                LocalLinuxBridgeTerminalResult(
+                                    terminalID: resultTerminalID,
+                                    completionReason: LocalLinuxCompletionReason(terminalBridgeRawValue: reason),
+                                    exitCode: exitCode,
+                                    terminationSignal: signal,
+                                    linuxError: linuxError,
+                                    outputBytes: outputBytes,
+                                    droppedBytes: droppedBytes,
+                                    elapsedMilliseconds: elapsedMilliseconds
+                                )
+                            )
+                            return
+                        }
+                        if resultStatus != 0, resultStatus != LocalLinuxBridgeConstants.linuxEAGAIN {
+                            resultState.fail(
+                                LocalLinuxRuntimeError.bridgeFailure(operation: "读取交互终端结果", linuxError: resultStatus)
+                            )
+                            return
+                        }
+                        exitObserved = resultStatus == 0
+                        if !exitObserved, count == 0, dropped == 0 { break }
+                        await Task.yield()
+                    }
+                    if Task.isCancelled { break }
                 }
-                if resultStatus != 0, resultStatus != LocalLinuxBridgeConstants.linuxEAGAIN {
-                    resultState.fail(
-                        LocalLinuxRuntimeError.bridgeFailure(operation: "读取交互终端结果", linuxError: resultStatus)
-                    )
-                    return
-                }
-                let delay = pacing.delayNanoseconds(bytesRead: Int(count), droppedBytes: dropped)
-                if delay == 0 {
-                    await Task.yield()
-                } else {
-                    try? await Task<Never, Never>.sleep(nanoseconds: delay)
-                }
+                resultState.fail(
+                    Task.isCancelled
+                        ? CancellationError()
+                        : LocalLinuxRuntimeError.bridgeFailure(
+                            operation: "读取交互终端输出", linuxError: LocalLinuxBridgeConstants.linuxESTALE))
+            } onCancel: {
+                activity.cancel()
             }
         }
         taskLock.lock()
-        pollingTask = task
+        readingTask = task
         taskLock.unlock()
         _ = terminalID
     }
 
     deinit {
         taskLock.lock()
-        let task = pollingTask
-        pollingTask = nil
+        let task = readingTask
+        readingTask = nil
         taskLock.unlock()
         task?.cancel()
         _ = etosISHTerminalCancel(native)

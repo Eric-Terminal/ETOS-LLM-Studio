@@ -327,7 +327,7 @@ struct LocalLinuxWatchTerminalView: View {
     @State private var terminalJobs: [LocalLinuxJob] = []
     @State private var inputOwner: LocalLinuxTerminalInputOwner?
     @State private var terminalShortcuts = LocalLinuxTerminalShortcutConfiguration.defaults
-    @State private var output = LocalLinuxTerminalPresentation.empty
+    @State private var output: [LocalLinuxTerminalDisplayLine] = []
     @State private var input = ""
     @State private var errorMessage: String?
     @State private var outputTask: Task<Void, Never>?
@@ -373,15 +373,19 @@ struct LocalLinuxWatchTerminalView: View {
             }
             Section {
                 Group {
-                    if output.plainText.isEmpty {
+                    if output.isEmpty {
                         Text(NSLocalizedString("正在启动…", comment: "Watch Linux terminal starting"))
                             .foregroundStyle(.secondary)
                     } else {
-                        Text(output.attributedText)
+                        ForEach(output) { line in
+                            Text(line.displayText)
+                                .listRowInsets(EdgeInsets())
+                        }
                     }
                 }
                     .font(.caption2.monospaced())
                     .listRowBackground(Color.black)
+                    .environment(\.defaultMinListRowHeight, 0)
                 if isInputControlledByAgent {
                     Text(NSLocalizedString("输入由 Agent 控制；发送内容即可接管", comment: "Watch terminal Agent input owner"))
                         .font(.caption2)
@@ -433,6 +437,7 @@ struct LocalLinuxWatchTerminalView: View {
                 }
             }
         }
+        .listStyle(.plain)
         .preferredColorScheme(.dark)
         .navigationTitle(terminalNavigationTitle)
         .localLinuxDiagnosticFeedback(priority: 2, active: isPresentationActive, blocked: errorMessage != nil)
@@ -493,22 +498,25 @@ struct LocalLinuxWatchTerminalView: View {
 
     private func attach(to selected: LocalLinuxJob) {
         job = selected
-        output = .empty
+        output = []
         outputTask?.cancel()
         outputTask = Task {
             let owner = try? await LocalLinuxJobScheduler.shared.terminalInputOwner(jobID: selected.id)
             guard !Task.isCancelled else { return }
             inputOwner = owner
-            while !Task.isCancelled {
-                let presentation = try? await LocalLinuxJobScheduler.shared.userVisibleTerminalPresentation(jobID: selected.id)
-                guard !Task.isCancelled else { return }
-                if let presentation { output = presentation }
-                let current = await LocalLinuxJobScheduler.shared.job(id: selected.id)
-                guard !Task.isCancelled else { return }
-                job = current
-                if current?.state.isTerminal == true { break }
-                try? await Task<Never, Never>.sleep(nanoseconds: 500_000_000)
+            if let updates = try? await LocalLinuxJobScheduler.shared.terminalDisplayUpdates(
+                jobID: selected.id,
+                appearance: .dark,
+                minimumInterval: .milliseconds(200)
+            ) {
+                for await presentation in updates {
+                    guard !Task.isCancelled else { return }
+                    output = presentation
+                }
             }
+            let current = await LocalLinuxJobScheduler.shared.job(id: selected.id)
+            guard !Task.isCancelled else { return }
+            job = current
             let jobs = await LocalLinuxJobScheduler.shared.activeJobs()
             guard !Task.isCancelled else { return }
             terminalJobs = visibleTerminalJobs(in: jobs)

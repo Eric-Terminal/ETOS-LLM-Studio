@@ -56,6 +56,8 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     private var terminalPreviewAppearance: LocalLinuxTerminalAppearance?
     private var terminalPreviewNeedsRefresh = false
     private var terminalDiagnosticSummaries: [String] = []
+    private let terminalChanges = LocalLinuxTerminalChanges()
+    private let diagnosticLineIDs = (0..<4).map { _ in UUID() }
 
     public init(
         rawURL: URL,
@@ -143,12 +145,14 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
             data: Data("\n\(summary)\n".utf8),
             flush: true
         )
+        terminalChanges.send()
     }
 
-    public func finish() {
+    public func finish(completeTerminalUpdates: Bool = true) {
         lock.lock()
         guard !isFinished else {
             lock.unlock()
+            if completeTerminalUpdates { terminalChanges.finish() }
             return
         }
         isFinished = true
@@ -178,6 +182,47 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
             writeError = writeError ?? error
         }
         lock.unlock()
+        if completeTerminalUpdates { terminalChanges.finish() }
+    }
+
+    /// 调度器先保存最终任务状态，再结束页面订阅，确保最后一帧与退出状态一致。
+    func finishTerminalUpdates() { terminalChanges.finish() }
+
+    func terminalDisplayUpdates(
+        appearance: LocalLinuxTerminalAppearance,
+        minimumInterval: Duration
+    ) -> AsyncStream<[LocalLinuxTerminalDisplayLine]> {
+        let changes = terminalChanges.stream()
+        let (stream, continuation) = AsyncStream<[LocalLinuxTerminalDisplayLine]>.makeStream(
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        // 订阅持有收集器直到最后一帧发送完成；页面取消会同时取消这个任务。
+        let task = Task.detached(priority: .utility) { [self] in
+            for await _ in changes {
+                guard !Task.isCancelled else { break }
+                continuation.yield(self.terminalDisplayLines(appearance: appearance))
+                // 只在有输出后合并短时间内的变化；空闲时没有周期性唤醒。
+                do { try await Task<Never, Never>.sleep(for: minimumInterval) }
+                catch { break }
+            }
+            continuation.finish()
+        }
+        continuation.onTermination = { _ in task.cancel() }
+        return stream
+    }
+
+    func terminalDisplayLines(appearance: LocalLinuxTerminalAppearance) -> [LocalLinuxTerminalDisplayLine] {
+        lock.lock()
+        defer { lock.unlock() }
+        var lines = terminalScreen?.renderedDisplayLines(appearance: appearance) ?? []
+        if !terminalDiagnosticSummaries.isEmpty {
+            for (index, summary) in (terminalDiagnosticSummaries + [LocalLinuxDiagnosticPresentation.userGuidance]).enumerated() {
+                lines.append(LocalLinuxTerminalDisplayLine(
+                    id: diagnosticLineIDs[index], plainText: summary, attributedText: AttributedString(summary)
+                ))
+            }
+        }
+        return lines
     }
 
     public func snapshot() -> LocalLinuxOutputSnapshot {
@@ -297,6 +342,7 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
         userPreviewNeedsRefresh = true
         terminalPresentationNeedsRefresh = true
         terminalPreviewNeedsRefresh = true
+        terminalChanges.send()
     }
 
     private func presentationWithDiagnostics(

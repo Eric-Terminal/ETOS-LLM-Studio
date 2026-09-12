@@ -158,6 +158,7 @@ int32_t etos_ish_terminal_start(
         void **session_out);
 void etos_ish_terminal_release(void *session);
 void *etos_ish_terminal_retain(void *session);
+int32_t etos_ish_terminal_copy_activity_fd(void *session, int32_t *fd_out);
 int32_t etos_ish_terminal_read(
         void *session,
         void *bytes,

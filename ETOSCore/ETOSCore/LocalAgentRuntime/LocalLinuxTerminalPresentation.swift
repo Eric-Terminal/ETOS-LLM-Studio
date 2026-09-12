@@ -166,6 +166,7 @@ struct LocalLinuxTerminalStyle: Equatable, Sendable {
 }
 
 struct LocalLinuxTerminalLinePresentation: Equatable, Sendable {
+    let id = UUID()
     let plainText: String
     let lightAttributedText: AttributedString
     let darkAttributedText: AttributedString

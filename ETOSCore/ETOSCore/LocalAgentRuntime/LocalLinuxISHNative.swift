@@ -158,6 +158,12 @@ func etosISHTerminalRead(
     _ droppedOut: UnsafeMutablePointer<UInt64>
 ) -> Int32
 
+@_silgen_name("etos_ish_terminal_copy_activity_fd")
+func etosISHTerminalCopyActivityFD(
+    _ session: UnsafeMutableRawPointer,
+    _ descriptorOut: UnsafeMutablePointer<Int32>
+) -> Int32
+
 @_silgen_name("etos_ish_terminal_write")
 func etosISHTerminalWrite(
     _ session: UnsafeMutableRawPointer,

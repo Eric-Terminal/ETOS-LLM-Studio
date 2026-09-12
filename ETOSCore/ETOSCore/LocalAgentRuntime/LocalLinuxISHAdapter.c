@@ -447,6 +447,16 @@ void *etos_ish_terminal_retain(void *session) {
 #endif
 }
 
+int32_t etos_ish_terminal_copy_activity_fd(void *session, int32_t *fd_out) {
+#if ETOS_ISH_SUPPORTED
+    return ish_apple_terminal_session_copy_activity_fd(session, fd_out);
+#else
+    (void) session;
+    if (fd_out != NULL) *fd_out = -1;
+    return ETOS_ISH_ENOSYS;
+#endif
+}
+
 int32_t etos_ish_terminal_read(void *session, void *bytes, uint32_t capacity, uint32_t *count_out, uint64_t *dropped_out) {
 #if ETOS_ISH_SUPPORTED
     return ish_apple_terminal_session_read_output(session, bytes, capacity, count_out, dropped_out);
