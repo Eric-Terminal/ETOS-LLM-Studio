@@ -518,7 +518,8 @@ extension Persistence {
             try db.execute(sql: "DROP TRIGGER IF EXISTS messages_ad")
             try db.execute(sql: "DROP TRIGGER IF EXISTS messages_au")
             try db.execute(sql: "DROP TABLE IF EXISTS messages_fts")
-            try db.execute(sql: "VACUUM")
+            // 恢复备份允许保留空闲页；每次启动压缩会在一致性复制后再次重写整库。
+            // FTS 在恢复后重建，导出快照的压缩策略由 SnapshotBuilder 独立负责。
         }
     }
 

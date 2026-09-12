@@ -54,7 +54,7 @@ extension PersistenceTests {
         #expect(!FileManager.default.fileExists(atPath: legacyMessageFileURL(sessionID).path))
     }
 
-    @Test("启动备份会裁剪 chat-store 的 FTS 结构")
+    @Test("启动备份移除 FTS、保留消息和空闲页，避免再次重写整库")
     func testLaunchBackupCreatesSlimChatStoreBackup() {
         cleanup(sessions: [])
 
@@ -86,6 +86,9 @@ extension PersistenceTests {
         #expect(!sqliteExists(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'messages_ad'"))
         #expect(!sqliteExists(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'messages_au'"))
         #expect(sqliteCount(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM messages") == messages.count)
+        #expect(sqliteCount(chatStoreBackupSQLiteURL, sql: "PRAGMA freelist_count") > 0)
+        // 原库索引不受恢复副本裁剪影响。
+        #expect(sqliteExists(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'messages_fts'"))
     }
 
     @Test("离线快照会打包三处分库并排除 FTS 与向量库")
