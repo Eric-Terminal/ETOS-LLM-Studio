@@ -11,14 +11,14 @@ import SwiftUI
 struct CappedScrollableText: View {
     let text: String
     let maxHeight: CGFloat
-    let font: Font
+    let font: ETFont
     let foreground: Color
     @State private var measuredHeight: CGFloat = 0
 
     var body: some View {
         ScrollView {
             Text(text)
-                .etFont(font)
+                .etFont(font, sampleText: text)
                 .foregroundColor(foreground)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(

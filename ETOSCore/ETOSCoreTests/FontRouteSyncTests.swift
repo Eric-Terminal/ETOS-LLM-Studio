@@ -16,6 +16,24 @@ import SwiftUI
 @Suite("字体路由与同步测试", .serialized)
 struct FontRouteSyncTests {
 
+    @Test("后台字体缓存随字号倍率和动态字体类别更新")
+    func testPreparedFontInvalidatesForScaleAndDynamicType() async throws {
+        try await withIsolatedFontStore {
+            FontLibrary.updateRuntimeSettings(isCustomFontEnabled: false, fallbackScope: .segment, customFontScale: 1)
+            let normal = await ETFontResolver.shared.font(for: .body)
+            FontLibrary.updateRuntimeSettings(isCustomFontEnabled: false, fallbackScope: .segment, customFontScale: 1.5)
+            let enlarged = await ETFontResolver.shared.font(for: .body)
+            #expect(normal != enlarged)
+#if canImport(UIKit)
+            let accessible = await ETFontResolver.shared.font(for: .body, sizeCategory: .accessibilityLarge)
+            #expect(accessible != enlarged)
+#endif
+            FontLibrary.updateRuntimeSettings(isCustomFontEnabled: false, fallbackScope: .segment, customFontScale: 1)
+            let restored = await ETFontResolver.shared.font(for: .body)
+            #expect(restored == normal)
+        }
+    }
+
     @Test("字体同步打包会携带字体文件与路由配置")
     func testBuildPackageIncludesFontFilesAndRouteConfiguration() async throws {
         try await withIsolatedFontStore {

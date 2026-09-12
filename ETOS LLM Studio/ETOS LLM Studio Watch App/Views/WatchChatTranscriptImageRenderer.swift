@@ -66,7 +66,8 @@ enum WatchChatTranscriptImageRenderer {
         try Task.checkCancellation()
 
         let rows = preparedRows.map(WatchChatTranscriptRenderRow.init)
-        let rootFont = AppFontAdapter.adaptedFont(from: .body)
+        let rootFont = await AppFontAdapter.adaptedFont(from: .body)
+        let fontTemplates = await ETFontResolver.shared.exportTemplates()
         let canvas = WatchChatTranscriptCanvas(
             rows: rows,
             continuationContext: preparedExport.continuationContext,
@@ -84,6 +85,7 @@ enum WatchChatTranscriptImageRenderer {
             AppLanguagePreference.preferredLocale(rawValue: configuration.appLanguage)
         )
         .environment(\.font, rootFont)
+        .environment(\.etFontExportTemplates, fontTemplates)
         .frame(width: configuration.canvasWidth)
         .fixedSize(horizontal: false, vertical: true)
 

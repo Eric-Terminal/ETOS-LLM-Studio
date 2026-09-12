@@ -11,7 +11,7 @@ import ETOSCore
 
 struct ShimmeringText: View {
     let text: String
-    let font: Font
+    let font: ETFont
     let baseColor: Color
     let highlightColor: Color
     var duration: Double = 5
@@ -19,7 +19,7 @@ struct ShimmeringText: View {
     var body: some View {
         RainbowSweepForeground(baseColor: baseColor, duration: duration) {
             Text(text)
-                .etFont(font)
+                .etFont(font, sampleText: text)
         }
     }
 }

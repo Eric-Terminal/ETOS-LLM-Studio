@@ -201,7 +201,7 @@ struct WatchReasoningMarkdownContentView: View {
     let enableMathRendering: Bool
     let textColor: Color
     let customTextStyleColors: ChatAppearanceTextStyleColors
-    let font: Font
+    let font: ETFont
     let onCodeBlockHeaderTap: ((String) -> Void)?
     let streamingMarkdownState: ETStreamingMarkdownRenderState?
     let isStreaming: Bool

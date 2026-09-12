@@ -59,6 +59,7 @@ struct ContentView: View {
     @State var launchRecoveryRequest: Persistence.LaunchRecoveryRequest?
     @State var launchRecoveryErrorMessage: String?
     @State var rootBodyFont: Font = .body
+    @State var rootFontPreparationTask: Task<Void, Never>?
     @State var legacyMigrationErrorMessage: String?
     @State var didEnterBackgroundSinceLastActivation = false
     @State var isRequestControlsPresented = false

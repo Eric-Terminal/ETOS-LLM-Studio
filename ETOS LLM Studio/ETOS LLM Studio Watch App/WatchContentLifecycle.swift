@@ -12,10 +12,13 @@ import ETOSCore
 
 extension ContentView {
     func refreshRootBodyFont() {
-        rootBodyFont = AppFontAdapter.adaptedFont(
-            from: .body,
-            sampleText: "The quick brown fox 你好こんにちは"
-        )
+        rootFontPreparationTask?.cancel()
+        rootFontPreparationTask = Task { @MainActor in
+            let font = await AppFontAdapter.adaptedFont(from: .body)
+            guard !Task.isCancelled else { return }
+            rootBodyFont = font
+            rootFontPreparationTask = nil
+        }
     }
 
     func refreshAttachmentSourceHistory() {

@@ -386,7 +386,7 @@ struct ToolResultsDisclosureView: View, Equatable {
     private func toolResultSection(
         title: String,
         text: String,
-        font: Font,
+        font: ETFont,
         enableSelection: Bool
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {

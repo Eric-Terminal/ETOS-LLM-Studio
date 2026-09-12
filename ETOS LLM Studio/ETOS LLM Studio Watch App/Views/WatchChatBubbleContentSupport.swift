@@ -666,7 +666,7 @@ extension ChatBubble {
     func toolResultSection(
         title: String,
         text: String,
-        font: Font,
+        font: ETFont,
         maxHeight: CGFloat
     ) -> some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -685,14 +685,14 @@ extension ChatBubble {
     private struct CappedScrollableText: View {
         let text: String
         let maxHeight: CGFloat
-        let font: Font
+        let font: ETFont
         let foreground: Color
         @State private var measuredHeight: CGFloat = 0
 
         var body: some View {
             ScrollView {
                 Text(text)
-                    .etFont(font)
+                    .etFont(font, sampleText: text)
                     .foregroundColor(foreground)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(

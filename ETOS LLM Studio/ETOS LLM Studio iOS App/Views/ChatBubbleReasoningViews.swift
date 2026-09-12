@@ -91,7 +91,7 @@ struct ReasoningMarkdownContentView: View {
     let isOutgoing: Bool
     let textColor: Color
     let customTextStyleColors: ChatAppearanceTextStyleColors
-    let font: Font
+    let font: ETFont
     let streamingMarkdownState: ETStreamingMarkdownRenderState?
     let isStreaming: Bool
 

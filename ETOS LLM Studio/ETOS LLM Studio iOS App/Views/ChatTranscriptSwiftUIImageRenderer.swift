@@ -67,6 +67,7 @@ enum ChatTranscriptSwiftUIImageRenderer {
             includeReasoning: includeReasoning
         )
 
+        let fontTemplates = await ETFontResolver.shared.exportTemplates()
         let canvas = ChatTranscriptExportCanvas(
             rows: rows,
             continuationContext: preparedExport.continuationContext,
@@ -77,6 +78,7 @@ enum ChatTranscriptSwiftUIImageRenderer {
         .environment(\.colorScheme, configuration.prefersDarkAppearance ? .dark : .light)
         .environment(\.locale, configuration.locale)
         .environment(\.font, configuration.rootFont)
+        .environment(\.etFontExportTemplates, fontTemplates)
         .frame(width: configuration.width)
         .fixedSize(horizontal: false, vertical: true)
 
@@ -756,7 +758,7 @@ private final class ChatTranscriptCGImageBox: @unchecked Sendable {
 extension ChatView {
     func transcriptSwiftUIImageConfiguration(
         session: ChatSession?
-    ) -> ChatTranscriptSwiftUIImageConfiguration {
+    ) async -> ChatTranscriptSwiftUIImageConfiguration {
         let windowBounds = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .flatMap(\.windows)
@@ -798,7 +800,7 @@ extension ChatView {
             inputPlaceholder: NSLocalizedString("Message", comment: "聊天长图输入框占位文本"),
             prefersDarkAppearance: colorScheme == .dark,
             locale: AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage),
-            rootFont: AppFontAdapter.adaptedFont(
+            rootFont: await AppFontAdapter.adaptedFont(
                 from: .body,
                 sampleText: "The quick brown fox 你好こんにちは"
             ),

@@ -41,6 +41,7 @@ struct ContentView: View {
     @State private var launchRecoveryRequest: Persistence.LaunchRecoveryRequest?
     @State private var launchRecoveryErrorMessage: String?
     @State private var rootBodyFont: Font = .body
+    @State private var rootFontPreparationTask: Task<Void, Never>?
     @State private var legacyMigrationErrorMessage: String?
     @State private var isLegacyMigrationErrorPresented: Bool = false
     @State private var isNativeSettingsPresented: Bool = false
@@ -709,10 +710,13 @@ struct ContentView: View {
     }
 
     private func refreshRootBodyFont() {
-        rootBodyFont = AppFontAdapter.adaptedFont(
-            from: .body,
-            sampleText: "The quick brown fox 你好こんにちは"
-        )
+        rootFontPreparationTask?.cancel()
+        rootFontPreparationTask = Task { @MainActor in
+            let font = await AppFontAdapter.adaptedFont(from: .body)
+            guard !Task.isCancelled else { return }
+            rootBodyFont = font
+            rootFontPreparationTask = nil
+        }
     }
 
     private var legacyJSONMigrationPromptSheet: some View {
