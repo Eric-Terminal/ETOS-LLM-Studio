@@ -185,8 +185,8 @@ struct TelemetryTests {
         #expect(decoded == envelope)
     }
 
-    @Test("超过安全嵌套边界的原始诊断会省略而不会递归解码")
-    func pathologicalDiagnosticIsOmittedBeforeDecoding() throws {
+    @Test("超过安全嵌套边界时保留有限调用栈并明确标注截断")
+    func pathologicalDiagnosticRetainsBoundedEvidence() throws {
         var nestedFrame = #"{"binaryName":"deepest-frame"}"#
         for index in 0..<400 {
             nestedFrame = #"{"binaryName":"frame-\#(index)","subFrames":[\#(nestedFrame)]}"#
@@ -205,9 +205,49 @@ struct TelemetryTests {
         )
         let text = String(decoding: try TelemetryEnvelopeCodec.encode(envelope), as: UTF8.self)
 
-        #expect(text.contains(#""source_omitted":"source_nesting_limit""#))
+        #expect(text.contains(#""source_truncated":"source_nesting_limit""#))
         #expect(text.contains(#""truncated":true"#))
+        #expect(text.contains("frame-399"))
+        #expect(text.contains("callStackFrames"))
         #expect(text.contains("deepest-frame") == false)
+    }
+
+    @Test("JSON 数字零和一不被桥接为布尔，真正布尔保持原类型")
+    func numericBridgePreservesNumberTypes() throws {
+        let value = try TelemetryPayloadFlattener.flatten(Data(#"{"zero":0,"one":1,"yes":true,"no":false,"decimal":1.25,"negative":-1}"#.utf8))
+        guard case .dictionary(let object) = value else {
+            Issue.record("缺少压平对象")
+            return
+        }
+        #expect(object["zero"] == .int(0))
+        #expect(object["one"] == .int(1))
+        #expect(object["yes"] == .bool(true))
+        #expect(object["no"] == .bool(false))
+        #expect(object["decimal"] == .double(1.25))
+        #expect(object["negative"] == .int(-1))
+    }
+
+    @Test("大字段后面的版本元数据和归因线程仍能保留")
+    func oversizedDiagnosticRetainsMetadataAfterLargeValue() throws {
+        let large = String(repeating: "x", count: TelemetryPayloadFlattener.maximumSourceBytes + 1)
+        let raw = Data(#"{"padding":"\#(large)","crashDiagnostics":[{"diagnosticMetaData":{"appBuildVersion":"442"},"callStackTree":{"callStacks":[{"threadAttributed":true,"callStackRootFrames":[{"binaryName":"ETOSCore","sampleCount":1}]}]}}]}"#.utf8)
+        let value = try TelemetryPayloadFlattener.flatten(raw)
+        let encoded = String(decoding: try JSONEncoder().encode(value), as: UTF8.self)
+        #expect(encoded.contains(#""appBuildVersion":"442""#))
+        #expect(encoded.contains(#""threadAttributed":true"#))
+        #expect(encoded.contains(#""sampleCount":1"#))
+        #expect(encoded.contains(#""source_truncated":"source_size_limit""#))
+        #expect(encoded.utf8.count < 10_000)
+    }
+
+    @Test("帧预算优先留给归因线程，其他线程不冒充归因栈")
+    func attributedThreadPrecedesUnrelatedFrames() throws {
+        let noise = Array(repeating: #"{"binaryName":"other"}"#, count: TelemetryPayloadFlattener.maximumCallStackFrames).joined(separator: ",")
+        let raw = Data(#"{"crashDiagnostics":[{"callStackTree":{"callStacks":[{"threadAttributed":false,"callStackRootFrames":[\#(noise)]},{"threadAttributed":true,"callStackRootFrames":[{"binaryName":"attributed"}]}]}}]}"#.utf8)
+        let value = try TelemetryPayloadFlattener.flatten(raw)
+        let encoded = String(decoding: try JSONEncoder().encode(value), as: UTF8.self)
+        #expect(encoded.contains("attributed"))
+        #expect(encoded.contains(#""truncated":true"#))
     }
 
     @Test("非对象 JSON 不会进入遥测队列")

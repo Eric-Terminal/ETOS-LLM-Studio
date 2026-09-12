@@ -40,30 +40,24 @@ enum TelemetryPayloadFlattener {
     }
 
     static func flatten(_ rawPayloadData: Data) throws -> JSONValue {
-        guard rawPayloadData.count <= maximumSourceBytes else {
-            return omittedPayload(
-                reason: "source_size_limit",
-                sourceBytes: rawPayloadData.count,
-                sourceHash: hash(rawPayloadData)
-            )
+        let truncationReason: String?
+        let object: Any
+        if isWithinDecodingLimits(rawPayloadData) {
+            truncationReason = nil
+            object = try JSONSerialization.jsonObject(with: rawPayloadData)
+        } else {
+            truncationReason = rawPayloadData.count > maximumSourceBytes ? "source_size_limit" : "source_nesting_limit"
+            object = try TelemetryBoundedJSONReader.read(rawPayloadData)
         }
-        guard isWithinDecodingLimits(rawPayloadData) else {
-            return omittedPayload(
-                reason: "source_nesting_limit",
-                sourceBytes: rawPayloadData.count,
-                sourceHash: hash(rawPayloadData)
-            )
-        }
-
-        let object = try JSONSerialization.jsonObject(with: rawPayloadData)
         guard let dictionary = object as? [String: Any] else {
             throw TelemetryEnvelopeError.payloadIsNotJSONObject
         }
 
         var state = TransformationState()
+        state.didTruncate = truncationReason != nil
         var flattened: [String: JSONValue] = [:]
         flattened.reserveCapacity(dictionary.count + 1)
-        for key in dictionary.keys.sorted() where key != metadataKey {
+        for key in dictionary.keys.sorted(by: conversionOrder) where key != metadataKey {
             guard let value = dictionary[key] else { continue }
             let converted = convert(value, key: key, depth: 0, state: &state)
             if key.caseInsensitiveCompare(exceptionReasonKey) == .orderedSame,
@@ -77,6 +71,12 @@ enum TelemetryPayloadFlattener {
             emittedFrames: state.emittedFrames,
             didTruncate: state.didTruncate
         )
+        if let truncationReason, let metadataValue = flattened[metadataKey], case .dictionary(var info) = metadataValue {
+            info["source_truncated"] = .string(truncationReason)
+            info["source_bytes"] = .int(rawPayloadData.count)
+            info["source_sha256"] = .string(hash(rawPayloadData))
+            flattened[metadataKey] = .dictionary(info)
+        }
         return .dictionary(flattened)
     }
 
@@ -106,10 +106,6 @@ enum TelemetryPayloadFlattener {
         switch value {
         case let value as String:
             return .string(value)
-        case let value as Bool:
-            return .bool(value)
-        case let value as Int:
-            return .int(value)
         case let value as NSNumber:
             if CFGetTypeID(value) == CFBooleanGetTypeID() {
                 return .bool(value.boolValue)
@@ -118,14 +114,14 @@ enum TelemetryPayloadFlattener {
             if doubleValue.isFinite,
                doubleValue.rounded(.towardZero) == doubleValue,
                doubleValue >= Double(Int.min),
-               doubleValue <= Double(Int.max) {
+               doubleValue < Double(Int.max) {
                 return .int(value.intValue)
             }
             return .double(doubleValue)
         case let value as [String: Any]:
             var result: [String: JSONValue] = [:]
             result.reserveCapacity(value.count)
-            for childKey in value.keys.sorted() {
+            for childKey in value.keys.sorted(by: conversionOrder) {
                 guard state.remainingValues > 0 else {
                     state.didTruncate = true
                     break
@@ -206,7 +202,9 @@ enum TelemetryPayloadFlattener {
             result[key] = convert(child, key: key, depth: 0, state: &state)
         }
 
-        let rawStacks = tree["callStacks"] as? [Any] ?? []
+        let sourceStacks = tree["callStacks"] as? [Any] ?? []
+        let rawStacks = sourceStacks.filter { ($0 as? [String: Any])?["threadAttributed"] as? Bool == true }
+            + sourceStacks.filter { ($0 as? [String: Any])?["threadAttributed"] as? Bool != true }
         var flattenedStacks: [JSONValue] = []
         flattenedStacks.reserveCapacity(rawStacks.count)
         var treeWasTruncated = false
@@ -305,21 +303,17 @@ enum TelemetryPayloadFlattener {
         ])
     }
 
-    private static func omittedPayload(
-        reason: String,
-        sourceBytes: Int,
-        sourceHash: String
-    ) -> JSONValue {
-        .dictionary([
-            metadataKey: .dictionary([
-                "format": .string(payloadFormat),
-                "source_bytes": .int(sourceBytes),
-                "source_sha256": .string(sourceHash),
-                "source_omitted": .string(reason),
-                "call_stack_frames_emitted": .int(0),
-                "truncated": .bool(true)
-            ])
-        ])
+    private static func conversionOrder(_ left: String, _ right: String) -> Bool {
+        func priority(_ key: String) -> Int {
+            switch key.lowercased() {
+            case "metadata", "diagnosticmetadata": return 0
+            case "callstacktree": return 2
+            default: return 1
+            }
+        }
+        let lhs = priority(left)
+        let rhs = priority(right)
+        return lhs == rhs ? left < right : lhs < rhs
     }
 
     private static func hash(_ data: Data) -> String {
