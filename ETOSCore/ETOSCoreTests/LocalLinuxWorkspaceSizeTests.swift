@@ -71,9 +71,11 @@ struct LocalLinuxWorkspaceSizeTests {
         let original = makeWorkspace()
         try store.saveLocalAgentWorkspace(original)
         var newer = try #require(store.loadLocalAgentWorkspaces().first)
-        newer.lastUsedAt = original.lastUsedAt.addingTimeInterval(60)
+        // 该小数日期在 Date 与 Unix 时间转换后会有亚微秒舍入，不能以未入库值判断统计覆盖。
+        newer.lastUsedAt = Date(timeIntervalSinceReferenceDate: 810800000.0000001)
         newer.guestPath = "/mnt/workspaces/renamed"
         try store.saveLocalAgentWorkspace(newer)
+        newer = try #require(store.loadLocalAgentWorkspaces().first)
         try store.updateLocalAgentWorkspaceSize(original, sizeBytes: 456)
         newer.sizeBytes = 456
         #expect(try store.loadLocalAgentWorkspaces().first == newer)
