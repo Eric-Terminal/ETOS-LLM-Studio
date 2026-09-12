@@ -13,6 +13,7 @@ import UIKit
 import ETOSCore
 @testable import ETOS_LLM_Studio_App
 
+@MainActor
 struct ETOS_LLM_Studio_AppTests {
 
     @Test("相邻气泡的局部重测量身份不会冲突")

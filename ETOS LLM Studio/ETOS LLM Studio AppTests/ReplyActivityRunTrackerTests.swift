@@ -8,6 +8,7 @@ import Testing
 @testable import ETOS_LLM_Studio_App
 
 @Suite("回复实时活动状态测试")
+@MainActor
 struct ReplyActivityRunTrackerTests {
     @Test("普通 Chat 从开始到完成保持同一个运行身份")
     func keepsStableRunIdentityUntilCompletion() {

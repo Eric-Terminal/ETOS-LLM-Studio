@@ -16,7 +16,7 @@ struct ChatLongConversationRuntimeTests {
     @MainActor
     @Test("四键跨越历史边界时只换入相邻消息")
     func testAdjacentNavigationPreservesConfiguredHistoryWindowSize() async throws {
-        let fixture = await makeFixture(
+        let fixture = try await makeFixture(
             automaticHistoryLoading: false,
             timelineNavigationEnabled: true,
             markdownEnabled: true,
@@ -49,7 +49,7 @@ struct ChatLongConversationRuntimeTests {
     @MainActor
     @Test("四条超长 Markdown 消息启用时间线导航后仍允许停留在顶部")
     func testFourLongMarkdownMessagesRemainAtTopDuringUserInteraction() async throws {
-        let fixture = await makeFixture(
+        let fixture = try await makeFixture(
             automaticHistoryLoading: false,
             timelineNavigationEnabled: true,
             markdownEnabled: true,
@@ -106,7 +106,7 @@ struct ChatLongConversationRuntimeTests {
     @MainActor
     @Test("长会话离开底部后细小滚动不会形成状态反馈或自行回底")
     func testLongConversationRemainsStableAwayFromBottom() async throws {
-        let fixture = await makeFixture(automaticHistoryLoading: true)
+        let fixture = try await makeFixture(automaticHistoryLoading: true)
         defer { fixture.dispose() }
         let scrollView = try #require(fixture.chatScrollView)
         let maximumOffset = maximumContentOffsetY(of: scrollView)
@@ -160,7 +160,7 @@ struct ChatLongConversationRuntimeTests {
     @Test("真实聊天视图在自动和手动历史扩窗时保持同一阅读位置")
     func testHistoryLoadingPreservesViewportInBothModes() async throws {
         for usesAutomaticHistory in [true, false] {
-            let fixture = await makeFixture(
+            let fixture = try await makeFixture(
                 automaticHistoryLoading: usesAutomaticHistory
             )
             defer { fixture.dispose() }
@@ -243,7 +243,8 @@ struct ChatLongConversationRuntimeTests {
         lazyLoadMessageCount: Int = 5,
         messageCount: Int = 60,
         paragraphCount: Int = 8
-    ) async -> HostedChatFixture {
+    ) async throws -> HostedChatFixture {
+        let windowScene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let appConfig = AppConfigStore.shared
         let savedConfiguration = SavedChatConfiguration(appConfig: appConfig)
         appConfig.chatTimelineNavigationEnabled = timelineNavigationEnabled
@@ -278,9 +279,8 @@ struct ChatLongConversationRuntimeTests {
             }
         )
         let host = UIHostingController(rootView: rootView)
-        let window = UIWindow(
-            frame: CGRect(x: 0, y: 0, width: 390, height: 844)
-        )
+        let window = UIWindow(windowScene: windowScene)
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
         window.rootViewController = host
         window.isHidden = false
         host.view.frame = window.bounds
@@ -351,7 +351,7 @@ struct ChatLongConversationRuntimeTests {
                 这是用于超长 Markdown 会话滚动验收的正文，包含 **强调内容**、`inline code` 与自然换行。
                 """
             }.joined(separator: "\n\n")
-            ChatMessage(
+            return ChatMessage(
                 role: index.isMultiple(of: 2) ? .user : .assistant,
                 content: """
                 第 \(index + 1) 条测试消息

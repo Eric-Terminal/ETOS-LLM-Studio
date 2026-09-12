@@ -11,6 +11,7 @@ import Testing
 @testable import ETOS_LLM_Studio_App
 
 @Suite("聊天输入框实体键盘测试")
+@MainActor
 struct ChatComposerHardwareKeyboardPolicyTests {
     @Test("开启设置后单独按 Return 发送")
     func plainReturnSendsWhenEnabled() {

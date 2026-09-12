@@ -11,6 +11,7 @@ import UIKit
 import ETOSCore
 @testable import ETOS_LLM_Studio_App
 
+@MainActor
 struct ChatScrollCoordinatorTests {
 
     @Test("弹性滚动不会拉开同轮相连气泡")

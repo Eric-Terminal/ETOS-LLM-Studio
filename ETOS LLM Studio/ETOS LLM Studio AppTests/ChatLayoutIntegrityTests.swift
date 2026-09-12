@@ -9,6 +9,7 @@ import CoreGraphics
 import Testing
 @testable import ETOS_LLM_Studio_App
 
+@MainActor
 struct ChatLayoutIntegrityTests {
     @Test("只识别位于视口安全区域的相邻消息重叠")
     func detectsAdjacentOverlapInsideViewport() {
