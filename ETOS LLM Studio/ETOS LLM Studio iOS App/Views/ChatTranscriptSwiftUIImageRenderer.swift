@@ -61,9 +61,13 @@ enum ChatTranscriptSwiftUIImageRenderer {
         let preloadedAttachments = try await attachmentPreload
         try Task.checkCancellation()
 
+        let versionIndex = await Task.detached(priority: .userInitiated) {
+            ChatResponseAttemptSupport.versionInfoByMessageID(in: sourceMessages)
+        }.value
         let rows = makeRows(
             preparedMessages: preparedMessages,
             sourceMessages: sourceMessages,
+            versionIndex: versionIndex,
             includeReasoning: includeReasoning
         )
 
@@ -140,6 +144,7 @@ enum ChatTranscriptSwiftUIImageRenderer {
     private static func makeRows(
         preparedMessages: [ChatTranscriptPreparedMessage],
         sourceMessages: [ChatMessage],
+        versionIndex: [UUID: ChatResponseAttemptVersionInfo],
         includeReasoning: Bool
     ) -> [ChatTranscriptRenderedRow] {
         let displaySourceMessages = ChatTranscriptExportService.visibleImageMessages(
@@ -194,10 +199,7 @@ enum ChatTranscriptSwiftUIImageRenderer {
                 messageActionBarContinuesToNext: continuesActionBar,
                 connectsTimelineFromPrevious: connectsFromPrevious,
                 connectsTimelineToNext: connectsToNext,
-                responseAttemptVersionInfo: ChatResponseAttemptSupport.versionInfo(
-                    for: prepared.message,
-                    in: sourceMessages
-                ),
+                responseAttemptVersionInfo: versionIndex[prepared.message.id],
                 canRetry: retryableMessageIDs.contains(prepared.message.id),
                 disablesAdvancedRenderer: prepared.markdown.containsMermaidContent
                     || prepared.reasoningMarkdown?.containsMermaidContent == true

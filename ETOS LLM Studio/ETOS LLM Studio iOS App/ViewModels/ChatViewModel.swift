@@ -70,6 +70,11 @@ final class ChatViewModel: ObservableObject {
     @Published var preparedReasoningMarkdownByMessageID: [UUID: ETPreparedMarkdownRenderPayload] = [:]
     @Published var reasoningThinkingTitleByMessageID: [UUID: String] = [:]
     var allMessagesForSession: [ChatMessage] = []
+    @Published var responseAttemptVersionIndex: [UUID: ChatResponseAttemptVersionInfo] = [:]
+    let responseAttemptIndexWorker = ChatResponseAttemptIndexWorker()
+    var responseAttemptIndexTask: Task<Void, Never>?
+    var responseAttemptIndexRevision = 0
+    var responseAttemptIndexPublishedRevision = -1
     @Published var isHistoryFullyLoaded: Bool = false
     @Published var isLaterHistoryFullyLoaded: Bool = true
     @Published var userInput: String = ""

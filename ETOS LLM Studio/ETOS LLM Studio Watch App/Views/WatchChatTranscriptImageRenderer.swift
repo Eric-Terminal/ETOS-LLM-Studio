@@ -186,6 +186,9 @@ enum WatchChatTranscriptImageRenderer {
             }
         }
 
+        let versionIndex = await Task.detached(priority: .userInitiated) {
+            ChatResponseAttemptSupport.versionInfoByMessageID(in: sourceMessages)
+        }.value
         return displayedMessages.indices.map { index in
             let message = displayedMessages[index]
             let visualMessage = visualMessages[index]
@@ -221,10 +224,7 @@ enum WatchChatTranscriptImageRenderer {
                 connectsTimelineToNext: mergeWithNext
                     && hasTimelineContent(message)
                     && hasTimelineContent(next),
-                responseAttemptVersionInfo: ChatResponseAttemptSupport.versionInfo(
-                    for: message,
-                    in: sourceMessages
-                ),
+                responseAttemptVersionInfo: versionIndex[message.id],
                 canRetry: retryableMessageIDs.contains(message.id)
             )
         }

@@ -35,6 +35,10 @@ extension ChatViewModel {
         historyWindowSessionID = sessionID
         historyWindow = nil
         allMessagesForSession = []
+        responseAttemptIndexTask?.cancel()
+        responseAttemptIndexRevision &+= 1
+        responseAttemptVersionIndex = [:]
+        responseAttemptIndexPublishedRevision = -1
         visibleMessagesCache = []
         retainedRenderMessageIDs.removeAll(keepingCapacity: true)
         messageStateByID.removeAll(keepingCapacity: true)
@@ -53,6 +57,7 @@ extension ChatViewModel {
         let previousVisibleMessages = visibleMessagesCache
         let previousHistoryWindow = historyWindow
         allMessagesForSession = incomingMessages
+        prepareResponseAttemptIndex(incomingMessages, sessionID: sessionID)
         refreshVisibleMessagesCache()
         if previousVisibleMessages.isEmpty, !visibleMessagesCache.isEmpty {
             historyWindow = nil
@@ -99,6 +104,23 @@ extension ChatViewModel {
         }
 
         updateDisplayedMessages()
+    }
+
+    func prepareResponseAttemptIndex(_ messages: [ChatMessage], sessionID: UUID?) {
+        responseAttemptIndexTask?.cancel()
+        responseAttemptIndexRevision &+= 1
+        let revision = responseAttemptIndexRevision
+        responseAttemptIndexTask = Task { [weak self, worker = responseAttemptIndexWorker] in
+            let index = await worker.prepare(messages: messages, sessionID: sessionID)
+            guard !Task.isCancelled, let self,
+                  self.responseAttemptIndexRevision == revision,
+                  self.historyWindowSessionID == sessionID else { return }
+            if self.responseAttemptIndexPublishedRevision != index.revision {
+                self.responseAttemptIndexPublishedRevision = index.revision
+                self.responseAttemptVersionIndex = index.entries
+            }
+            self.responseAttemptIndexTask = nil
+        }
     }
 
     func updateDisplayedStatesIfNeeded(_ newMessages: [ChatMessage]) {

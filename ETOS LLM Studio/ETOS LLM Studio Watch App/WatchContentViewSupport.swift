@@ -734,6 +734,7 @@ extension ContentView {
         if let message = viewModel.allMessagesForSession.first(where: { $0.id == messageID }) {
             MessageActionsView(
                 message: message,
+                responseAttemptVersionInfo: viewModel.responseAttemptVersionInfo(for: message),
                 canRetry: viewModel.canRetry(message: message),
                 canRewrite: viewModel.canRewrite(message: message),
                 onInsertText: { text in

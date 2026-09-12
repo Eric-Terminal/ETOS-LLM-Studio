@@ -174,6 +174,43 @@ public enum ChatResponseAttemptSupport {
         )
     }
 
+    /// 一份会话快照只整理一次分组、排序与轮次；气泡按 ID 查询，避免逐行扫描整段会话。
+    public static func versionInfoByMessageID(in messages: [ChatMessage]) -> [UUID: ChatResponseAttemptVersionInfo] {
+        let selectedByGroup = selectedAttemptIDsByGroup(in: messages)
+        var ordersByGroup: [UUID: [UUID: AttemptOrder]] = [:]
+        var visible: [ChatMessage] = []
+        for (position, message) in messages.enumerated() {
+            if let group = message.responseGroupID, let attempt = message.responseAttemptID {
+                recordAttemptOrder(attemptID: attempt, explicitIndex: message.responseAttemptIndex, position: position, in: &ordersByGroup[group, default: [:]])
+                if let selected = selectedByGroup[group], selected != attempt { continue }
+            }
+            visible.append(message)
+        }
+
+        var infoByGroup: [UUID: ChatResponseAttemptVersionInfo] = [:]
+        for (group, orders) in ordersByGroup {
+            let attempts = orderedAttemptIDs(from: orders)
+            guard attempts.count > 1, let selected = selectedByGroup[group],
+                  let index = attempts.firstIndex(of: selected) else { continue }
+            infoByGroup[group] = ChatResponseAttemptVersionInfo(responseGroupID: group, currentAttemptID: selected, currentIndex: index, totalCount: attempts.count)
+        }
+
+        var inferredGroups: [UUID: UUID] = [:]
+        for turn in ChatConversationTurnSupport.turns(in: visible) {
+            guard let anchor = turn.responseGroupAnchorIndex else { continue }
+            let group = visible[anchor].id
+            for index in turn.range { inferredGroups[visible[index].id] = group }
+        }
+        var result: [UUID: ChatResponseAttemptVersionInfo] = [:]
+        for message in messages {
+            guard let group = message.responseGroupID ?? inferredGroups[message.id],
+                  let info = infoByGroup[group] else { continue }
+            if let attempt = message.responseAttemptID, attempt != info.currentAttemptID { continue }
+            result[message.id] = info
+        }
+        return result
+    }
+
     public static func selectPreviousAttempt(for message: ChatMessage, in messages: [ChatMessage]) -> [ChatMessage]? {
         guard let info = versionInfo(for: message, in: messages), info.currentIndex > 0 else { return nil }
         return selectAttempt(attemptID: orderedAttemptIDs(for: info.responseGroupID, in: messages)[info.currentIndex - 1], groupID: info.responseGroupID, in: messages)
@@ -304,14 +341,12 @@ public enum ChatResponseAttemptSupport {
             }
 
             guard let attemptID = message.responseAttemptID else { continue }
-            var orderByID = orderByGroup[groupID, default: [:]]
             recordAttemptOrder(
                 attemptID: attemptID,
                 explicitIndex: message.responseAttemptIndex,
                 position: position,
-                in: &orderByID
+                in: &orderByGroup[groupID, default: [:]]
             )
-            orderByGroup[groupID] = orderByID
         }
 
         var selectedByGroup = anchorSelectionByGroup

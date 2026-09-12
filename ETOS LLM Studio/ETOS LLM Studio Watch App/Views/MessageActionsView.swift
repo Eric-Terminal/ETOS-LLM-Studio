@@ -16,6 +16,7 @@ struct MessageActionsView: View {
     // MARK: - 属性与操作
     
     let message: ChatMessage
+    let responseAttemptVersionInfo: ChatResponseAttemptVersionInfo?
     let canRetry: Bool
     let canRewrite: Bool
     let onInsertText: (String) -> Void
@@ -46,6 +47,7 @@ struct MessageActionsView: View {
 
     init(
         message: ChatMessage,
+        responseAttemptVersionInfo: ChatResponseAttemptVersionInfo?,
         canRetry: Bool,
         canRewrite: Bool,
         onInsertText: @escaping (String) -> Void,
@@ -74,6 +76,7 @@ struct MessageActionsView: View {
         totalMessages: Int
     ) {
         self.message = message
+        self.responseAttemptVersionInfo = responseAttemptVersionInfo
         self.canRetry = canRetry
         self.canRewrite = canRewrite
         self.onInsertText = onInsertText
@@ -119,10 +122,6 @@ struct MessageActionsView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
     @ObservedObject private var ttsManager = TTSManager.shared
     @Environment(\.colorScheme) private var colorScheme
-
-    private var responseAttemptVersionInfo: ChatResponseAttemptVersionInfo? {
-        ChatResponseAttemptSupport.versionInfo(for: message, in: allMessages)
-    }
 
     private var hasDisplayVersions: Bool {
         responseAttemptVersionInfo != nil || message.hasMultipleVersions

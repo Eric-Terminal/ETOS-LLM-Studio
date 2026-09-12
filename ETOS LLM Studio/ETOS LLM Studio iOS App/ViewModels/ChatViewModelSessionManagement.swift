@@ -320,7 +320,7 @@ extension ChatViewModel {
     }
 
     func responseAttemptVersionInfo(for message: ChatMessage) -> ChatResponseAttemptVersionInfo? {
-        ChatResponseAttemptSupport.versionInfo(for: message, in: allMessagesForSession)
+        responseAttemptVersionIndex[message.id]
     }
 
     func hasDisplayVersions(for message: ChatMessage) -> Bool {
