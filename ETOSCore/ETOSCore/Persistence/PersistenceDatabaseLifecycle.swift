@@ -24,10 +24,7 @@ extension Persistence {
     static func activeGRDBStore() -> PersistenceGRDBStore? {
         guard shouldUseGRDBStore() else { return nil }
         guard !DatabaseEncryptionManager.shared.requiresManualUnlock else { return nil }
-        if let store = cachedGRDBStore {
-            return store
-        }
-
+        // 读取也要受锁保护；恢复或测试重置会释放缓存，先取引用再加锁仍有 retain 竞态。
         grdbStoreLock.lock()
         defer { grdbStoreLock.unlock() }
 
@@ -82,12 +79,9 @@ extension Persistence {
     static func activeAuxiliaryStore(kind: AuxiliaryStoreKind) -> PersistenceAuxiliaryGRDBStore? {
         guard shouldUseGRDBStore() else { return nil }
         guard !DatabaseEncryptionManager.shared.requiresManualUnlock else { return nil }
-        if let store = cachedAuxiliaryStores[kind] {
-            return store
-        }
-
         var shouldPersistRecoveryNotice = false
         let resolvedStore: PersistenceAuxiliaryGRDBStore? = {
+            // 字典查询与引用保留必须和初始化、清空共用同一把锁。
             auxiliaryStoreLock.lock()
             defer { auxiliaryStoreLock.unlock() }
 
