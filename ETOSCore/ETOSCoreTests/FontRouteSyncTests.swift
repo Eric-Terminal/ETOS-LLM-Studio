@@ -16,6 +16,102 @@ import SwiftUI
 @Suite("字体路由与同步测试", .serialized)
 struct FontRouteSyncTests {
 
+    @Test("自定义字体导出保持语义字号与显式字号的原缩放行为", arguments: [FontFallbackScope.segment, .character])
+    func testCustomExportPreservesSizing(scope: FontFallbackScope) async throws {
+        try await withIsolatedFontStore {
+            let fixture = try loadSystemFontFixture()
+            let imported = try FontLibrary.importFont(data: fixture.data, fileName: "export-sizing-\(fixture.fileName)")
+            FontLibrary.updateChain([imported.id], for: .body)
+            FontLibrary.updateRuntimeSettings(isCustomFontEnabled: true, fallbackScope: scope, customFontScale: 1.5)
+            for descriptor in [ETFont.body, .system(size: 14)] {
+                let expected = await ETFontResolver.shared.font(for: descriptor, sampleText: "∞∑", sizeCategory: .extraExtraLarge)
+                try await verifyCustomExportLayout(descriptor: descriptor, expectedFont: expected)
+            }
+        }
+    }
+
+    @MainActor
+    private func verifyCustomExportLayout(descriptor: ETFont, expectedFont: Font) async throws {
+        let text = Text(verbatim: "∞∑")
+        let preparation = ETFontExportPreparation()
+        let renderer = ImageRenderer(content: text.modifier(ETFontModifier(descriptor, text: text))
+            .environment(\.sizeCategory, .extraExtraLarge)
+            .environment(\.etFontExportPreparation, preparation))
+        renderer.render { _, _ in }
+        #expect(try await preparation.preparePendingFonts())
+        var actual = CGSize.zero
+        renderer.render { size, _ in actual = size }
+        let expectedRenderer = ImageRenderer(content: text.font(expectedFont).environment(\.sizeCategory, .extraExtraLarge))
+        var expected = CGSize.zero
+        expectedRenderer.render { size, _ in expected = size }
+        #expect(abs(actual.width - expected.width) < 0.5, "字号 \(descriptor.basePointSize)，实际 \(actual)，预期 \(expected)")
+        #expect(abs(actual.height - expected.height) < 0.5, "字号 \(descriptor.basePointSize)，实际 \(actual)，预期 \(expected)")
+    }
+
+    @Test("Text 标签使用实际混排文字保持整段和逐字回退", arguments: [FontFallbackScope.segment, .character])
+    func testTextSamplePreservesFallbackScope(scope: FontFallbackScope) async throws {
+        try await withIsolatedFontStore {
+            let fixture = try loadSystemFontFixture()
+            let imported = try FontLibrary.importFont(data: fixture.data, fileName: "label-\(fixture.fileName)")
+            for role in [FontSemanticRole.body, .emphasis, .strong, .code] {
+                FontLibrary.updateChain([imported.id], for: role)
+            }
+            FontLibrary.updateRuntimeSettings(isCustomFontEnabled: true, fallbackScope: scope, customFontScale: 1)
+            let sample = "A你好\u{0378}"
+            for descriptor in [ETFont.body, .body.italic(), .body.bold(), .body.monospaced()] {
+                let request = ETFontPreparationRequest(
+                    descriptor: descriptor,
+                    sampleText: nil,
+                    text: Text(verbatim: sample),
+                    locale: Locale(identifier: "zh_CN"),
+                    calendar: Calendar(identifier: .gregorian),
+                    timeZone: TimeZone(secondsFromGMT: 0)!,
+                    sizeCategory: .extraExtraLarge,
+                    revision: FontLibrary.adapterCacheToken()
+                )
+                let actual = await ETFontResolver.shared.font(for: request)
+                let expected = await ETFontResolver.shared.font(for: descriptor, sampleText: sample, sizeCategory: .extraExtraLarge)
+                #expect(actual == expected)
+                if scope == .segment {
+                    // 不可覆盖的字符要求整段退回系统字体，不能悄悄改成首选字体逐字回退。
+                    #expect(actual == descriptor.systemFont)
+                }
+            }
+        }
+    }
+
+    @Test("离屏渲染等待实际字体准备并使用更新后的字号测量")
+    @MainActor
+    func testExportWaitsForPreparedFonts() async throws {
+        try await withIsolatedFontStore {
+            FontLibrary.updateRuntimeSettings(isCustomFontEnabled: false, fallbackScope: .segment, customFontScale: 2)
+            try await verifyPreparedExportLayout()
+        }
+    }
+
+    @MainActor
+    private func verifyPreparedExportLayout() async throws {
+        let preparation = ETFontExportPreparation()
+        let text = Text(verbatim: "实际字号 Export")
+        let renderer = ImageRenderer(content: text
+            .modifier(ETFontModifier(.body, text: text))
+            .environment(\.etFontExportPreparation, preparation)
+            .environment(\.sizeCategory, .extraExtraLarge))
+        var initialSize = CGSize.zero
+        renderer.render { size, _ in initialSize = size }
+        #expect(try await preparation.preparePendingFonts())
+        var preparedSize = CGSize.zero
+        renderer.render { size, _ in preparedSize = size }
+        #expect(preparedSize.height > initialSize.height * 1.5)
+        #expect(try await !preparation.preparePendingFonts())
+
+        let expectedFont = await ETFontResolver.shared.font(for: .body, sizeCategory: .extraExtraLarge)
+        let expectedRenderer = ImageRenderer(content: text.font(expectedFont).environment(\.sizeCategory, .extraExtraLarge))
+        var expectedSize = CGSize.zero
+        expectedRenderer.render { size, _ in expectedSize = size }
+        #expect(preparedSize == expectedSize)
+    }
+
     @Test("后台字体缓存随字号倍率和动态字体类别更新")
     func testPreparedFontInvalidatesForScaleAndDynamicType() async throws {
         try await withIsolatedFontStore {

@@ -7,9 +7,15 @@ extension View {
     }
 }
 
+extension Text {
+    func etFont(_ font: ETFont?, sampleText: String? = nil) -> some View {
+        modifier(ETFontModifier(font, sampleText: sampleText, text: self))
+    }
+}
+
 enum AppFontAdapter {
-    static func adaptedFont(from font: ETFont, sampleText: String? = nil) async -> Font {
-        await ETFontResolver.shared.font(for: font, sampleText: sampleText)
+    static func adaptedFont(from font: ETFont, sampleText: String? = nil, sizeCategory: ContentSizeCategory = .large) async -> Font {
+        await ETFontResolver.shared.font(for: font, sampleText: sampleText, sizeCategory: sizeCategory)
     }
 
     static func scaledSystemPointSize(from font: ETFont) -> CGFloat {

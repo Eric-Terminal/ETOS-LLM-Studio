@@ -22,6 +22,7 @@ struct WatchChatTranscriptImageConfiguration: Sendable {
     let inputPlaceholder: String
     let prefersDarkAppearance: Bool
     let appLanguage: String
+    let sizeCategory: ContentSizeCategory
     let backgroundImageURL: URL?
     let backgroundOpacity: Double
     let backgroundBlurRadius: Double
@@ -66,8 +67,8 @@ enum WatchChatTranscriptImageRenderer {
         try Task.checkCancellation()
 
         let rows = preparedRows.map(WatchChatTranscriptRenderRow.init)
-        let rootFont = await AppFontAdapter.adaptedFont(from: .body)
-        let fontTemplates = await ETFontResolver.shared.exportTemplates()
+        let rootFont = await AppFontAdapter.adaptedFont(from: .body, sizeCategory: configuration.sizeCategory)
+        let fontPreparation = ETFontExportPreparation()
         let canvas = WatchChatTranscriptCanvas(
             rows: rows,
             continuationContext: preparedExport.continuationContext,
@@ -85,7 +86,8 @@ enum WatchChatTranscriptImageRenderer {
             AppLanguagePreference.preferredLocale(rawValue: configuration.appLanguage)
         )
         .environment(\.font, rootFont)
-        .environment(\.etFontExportTemplates, fontTemplates)
+        .environment(\.sizeCategory, configuration.sizeCategory)
+        .environment(\.etFontExportPreparation, fontPreparation)
         .frame(width: configuration.canvasWidth)
         .fixedSize(horizontal: false, vertical: true)
 
@@ -94,9 +96,12 @@ enum WatchChatTranscriptImageRenderer {
         renderer.isOpaque = true
 
         var measuredSize = CGSize.zero
-        renderer.render(rasterizationScale: 1) { size, _ in
-            measuredSize = size
-        }
+        repeat {
+            try Task.checkCancellation()
+            renderer.render(rasterizationScale: 1) { size, _ in
+                measuredSize = size
+            }
+        } while try await fontPreparation.preparePendingFonts()
         guard measuredSize.width > 0, measuredSize.height > 0 else {
             throw ChatTranscriptExportError.imageRenderFailed
         }

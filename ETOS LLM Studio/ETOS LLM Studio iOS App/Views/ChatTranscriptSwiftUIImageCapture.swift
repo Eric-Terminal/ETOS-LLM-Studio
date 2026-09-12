@@ -45,7 +45,8 @@ enum ChatTranscriptSwiftUIImageCapture {
         viewportHeight: CGFloat,
         prefersDarkAppearance: Bool
     ) async throws -> ChatTranscriptCapturedImage {
-        let hostingController = UIHostingController(rootView: canvas)
+        let fontPreparation = ETFontExportPreparation()
+        let hostingController = UIHostingController(rootView: canvas.environment(\.etFontExportPreparation, fontPreparation))
         hostingController.view.backgroundColor = .clear
         hostingController.safeAreaRegions = []
         hostingController.overrideUserInterfaceStyle = prefersDarkAppearance ? .dark : .light
@@ -87,7 +88,8 @@ enum ChatTranscriptSwiftUIImageCapture {
             hostingController: hostingController,
             scrollView: scrollView,
             rootController: rootController,
-            width: width
+            width: width,
+            fontPreparation: fontPreparation
         )
         let scale = try renderScale(width: width, height: height)
         let pixelWidth = Int(ceil(width * scale))
@@ -156,7 +158,8 @@ enum ChatTranscriptSwiftUIImageCapture {
         hostingController: UIHostingController<Canvas>,
         scrollView: UIScrollView,
         rootController: UIViewController,
-        width: CGFloat
+        width: CGFloat,
+        fontPreparation: ETFontExportPreparation
     ) async throws -> CGFloat {
         var heightTracker = ChatTranscriptExportHeightTracker()
         var resolvedHeight = hostingController.view.frame.height
@@ -164,6 +167,9 @@ enum ChatTranscriptSwiftUIImageCapture {
         // 测量与截图必须复用同一棵已挂载视图，等待异步 Markdown 和字体布局稳定。
         for _ in 0..<maximumLayoutPassCount {
             try Task.checkCancellation()
+            if try await fontPreparation.preparePendingFonts() {
+                heightTracker = ChatTranscriptExportHeightTracker()
+            }
             rootController.view.layoutIfNeeded()
             hostingController.view.setNeedsLayout()
             hostingController.view.layoutIfNeeded()

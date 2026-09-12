@@ -12,6 +12,7 @@ import WatchKit
 import ETOSCore
 
 struct ChatExportFormatsView: View {
+    @Environment(\.sizeCategory) private var sizeCategory
     let session: ChatSession?
     let messages: [ChatMessage]
     let upToMessageID: UUID?
@@ -407,6 +408,7 @@ struct ChatExportFormatsView: View {
             inputPlaceholder: NSLocalizedString("输入...", comment: "Default input placeholder on watch"),
             prefersDarkAppearance: colorScheme == .dark,
             appLanguage: appConfig.appLanguage,
+            sizeCategory: sizeCategory,
             backgroundImageURL: backgroundURL,
             backgroundOpacity: WatchBackgroundOpacitySetting.normalized(appConfig.backgroundOpacity),
             backgroundBlurRadius: max(0, appConfig.backgroundBlur),

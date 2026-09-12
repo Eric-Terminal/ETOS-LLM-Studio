@@ -22,6 +22,7 @@ import UniformTypeIdentifiers
 struct ChatView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.sizeCategory) var sizeCategory
     @Environment(\.accessibilityReduceMotion) var accessibilityReduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) var accessibilityVoiceOverEnabled
     @Environment(\.scenePhase) var scenePhase

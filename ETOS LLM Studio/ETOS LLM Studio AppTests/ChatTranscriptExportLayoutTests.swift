@@ -8,11 +8,37 @@
 
 import Combine
 import CoreGraphics
+import ETOSCore
 import SwiftUI
 import Testing
 @testable import ETOS_LLM_Studio_App
 
 struct ChatTranscriptExportLayoutTests {
+    @MainActor
+    @Test("真实画布截图等待文字重载的后台字体完成")
+    func captureWaitsForPreparedFonts() async throws {
+        let enabled = FontLibrary.isCustomFontEnabled
+        let scope = FontLibrary.fallbackScope
+        let scale = FontLibrary.customFontScale
+        defer {
+            FontLibrary.updateRuntimeSettings(isCustomFontEnabled: enabled, fallbackScope: scope, customFontScale: scale)
+        }
+        let canvas = Text(verbatim: "字体 Font")
+            .etFont(.body)
+            .environment(\.sizeCategory, .extraExtraLarge)
+            .frame(width: 200)
+            .fixedSize(horizontal: false, vertical: true)
+        FontLibrary.updateRuntimeSettings(isCustomFontEnabled: false, fallbackScope: .segment, customFontScale: 1)
+        let regular = try await ChatTranscriptSwiftUIImageCapture.capture(
+            canvas: canvas, width: 200, viewportHeight: 400, prefersDarkAppearance: false
+        )
+        FontLibrary.updateRuntimeSettings(isCustomFontEnabled: false, fallbackScope: .segment, customFontScale: 2)
+        let enlarged = try await ChatTranscriptSwiftUIImageCapture.capture(
+            canvas: canvas, width: 200, viewportHeight: 400, prefersDarkAppearance: false
+        )
+        #expect(enlarged.image.height > regular.image.height * 3 / 2)
+    }
+
     @Test("导出高度连续稳定后才开始截图")
     func waitsForStableHeightBeforeCapture() {
         var tracker = ChatTranscriptExportHeightTracker()

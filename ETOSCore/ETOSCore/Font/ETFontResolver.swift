@@ -14,15 +14,20 @@ public actor ETFontResolver {
         let descriptor: ETFont
         let sample: String?
         let sizeCategory: ContentSizeCategory
+        let scaledBasePointSize: CGFloat?
     }
 
     public func font(for descriptor: ETFont, sampleText: String? = nil, sizeCategory: ContentSizeCategory = .large) -> Font {
+        cachedFont(for: descriptor, sampleText: sampleText, sizeCategory: sizeCategory, scaledBasePointSize: nil)
+    }
+
+    private func cachedFont(for descriptor: ETFont, sampleText: String?, sizeCategory: ContentSizeCategory, scaledBasePointSize: CGFloat?) -> Font {
         let currentRevision = FontLibrary.adapterCacheToken()
         if revision != currentRevision {
             revision = currentRevision
             cache.removeAll(keepingCapacity: true)
         }
-        let request = Request(descriptor: descriptor, sample: sampleText.map(Self.sample), sizeCategory: sizeCategory)
+        let request = Request(descriptor: descriptor, sample: sampleText.map(Self.sample), sizeCategory: sizeCategory, scaledBasePointSize: scaledBasePointSize)
         if let cached = cache[request] { return cached }
         let font = resolve(request)
         if cache.count >= 512 { cache.removeAll(keepingCapacity: true) }
@@ -30,19 +35,19 @@ public actor ETFontResolver {
         return font
     }
 
-    /// ImageRenderer 不运行视图 task，导出前必须准备可同步使用的字体模板。
-    public func exportTemplates() -> ETFontExportTemplates {
-        var descriptors: [FontSemanticRole: CTFontDescriptor] = [:]
-        if FontLibrary.isCustomFontEnabled {
-            for role in [FontSemanticRole.body, .emphasis, .strong, .code] {
-                guard let primary = FontLibrary.resolvedPostScriptName(for: role) else { continue }
-                let cascade = FontLibrary.fallbackPostScriptNames(for: role).filter { $0 != primary }
-                    .map { CTFontDescriptorCreateWithNameAndSize($0 as CFString, 0) }
-                let attributes: [CFString: Any] = [kCTFontNameAttribute: primary, kCTFontCascadeListAttribute: cascade]
-                descriptors[role] = CTFontDescriptorCreateWithAttributes(attributes as CFDictionary)
-            }
+    func font(for request: ETFontPreparationRequest) -> Font? {
+        guard let descriptor = request.descriptor else { return nil }
+        var sampleText = request.sampleText
+        if sampleText == nil, let text = request.text, FontLibrary.isCustomFontEnabled {
+            var environment = EnvironmentValues()
+            environment.locale = request.locale
+            environment.calendar = request.calendar
+            environment.timeZone = request.timeZone
+            environment.sizeCategory = request.sizeCategory
+            // 使用 SDK 导出的 Text 解析入口，不遍历其私有存储；解析和样本截取均留在 actor。
+            sampleText = text._resolveText(in: environment)
         }
-        return ETFontExportTemplates(descriptors: descriptors, scale: CGFloat(FontLibrary.customFontScale))
+        return cachedFont(for: descriptor, sampleText: sampleText, sizeCategory: request.sizeCategory, scaledBasePointSize: request.scaledBasePointSize)
     }
 
     private static func sample(_ text: String) -> String {
@@ -56,14 +61,25 @@ public actor ETFontResolver {
     private func resolve(_ request: Request) -> Font {
         let descriptor = request.descriptor
         let scale = CGFloat(FontLibrary.customFontScale)
-        let pointSize = descriptor.basePointSize * scale
+        let fallbackScope = FontLibrary.fallbackScope
         let candidates = FontLibrary.fallbackPostScriptNames(for: descriptor.role)
-        let primary: String?
-        if let sample = request.sample, !sample.isEmpty {
-            primary = FontLibrary.resolvePostScriptName(for: descriptor.role, sampleText: sample)
-        } else {
-            primary = FontLibrary.resolvedPostScriptName(for: descriptor.role)
+        let defaultSample: String
+        // 非 Text 控件和空文字沿用旧适配器的语义样本，仍然遵守整段回退配置。
+        switch descriptor.role {
+        case .body: defaultSample = "The quick brown fox 你好こんにちは"
+        case .emphasis: defaultSample = "Emphasis 斜体预览 こんにちは"
+        case .strong: defaultSample = "Strong 粗体预览 こんにちは"
+        case .code: defaultSample = "let value = 42 // 代码"
         }
+        let sample = request.sample.flatMap { $0.isEmpty ? nil : $0 } ?? defaultSample
+        let primary = FontLibrary.resolvePostScriptName(for: descriptor.role, sampleText: sample)
+#if os(watchOS)
+        // watchOS 没有指定字号 trait 的 UIFontMetrics 接口，语义字号使用视图环境度量。
+        let baseSize = descriptor.textStyle != nil ? request.scaledBasePointSize ?? descriptor.basePointSize : descriptor.basePointSize
+#else
+        let baseSize = descriptor.basePointSize
+#endif
+        let pointSize = baseSize * scale
 
         guard FontLibrary.isCustomFontEnabled, let primary else {
             if abs(scale - 1) < 0.001 { return descriptor.systemFont }
@@ -83,9 +99,7 @@ public actor ETFontResolver {
 #endif
         }
 
-        // 普通控件无需反射 Text；无样本时使用首选字体和字形回退链。
-        // 显式文本样本仍按用户配置的整段或逐字策略匹配。
-        if FontLibrary.fallbackScope == .character || request.sample == nil {
+        if fallbackScope == .character {
             let cascade = candidates.filter { $0.caseInsensitiveCompare(primary) != .orderedSame }
                 .map { CTFontDescriptorCreateWithNameAndSize($0 as CFString, pointSize) }
 #if canImport(UIKit)
@@ -105,16 +119,21 @@ public actor ETFontResolver {
         }
 
         let font: Font
+        // custom 字体让 SwiftUI 按当前环境缩放；先手动缩放再固定字号会改变原生取整结果。
+        let customPointSize = descriptor.basePointSize * scale
         if let style = descriptor.textStyle {
-            font = .custom(primary, size: pointSize, relativeTo: style)
+            font = .custom(primary, size: customPointSize, relativeTo: style)
         } else {
-            font = .custom(primary, size: pointSize)
+            font = .custom(primary, size: customPointSize)
         }
         return descriptor.applyingTraits(to: font)
     }
 
 #if canImport(UIKit)
     private func scaledFont(_ font: UIFont, request: Request) -> Font {
+#if os(watchOS)
+        if request.scaledBasePointSize != nil { return Font(font) }
+#endif
         guard let style = request.descriptor.textStyle else { return Font(font) }
         let uiStyle: UIFont.TextStyle
         switch style {
@@ -167,70 +186,4 @@ public actor ETFontResolver {
         }
     }
 #endif
-}
-
-public struct ETFontModifier: ViewModifier {
-    let descriptor: ETFont?
-    let sampleText: String?
-    @Environment(\.sizeCategory) private var sizeCategory
-    @Environment(\.etFontExportTemplates) private var exportTemplates
-    @State private var resolvedFont: Font?
-    @State private var configurationRevision = FontLibrary.adapterCacheToken()
-
-    public init(_ descriptor: ETFont?, sampleText: String? = nil) {
-        self.descriptor = descriptor
-        self.sampleText = sampleText
-    }
-
-    private struct Preparation: Equatable {
-        let descriptor: ETFont?
-        let sample: String?
-        let revision: String
-        let sizeCategory: ContentSizeCategory
-    }
-
-    public func body(content: Content) -> some View {
-        let currentRevision = FontLibrary.adapterCacheToken()
-        let preparation = Preparation(descriptor: descriptor, sample: sampleText, revision: configurationRevision == currentRevision ? configurationRevision : currentRevision, sizeCategory: sizeCategory)
-        content
-            .font(descriptor.map { exportTemplates?.font(for: $0) ?? resolvedFont ?? $0.systemFont })
-            .task(id: preparation) {
-                guard let descriptor else {
-                    resolvedFont = nil
-                    return
-                }
-                let font = await ETFontResolver.shared.font(for: descriptor, sampleText: sampleText, sizeCategory: sizeCategory)
-                guard !Task.isCancelled else { return }
-                resolvedFont = font
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
-                configurationRevision = FontLibrary.adapterCacheToken()
-            }
-    }
-}
-
-/// 模板中的 CoreText 描述符不可变，可从后台准备任务传给导出视图。
-public struct ETFontExportTemplates: @unchecked Sendable {
-    let descriptors: [FontSemanticRole: CTFontDescriptor]
-    let scale: CGFloat
-
-    func font(for descriptor: ETFont) -> Font {
-        guard let template = descriptors[descriptor.role] else {
-            if abs(scale - 1) < 0.001 { return descriptor.systemFont }
-            return descriptor.applyingTraits(to: .system(size: descriptor.basePointSize * scale, weight: descriptor.fontWeight ?? (descriptor.textStyle == .headline ? .semibold : .regular), design: descriptor.design))
-        }
-        let font = CTFontCreateWithFontDescriptor(template, descriptor.basePointSize * scale, nil)
-        return descriptor.applyingTraits(to: Font(font))
-    }
-}
-
-private struct ETFontExportTemplatesKey: EnvironmentKey {
-    static let defaultValue: ETFontExportTemplates? = nil
-}
-
-public extension EnvironmentValues {
-    var etFontExportTemplates: ETFontExportTemplates? {
-        get { self[ETFontExportTemplatesKey.self] }
-        set { self[ETFontExportTemplatesKey.self] = newValue }
-    }
 }

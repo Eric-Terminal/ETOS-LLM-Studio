@@ -21,6 +21,7 @@ struct ChatTranscriptSwiftUIImageConfiguration {
     let inputPlaceholder: String
     let prefersDarkAppearance: Bool
     let locale: Locale
+    let sizeCategory: ContentSizeCategory
     let rootFont: Font
     let composerInputHeight: CGFloat
     let composerActionIconName: String
@@ -71,7 +72,6 @@ enum ChatTranscriptSwiftUIImageRenderer {
             includeReasoning: includeReasoning
         )
 
-        let fontTemplates = await ETFontResolver.shared.exportTemplates()
         let canvas = ChatTranscriptExportCanvas(
             rows: rows,
             continuationContext: preparedExport.continuationContext,
@@ -81,8 +81,8 @@ enum ChatTranscriptSwiftUIImageRenderer {
         .environment(\.chatTranscriptPreloadedAttachmentImages, preloadedAttachments.images)
         .environment(\.colorScheme, configuration.prefersDarkAppearance ? .dark : .light)
         .environment(\.locale, configuration.locale)
+        .environment(\.sizeCategory, configuration.sizeCategory)
         .environment(\.font, configuration.rootFont)
-        .environment(\.etFontExportTemplates, fontTemplates)
         .frame(width: configuration.width)
         .fixedSize(horizontal: false, vertical: true)
 
@@ -802,9 +802,11 @@ extension ChatView {
             inputPlaceholder: NSLocalizedString("Message", comment: "聊天长图输入框占位文本"),
             prefersDarkAppearance: colorScheme == .dark,
             locale: AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage),
+            sizeCategory: sizeCategory,
             rootFont: await AppFontAdapter.adaptedFont(
                 from: .body,
-                sampleText: "The quick brown fox 你好こんにちは"
+                sampleText: "The quick brown fox 你好こんにちは",
+                sizeCategory: sizeCategory
             ),
             composerInputHeight: composerInputHeight,
             composerActionIconName: actionIconName,
