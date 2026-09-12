@@ -42,7 +42,8 @@ struct SimilarityIndexConcurrencyTests {
     func searchUsesOneSnapshot() async {
         let index = await SimilarityIndex(model: FixedEmbeddings())
         await index.addItem(id: "original", text: "原始正文", metadata: ["version": "old"], embedding: [1, 0])
-        let results = index.search(usingQueryEmbedding: [1, 0], metric: ReplacingMetric {
+        let results = index.search(usingQueryEmbedding: [1, 0], metric: ReplacingMetric { [weak index] in
+            guard let index else { return }
             index.removeAll()
             index.indexItems = [.init(id: "original", text: "替换后的正文", embedding: [0, 1], metadata: ["version": "new"])]
         })
