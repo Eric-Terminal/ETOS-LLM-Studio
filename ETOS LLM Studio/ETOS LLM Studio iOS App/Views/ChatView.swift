@@ -20,6 +20,7 @@ import AVFoundation
 import UniformTypeIdentifiers
 
 struct ChatView: View {
+    @Environment(\.displayScale) var displayScale
     @EnvironmentObject var viewModel: ChatViewModel
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.sizeCategory) var sizeCategory

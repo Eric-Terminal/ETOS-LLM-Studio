@@ -393,16 +393,8 @@ final class ChatViewModel: ObservableObject {
     var autoReasoningPreviewMessageIDs: Set<UUID> = []
     var userControlledReasoningPreviewMessageIDs: Set<UUID> = []
     var isPersistingGlobalSystemPrompts = false
-    let backgroundImageCache: NSCache<NSString, UIImage> = {
-        let cache = NSCache<NSString, UIImage>()
-        cache.countLimit = 8
-        return cache
-    }()
-    let blurredBackgroundImageCache: NSCache<NSString, UIImage> = {
-        let cache = NSCache<NSString, UIImage>()
-        cache.countLimit = 8
-        return cache
-    }()
+    var backgroundDisplayTarget = DisplayImageTarget(size: .zero, scale: 1)
+    let blurredBackgroundImageCache = NSCache<NSString, UIImage>()
     var globalSystemPromptReloadTask: Task<Void, Never>?
     var conversationMemoryReloadTask: Task<Void, Never>?
     var backgroundBlurTask: Task<Void, Never>?

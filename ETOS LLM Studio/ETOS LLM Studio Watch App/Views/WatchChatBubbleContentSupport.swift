@@ -164,7 +164,7 @@ extension ChatBubble {
                     fileName: fileName,
                     height: itemHeight
                 ) { image in
-                    imagePreview = ImagePreviewPayload(image: image)
+                    imagePreview = ImagePreviewPayload(image: image, fileName: fileName)
                 }
             }
         }

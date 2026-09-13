@@ -26,11 +26,17 @@ struct AttachmentImageView: View {
     let onPreview: (UIImage) -> Void
 
     @Environment(\.watchChatPreloadedAttachmentImages) private var preloadedImages
+    @Environment(\.displayScale) private var displayScale
     @State private var image: UIImage?
-    @State private var didAttemptLoad = false
+    @State private var loadedFileName: String?
+    @State private var displaySize: CGSize = .zero
 
     private var resolvedImage: UIImage? {
-        preloadedImages[fileName] ?? image
+        preloadedImages[fileName] ?? (loadedFileName == fileName ? image : nil)
+    }
+
+    private var imageTarget: DisplayImageTarget {
+        DisplayImageTarget(size: displaySize, scale: displayScale)
     }
 
     var body: some View {
@@ -62,44 +68,33 @@ struct AttachmentImageView: View {
                     )
             }
         }
-        .task(id: fileName) {
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { displaySize = $0 }
+        .task(id: "\(fileName)|\(imageTarget.width)x\(imageTarget.height)") {
             guard preloadedImages[fileName] == nil else { return }
-            guard !didAttemptLoad else { return }
-            didAttemptLoad = true
             await loadImage()
         }
     }
 
     private func loadImage() async {
-        if let cached = ChatAttachmentImageCache.image(for: fileName) {
-            await MainActor.run {
-                image = cached
-            }
-            return
-        }
-
-        let uiImage = await Task.detached(priority: .userInitiated) {
-            let fileURL = Persistence.getImageDirectory().appendingPathComponent(fileName)
-            return UIImage(contentsOfFile: fileURL.path)
-                ?? Persistence.loadImage(fileName: fileName).flatMap { UIImage(data: $0) }
-        }.value
-        guard let uiImage else { return }
-        ChatAttachmentImageCache.store(uiImage, for: fileName)
-        await MainActor.run {
-            image = uiImage
-        }
+        guard !imageTarget.isEmpty else { return }
+        let prepared = await DisplayImageLoader.shared.attachment(named: fileName, target: imageTarget)
+        guard !Task.isCancelled else { return }
+        image = prepared?.image
+        loadedFileName = fileName
     }
 }
 
 struct ImagePreviewPayload: Identifiable {
     let id = UUID()
     let image: UIImage
+    var fileName: String? = nil
 }
 
 struct WatchAttachmentImagePreviewSheet: View {
     let payload: ImagePreviewPayload
 
     @State private var zoomScale = 1.0
+    @State private var originalImage: UIImage?
     @State private var settledOffset: CGSize = .zero
     @GestureState private var dragTranslation: CGSize = .zero
 
@@ -126,7 +121,7 @@ struct WatchAttachmentImagePreviewSheet: View {
             ZStack {
                 Color.black.ignoresSafeArea()
 
-                Image(uiImage: payload.image)
+                Image(uiImage: originalImage ?? payload.image)
                     .resizable()
                     .scaledToFit()
                     .frame(width: contentSize.width, height: contentSize.height)
@@ -183,22 +178,12 @@ struct WatchAttachmentImagePreviewSheet: View {
             }
         }
         .accessibilityLabel(NSLocalizedString("图片预览", comment: ""))
-    }
-}
-
-private enum ChatAttachmentImageCache {
-    private static let cache: NSCache<NSString, UIImage> = {
-        let cache = NSCache<NSString, UIImage>()
-        cache.countLimit = 96
-        return cache
-    }()
-
-    static func image(for fileName: String) -> UIImage? {
-        cache.object(forKey: fileName as NSString)
-    }
-
-    static func store(_ image: UIImage, for fileName: String) {
-        let pixelCost = Int(image.size.width * image.size.height * image.scale * image.scale)
-        cache.setObject(image, forKey: fileName as NSString, cost: max(1, pixelCost))
+        .task(id: payload.id) {
+            originalImage = nil
+            guard let fileName = payload.fileName else { return }
+            let image = await DisplayImageLoader.shared.originalAttachment(named: fileName)
+            guard !Task.isCancelled else { return }
+            originalImage = image
+        }
     }
 }

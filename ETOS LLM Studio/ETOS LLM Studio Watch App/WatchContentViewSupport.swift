@@ -455,6 +455,19 @@ extension ContentView {
 
     @ViewBuilder
     var chatBackgroundLayer: some View {
+        GeometryReader { geometry in
+            chatBackgroundContent
+                .task(id: DisplayImageTarget(
+                    size: geometry.size, scale: displayScale,
+                    fillsBounds: viewModel.backgroundContentMode == "fill"
+                )) {
+                    viewModel.updateBackgroundDisplayTarget(size: geometry.size, scale: displayScale)
+                }
+        }
+    }
+
+    @ViewBuilder
+    private var chatBackgroundContent: some View {
         if viewModel.enableBackground,
            viewModel.currentBackgroundIsVideo,
            let videoURL = viewModel.currentBackgroundMediaURL {

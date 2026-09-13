@@ -171,6 +171,12 @@ extension ChatView {
                     TelegramDefaultBackground()
                 }
             }
+            .task(id: DisplayImageTarget(
+                size: geometry.size, scale: displayScale,
+                fillsBounds: viewModel.backgroundContentMode == "fill"
+            )) {
+                viewModel.updateBackgroundDisplayTarget(size: geometry.size, scale: displayScale)
+            }
         }
     }
 

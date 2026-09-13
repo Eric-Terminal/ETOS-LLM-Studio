@@ -768,6 +768,9 @@ extension ChatView {
             .bounds ?? UIScreen.main.bounds
         let exportWidth = min(430, max(1, windowBounds.width))
         let viewportHeight = max(1, windowBounds.height)
+        let backgroundImage = await viewModel.backgroundImageForExport(
+            size: CGSize(width: exportWidth, height: viewportHeight), scale: max(2, displayScale)
+        )
         let measuredPointSize = CGFloat(
             FontLibrary.scaledPointSize(
                 16,
@@ -817,7 +820,7 @@ extension ChatView {
             enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
             reasoningPreviewMaxHeight: responsiveReasoningPreviewMaxHeight(for: viewportHeight),
             backgroundMediaURL: viewModel.currentBackgroundMediaURL,
-            backgroundImage: viewModel.currentBackgroundImageBlurredUIImage,
+            backgroundImage: backgroundImage,
             backgroundIsVideo: viewModel.currentBackgroundIsVideo,
             backgroundOpacity: viewModel.backgroundOpacity,
             backgroundBlurRadius: viewModel.backgroundBlur,

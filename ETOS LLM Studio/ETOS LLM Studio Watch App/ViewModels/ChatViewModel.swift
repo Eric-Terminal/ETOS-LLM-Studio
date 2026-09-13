@@ -390,12 +390,6 @@ class ChatViewModel: ObservableObject {
         return ConfigLoader.getBackgroundsDirectory().appendingPathComponent(currentBackgroundImage)
     }
 
-    var currentBackgroundImageUIImage: UIImage? {
-        guard !currentBackgroundImage.isEmpty else { return nil }
-        guard !currentBackgroundIsVideo else { return nil }
-        return loadBackgroundImage(named: currentBackgroundImage)
-    }
-
     var resolvedBackgroundOpacity: Double {
         WatchBackgroundOpacitySetting.normalized(backgroundOpacity)
     }
@@ -465,16 +459,8 @@ class ChatViewModel: ObservableObject {
     var pendingSendDelayTask: Task<Void, Never>?
     private var pendingSendDelayPayload: PendingChatSendPayload?
     let iso8601Formatter = ISO8601DateFormatter()
-    let backgroundImageCache: NSCache<NSString, UIImage> = {
-        let cache = NSCache<NSString, UIImage>()
-        cache.countLimit = 6
-        return cache
-    }()
-    let blurredBackgroundImageCache: NSCache<NSString, UIImage> = {
-        let cache = NSCache<NSString, UIImage>()
-        cache.countLimit = 6
-        return cache
-    }()
+    var backgroundDisplayTarget = DisplayImageTarget(size: .zero, scale: 1)
+    let blurredBackgroundImageCache = NSCache<NSString, UIImage>()
     var globalSystemPromptReloadTask: Task<Void, Never>?
     var conversationMemoryReloadTask: Task<Void, Never>?
     var backgroundBlurTask: Task<Void, Never>?

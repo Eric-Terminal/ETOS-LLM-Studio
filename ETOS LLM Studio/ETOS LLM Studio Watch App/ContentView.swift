@@ -10,6 +10,7 @@ import Combine
 import ETOSCore
 
 struct ContentView: View {
+    @Environment(\.displayScale) var displayScale
     @Environment(\.scenePhase) var scenePhase
 
     @Environment(\.colorScheme) var colorScheme

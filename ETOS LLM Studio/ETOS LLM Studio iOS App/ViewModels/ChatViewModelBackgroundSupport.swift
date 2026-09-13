@@ -8,6 +8,7 @@
 
 import CoreImage
 import Foundation
+import ImageIO
 import ETOSCore
 #if canImport(Accelerate)
 import Accelerate
@@ -26,13 +27,15 @@ extension ChatViewModel {
         return ConfigLoader.getBackgroundsDirectory().appendingPathComponent(currentBackgroundImage)
     }
 
-    var currentBackgroundImageUIImage: UIImage? {
-        guard !currentBackgroundImage.isEmpty else { return nil }
-        guard !currentBackgroundIsVideo else { return nil }
-        return loadBackgroundImage(named: currentBackgroundImage)
+    func updateBackgroundDisplayTarget(size: CGSize, scale: CGFloat) {
+        let target = DisplayImageTarget(size: size, scale: scale, fillsBounds: backgroundContentMode == "fill")
+        guard !target.isEmpty, target != backgroundDisplayTarget else { return }
+        let isResize = !backgroundDisplayTarget.isEmpty
+        backgroundDisplayTarget = target
+        refreshBlurredBackgroundImage(coalescesResize: isResize)
     }
 
-    func refreshBlurredBackgroundImage() {
+    func refreshBlurredBackgroundImage(coalescesResize: Bool = false) {
         backgroundBlurTask?.cancel()
         guard enableBackground, !currentBackgroundImage.isEmpty else {
             currentBackgroundImageBlurredUIImage = nil
@@ -42,72 +45,70 @@ extension ChatViewModel {
             currentBackgroundImageBlurredUIImage = nil
             return
         }
-        guard let baseImage = loadBackgroundImage(named: currentBackgroundImage) else {
-            currentBackgroundImageBlurredUIImage = nil
-            return
-        }
-        guard let baseCGImage = baseImage.cgImage else {
-            currentBackgroundImageBlurredUIImage = baseImage
-            return
-        }
-        let baseScale = baseImage.scale
-        let baseOrientation = baseImage.imageOrientation
-        let radius = backgroundBlur
-        if radius <= 0.01 {
-            currentBackgroundImageBlurredUIImage = baseImage
-            return
-        }
-        let cacheKey = blurredCacheKey(for: currentBackgroundImage, radius: radius)
-        if let cached = blurredBackgroundImageCache.object(forKey: cacheKey) {
-            currentBackgroundImageBlurredUIImage = cached
-            return
-        }
-        let diskCacheURL = Self.blurredDiskCacheURL(for: currentBackgroundImage, radius: radius)
-        if let diskCachedImage = Self.loadBlurredImageFromDisk(at: diskCacheURL) {
-            blurredBackgroundImageCache.setObject(diskCachedImage, forKey: cacheKey)
-            currentBackgroundImageBlurredUIImage = diskCachedImage
-            return
-        }
-        currentBackgroundImageBlurredUIImage = baseImage
+        guard !backgroundDisplayTarget.isEmpty else { return }
         let expectedName = currentBackgroundImage
-        let expectedRadius = radius
-        backgroundBlurTask = Task.detached(priority: .userInitiated) { [weak self] in
-            guard let self else { return }
-            let blurredCGImage = Self.makeBlurredCGImage(from: baseCGImage, radius: expectedRadius)
-            let blurredUIImage = blurredCGImage.map {
-                UIImage(cgImage: $0, scale: baseScale, orientation: baseOrientation)
+        let expectedRadius = backgroundBlur
+        let target = backgroundDisplayTarget
+        backgroundBlurTask = Task { [weak self] in
+            if coalescesResize {
+                // 键盘和窗口动画会逐帧改变尺寸；短暂复用旧位图，稳定后只解码最终尺寸。
+                do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
             }
+            let prepared = await DisplayImageLoader.shared.background(named: expectedName, target: target)
             guard !Task.isCancelled else { return }
-            if let blurredUIImage {
-                Self.saveBlurredImageToDisk(blurredUIImage, at: diskCacheURL)
-                Self.cleanupBlurredDiskCache(keeping: diskCacheURL)
+            let cacheName = "\(expectedName)__display_\(target.width)x\(target.height)_\(target.fillsBounds)_\(prepared?.sourceRevision ?? "missing")"
+            let cacheKey = "\(cacheName)|\(expectedRadius)" as NSString
+            if let cached = self?.blurredBackgroundImageCache.object(forKey: cacheKey) {
+                self?.currentBackgroundImageBlurredUIImage = cached
+                return
             }
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                guard self.enableBackground,
-                      self.currentBackgroundImage == expectedName,
-                      self.backgroundBlur == expectedRadius else { return }
-                if let blurredUIImage {
-                    self.blurredBackgroundImageCache.setObject(blurredUIImage, forKey: cacheKey)
-                }
-                self.currentBackgroundImageBlurredUIImage = blurredUIImage ?? self.currentBackgroundImageUIImage
-            }
+            let rendered = await Self.renderBackgroundImage(prepared, cacheName: cacheName, radius: expectedRadius)
+            guard !Task.isCancelled, let self,
+                  self.enableBackground,
+                  self.currentBackgroundImage == expectedName,
+                  self.backgroundBlur == expectedRadius,
+                  self.backgroundDisplayTarget == target else { return }
+            if let rendered { self.blurredBackgroundImageCache.setObject(rendered, forKey: cacheKey) }
+            self.currentBackgroundImageBlurredUIImage = rendered
         }
     }
 
-    private func loadBackgroundImage(named name: String) -> UIImage? {
-        if let cached = backgroundImageCache.object(forKey: name as NSString) {
-            return cached
-        }
-        let fileURL = ConfigLoader.getBackgroundsDirectory().appendingPathComponent(name)
-        guard let image = UIImage(contentsOfFile: fileURL.path) else { return nil }
-        backgroundImageCache.setObject(image, forKey: name as NSString)
-        return image
+    func waitForBackgroundImage() async {
+        await backgroundBlurTask?.value
     }
 
-    private func blurredCacheKey(for name: String, radius: Double) -> NSString {
-        let scaled = Int((radius * 10).rounded())
-        return "\(name)|blur:\(scaled)" as NSString
+    /// 导出独立准备自己的像素尺寸，不能把 iPad 当前背景改成窄长图的清晰度。
+    func backgroundImageForExport(size: CGSize, scale: CGFloat) async -> UIImage? {
+        guard enableBackground, !currentBackgroundImage.isEmpty, !currentBackgroundIsVideo else { return nil }
+        let name = currentBackgroundImage
+        let radius = backgroundBlur
+        let target = DisplayImageTarget(size: size, scale: scale, fillsBounds: backgroundContentMode == "fill")
+        let prepared = await DisplayImageLoader.shared.background(named: name, target: target)
+        let cacheName = "\(name)__display_\(target.width)x\(target.height)_\(target.fillsBounds)_\(prepared?.sourceRevision ?? "missing")"
+        return await Self.renderBackgroundImage(prepared, cacheName: cacheName, radius: radius)
+    }
+
+    nonisolated private static func renderBackgroundImage(
+        _ prepared: PreparedDisplayImage?, cacheName: String, radius: Double
+    ) async -> UIImage? {
+        let task = Task.detached(priority: .userInitiated) {
+            guard !Task.isCancelled, let prepared else { return nil as UIImage? }
+            let diskCacheURL = Self.blurredDiskCacheURL(for: cacheName, radius: radius)
+            if radius > 0.01, let cached = Self.loadBlurredImageFromDisk(at: diskCacheURL) { return cached }
+            guard radius > 0.01, let source = prepared.image.cgImage,
+                  let blurred = Self.makeBlurredCGImage(from: source, radius: radius * prepared.sourcePixelScale)
+            else { return prepared.image }
+            let image = UIImage(cgImage: blurred)
+            guard !Task.isCancelled else { return nil }
+            Self.saveBlurredImageToDisk(image, at: diskCacheURL)
+            Self.cleanupBlurredDiskCache(keeping: diskCacheURL)
+            return image
+        }
+        return await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     nonisolated private static func makeBlurredCGImage(from baseCGImage: CGImage, radius: Double) -> CGImage? {
@@ -260,7 +261,12 @@ extension ChatViewModel {
     }
 
     nonisolated private static func loadBlurredImageFromDisk(at url: URL) -> UIImage? {
-        UIImage(contentsOfFile: url.path)
+        // 磁盘命中也在后台完成解码，不能把 JPEG 首次解压留给下一帧渲染。
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let image = CGImageSourceCreateImageAtIndex(
+                source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary
+              ) else { return nil }
+        return UIImage(cgImage: image)
     }
 
     nonisolated private static func saveBlurredImageToDisk(_ image: UIImage, at url: URL) {
