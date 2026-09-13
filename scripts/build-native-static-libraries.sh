@@ -18,6 +18,8 @@ fi
 
 case "$SDK_FAMILY" in
     iphoneos|iphonesimulator|watchos|watchsimulator)
+        # 清单通过编译不代表可启动；本地和云端构建都必须核对真实安装收据身份。
+        "$ROOT_PATH/scripts/verify-local-linux-rootfs.sh"
         "$ROOT_PATH/scripts/build-ish-static-library.sh"
         ;;
 esac

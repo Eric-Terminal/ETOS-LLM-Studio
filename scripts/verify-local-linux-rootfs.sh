@@ -23,6 +23,7 @@ import hashlib
 import json
 from pathlib import Path
 import sys
+import tarfile
 
 archive = Path(sys.argv[1])
 metadata = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
@@ -39,10 +40,25 @@ if metadata.get("archiveSHA256") != digest:
     raise SystemExit("错误：RootFS 资源 SHA-256 与清单不一致。")
 if metadata.get("archiveBytes") != archive.stat().st_size:
     raise SystemExit("错误：RootFS 资源大小与清单不一致。")
+# 原生安装收据使用内部清单的上游摘要；外层压缩包摘要只校验分发文件。
+with tarfile.open(archive, "r:gz") as seed_archive:
+    seed_manifest_bytes = seed_archive.extractfile("rootfs-manifest.txt").read()
+if hashlib.sha256(seed_manifest_bytes).hexdigest() != metadata.get("seedManifestSHA256"):
+    raise SystemExit("错误：RootFS 内部清单摘要与资源清单不一致。")
+seed_manifest = dict(
+    line.split("=", 1)
+    for line in seed_manifest_bytes.decode("utf-8").splitlines()
+    if "=" in line
+)
+receipt_digest = seed_manifest.get("archive_sha256", "").lower()
+if len(receipt_digest) != 64 or any(c not in "0123456789abcdef" for c in receipt_digest):
+    raise SystemExit("错误：RootFS 内部清单的安装收据摘要无效。")
+if metadata.get("upstreamArchiveSHA256", "").lower() != receipt_digest:
+    raise SystemExit("错误：RootFS 安装收据摘要与 seed 内部清单不一致。")
 if migrations.get("format") != "etos-rootfs-migrations-v1":
     raise SystemExit("错误：RootFS 迁移清单格式无效。")
-if migrations.get("targetSeedSHA256") != metadata.get("archiveSHA256"):
-    raise SystemExit("错误：RootFS 迁移清单目标与 seed 不一致。")
+if migrations.get("targetSeedSHA256", "").lower() != receipt_digest:
+    raise SystemExit("错误：RootFS 迁移清单目标与安装收据摘要不一致。")
 seen_ids = set()
 seen_sources = set()
 for migration in migrations.get("migrations", []):
