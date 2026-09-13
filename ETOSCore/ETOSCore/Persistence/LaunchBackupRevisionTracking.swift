@@ -27,15 +27,21 @@ enum LaunchBackupRevisionTracking {
     }
 
     static func matches(_ revision: Revision, backupURL: URL) -> Bool {
-        guard FileManager.default.fileExists(atPath: backupURL.path),
-              Persistence.isDatabaseHealthy(at: backupURL) else { return false }
+        guard FileManager.default.fileExists(atPath: backupURL.path) else { return false }
         let configuration = Persistence.databaseEncryptionHasStoredPassphrase()
             ? Persistence.makeEncryptedDatabaseConfiguration(qos: .background, readonly: true)
             : Persistence.makePlainDatabaseConfiguration(qos: .background, readonly: true)
         do {
             let queue = try DatabaseQueue(path: backupURL.path, configuration: configuration)
             defer { try? queue.close() }
-            return try queue.read { try read(in: $0) == revision }
+            return try queue.read { db in
+                // 已变化的副本必然重建，先读小标记，避免再扫描整库。复用时仍完整校验，
+                // 并沿用同一个只读事务和加密连接，避免重复派生密钥及校验后换连接的窗口。
+                guard try read(in: db) == revision else { return false }
+                let health = try String.fetchOne(db, sql: "PRAGMA quick_check(1)")?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return health?.caseInsensitiveCompare("ok") == .orderedSame
+            }
         } catch {
             // 旧副本没有标记，或密钥与当前库不同，都必须重新生成可验证的副本。
             return false

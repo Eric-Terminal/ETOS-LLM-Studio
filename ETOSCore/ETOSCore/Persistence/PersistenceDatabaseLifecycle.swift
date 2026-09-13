@@ -227,6 +227,8 @@ extension Persistence {
         _ = activeAuxiliaryStore(kind: .config)
         _ = activeAuxiliaryStore(kind: .memory)
         if launchPreparation.needsChatFTSRebuild {
+            let interval = TelemetrySignpost.begin(.databaseFTSRebuild)
+            defer { TelemetrySignpost.end(interval) }
             grdbStore?.rebuildMessagesFTSIndex()
         }
     }

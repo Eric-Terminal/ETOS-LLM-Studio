@@ -65,10 +65,19 @@ final class PersistenceGRDBStore {
             qos: .userInitiated,
             mmapSize: 134_217_728
         )
-        self.dbPool = try DatabasePool(path: databaseURL.path, configuration: configuration)
+        let databasePath = databaseURL.path
+        self.dbPool = try {
+            let interval = TelemetrySignpost.begin(.databaseConnectionOpen)
+            defer { TelemetrySignpost.end(interval) }
+            return try DatabasePool(path: databasePath, configuration: configuration)
+        }()
         messageWriteQueue.setSpecific(key: messageWriteQueueSpecificKey, value: 1)
 
-        try migrateSchemaIfNeeded()
+        do {
+            let interval = TelemetrySignpost.begin(.databaseSchemaMigration)
+            defer { TelemetrySignpost.end(interval) }
+            try migrateSchemaIfNeeded()
+        }
         scheduleDatabaseMaintenanceIfNeeded()
     }
 

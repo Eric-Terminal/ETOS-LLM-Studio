@@ -31,8 +31,17 @@ final class PersistenceAuxiliaryGRDBStore {
             qos: .userInitiated,
             mmapSize: 67_108_864
         )
-        self.dbPool = try DatabasePool(path: databaseURL.path, configuration: configuration)
-        try migrateSchemaIfNeeded()
+        let databasePath = databaseURL.path
+        self.dbPool = try {
+            let interval = TelemetrySignpost.begin(.databaseConnectionOpen)
+            defer { TelemetrySignpost.end(interval) }
+            return try DatabasePool(path: databasePath, configuration: configuration)
+        }()
+        do {
+            let interval = TelemetrySignpost.begin(.databaseSchemaMigration)
+            defer { TelemetrySignpost.end(interval) }
+            try migrateSchemaIfNeeded()
+        }
         scheduleDatabaseMaintenanceIfNeeded()
     }
 

@@ -15,6 +15,10 @@ import os
 public enum TelemetrySignpostInterval: String, CaseIterable, Sendable {
     case appLaunch
     case databaseBootstrap
+    case launchDatabaseHealthCheck
+    case databaseConnectionOpen
+    case databaseSchemaMigration
+    case databaseFTSRebuild
     case serviceWarmup
     case sessionMessageLoad
     case requestPreparation
@@ -138,6 +142,14 @@ public enum TelemetrySignpost {
             return "AppLaunch"
         case .databaseBootstrap:
             return "DatabaseBootstrap"
+        case .launchDatabaseHealthCheck:
+            return "LaunchDatabaseHealthCheck"
+        case .databaseConnectionOpen:
+            return "DatabaseConnectionOpen"
+        case .databaseSchemaMigration:
+            return "DatabaseSchemaMigration"
+        case .databaseFTSRebuild:
+            return "DatabaseFTSRebuild"
         case .serviceWarmup:
             return "ServiceWarmup"
         case .sessionMessageLoad:

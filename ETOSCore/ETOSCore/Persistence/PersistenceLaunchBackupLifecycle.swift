@@ -79,7 +79,10 @@ extension Persistence {
 
         var result = LaunchPreparationResult()
         for kind in LaunchDatabaseKind.allCases {
-            guard isSQLiteDatabaseHealthy(at: databaseURL(for: kind)) else {
+            let interval = TelemetrySignpost.begin(.launchDatabaseHealthCheck)
+            let healthy = isSQLiteDatabaseHealthy(at: databaseURL(for: kind))
+            TelemetrySignpost.end(interval)
+            guard healthy else {
                 if hasUsableLaunchBackup(for: kind) {
                     result.recoverableKinds.append(kind)
                 } else {
