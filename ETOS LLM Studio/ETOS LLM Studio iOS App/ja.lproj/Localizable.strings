@@ -7511,3 +7511,34 @@
 "消息已发生变化，请重新打开编辑器。" = "メッセージが変更されました。編集画面を開き直してください。";
 "一条工具结果消息只能关联一个调用；多个调用请添加到助手消息。" = "ツール結果メッセージには1件の呼び出しのみ関連付けられます。複数の呼び出しはアシスタントメッセージに追加してください。";
 "使用 JSON 数组编辑调用。每项包含 id、toolName 和 arguments（JSON 对象或包含对象的字符串）；可选 result、resultDisposition 和 providerSpecificFields。新增一项即可添加调用，删除一项可移除调用，[] 表示清空。id 必须唯一，建议保留现有 id 以维持结果关联。result 为字符串，状态可为 completed、failed 或 rejected。修改会同步同轮对话中的关联结果；这些记录会用于后续聊天历史。" = "呼び出しをJSON配列で編集します。各項目にはid、toolName、arguments（JSONオブジェクトまたはそれを含む文字列）を指定します。result、resultDisposition、providerSpecificFieldsは任意です。項目の追加・削除で呼び出しを変更でき、[]で全件削除します。idは一意にし、結果との関連を保つため既存のidを維持してください。resultは文字列、状態はcompleted、failed、rejectedのいずれかです。同じ会話ターンの関連結果も更新され、その後のチャット履歴に使われます。";
+
+// 用户确认的 HTTP 与 HTTPS 证书连接例外。
+"Address" = "アドレス";
+"Allow HTTP exceptions" = "HTTP 接続の例外を許可";
+"Allow certificate exceptions" = "証明書の例外を許可";
+"Cancel" = "キャンセル";
+"Certificate exception" = "証明書の例外";
+"Connection Exception" = "接続の例外";
+"Connection Exceptions" = "接続の例外";
+"Connection exceptions help you connect to self-hosted services. HTTP sends data without encryption. HTTPS with a certificate exception remains encrypted, but the server's identity cannot be verified normally.\n\nWhen a connection is blocked, choose Continue Once or Continue and Remember. Remembered choices are shared by the app's API, model, MCP and file-transfer requests on this device. A new address, port, certificate or validation problem can require another confirmation.\n\nSwitches control remembered exceptions; they do not approve every server. Remove an address to revoke its exception. App-owned services always require normal HTTPS verification. These settings do not change the certificate trust of iOS or watchOS, Safari, or programs running inside the local Linux environment." = "接続の例外を使うと、自分でホストするサービスに接続できます。HTTP は通信を暗号化しません。証明書の例外を許可した HTTPS は暗号化されますが、サーバーの身元を通常の方法で確認できません。\n\n接続がブロックされた場合は「今回のみ続ける」または「続けて記憶する」を選びます。記憶した選択は、このデバイスのアプリ内で API、モデル、MCP、ファイル転送に共通して使われます。アドレス、ポート、証明書の変更や新たな検証エラーがある場合は、再確認が必要になることがあります。\n\nスイッチは記憶した例外を制御し、すべてのサーバーを許可するものではありません。アドレスを削除すると許可を取り消せます。アプリの公式サービスには通常の HTTPS 検証が常に必要です。この設定は iOS、watchOS、Safari、ローカル Linux 内の独立したプログラムの証明書の信頼設定を変更しません。";
+"Continue Once" = "今回のみ続ける";
+"Continue and Remember" = "続けて記憶する";
+"Continue without encryption?" = "暗号化せずに続けますか？";
+"Exception type" = "例外の種類";
+"HTTP connection" = "HTTP 接続";
+"Learn More…" = "詳しく見る…";
+"Manage connections you have explicitly allowed on this device." = "このデバイスで明示的に許可した接続を管理します。";
+"Messages, files and API keys sent to this address will not be encrypted and may be read or changed by others on the network." = "このアドレスに送信するメッセージ、ファイル、API キーは暗号化されず、ネットワーク上の第三者に読み取られたり改ざんされたりする可能性があります。";
+"No remembered exceptions" = "記憶した例外はありません";
+"OK" = "OK";
+"Only remembered addresses are allowed. New addresses and new certificate problems still require confirmation. Turning a switch off also stops affected connections." = "記憶したアドレスのみを許可します。新しいアドレスや証明書の問題には確認が必要です。スイッチをオフにすると対象の接続も停止します。";
+"Remembered Addresses" = "記憶したアドレス";
+"Remembering this choice enables this type of exception for this address across the app. Manage exceptions in Extended Features > Connection Exceptions." = "記憶すると、アプリ全体でこのアドレスに対する同種の例外が有効になります。「拡張機能」→「接続の例外」で管理できます。";
+"Remove Exception" = "例外を削除";
+"Removing this exception stops connections to this address and requires confirmation next time." = "この例外を削除すると、このアドレスへの接続が停止し、次回は再確認が必要になります。";
+"The connection exception could not be saved. Please try again." = "接続の例外を保存できませんでした。もう一度お試しください。";
+"The connection was blocked because it has not been approved." = "接続が許可されていないため、ブロックされました。";
+"This HTTPS connection is encrypted, but the server's identity could not be verified. Someone could be impersonating this server." = "この HTTPS 接続は暗号化されていますが、サーバーの身元を確認できませんでした。第三者がこのサーバーになりすましている可能性があります。";
+"Unable to save exception" = "例外を保存できません";
+"Unable to update exceptions" = "例外を更新できません";
+"Unable to verify server identity" = "サーバーの身元を確認できません";

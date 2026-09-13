@@ -185,7 +185,7 @@ public actor MCPSDKHTTPTransportController: MCPSDKTransportControl {
         request.httpMethod = "DELETE"
         request.setValue(sessionID, forHTTPHeaderField: mcpSessionHeader)
         request = requestModifier(request)
-        _ = try? await session.data(for: request)
+        _ = try? await session.securedData(for: request)
         await transport.disconnect()
     }
 
@@ -411,7 +411,7 @@ public final class MCPOAuthEndpointAuthorizer: HTTPClientAuthorizer, @unchecked 
             request.setValue("Basic \(encoded)", forHTTPHeaderField: "Authorization")
         }
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.securedData(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw MCPClientError.invalidResponse
         }

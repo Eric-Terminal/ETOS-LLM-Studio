@@ -292,7 +292,7 @@ public final class SurveyManager: ObservableObject {
     private func fetchSurveys() async throws -> [SurveyDefinition] {
         var request = try buildRequest(path: Self.surveyPath, method: "GET")
         request.cachePolicy = .useProtocolCachePolicy
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.securedData(for: request)
         try validateHTTPResponse(response, data: data)
         do {
             return try await Task.detached {
@@ -352,7 +352,7 @@ public final class SurveyManager: ObservableObject {
             request.setValue(String(powSolution.bits), forHTTPHeaderField: "X-ELS-PoW-Bits")
         }
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.securedData(for: request)
         try validateHTTPResponse(response, data: data)
     }
 
@@ -360,7 +360,7 @@ public final class SurveyManager: ObservableObject {
         var request = try buildRequest(path: Self.challengePath, method: "POST")
         request.httpBody = Data("{}".utf8)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.securedData(for: request)
         try validateHTTPResponse(response, data: data)
         do {
             return try await Task.detached {

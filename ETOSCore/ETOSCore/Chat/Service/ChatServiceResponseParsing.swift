@@ -83,7 +83,7 @@ extension ChatService {
         do {
             var request = URLRequest(url: url)
             request.timeoutInterval = 20
-            let (data, response) = try await urlSession.data(for: request)
+            let (data, response) = try await urlSession.securedData(for: request)
             guard let httpResponse = response as? HTTPURLResponse,
                   (200...299).contains(httpResponse.statusCode) else {
                 return nil

@@ -20,7 +20,7 @@ extension LocalDebugServer {
 
         let config = NetworkSessionConfiguration.makeConfiguration()
         config.httpMaximumConnectionsPerHost = 4
-        httpSession = URLSession(configuration: config)
+        httpSession = NetworkSessionConfiguration.makeSession(from: config)
 
         testHTTPConnection(host: host, port: port) { [weak self] success, error in
             guard let self = self else { return }
@@ -52,9 +52,9 @@ extension LocalDebugServer {
         request.httpMethod = "GET"
         request.timeoutInterval = 5.0
 
-        httpSession?.dataTask(with: request) { data, response, error in
+        httpSession?.securedDataTask(with: request) { [weak self] data, response, error in
             if let error = error {
-                self.logger.error("HTTP 测试失败: \(error.localizedDescription)")
+                self?.logger.error("HTTP 测试失败: \(error.localizedDescription)")
                 completion(false, error)
                 return
             }
@@ -65,7 +65,7 @@ extension LocalDebugServer {
             } else {
                 completion(false, nil)
             }
-        }.resume()
+        }
     }
 
     /// 生成更易定位问题的 HTTP 连接失败提示
@@ -135,7 +135,7 @@ extension LocalDebugServer {
             request.httpBody = jsonData
         }
 
-        httpSession?.dataTask(with: request) { [weak self] data, response, error in
+        httpSession?.securedDataTask(with: request) { [weak self] data, response, error in
             guard let self = self else { return }
 
             if let error = error {
@@ -182,7 +182,7 @@ extension LocalDebugServer {
                     }
                 }
             }
-        }.resume()
+        }
     }
 
     /// 通过 HTTP 发送响应
@@ -213,14 +213,14 @@ extension LocalDebugServer {
                 }
             }
 
-            httpSession?.dataTask(with: request) { [weak self] _, _, error in
+            httpSession?.securedDataTask(with: request) { [weak self] _, _, error in
                 guard let self = self else { return }
                 Task { @MainActor in
                     if let error = error {
                         self.addLog("发送失败: \(error.localizedDescription)", type: .error)
                     }
                 }
-            }.resume()
+            }
         }
     }
 
@@ -260,7 +260,7 @@ extension LocalDebugServer {
         let isComplete = response["stream_complete"] as? Bool ?? false
 
         do {
-            let (_, httpResponse) = try await session.data(for: request)
+            let (_, httpResponse) = try await session.securedData(for: request)
             if let httpRes = httpResponse as? HTTPURLResponse {
                 if httpRes.statusCode != 200 {
                     logger.error("服务器返回错误状态码: \(httpRes.statusCode)")

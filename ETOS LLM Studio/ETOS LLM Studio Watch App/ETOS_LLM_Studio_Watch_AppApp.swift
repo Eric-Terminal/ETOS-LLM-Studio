@@ -46,6 +46,7 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .networkConnectionApprovalHost()
                 .environmentObject(launchStateMachine)
                 .environmentObject(appConfig)
                 .environmentObject(syncManager)

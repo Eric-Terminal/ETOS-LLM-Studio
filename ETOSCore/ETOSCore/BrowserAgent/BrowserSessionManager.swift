@@ -400,6 +400,8 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
             delegateQueue: nil
         )
         defer { networkSession.finishTasksAndInvalidate() }
+        NetworkSessionConfiguration.track(networkSession)
+        try await NetworkConnectionSecurity.shared.authorizeHTTP(request.url)
         let (temporaryURL, response) = try await networkSession.download(for: request)
         if let blockedHost = redirectDelegate.blockedHost {
             throw BrowserAgentError.crossDomainApprovalRequired(

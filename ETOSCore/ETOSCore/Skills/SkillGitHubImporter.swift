@@ -322,7 +322,7 @@ public enum SkillGitHubImporter {
         request.timeoutInterval = 30
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
 
-        let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
+        let (data, response) = try await NetworkSessionConfiguration.shared.securedData(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw SkillStoreError.networkError(
                 NSLocalizedString("GitHub 响应无效。", comment: "Invalid GitHub response")

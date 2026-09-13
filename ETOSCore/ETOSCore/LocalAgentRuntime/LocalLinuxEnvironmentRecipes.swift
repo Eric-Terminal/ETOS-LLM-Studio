@@ -85,7 +85,7 @@ public enum LocalLinuxPackageMirrors {
         configuration.timeoutIntervalForRequest = 5
         configuration.timeoutIntervalForResource = 10
         configuration.waitsForConnectivity = false
-        let session = URLSession(configuration: configuration)
+        let session = NetworkSessionConfiguration.makeSession(from: configuration)
         defer { session.invalidateAndCancel() }
 
         let results = await withTaskGroup(of: LocalLinuxMirrorProbeResult.self) { group in
@@ -145,7 +145,7 @@ public enum LocalLinuxPackageMirrors {
             request.timeoutInterval = 5
 
             do {
-                let (_, response) = try await session.data(for: request)
+                let (_, response) = try await session.securedData(for: request)
                 guard let httpResponse = response as? HTTPURLResponse,
                       (200..<400).contains(httpResponse.statusCode) else {
                     return nil

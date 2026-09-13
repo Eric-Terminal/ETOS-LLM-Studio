@@ -286,6 +286,7 @@ extension ChatService {
     /// 检测是否为取消错误（包括 CancellationError 和 URLError.cancelled）
     /// URLError(.cancelled) 不会被 Swift 的 `is CancellationError` 匹配，需要单独处理
     func isCancellationError(_ error: Error) -> Bool {
+        if NetworkConnectionSecurityError.isRejection(error) { return true }
         if error is CancellationError {
             return true
         }
@@ -464,7 +465,7 @@ extension ChatService {
         }
         let configuration = NetworkSessionConfiguration.makeConfiguration()
         configuration.connectionProxyDictionary = proxyDictionary
-        return (URLSession(configuration: configuration), proxyConfiguration)
+        return (NetworkSessionConfiguration.makeSession(from: configuration), proxyConfiguration)
     }
 
     func requestData(
@@ -476,7 +477,7 @@ extension ChatService {
             to: request,
             configuration: resolved.proxy
         )
-        return try await resolved.session.data(for: proxiedRequest)
+        return try await resolved.session.securedData(for: proxiedRequest)
     }
 
     private func requestBytes(
@@ -488,7 +489,7 @@ extension ChatService {
             to: request,
             configuration: resolved.proxy
         )
-        return try await resolved.session.bytes(for: proxiedRequest)
+        return try await resolved.session.securedBytes(for: proxiedRequest)
     }
 
     func fetchData(for request: URLRequest, provider: Provider?) async throws -> Data {

@@ -76,7 +76,7 @@ final class TelemetryUploader: TelemetryUploading, @unchecked Sendable {
             configuration.waitsForConnectivity = false
             configuration.timeoutIntervalForRequest = 30
             configuration.timeoutIntervalForResource = 60
-            self.session = URLSession(configuration: configuration)
+            self.session = NetworkSessionConfiguration.makeSession(from: configuration)
         }
 
         let baseURL = FeedbackServiceConfig.default.baseURL
@@ -170,7 +170,7 @@ final class TelemetryUploader: TelemetryUploading, @unchecked Sendable {
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
 
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await session.securedData(for: request)
             guard let httpResponse = response as? HTTPURLResponse,
                   (200..<300).contains(httpResponse.statusCode) else {
                 return (

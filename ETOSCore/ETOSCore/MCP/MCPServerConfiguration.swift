@@ -252,6 +252,7 @@ public extension MCPServerConfiguration {
         case .http(let endpoint, let apiKey, let additionalHeaders):
             let headers = resolveAdditionalHeaders(additionalHeaders, token: apiKey)
             let configuration = NetworkSessionConfiguration.makeConfiguration()
+            configuration.protocolClasses = [MCPNetworkSecurityURLProtocol.self] + (configuration.protocolClasses ?? [])
             let requestState = MCPSDKHTTPRequestState(headers: headers)
             let modifier = requestState.requestModifier()
             let sdkTransport = HTTPClientTransport(
@@ -318,6 +319,7 @@ public extension MCPServerConfiguration {
             )
         case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
             let configuration = NetworkSessionConfiguration.makeConfiguration()
+            configuration.protocolClasses = [MCPNetworkSecurityURLProtocol.self] + (configuration.protocolClasses ?? [])
             let authorizer = MCPOAuthEndpointAuthorizer(
                 tokenEndpoint: tokenEndpoint,
                 clientID: clientID,

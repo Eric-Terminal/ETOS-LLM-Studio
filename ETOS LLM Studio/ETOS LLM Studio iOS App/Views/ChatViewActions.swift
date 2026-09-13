@@ -282,7 +282,7 @@ extension ChatView {
         }
         var request = URLRequest(url: url)
         request.timeoutInterval = 20
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await NetworkSessionConfiguration.shared.securedData(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode),
               UIImage(data: data) != nil else {

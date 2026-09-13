@@ -503,7 +503,7 @@ public final class UpdateTimelineManager: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("ETOS LLM Studio", forHTTPHeaderField: "User-Agent")
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.securedData(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw UpdateTimelineError.missingGraphQLResponse
         }
@@ -529,7 +529,7 @@ public final class UpdateTimelineManager: ObservableObject {
         ]
         guard let url = components.url else { return nil }
         let decoder = timelineJSONDecoder()
-        let (data, response) = try await session.data(from: url)
+        let (data, response) = try await session.securedData(from: url)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw UpdateTimelineError.missingGraphQLResponse
         }

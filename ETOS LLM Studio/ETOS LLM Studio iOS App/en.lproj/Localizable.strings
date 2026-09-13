@@ -7518,3 +7518,34 @@
 "消息已发生变化，请重新打开编辑器。" = "The message has changed. Reopen the editor.";
 "一条工具结果消息只能关联一个调用；多个调用请添加到助手消息。" = "A tool result message can reference only one call. Add multiple calls to an assistant message.";
 "使用 JSON 数组编辑调用。每项包含 id、toolName 和 arguments（JSON 对象或包含对象的字符串）；可选 result、resultDisposition 和 providerSpecificFields。新增一项即可添加调用，删除一项可移除调用，[] 表示清空。id 必须唯一，建议保留现有 id 以维持结果关联。result 为字符串，状态可为 completed、failed 或 rejected。修改会同步同轮对话中的关联结果；这些记录会用于后续聊天历史。" = "Edit calls as a JSON array. Each item contains id, toolName, and arguments (a JSON object or a string containing one). Optional fields are result, resultDisposition, and providerSpecificFields. Add or remove items to add or remove calls; [] clears the list. IDs must be unique; keep existing IDs to preserve result links. result is a string; status can be completed, failed, or rejected. Changes update linked results in the same conversation turn and are used in subsequent chat history.";
+
+// 用户确认的 HTTP 与 HTTPS 证书连接例外。
+"Address" = "Address";
+"Allow HTTP exceptions" = "Allow HTTP exceptions";
+"Allow certificate exceptions" = "Allow certificate exceptions";
+"Cancel" = "Cancel";
+"Certificate exception" = "Certificate exception";
+"Connection Exception" = "Connection Exception";
+"Connection Exceptions" = "Connection Exceptions";
+"Connection exceptions help you connect to self-hosted services. HTTP sends data without encryption. HTTPS with a certificate exception remains encrypted, but the server's identity cannot be verified normally.\n\nWhen a connection is blocked, choose Continue Once or Continue and Remember. Remembered choices are shared by the app's API, model, MCP and file-transfer requests on this device. A new address, port, certificate or validation problem can require another confirmation.\n\nSwitches control remembered exceptions; they do not approve every server. Remove an address to revoke its exception. App-owned services always require normal HTTPS verification. These settings do not change the certificate trust of iOS or watchOS, Safari, or programs running inside the local Linux environment." = "Connection exceptions help you connect to self-hosted services. HTTP sends data without encryption. HTTPS with a certificate exception remains encrypted, but the server's identity cannot be verified normally.\n\nWhen a connection is blocked, choose Continue Once or Continue and Remember. Remembered choices are shared by the app's API, model, MCP and file-transfer requests on this device. A new address, port, certificate or validation problem can require another confirmation.\n\nSwitches control remembered exceptions; they do not approve every server. Remove an address to revoke its exception. App-owned services always require normal HTTPS verification. These settings do not change the certificate trust of iOS or watchOS, Safari, or programs running inside the local Linux environment.";
+"Continue Once" = "Continue Once";
+"Continue and Remember" = "Continue and Remember";
+"Continue without encryption?" = "Continue without encryption?";
+"Exception type" = "Exception type";
+"HTTP connection" = "HTTP connection";
+"Learn More…" = "Learn More…";
+"Manage connections you have explicitly allowed on this device." = "Manage connections you have explicitly allowed on this device.";
+"Messages, files and API keys sent to this address will not be encrypted and may be read or changed by others on the network." = "Messages, files and API keys sent to this address will not be encrypted and may be read or changed by others on the network.";
+"No remembered exceptions" = "No remembered exceptions";
+"OK" = "OK";
+"Only remembered addresses are allowed. New addresses and new certificate problems still require confirmation. Turning a switch off also stops affected connections." = "Only remembered addresses are allowed. New addresses and new certificate problems still require confirmation. Turning a switch off also stops affected connections.";
+"Remembered Addresses" = "Remembered Addresses";
+"Remembering this choice enables this type of exception for this address across the app. Manage exceptions in Extended Features > Connection Exceptions." = "Remembering this choice enables this type of exception for this address across the app. Manage exceptions in Extended Features > Connection Exceptions.";
+"Remove Exception" = "Remove Exception";
+"Removing this exception stops connections to this address and requires confirmation next time." = "Removing this exception stops connections to this address and requires confirmation next time.";
+"The connection exception could not be saved. Please try again." = "The connection exception could not be saved. Please try again.";
+"The connection was blocked because it has not been approved." = "The connection was blocked because it has not been approved.";
+"This HTTPS connection is encrypted, but the server's identity could not be verified. Someone could be impersonating this server." = "This HTTPS connection is encrypted, but the server's identity could not be verified. Someone could be impersonating this server.";
+"Unable to save exception" = "Unable to save exception";
+"Unable to update exceptions" = "Unable to update exceptions";
+"Unable to verify server identity" = "Unable to verify server identity";

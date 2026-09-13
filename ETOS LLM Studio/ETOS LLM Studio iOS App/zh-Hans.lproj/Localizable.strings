@@ -7504,3 +7504,34 @@
 "消息已发生变化，请重新打开编辑器。" = "消息已发生变化，请重新打开编辑器。";
 "一条工具结果消息只能关联一个调用；多个调用请添加到助手消息。" = "一条工具结果消息只能关联一个调用；多个调用请添加到助手消息。";
 "使用 JSON 数组编辑调用。每项包含 id、toolName 和 arguments（JSON 对象或包含对象的字符串）；可选 result、resultDisposition 和 providerSpecificFields。新增一项即可添加调用，删除一项可移除调用，[] 表示清空。id 必须唯一，建议保留现有 id 以维持结果关联。result 为字符串，状态可为 completed、failed 或 rejected。修改会同步同轮对话中的关联结果；这些记录会用于后续聊天历史。" = "使用 JSON 数组编辑调用。每项包含 id、toolName 和 arguments（JSON 对象或包含对象的字符串）；可选 result、resultDisposition 和 providerSpecificFields。新增一项即可添加调用，删除一项可移除调用，[] 表示清空。id 必须唯一，建议保留现有 id 以维持结果关联。result 为字符串，状态可为 completed、failed 或 rejected。修改会同步同轮对话中的关联结果；这些记录会用于后续聊天历史。";
+
+// 用户确认的 HTTP 与 HTTPS 证书连接例外。
+"Address" = "地址";
+"Allow HTTP exceptions" = "允许 HTTP 连接例外";
+"Allow certificate exceptions" = "允许证书验证例外";
+"Cancel" = "取消";
+"Certificate exception" = "证书验证例外";
+"Connection Exception" = "连接例外";
+"Connection Exceptions" = "连接例外";
+"Connection exceptions help you connect to self-hosted services. HTTP sends data without encryption. HTTPS with a certificate exception remains encrypted, but the server's identity cannot be verified normally.\n\nWhen a connection is blocked, choose Continue Once or Continue and Remember. Remembered choices are shared by the app's API, model, MCP and file-transfer requests on this device. A new address, port, certificate or validation problem can require another confirmation.\n\nSwitches control remembered exceptions; they do not approve every server. Remove an address to revoke its exception. App-owned services always require normal HTTPS verification. These settings do not change the certificate trust of iOS or watchOS, Safari, or programs running inside the local Linux environment." = "连接例外用于访问自建服务。HTTP 不会加密传输内容。允许证书例外的 HTTPS 仍然加密，但无法正常验证服务器身份。\n\n连接被阻止时，可选择“仅本次继续”或“继续并记住”。记住的选择供本机 App 的 API、模型、MCP 和文件传输共同使用。地址、端口、证书变化或出现新的验证问题时，可能需要重新确认。\n\n开关仅控制已记住的例外，不会放行所有服务器。移除地址可撤销授权。App 自有服务始终要求正常的 HTTPS 验证。这些设置不会改变 iOS、watchOS、Safari 或本地 Linux 中独立程序的证书信任规则。";
+"Continue Once" = "仅本次继续";
+"Continue and Remember" = "继续并记住";
+"Continue without encryption?" = "继续使用未加密连接？";
+"Exception type" = "例外类型";
+"HTTP connection" = "HTTP 连接";
+"Learn More…" = "进一步了解…";
+"Manage connections you have explicitly allowed on this device." = "管理你在本机明确允许的连接。";
+"Messages, files and API keys sent to this address will not be encrypted and may be read or changed by others on the network." = "发送到此地址的消息、文件和 API Key 不会加密，可能被网络中的其他人读取或修改。";
+"No remembered exceptions" = "尚未记住任何例外";
+"OK" = "好的";
+"Only remembered addresses are allowed. New addresses and new certificate problems still require confirmation. Turning a switch off also stops affected connections." = "仅允许已记住的地址。新地址和新的证书问题仍需要确认。关闭开关也会停止受影响的连接。";
+"Remembered Addresses" = "已记住的地址";
+"Remembering this choice enables this type of exception for this address across the app. Manage exceptions in Extended Features > Connection Exceptions." = "记住后，将在 App 各项功能中对这个地址启用此类例外。可在“拓展功能”→“连接例外”中管理。";
+"Remove Exception" = "移除例外";
+"Removing this exception stops connections to this address and requires confirmation next time." = "移除此例外会停止连接到该地址，下次连接时需要重新确认。";
+"The connection exception could not be saved. Please try again." = "无法保存连接例外，请重试。";
+"The connection was blocked because it has not been approved." = "连接尚未获得授权，已被阻止。";
+"This HTTPS connection is encrypted, but the server's identity could not be verified. Someone could be impersonating this server." = "此 HTTPS 连接已加密，但无法验证服务器身份。其他人可能正在冒充这台服务器。";
+"Unable to save exception" = "无法保存例外";
+"Unable to update exceptions" = "无法更新例外";
+"Unable to verify server identity" = "无法验证服务器身份";

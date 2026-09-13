@@ -480,7 +480,7 @@ private struct ChatExportUploadProgressView: View {
     }
 }
 
-private final class ChatExportUploadProgressDelegate: NSObject, URLSessionDataDelegate {
+private final class ChatExportUploadProgressDelegate: NetworkSecuritySessionDelegate, URLSessionDataDelegate, @unchecked Sendable {
     private let totalBytes: Int64
     private let progress: @Sendable (SyncPackageUploadProgress) -> Void
     private let lock = NSLock()
@@ -494,19 +494,30 @@ private final class ChatExportUploadProgressDelegate: NSObject, URLSessionDataDe
     }
 
     func upload(request: URLRequest, fileURL: URL) async throws -> (Data, URLResponse) {
-        try await withCheckedThrowingContinuation { continuation in
-            lock.lock()
-            self.continuation = continuation
-            let session = URLSession(
-                configuration: NetworkSessionConfiguration.makeConfiguration(),
-                delegate: self,
-                delegateQueue: nil
-            )
-            self.session = session
-            lock.unlock()
+        try await NetworkConnectionSecurity.shared.authorizeHTTP(request.url)
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                lock.lock()
+                guard !Task.isCancelled else {
+                    lock.unlock()
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
+                self.continuation = continuation
+                let session = URLSession(configuration: NetworkSessionConfiguration.makeConfiguration(), delegate: self, delegateQueue: nil)
+                self.session = session
+                NetworkSessionConfiguration.track(session)
+                session.uploadTask(with: request, fromFile: fileURL).resume()
+                lock.unlock()
+            }
+        } onCancel: { [weak self] in self?.cancelTransfer() }
+    }
 
-            session.uploadTask(with: request, fromFile: fileURL).resume()
-        }
+    private func cancelTransfer() {
+        lock.lock()
+        let session = session
+        lock.unlock()
+        session?.invalidateAndCancel()
     }
 
     func urlSession(
@@ -524,7 +535,8 @@ private final class ChatExportUploadProgressDelegate: NSObject, URLSessionDataDe
         responseData.append(data)
     }
 
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    override func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        super.urlSession(session, task: task, didCompleteWithError: error)
         if let error {
             finish(.failure(error))
             return

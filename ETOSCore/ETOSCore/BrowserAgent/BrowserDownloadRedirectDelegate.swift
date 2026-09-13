@@ -9,7 +9,7 @@
 import Foundation
 
 #if canImport(WebKit) && canImport(UIKit) && !os(watchOS)
-final class BrowserDownloadRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+final class BrowserDownloadRedirectDelegate: NetworkSecuritySessionDelegate, @unchecked Sendable {
     private let allowedHosts: Set<String>
     private let lock = NSLock()
     private var blockedHostStorage: String?
@@ -24,12 +24,12 @@ final class BrowserDownloadRedirectDelegate: NSObject, URLSessionTaskDelegate, @
         return blockedHostStorage
     }
 
-    func urlSession(
+    override func urlSession(
         _ session: URLSession,
         task: URLSessionTask,
         willPerformHTTPRedirection response: HTTPURLResponse,
         newRequest request: URLRequest,
-        completionHandler: @escaping (URLRequest?) -> Void
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void
     ) {
         guard let url = request.url,
               let scheme = url.scheme?.lowercased(),
@@ -42,7 +42,8 @@ final class BrowserDownloadRedirectDelegate: NSObject, URLSessionTaskDelegate, @
             completionHandler(nil)
             return
         }
-        completionHandler(request)
+        super.urlSession(session, task: task, willPerformHTTPRedirection: response,
+                         newRequest: request, completionHandler: completionHandler)
     }
 }
 #endif

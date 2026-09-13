@@ -7511,3 +7511,34 @@
 "消息已发生变化，请重新打开编辑器。" = "Сообщение изменилось. Откройте редактор заново.";
 "一条工具结果消息只能关联一个调用；多个调用请添加到助手消息。" = "Сообщение с результатом может относиться только к одному вызову. Несколько вызовов добавляйте в сообщение ассистента.";
 "使用 JSON 数组编辑调用。每项包含 id、toolName 和 arguments（JSON 对象或包含对象的字符串）；可选 result、resultDisposition 和 providerSpecificFields。新增一项即可添加调用，删除一项可移除调用，[] 表示清空。id 必须唯一，建议保留现有 id 以维持结果关联。result 为字符串，状态可为 completed、failed 或 rejected。修改会同步同轮对话中的关联结果；这些记录会用于后续聊天历史。" = "Редактируйте вызовы как массив JSON. Каждый элемент содержит id, toolName и arguments (объект JSON или строку с ним). Поля result, resultDisposition и providerSpecificFields необязательны. Добавляйте и удаляйте элементы; [] очищает список. ID должны быть уникальны; сохраняйте существующие ID для связи с результатами. result — строка; статус — completed, failed или rejected. Связанные результаты в том же ходе обновляются и используются в последующей истории чата.";
+
+// 用户确认的 HTTP 与 HTTPS 证书连接例外。
+"Address" = "Адрес";
+"Allow HTTP exceptions" = "Разрешить исключения HTTP";
+"Allow certificate exceptions" = "Разрешить исключения сертификатов";
+"Cancel" = "Отмена";
+"Certificate exception" = "Исключение сертификата";
+"Connection Exception" = "Исключение подключения";
+"Connection Exceptions" = "Исключения подключений";
+"Connection exceptions help you connect to self-hosted services. HTTP sends data without encryption. HTTPS with a certificate exception remains encrypted, but the server's identity cannot be verified normally.\n\nWhen a connection is blocked, choose Continue Once or Continue and Remember. Remembered choices are shared by the app's API, model, MCP and file-transfer requests on this device. A new address, port, certificate or validation problem can require another confirmation.\n\nSwitches control remembered exceptions; they do not approve every server. Remove an address to revoke its exception. App-owned services always require normal HTTPS verification. These settings do not change the certificate trust of iOS or watchOS, Safari, or programs running inside the local Linux environment." = "Исключения позволяют подключаться к самостоятельно размещённым сервисам. HTTP передаёт данные без шифрования. HTTPS с исключением сертификата остаётся зашифрованным, но подлинность сервера нельзя проверить обычным способом.\n\nЕсли подключение заблокировано, выберите «Продолжить один раз» или «Продолжить и запомнить». Сохранённые решения действуют для API, моделей, MCP и передачи файлов приложения на этом устройстве. Новый адрес, порт, сертификат или ошибка проверки могут потребовать повторного подтверждения.\n\nПереключатели управляют сохранёнными исключениями и не разрешают все серверы. Удалите адрес, чтобы отозвать исключение. Собственные сервисы приложения всегда требуют обычной проверки HTTPS. Эти настройки не меняют доверие к сертификатам в iOS, watchOS, Safari или независимых программах локальной среды Linux.";
+"Continue Once" = "Продолжить один раз";
+"Continue and Remember" = "Продолжить и запомнить";
+"Continue without encryption?" = "Продолжить без шифрования?";
+"Exception type" = "Тип исключения";
+"HTTP connection" = "Подключение HTTP";
+"Learn More…" = "Подробнее…";
+"Manage connections you have explicitly allowed on this device." = "Управляйте подключениями, которые вы явно разрешили на этом устройстве.";
+"Messages, files and API keys sent to this address will not be encrypted and may be read or changed by others on the network." = "Сообщения, файлы и ключи API, отправляемые на этот адрес, не будут зашифрованы. Другие участники сети смогут прочитать или изменить их.";
+"No remembered exceptions" = "Нет сохранённых исключений";
+"OK" = "ОК";
+"Only remembered addresses are allowed. New addresses and new certificate problems still require confirmation. Turning a switch off also stops affected connections." = "Разрешены только сохранённые адреса. Новые адреса и ошибки сертификатов требуют подтверждения. Отключение переключателя также останавливает соответствующие подключения.";
+"Remembered Addresses" = "Сохранённые адреса";
+"Remembering this choice enables this type of exception for this address across the app. Manage exceptions in Extended Features > Connection Exceptions." = "Сохранение решения включает этот тип исключения для данного адреса во всём приложении. Управление доступно в разделе «Расширенные функции» → «Исключения подключений».";
+"Remove Exception" = "Удалить исключение";
+"Removing this exception stops connections to this address and requires confirmation next time." = "Удаление исключения останавливает подключения к этому адресу и требует подтверждения в следующий раз.";
+"The connection exception could not be saved. Please try again." = "Не удалось сохранить исключение подключения. Повторите попытку.";
+"The connection was blocked because it has not been approved." = "Подключение заблокировано, поскольку оно не было разрешено.";
+"This HTTPS connection is encrypted, but the server's identity could not be verified. Someone could be impersonating this server." = "Это подключение HTTPS зашифровано, но подлинность сервера проверить не удалось. Кто-то может выдавать себя за этот сервер.";
+"Unable to save exception" = "Не удалось сохранить исключение";
+"Unable to update exceptions" = "Не удалось обновить исключения";
+"Unable to verify server identity" = "Не удалось проверить подлинность сервера";

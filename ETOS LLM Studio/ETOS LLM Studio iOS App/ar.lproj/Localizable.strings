@@ -7595,3 +7595,34 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "消息已发生变化，请重新打开编辑器。" = "تغيرت الرسالة. أعد فتح المحرر.";
 "一条工具结果消息只能关联一个调用；多个调用请添加到助手消息。" = "يمكن لرسالة نتيجة الأداة الارتباط باستدعاء واحد فقط. أضف الاستدعاءات المتعددة إلى رسالة المساعد.";
 "使用 JSON 数组编辑调用。每项包含 id、toolName 和 arguments（JSON 对象或包含对象的字符串）；可选 result、resultDisposition 和 providerSpecificFields。新增一项即可添加调用，删除一项可移除调用，[] 表示清空。id 必须唯一，建议保留现有 id 以维持结果关联。result 为字符串，状态可为 completed、failed 或 rejected。修改会同步同轮对话中的关联结果；这些记录会用于后续聊天历史。" = "حرّر الاستدعاءات كمصفوفة JSON. يحتوي كل عنصر على id وtoolName وarguments (كائن JSON أو سلسلة تحتوي عليه). الحقول الاختيارية هي result وresultDisposition وproviderSpecificFields. أضف العناصر أو احذفها؛ [] تفرغ القائمة. يجب أن تكون المعرّفات فريدة؛ احتفظ بالحالية للحفاظ على ارتباط النتائج. result سلسلة نصية، والحالة completed أو failed أو rejected. تحدّث التغييرات النتائج المرتبطة في دور المحادثة نفسه وتُستخدم في سجل الدردشة اللاحق.";
+
+// 用户确认的 HTTP 与 HTTPS 证书连接例外。
+"Address" = "العنوان";
+"Allow HTTP exceptions" = "السماح باستثناءات HTTP";
+"Allow certificate exceptions" = "السماح باستثناءات الشهادات";
+"Cancel" = "إلغاء";
+"Certificate exception" = "استثناء شهادة";
+"Connection Exception" = "استثناء اتصال";
+"Connection Exceptions" = "استثناءات الاتصال";
+"Connection exceptions help you connect to self-hosted services. HTTP sends data without encryption. HTTPS with a certificate exception remains encrypted, but the server's identity cannot be verified normally.\n\nWhen a connection is blocked, choose Continue Once or Continue and Remember. Remembered choices are shared by the app's API, model, MCP and file-transfer requests on this device. A new address, port, certificate or validation problem can require another confirmation.\n\nSwitches control remembered exceptions; they do not approve every server. Remove an address to revoke its exception. App-owned services always require normal HTTPS verification. These settings do not change the certificate trust of iOS or watchOS, Safari, or programs running inside the local Linux environment." = "تتيح استثناءات الاتصال الوصول إلى الخدمات ذاتية الاستضافة. يرسل HTTP البيانات دون تشفير. يبقى اتصال HTTPS الذي يستخدم استثناء شهادة مشفراً، لكن لا يمكن التحقق من هوية الخادم بالطريقة المعتادة.\n\nعند حظر اتصال، اختر «المتابعة مرة واحدة» أو «المتابعة والتذكر». تُستخدم القرارات المحفوظة لطلبات API والنماذج وMCP ونقل الملفات في التطبيق على هذا الجهاز. قد يتطلب تغيير العنوان أو المنفذ أو الشهادة أو ظهور مشكلة تحقق جديدة تأكيداً آخر.\n\nتتحكم المفاتيح في الاستثناءات المحفوظة ولا تسمح بجميع الخوادم. احذف عنواناً لإلغاء استثنائه. تتطلب خدمات التطبيق الخاصة دائماً التحقق المعتاد من HTTPS. لا تغيّر هذه الإعدادات الثقة بالشهادات في iOS أو watchOS أو Safari أو البرامج المستقلة داخل بيئة Linux المحلية.";
+"Continue Once" = "المتابعة مرة واحدة";
+"Continue and Remember" = "المتابعة والتذكر";
+"Continue without encryption?" = "هل تريد المتابعة دون تشفير؟";
+"Exception type" = "نوع الاستثناء";
+"HTTP connection" = "اتصال HTTP";
+"Learn More…" = "معرفة المزيد…";
+"Manage connections you have explicitly allowed on this device." = "إدارة الاتصالات التي سمحت بها صراحةً على هذا الجهاز.";
+"Messages, files and API keys sent to this address will not be encrypted and may be read or changed by others on the network." = "لن تُشفّر الرسائل والملفات ومفاتيح API المرسلة إلى هذا العنوان، وقد يتمكن أشخاص آخرون على الشبكة من قراءتها أو تعديلها.";
+"No remembered exceptions" = "لا توجد استثناءات محفوظة";
+"OK" = "حسناً";
+"Only remembered addresses are allowed. New addresses and new certificate problems still require confirmation. Turning a switch off also stops affected connections." = "يُسمح بالعناوين المحفوظة فقط. تتطلب العناوين الجديدة ومشكلات الشهادات الجديدة تأكيداً. يؤدي إيقاف المفتاح أيضاً إلى إيقاف الاتصالات المتأثرة.";
+"Remembered Addresses" = "العناوين المحفوظة";
+"Remembering this choice enables this type of exception for this address across the app. Manage exceptions in Extended Features > Connection Exceptions." = "يؤدي تذكر هذا القرار إلى تفعيل هذا النوع من الاستثناءات لهذا العنوان في جميع أجزاء التطبيق. يمكنك إدارتها في «الميزات الموسعة» > «استثناءات الاتصال».";
+"Remove Exception" = "إزالة الاستثناء";
+"Removing this exception stops connections to this address and requires confirmation next time." = "تؤدي إزالة هذا الاستثناء إلى إيقاف الاتصالات بهذا العنوان وطلب التأكيد في المرة القادمة.";
+"The connection exception could not be saved. Please try again." = "تعذر حفظ استثناء الاتصال. يرجى المحاولة مجدداً.";
+"The connection was blocked because it has not been approved." = "حُظر الاتصال لأنه لم تتم الموافقة عليه.";
+"This HTTPS connection is encrypted, but the server's identity could not be verified. Someone could be impersonating this server." = "اتصال HTTPS هذا مشفّر، لكن تعذر التحقق من هوية الخادم. قد يكون هناك من ينتحل هوية هذا الخادم.";
+"Unable to save exception" = "تعذر حفظ الاستثناء";
+"Unable to update exceptions" = "تعذر تحديث الاستثناءات";
+"Unable to verify server identity" = "تعذر التحقق من هوية الخادم";

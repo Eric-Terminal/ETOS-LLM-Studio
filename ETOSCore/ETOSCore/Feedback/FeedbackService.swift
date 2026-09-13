@@ -231,7 +231,7 @@ public final class FeedbackService: ObservableObject {
             request.setValue(String(powSolution.bits), forHTTPHeaderField: "X-ELS-PoW-Bits")
         }
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.securedData(for: request)
         try validateHTTPResponse(response, data: data)
 
         let submitResponse: SubmitIssueResponse
@@ -294,7 +294,7 @@ public final class FeedbackService: ObservableObject {
         )
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.securedData(for: request)
         try validateHTTPResponse(response, data: data)
 
         let statusResponse: IssueStatusResponse
@@ -395,7 +395,7 @@ public final class FeedbackService: ObservableObject {
             request.setValue(String(powSolution.bits), forHTTPHeaderField: "X-ELS-PoW-Bits")
         }
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.securedData(for: request)
         try validateHTTPResponse(response, data: data)
 
         let submitResponse: SubmitCommentResponse
@@ -468,7 +468,7 @@ public final class FeedbackService: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.httpBody = Data("{}".utf8)
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.securedData(for: request)
         try validateHTTPResponse(response, data: data)
 
         do {

@@ -124,7 +124,7 @@ public actor MCPOAuthHTTPTransport: MCPTransport, MCPProtocolVersionConfigurable
             request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
         }
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.securedData(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw MCPClientError.invalidResponse
         }
@@ -146,7 +146,7 @@ public actor MCPOAuthHTTPTransport: MCPTransport, MCPProtocolVersionConfigurable
             request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
         }
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.securedData(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw MCPClientError.invalidResponse
         }
@@ -242,7 +242,7 @@ public actor MCPOAuthHTTPTransport: MCPTransport, MCPProtocolVersionConfigurable
             }
         }
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.securedData(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw MCPClientError.invalidResponse
         }

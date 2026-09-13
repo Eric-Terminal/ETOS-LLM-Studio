@@ -141,7 +141,7 @@ public actor GuideSourceService {
             .appendingPathComponent("guide")
             .appendingPathComponent("source-trees")
             .appendingPathComponent(sha)
-        let (data, response) = try await urlSession.data(from: url)
+        let (data, response) = try await urlSession.securedData(from: url)
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
             throw URLError(.badServerResponse)

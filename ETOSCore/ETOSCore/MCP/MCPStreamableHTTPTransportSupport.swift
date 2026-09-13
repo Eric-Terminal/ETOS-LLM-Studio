@@ -155,7 +155,7 @@ extension MCPStreamableHTTPTransport {
                     continue
                 }
 
-                let (bytes, response) = try await session.bytes(for: request)
+                let (bytes, response) = try await session.securedBytes(for: request)
                 guard let httpResponse = response as? HTTPURLResponse else {
                     throw MCPClientError.invalidResponse
                 }
@@ -206,6 +206,7 @@ extension MCPStreamableHTTPTransport {
                     return
                 }
                 streamableLogger.error("Streamable HTTP SSE error: \(error.localizedDescription)")
+                guard !NetworkConnectionSecurityError.isRejection(error) else { return }
                 guard await scheduleSSEReconnectIfNeeded() else { return }
             }
         }
@@ -274,7 +275,7 @@ extension MCPStreamableHTTPTransport {
             return try await responseExecutor(request)
         }
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.securedData(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw MCPClientError.invalidResponse
         }
@@ -593,7 +594,7 @@ extension MCPStreamableHTTPTransport {
             if let responseExecutor {
                 (_, httpResponse) = try await responseExecutor(request)
             } else {
-                let (_, response) = try await session.data(for: request)
+                let (_, response) = try await session.securedData(for: request)
                 guard let castedResponse = response as? HTTPURLResponse else {
                     streamableLogger.error("会话终止请求返回了无效响应。")
                     return

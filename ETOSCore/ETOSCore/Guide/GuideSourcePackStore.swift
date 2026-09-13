@@ -206,7 +206,7 @@ actor GuideSourcePackStore {
             .appendingPathComponent("guide")
             .appendingPathComponent("source-packs")
             .appendingPathComponent(sha)
-        let (data, response) = try await urlSession.data(from: url)
+        let (data, response) = try await urlSession.securedData(from: url)
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode),
               data.count <= Self.maximumArchiveBytes else {

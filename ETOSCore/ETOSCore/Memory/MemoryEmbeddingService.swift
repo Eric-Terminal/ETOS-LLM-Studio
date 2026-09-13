@@ -156,7 +156,7 @@ final class CloudEmbeddingService: MemoryEmbeddingGenerating {
             throw MemoryEmbeddingError.requestBuildFailed
         }
         
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response) = try await urlSession.securedData(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw MemoryEmbeddingError.invalidResponse
         }

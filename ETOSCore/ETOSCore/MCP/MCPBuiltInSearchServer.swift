@@ -477,7 +477,7 @@ private final class MCPBuiltInWebSearchClient {
         configuration.timeoutIntervalForRequest = defaultRequestTimeout
         configuration.timeoutIntervalForResource = defaultTotalTimeout
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        return URLSession(configuration: configuration)
+        return NetworkSessionConfiguration.makeSession(from: configuration)
     }
 
     convenience init() {
@@ -486,7 +486,7 @@ private final class MCPBuiltInWebSearchClient {
 
     init(session: URLSession) {
         self.dataLoader = { request in
-            try await session.data(for: request)
+            try await session.securedData(for: request)
         }
     }
 

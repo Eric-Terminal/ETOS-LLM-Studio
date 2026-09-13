@@ -75,7 +75,7 @@ public actor GuideEphemeralTokenProvider {
         )
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response) = try await urlSession.securedData(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
@@ -234,7 +234,7 @@ public final class GuideBuiltInCompletionClient: GuideCompletionClient, @uncheck
         tools: [InternalToolDefinition],
         onDelta: @escaping @Sendable (String) async -> Void
     ) async throws -> ChatMessage {
-        let (bytes, response) = try await urlSession.bytes(for: request)
+        let (bytes, response) = try await urlSession.securedBytes(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }

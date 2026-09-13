@@ -381,7 +381,7 @@ extension LocalDebugServer {
         request.httpBody = jsonData
 
         do {
-            let (data, _) = try await session.data(for: request)
+            let (data, _) = try await session.securedData(for: request)
 
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let status = json["status"] as? String,

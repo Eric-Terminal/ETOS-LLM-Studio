@@ -309,6 +309,15 @@ public struct ExtendedFeaturesView: View {
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
+            Section {
+                NavigationLink {
+                    NetworkConnectionSecuritySettingsView { page in
+                        AnyView(page.watchGuideEntry())
+                    }
+                } label: {
+                    Label(NSLocalizedString("Connection Exceptions", comment: "连接例外页面标题"), systemImage: "network")
+                }
+            }
         }
         .navigationTitle(NSLocalizedString("拓展功能", comment: "拓展功能页标题"))
         .guideSettingsPageContext(
@@ -321,7 +330,7 @@ public struct ExtendedFeaturesView: View {
                         "slash_commands", "background_generation", "app_lock", "tts", "speech_input",
                         "feedback", "memory", "mcp", "local_linux", "browser_agent", "shortcuts",
                         "agent_skills", "roleplay", "worldbook", "local_models", "remote_files",
-                        "storage", "data_import", "image_gallery"
+                        "storage", "data_import", "image_gallery", "connection_exceptions"
                     ].map(JSONValue.string))
                 })
             ]

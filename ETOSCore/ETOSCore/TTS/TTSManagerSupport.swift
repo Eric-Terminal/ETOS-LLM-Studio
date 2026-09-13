@@ -32,7 +32,7 @@ extension TTSManager {
     }
 
     func fetchData(for request: URLRequest) async throws -> Data {
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response) = try await urlSession.securedData(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw NSError(domain: "TTS", code: -20, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("无效的网络响应。", comment: "")])
         }

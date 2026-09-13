@@ -736,7 +736,7 @@ private struct WatchPersonaEditorView: View {
             do {
                 var request = URLRequest(url: url)
                 request.timeoutInterval = 45
-                let (data, response) = try await URLSession.shared.data(for: request)
+                let (data, response) = try await NetworkSessionConfiguration.shared.securedData(for: request)
                 if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
                     throw URLError(.badServerResponse)
                 }

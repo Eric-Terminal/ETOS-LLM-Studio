@@ -245,7 +245,7 @@ extension ConfigLoader {
             request.timeoutInterval = officialDataTimeout
             request.cachePolicy = .reloadIgnoringLocalCacheData
 
-            let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
+            let (data, response) = try await NetworkSessionConfiguration.shared.securedData(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse,
                   (200...299).contains(httpResponse.statusCode) else {

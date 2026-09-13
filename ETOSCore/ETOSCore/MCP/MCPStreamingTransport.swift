@@ -106,7 +106,7 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
                         request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
                     }
 
-                    let (data, response) = try await session.data(for: request)
+                    let (data, response) = try await session.securedData(for: request)
                     guard let httpResponse = response as? HTTPURLResponse else {
                         throw MCPClientError.invalidResponse
                     }
@@ -146,7 +146,7 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
             request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
         }
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.securedData(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw MCPClientError.invalidResponse
         }
@@ -227,7 +227,7 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
             }
 
             do {
-                let (bytes, response) = try await session.bytes(for: request)
+                let (bytes, response) = try await session.securedBytes(for: request)
                 guard let httpResponse = response as? HTTPURLResponse else {
                     throw MCPClientError.invalidResponse
                 }
@@ -284,6 +284,7 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
                     return
                 }
                 streamingLogger.error("SSE 连接错误: \(error.localizedDescription)")
+                guard !NetworkConnectionSecurityError.isRejection(error) else { return }
                 guard await scheduleSSEReconnectIfNeeded() else { return }
             }
         }

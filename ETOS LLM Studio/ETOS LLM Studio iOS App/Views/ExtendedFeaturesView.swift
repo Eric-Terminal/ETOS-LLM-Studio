@@ -144,6 +144,14 @@ struct ExtendedFeaturesView: View {
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
+
+            Section {
+                NavigationLink {
+                    NetworkConnectionSecuritySettingsView()
+                } label: {
+                    Label(NSLocalizedString("Connection Exceptions", comment: "连接例外页面标题"), systemImage: "network")
+                }
+            }
         }
         .navigationTitle(NSLocalizedString("拓展功能", comment: "拓展功能页标题"))
         .listStyle(.insetGrouped)
@@ -155,7 +163,7 @@ struct ExtendedFeaturesView: View {
                 .readOnly("available_sections", label: NSLocalizedString("可用功能入口", comment: "向导设置字段"), value: {
                     .array([
                         "slash_commands", "background_generation", "app_lock", "feedback", "local_models",
-                        "image_gallery", "remote_files", "storage", "data_import"
+                        "image_gallery", "remote_files", "storage", "data_import", "connection_exceptions"
                     ].map(JSONValue.string))
                 })
             ]
