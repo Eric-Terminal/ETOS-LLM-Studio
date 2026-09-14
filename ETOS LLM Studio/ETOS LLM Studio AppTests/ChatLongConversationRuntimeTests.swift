@@ -62,11 +62,11 @@ struct ChatLongConversationRuntimeTests {
         let maximumOffset = maximumContentOffsetY(of: scrollView)
         #expect(maximumOffset > 2_000)
 
-        _ = fixture.coordinator.prepareForUserPan(
-            isMessageJumpInFlight: false,
-            bottomScrollTarget: .bottom
-        )
-        fixture.coordinator.shouldKeepBottomPinned = false
+        // 初始定位尚未释放时，手势也必须走真实视图回调并取消该指令。
+        #expect(fixture.coordinator.chatScrollPositionController.issueCommand(to: .bottom, anchor: .bottom))
+        try fixture.beginUserPan()
+        #expect(!fixture.coordinator.chatScrollPositionController.hasActiveCommand)
+        #expect(fixture.coordinator.pendingScrollTargetTask == nil)
         let slightlyAwayFromBottomOffset = maximumOffset - 12
         scrollView.setContentOffset(
             CGPoint(x: scrollView.contentOffset.x, y: slightlyAwayFromBottomOffset),
@@ -86,11 +86,7 @@ struct ChatLongConversationRuntimeTests {
         await settleLayout(fixture.host.view, duration: 0.25)
         let settledReadingOffset = scrollView.contentOffset.y
 
-        _ = fixture.coordinator.prepareForUserPan(
-            isMessageJumpInFlight: false,
-            bottomScrollTarget: .bottom
-        )
-        fixture.coordinator.shouldKeepBottomPinned = false
+        try fixture.beginUserPan()
         let acceptedLateBottomCommand = fixture.coordinator.chatScrollPositionController
             .issueCommand(to: .bottom, anchor: .bottom)
 
@@ -417,6 +413,21 @@ private final class HostedChatFixture {
         window.isHidden = true
         window.rootViewController = nil
         savedConfiguration.restore(to: AppConfigStore.shared)
+    }
+
+    func beginUserPan() throws {
+        let observer = try #require(scrollMetricsObservers(in: host.view).first {
+            $0.coordinator?.scrollView === chatScrollView
+        })
+        let bridge = try #require(observer.coordinator)
+        // prepareForUserPan 只返回取消决定；实际 ChatView 回调还会释放任务与定位目标。
+        bridge.onUserPanBegan()
+        bridge.keepsBottomPinned.wrappedValue = false
+    }
+
+    private func scrollMetricsObservers(in view: UIView) -> [ChatScrollMetricsObserver.ObserverView] {
+        (view as? ChatScrollMetricsObserver.ObserverView).map { [$0] }
+            ?? view.subviews.flatMap { scrollMetricsObservers(in: $0) }
     }
 
     private func allScrollViews(in view: UIView) -> [UIScrollView] {
