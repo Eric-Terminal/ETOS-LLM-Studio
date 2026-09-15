@@ -1,6 +1,6 @@
 {
   "format": "etos-local-linux-compliance-v1",
-  "ishRevision": "87a0058c964187f7bb504d3f8a32f4c444462cfa",
+  "ishRevision": "8e1dd5fe51b2a4a73f4e51ab76942f14b1c33c0e",
   "resources": {
     "LocalLinuxRootFS-Packages.tsv": {
       "bytes": 1404,
@@ -8,7 +8,7 @@
     },
     "LocalLinuxRootFS-SBOM.spdx.json": {
       "bytes": 17032,
-      "sha256": "268c70ad25e2a4a144ad6f69afa09af3b2c2118a4edbba58871e7186bcefc7b0"
+      "sha256": "da50f9c6535e28f65c8a1f15c6f691c2015e7017940606edcc690cba6f5cf5c8"
     },
     "LocalLinuxRootFS-Source-Assets.tsv": {
       "bytes": 7908,
@@ -16,7 +16,7 @@
     },
     "LocalLinuxRootFS-Source-Offer.txt": {
       "bytes": 1390,
-      "sha256": "7e0f29d6be0d9205b24b42d8a6dc38790394cfc5f10394d7536a17ee80280103"
+      "sha256": "9f96e9d08755c76567d94f85b476ea3ed32782e04f1d3c8034ab2ebabc0c5ab2"
     },
     "LocalLinuxRootFS-Third-Party-Notices.txt": {
       "bytes": 199056,
