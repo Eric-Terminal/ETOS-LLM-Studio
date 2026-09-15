@@ -187,6 +187,11 @@ extension ChatService {
 
             do {
                 var parsedMessage = try adapter.parseResponse(data: data)
+                // 非流式返回只包含新增后缀；流式接收器已直接追加到同一占位消息。
+                if let prefix = messagesSnapshot(for: currentSessionID).first(where: { $0.id == loadingMessageID }) {
+                    parsedMessage.content = prefix.content + parsedMessage.content
+                    parsedMessage.reasoningContent = (prefix.reasoningContent ?? "") + (parsedMessage.reasoningContent ?? "")
+                }
                 let embeddedImageFileNames = extractGeneratedImagesFromAPIResponseBody(data)
                 if !embeddedImageFileNames.isEmpty {
                     parsedMessage.imageFileNames = (parsedMessage.imageFileNames ?? []) + embeddedImageFileNames

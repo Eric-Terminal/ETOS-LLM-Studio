@@ -749,6 +749,7 @@ extension ContentView {
                 message: message,
                 responseAttemptVersionInfo: viewModel.responseAttemptVersionInfo(for: message),
                 canRetry: viewModel.canRetry(message: message),
+                canPrefill: viewModel.selectedModel?.canRequestAssistantPrefill == true,
                 canRewrite: viewModel.canRewrite(message: message),
                 onInsertText: { text in
                     viewModel.applyToolInputDraftRequest(
@@ -770,6 +771,9 @@ extension ContentView {
                 },
                 onRetry: { message in
                     viewModel.retryMessage(message)
+                },
+                onPrefill: { message in
+                    viewModel.retryMessage(message, prefill: true)
                 },
                 onRetryVideoAnalysis: { message, fileName in
                     try await viewModel.retryVideoAnalysis(message, fileName: fileName)

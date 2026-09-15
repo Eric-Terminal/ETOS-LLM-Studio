@@ -103,6 +103,7 @@ final class MockAPIAdapter: APIAdapter {
 
 final class RetryStreamingMockAdapter: APIAdapter {
     let requiresExplicitStreamingTermination = false
+    var receivedMessages: [ChatMessage]?
 
     func buildChatRequest(
         for model: RunnableModel,
@@ -113,6 +114,7 @@ final class RetryStreamingMockAdapter: APIAdapter {
         imageAttachments: [UUID : [ImageAttachment]],
         fileAttachments: [UUID : [FileAttachment]]
     ) -> URLRequest? {
+        receivedMessages = messages
         let marker = messages.last(where: { $0.role == .user })?.content ?? "unknown"
         var components = URLComponents(string: "https://fake.url/retry-stream")
         components?.queryItems = [URLQueryItem(name: "marker", value: marker)]

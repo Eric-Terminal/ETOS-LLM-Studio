@@ -7626,3 +7626,4 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "Unable to save exception" = "No se puede guardar la excepción";
 "Unable to update exceptions" = "No se pueden actualizar las excepciones";
 "Unable to verify server identity" = "No se puede verificar la identidad del servidor";
+"预填充续写" = "Continuar con prefill";

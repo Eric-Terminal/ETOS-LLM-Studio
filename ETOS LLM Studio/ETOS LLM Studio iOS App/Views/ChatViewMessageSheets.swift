@@ -20,6 +20,7 @@ struct MessageActionSheet: View {
     let displayVersionCount: Int
     let displayCurrentVersionIndex: Int
     let canRetry: Bool
+    let canPrefill: Bool
     let canRewrite: Bool
     let allMessages: [ChatMessage]
     let providers: [Provider]
@@ -27,6 +28,7 @@ struct MessageActionSheet: View {
     let onEdit: (ChatMessage) -> Void
     let onRewrite: (ChatMessage) -> Void
     let onRetry: (ChatMessage) -> Void
+    let onPrefill: (ChatMessage) -> Void
     let onShowFullError: (String) -> Void
     let onBranch: (ChatMessage) -> Void
     let onExport: (ChatTranscriptExportFormat, Bool, Bool, ChatMessage?) -> Void
@@ -140,6 +142,13 @@ struct MessageActionSheet: View {
                             onRetry(message)
                         } label: {
                             Label(NSLocalizedString("重试", comment: ""), systemImage: "arrow.clockwise")
+                        }
+                        if canPrefill && message.canPrefill {
+                            Button {
+                                onPrefill(message)
+                            } label: {
+                                Label(NSLocalizedString("预填充续写", comment: ""), systemImage: "text.append")
+                            }
                         }
                     }
 

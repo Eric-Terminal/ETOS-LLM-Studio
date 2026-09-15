@@ -26,6 +26,7 @@ extension ChatService {
     func prepareMessageRetry(
         targetMessage: ChatMessage,
         in sourceMessages: [ChatMessage],
+        prefill: Bool = false,
         requestedAt: Date = Date()
     ) -> PreparedMessageRetry? {
         let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: sourceMessages)
@@ -47,7 +48,8 @@ extension ChatService {
             turn: turn,
             visibleMessages: visibleMessages
         )
-        let continuesCurrentVersion = shouldContinueCurrentRetryVersion(
+        guard !prefill || targetMessage.canPrefill else { return nil }
+        let continuesCurrentVersion = !prefill && shouldContinueCurrentRetryVersion(
             targetMessage: targetMessage,
             targetIndex: targetIndex,
             turn: turn,
@@ -137,9 +139,12 @@ extension ChatService {
         }
         var loadingMessage = ChatMessage(
             role: .assistant,
-            content: "",
+            content: prefill ? targetMessage.content : "",
             requestedAt: requestedAt
         )
+        if prefill {
+            loadingMessage.reasoningContent = targetMessage.reasoningContent
+        }
         applyResponseAttemptMetadata(newAttempt, to: &loadingMessage)
         newAttemptMessages.append(loadingMessage)
 

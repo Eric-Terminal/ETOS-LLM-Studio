@@ -27,10 +27,10 @@ extension ChatView {
         }
     }
 
-    func performDeferredRetry(_ message: ChatMessage) {
+    func performDeferredRetry(_ message: ChatMessage, prefill: Bool = false) {
         Task { @MainActor in
             await Task.yield()
-            viewModel.retryMessage(message)
+            viewModel.retryMessage(message, prefill: prefill)
         }
     }
 

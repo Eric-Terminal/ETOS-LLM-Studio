@@ -66,7 +66,8 @@ extension ChatService {
         enableResponseSpeedMetrics: Bool,
         currentAudioAttachment: AudioAttachment?,
         currentImageAttachments: [ImageAttachment],
-        currentFileAttachments: [FileAttachment]
+        currentFileAttachments: [FileAttachment],
+        assistantPrefill: ChatMessage? = nil
     ) async {
         let currentSessionSnapshot = currentSessionSubject.value
         let sessionForRequest = currentSessionSnapshot?.id == currentSessionID
@@ -568,6 +569,11 @@ extension ChatService {
             }
         }
 
+        // 预填充必须位于所有尾部提示之后，且保留原文边界，不经过宏或正则再次改写。
+        if let assistantPrefill {
+            messagesToSend.append(ChatMessage(role: .assistant, content: assistantPrefill.content))
+        }
+
         if LocalModelProviderBridge.isLocalRunnableModel(runnableModel) {
             let localTools = runnableModel.model.supportsToolCalling ? tools : nil
             if tools != nil, localTools == nil {
@@ -670,6 +676,9 @@ extension ChatService {
         let temperatureEnabled = await MainActor.run { AppConfigStore.shared.aiTemperatureEnabled }
         let topPEnabled = await MainActor.run { AppConfigStore.shared.aiTopPEnabled }
         var commonPayload: [String: Any] = ["stream": effectiveStreaming]
+        if assistantPrefill != nil {
+            commonPayload[OpenAIAdapter.responsesForceFullInputControlKey] = true
+        }
         if temperatureEnabled { commonPayload["temperature"] = aiTemperature }
         if topPEnabled { commonPayload["top_p"] = aiTopP }
         commonPayload[ReasoningContentEchoPayload.key] = await openAIReasoningContentEchoModeControlValue()

@@ -28,7 +28,8 @@ extension ChatService {
         systemTimeInjectionPosition: SystemTimeInjectionPosition = .front,
         enablePeriodicTimeLandmark: Bool = false,
         periodicTimeLandmarkIntervalMinutes: Int = 30,
-        enableResponseSpeedMetrics: Bool = true
+        enableResponseSpeedMetrics: Bool = true,
+        prefill: Bool = false
     ) async {
         guard let currentSession = currentSessionSubject.value else { return }
 
@@ -40,6 +41,7 @@ extension ChatService {
             logger.warning("未找到要重试的消息")
             return
         }
+        guard !prefill || (selectedMessage.canPrefill && selectedModelSubject.value?.canRequestAssistantPrefill == true) else { return }
 
         logger.info("重试消息: \(String(describing: selectedMessage.role)) - \(selectedMessage.id.uuidString)")
         let shouldRetryAsImageGeneration = shouldRetryMessageAsImageGeneration()
@@ -59,7 +61,8 @@ extension ChatService {
 
         guard let preparedRetry = prepareMessageRetry(
             targetMessage: currentMessage,
-            in: messages
+            in: messages,
+            prefill: prefill
         ) else {
             logger.warning("无法为目标消息建立轮次级重试计划。")
             return
@@ -116,7 +119,8 @@ extension ChatService {
             currentAudioAttachment: nil,
             currentImageAttachments: imageAttachments,
             currentFileAttachments: fileAttachments,
-            pendingToolCallMessageID: preparedRetry.pendingToolCallMessageID
+            pendingToolCallMessageID: preparedRetry.pendingToolCallMessageID,
+            assistantPrefill: prefill ? preparedRetry.loadingMessage : nil
         )
     }
 
@@ -143,7 +147,8 @@ extension ChatService {
         currentAudioAttachment: AudioAttachment?,
         currentImageAttachments: [ImageAttachment],
         currentFileAttachments: [FileAttachment],
-        pendingToolCallMessageID: UUID? = nil
+        pendingToolCallMessageID: UUID? = nil,
+        assistantPrefill: ChatMessage? = nil
     ) async {
         emitSessionRequestStatus(.started, sessionID: currentSession.id)
 
@@ -300,7 +305,8 @@ extension ChatService {
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 currentAudioAttachment: currentAudioAttachment,
                 currentImageAttachments: currentImageAttachments,
-                currentFileAttachments: currentFileAttachments
+                currentFileAttachments: currentFileAttachments,
+                assistantPrefill: assistantPrefill
             )
         }
         updateRequestTask(requestTask, for: currentSession.id, token: requestToken)

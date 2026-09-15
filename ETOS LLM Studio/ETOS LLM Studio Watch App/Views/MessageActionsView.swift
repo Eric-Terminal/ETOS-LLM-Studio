@@ -18,12 +18,14 @@ struct MessageActionsView: View {
     let message: ChatMessage
     let responseAttemptVersionInfo: ChatResponseAttemptVersionInfo?
     let canRetry: Bool
+    let canPrefill: Bool
     let canRewrite: Bool
     let onInsertText: (String) -> Void
     let onEdit: () -> Void
     let onRewrite: () -> Void
     let onRewriteSelection: (MessageRewriteSelectionTarget) -> Void
     let onRetry: (ChatMessage) -> Void
+    let onPrefill: (ChatMessage) -> Void
     let onRetryVideoAnalysis: (ChatMessage, String) async throws -> VideoAnalysisResult
     let onSpeak: (ChatMessage) -> Void
     let onStopSpeaking: () -> Void
@@ -49,12 +51,14 @@ struct MessageActionsView: View {
         message: ChatMessage,
         responseAttemptVersionInfo: ChatResponseAttemptVersionInfo?,
         canRetry: Bool,
+        canPrefill: Bool,
         canRewrite: Bool,
         onInsertText: @escaping (String) -> Void,
         onEdit: @escaping () -> Void,
         onRewrite: @escaping () -> Void,
         onRewriteSelection: @escaping (MessageRewriteSelectionTarget) -> Void,
         onRetry: @escaping (ChatMessage) -> Void,
+        onPrefill: @escaping (ChatMessage) -> Void,
         onRetryVideoAnalysis: @escaping (ChatMessage, String) async throws -> VideoAnalysisResult,
         onSpeak: @escaping (ChatMessage) -> Void,
         onStopSpeaking: @escaping () -> Void,
@@ -78,12 +82,14 @@ struct MessageActionsView: View {
         self.message = message
         self.responseAttemptVersionInfo = responseAttemptVersionInfo
         self.canRetry = canRetry
+        self.canPrefill = canPrefill
         self.canRewrite = canRewrite
         self.onInsertText = onInsertText
         self.onEdit = onEdit
         self.onRewrite = onRewrite
         self.onRewriteSelection = onRewriteSelection
         self.onRetry = onRetry
+        self.onPrefill = onPrefill
         self.onRetryVideoAnalysis = onRetryVideoAnalysis
         self.onSpeak = onSpeak
         self.onStopSpeaking = onStopSpeaking
@@ -112,6 +118,7 @@ struct MessageActionsView: View {
     @State private var showBranchOptions = false
     @State private var versionIndexToDelete: Int?
     @State private var pendingRetryMessage: ChatMessage?
+    @State private var pendingPrefill = false
     @State private var jumpInput: String = ""
     @State private var jumpError: String?
     @State private var mathHTMLPageItem: WatchWebHTMLPageItem?
@@ -201,6 +208,15 @@ struct MessageActionsView: View {
                         dismiss()
                     } label: {
                         Label(NSLocalizedString("重试", comment: ""), systemImage: "arrow.clockwise")
+                    }
+                    if canPrefill && message.canPrefill {
+                        Button {
+                            pendingPrefill = true
+                            pendingRetryMessage = message
+                            dismiss()
+                        } label: {
+                            Label(NSLocalizedString("预填充续写", comment: ""), systemImage: "text.append")
+                        }
                     }
                 }
                 
@@ -683,10 +699,16 @@ struct MessageActionsView: View {
 
     private func performPendingRetryIfNeeded() {
         guard let message = pendingRetryMessage else { return }
+        let isPrefill = pendingPrefill
         pendingRetryMessage = nil
+        pendingPrefill = false
         Task { @MainActor in
             await Task.yield()
-            onRetry(message)
+            if isPrefill {
+                onPrefill(message)
+            } else {
+                onRetry(message)
+            }
         }
     }
 }

@@ -7626,3 +7626,4 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "Unable to save exception" = "Impossible d’enregistrer l’exception";
 "Unable to update exceptions" = "Impossible de modifier les exceptions";
 "Unable to verify server identity" = "Identité du serveur non vérifiée";
+"预填充续写" = "Continuer avec préremplissage";

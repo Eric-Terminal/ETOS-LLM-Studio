@@ -705,7 +705,7 @@ class ChatViewModel: ObservableObject {
         ttsManager.setPlaybackSpeed(speed)
     }
     
-    func retryMessage(_ message: ChatMessage) {
+    func retryMessage(_ message: ChatMessage, prefill: Bool = false) {
         Task {
             await chatService.retryMessage(
                 message,
@@ -722,7 +722,8 @@ class ChatViewModel: ObservableObject {
                 systemTimeInjectionPosition: systemTimeInjectionPosition,
                 enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
-                enableResponseSpeedMetrics: enableResponseSpeedMetrics
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
+                prefill: prefill
             )
         }
     }

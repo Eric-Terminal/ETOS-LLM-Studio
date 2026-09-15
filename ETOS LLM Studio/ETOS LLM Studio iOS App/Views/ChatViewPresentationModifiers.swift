@@ -55,6 +55,7 @@ extension ChatView {
                     displayVersionCount: viewModel.displayVersionCount(for: payload.message),
                     displayCurrentVersionIndex: viewModel.displayCurrentVersionIndex(for: payload.message),
                     canRetry: viewModel.canRetry(message: payload.message),
+                    canPrefill: viewModel.selectedModel?.canRequestAssistantPrefill == true,
                     canRewrite: viewModel.canRewrite(message: payload.message),
                     allMessages: viewModel.allMessagesForSession,
                     providers: viewModel.providers,
@@ -72,6 +73,10 @@ extension ChatView {
                     onRetry: { message in
                         messageActionSheetPayload = nil
                         performDeferredRetry(message)
+                    },
+                    onPrefill: { message in
+                        messageActionSheetPayload = nil
+                        performDeferredRetry(message, prefill: true)
                     },
                     onShowFullError: { content in
                         dismissMessageActionSheet {

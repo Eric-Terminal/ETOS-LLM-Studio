@@ -7396,3 +7396,4 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "Unable to save exception" = "تعذر حفظ الاستثناء";
 "Unable to update exceptions" = "تعذر تحديث الاستثناءات";
 "Unable to verify server identity" = "تعذر التحقق من هوية الخادم";
+"预填充续写" = "المتابعة بالتعبئة المسبقة";

@@ -238,7 +238,7 @@ extension ChatViewModel {
         messageToEdit = nil
     }
 
-    func retryMessage(_ message: ChatMessage) {
+    func retryMessage(_ message: ChatMessage, prefill: Bool = false) {
         Task {
             await chatService.retryMessage(
                 message,
@@ -255,7 +255,8 @@ extension ChatViewModel {
                 systemTimeInjectionPosition: systemTimeInjectionPosition,
                 enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
-                enableResponseSpeedMetrics: enableResponseSpeedMetrics
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
+                prefill: prefill
             )
         }
     }
