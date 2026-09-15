@@ -46,7 +46,9 @@ struct ETMathContentParserTests {
         "- 示例\n\n  ```html\n  <div>$value$</div>\n  ```",
         "````html\n<script>\n```\nconst value = '$value$';\n</script>\n````",
         "```html\n<div>$value$</div>",
-        "```html\r\n<div>$value$</div>\r\n```"
+        "```html\r\n<div>$value$</div>\r\n```",
+        "```html\r<script>const $ = 1; const x = $;</script>\r```",
+        "中文🙂\r\n\r```html\n<div>$value$</div>\r```"
     ])
     func preservesCodeSyntaxBoundaries(source: String) {
         #expect(ETMathContentParser.parseSegments(in: source) == [.text(source)])

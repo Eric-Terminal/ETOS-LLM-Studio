@@ -110,7 +110,7 @@ struct CodePreviewRuntimeTests {
             if previewButton != nil { break }
             try await Task.sleep(for: .milliseconds(50))
         }
-        // 代码框出现后，留出公式图片提交和布局绘制的时间，截图不采集异步占位帧。
+        // 代码框出现后等一次布局绘制；公式图片独立加载，此帧不作为公式已完成的证据。
         try await Task.sleep(for: .seconds(1))
         host.view.layoutIfNeeded()
         let png = UIGraphicsImageRenderer(bounds: window.bounds).pngData { _ in
@@ -146,6 +146,18 @@ struct CodePreviewRuntimeTests {
             window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
         }
         Attachment.record(previewPNG, named: "代码预览页-\(scenario).png")
+        if scenario == .surroundingMath {
+            await withCheckedContinuation { continuation in
+                host.dismiss(animated: false) { continuation.resume() }
+            }
+            // 返回后补采一帧，便于复核代码外的异步公式图片与网页预览能否共存。
+            try await Task.sleep(for: .seconds(2))
+            host.view.layoutIfNeeded()
+            let returnedPNG = UIGraphicsImageRenderer(bounds: window.bounds).pngData { _ in
+                window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+            }
+            Attachment.record(returnedPNG, named: "混排公式-返回聊天.png")
+        }
     }
 
     private func accessibilityObjects(_ object: NSObject, depth: Int = 0) -> [NSObject] {

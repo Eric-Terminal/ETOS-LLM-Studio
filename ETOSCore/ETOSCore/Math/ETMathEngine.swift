@@ -272,8 +272,15 @@ private struct ETMathCodeRangeCollector: MarkupWalker {
     init(source: String) {
         self.source = source
         var starts = [source.utf8.startIndex]
-        for index in source.utf8.indices where source.utf8[index] == 0x0A {
-            starts.append(source.utf8.index(after: index))
+        var index = source.utf8.startIndex
+        while index < source.utf8.endIndex {
+            let byte = source.utf8[index]
+            index = source.utf8.index(after: index)
+            // Markdown 将 CR、LF、CRLF 都视为换行；CRLF 必须只计一行，并保留原文字节。
+            if byte == 0x0D, index < source.utf8.endIndex, source.utf8[index] == 0x0A {
+                index = source.utf8.index(after: index)
+            }
+            if byte == 0x0D || byte == 0x0A { starts.append(index) }
         }
         lineStarts = starts
     }

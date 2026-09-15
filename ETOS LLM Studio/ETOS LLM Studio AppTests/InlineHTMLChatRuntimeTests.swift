@@ -30,6 +30,7 @@ struct InlineHTMLChatRuntimeTests {
         RoleplayStore.shared.upsertBinding(SessionRoleplayBinding(sessionID: session.id, helperScriptsEnabled: false))
         defer { RoleplayStore.shared.removeBinding(sessionID: session.id) }
         let config = AppConfigStore.shared
+        await config.waitForPersistentStoreLoaded()
         let saved = (config.enableMarkdown, config.enableAdvancedRenderer, config.enableBackground, config.enableNoBubbleUI)
         let savedFont = (FontLibrary.isCustomFontEnabled, FontLibrary.fallbackScope, FontLibrary.customFontScale)
         config.enableMarkdown = true
@@ -56,6 +57,10 @@ struct InlineHTMLChatRuntimeTests {
         let state = try #require(model.messages.first)
         #expect(state.message.id == message.id)
         #expect(state.roleplayHTML?.containsHTML == true)
+        #expect(model.enableMarkdown)
+        #expect(model.enableAdvancedRenderer == (mode == .advancedMarkdown))
+        #expect(model.enableNoBubbleUI == (mode == .noBubble))
+        #expect(FontLibrary.customFontScale == (mode == .scaledFont ? 1.5 : 1))
         let canvas = NavigationStack {
             ChatView(scrollCoordinator: ChatScrollCoordinator()).environmentObject(model)
         }
@@ -151,7 +156,7 @@ struct InlineHTMLChatRuntimeTests {
             ChatView(scrollCoordinator: ChatScrollCoordinator()).environmentObject(model)
         })
         defer { host.dispose() }
-        _ = try await host.waitForWebView(containing: "regex-html", minimumHeight: 240)
+        let initialWebView = try await host.waitForWebView(containing: "regex-html", minimumHeight: 240)
 
         binding.htmlRenderingEnabled = false
         store.upsertBinding(binding)
@@ -160,6 +165,13 @@ struct InlineHTMLChatRuntimeTests {
             try await Task.sleep(for: .milliseconds(20))
         }
         #expect(model.messages.first?.roleplayHTML == nil)
+        // 模型状态关闭还不够，已显示的网页也必须退出真实聊天视图树。
+        for _ in 0..<200 {
+            host.host.view.layoutIfNeeded()
+            if !initialWebView.isDescendant(of: host.host.view) { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(!initialWebView.isDescendant(of: host.host.view))
         binding.htmlRenderingEnabled = true
         store.upsertBinding(binding)
         let original = try await host.waitForWebView(containing: "regex-html", minimumHeight: 240)
