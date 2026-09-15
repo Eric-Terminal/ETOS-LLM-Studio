@@ -124,15 +124,10 @@ public extension Persistence {
         }
     }
 
-    @discardableResult
-    static func updateLocalAgentWorkspaceSize(_ workspace: LocalAgentWorkspace, sizeBytes: UInt64) -> Bool {
-        do {
-            guard let store = activeGRDBStore() else { return false }
-            try store.updateLocalAgentWorkspaceSize(workspace, sizeBytes: sizeBytes)
-            return true
-        } catch {
-            logger.error("更新 Linux 工作区统计失败：\(error.localizedDescription)")
-            return false
+    internal static func makeLocalAgentWorkspaceSizeWriter()
+        -> (@Sendable (LocalAgentWorkspace, UInt64) throws -> Void)? {
+        grdbStoreLock.withLock {
+            cachedGRDBStore?.makeLocalAgentWorkspaceSizeWriter()
         }
     }
 

@@ -253,18 +253,21 @@ extension PersistenceGRDBStore {
     }
 
     /// 后台统计只能更新派生字段，不能覆盖期间更新的元数据或重新插入已删除的工作区。
-    func updateLocalAgentWorkspaceSize(_ workspace: LocalAgentWorkspace, sizeBytes: UInt64) throws {
-        try dbPool.write { db in
-            try db.execute(
-                sql: """
-                UPDATE local_agent_workspaces SET size_bytes = ?
-                WHERE id = ? AND host_relative_path = ? AND created_at = ?
-                """,
-                arguments: [
-                    Int64(clamping: sizeBytes), workspace.id.uuidString, workspace.hostRelativePath,
-                    workspace.createdAt.timeIntervalSince1970
-                ]
-            )
+    func makeLocalAgentWorkspaceSizeWriter() -> @Sendable (LocalAgentWorkspace, UInt64) throws -> Void {
+        // 在排队前绑定连接；恢复快照或切换加密关闭旧连接后，旧统计只能失败，不能重开或换库。
+        { [dbPool] workspace, sizeBytes in
+            try dbPool.write { db in
+                try db.execute(
+                    sql: """
+                    UPDATE local_agent_workspaces SET size_bytes = ?
+                    WHERE id = ? AND host_relative_path = ? AND created_at = ?
+                    """,
+                    arguments: [
+                        Int64(clamping: sizeBytes), workspace.id.uuidString, workspace.hostRelativePath,
+                        workspace.createdAt.timeIntervalSince1970
+                    ]
+                )
+            }
         }
     }
 

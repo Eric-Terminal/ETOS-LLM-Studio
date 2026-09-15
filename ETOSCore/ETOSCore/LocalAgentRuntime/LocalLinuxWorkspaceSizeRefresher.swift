@@ -5,6 +5,7 @@ actor LocalLinuxWorkspaceSizeRefresher {
     private struct Request {
         let workspace: LocalAgentWorkspace
         let directory: URL
+        let persist: @Sendable (LocalAgentWorkspace, UInt64) async throws -> Void
     }
 
     private struct Scan {
@@ -13,7 +14,6 @@ actor LocalLinuxWorkspaceSizeRefresher {
     }
 
     private let measure: @Sendable (URL) async throws -> UInt64
-    private let persist: @Sendable (LocalAgentWorkspace, UInt64) async throws -> Void
     private let coalescingDelay: Duration
     private var pending: [UUID: Request] = [:]
     private var scans: [UUID: Scan] = [:]
@@ -21,16 +21,18 @@ actor LocalLinuxWorkspaceSizeRefresher {
 
     init(
         coalescingDelay: Duration = .milliseconds(500),
-        measure: @escaping @Sendable (URL) async throws -> UInt64,
-        persist: @escaping @Sendable (LocalAgentWorkspace, UInt64) async throws -> Void
+        measure: @escaping @Sendable (URL) async throws -> UInt64
     ) {
         self.coalescingDelay = coalescingDelay
         self.measure = measure
-        self.persist = persist
     }
 
-    func schedule(_ workspace: LocalAgentWorkspace, directory: URL) {
-        pending[workspace.id] = Request(workspace: workspace, directory: directory)
+    func schedule(
+        _ workspace: LocalAgentWorkspace,
+        directory: URL,
+        persist: @escaping @Sendable (LocalAgentWorkspace, UInt64) async throws -> Void
+    ) {
+        pending[workspace.id] = Request(workspace: workspace, directory: directory, persist: persist)
         guard !isDraining else { return }
         isDraining = true
         Task { [weak self, coalescingDelay] in
@@ -39,7 +41,11 @@ actor LocalLinuxWorkspaceSizeRefresher {
         }
     }
 
-    func refresh(_ workspace: LocalAgentWorkspace, directory: URL) async throws -> UInt64 {
+    func refresh(
+        _ workspace: LocalAgentWorkspace,
+        directory: URL,
+        persist: @escaping @Sendable (LocalAgentWorkspace, UInt64) async throws -> Void
+    ) async throws -> UInt64 {
         if let scan = scans[workspace.id] { return try await scan.task.value }
         pending.removeValue(forKey: workspace.id)
         // 文件枚举和数据库写入都离开 storage actor，避免它们拖住后续命令的准备工作。
@@ -64,7 +70,7 @@ actor LocalLinuxWorkspaceSizeRefresher {
             }
             // 已在执行的扫描未必包含最新命令的写入；等待它结束后再取合并后的请求。
             guard let next = pending.removeValue(forKey: request.workspace.id) else { continue }
-            _ = try? await refresh(next.workspace, directory: next.directory)
+            _ = try? await refresh(next.workspace, directory: next.directory, persist: next.persist)
             if !pending.isEmpty { try? await Task<Never, Never>.sleep(for: coalescingDelay) }
         }
         isDraining = false

@@ -12,7 +12,7 @@ struct LocalLinuxWorkspaceSizeTests {
         var starts = probe.starts.makeAsyncIterator()
         var saved = probe.saved.makeAsyncIterator()
 
-        await scheduleBurst(on: refresher, workspace: workspace)
+        await scheduleBurst(on: refresher, workspace: workspace, probe: probe)
         #expect(await starts.next() == 1)
         // 扫描仍被测试门闩挂起；排队已经返回，也尚未写入统计。
         #expect(await probe.savedCount == 0)
@@ -29,9 +29,9 @@ struct LocalLinuxWorkspaceSizeTests {
         var starts = probe.starts.makeAsyncIterator()
         var saved = probe.saved.makeAsyncIterator()
 
-        await scheduleBurst(on: refresher, workspace: workspace)
+        await scheduleBurst(on: refresher, workspace: workspace, probe: probe)
         #expect(await starts.next() == 1)
-        await scheduleBurst(on: refresher, workspace: workspace)
+        await scheduleBurst(on: refresher, workspace: workspace, probe: probe)
         await probe.complete(1, size: 10)
         #expect(await saved.next() == 10)
         #expect(await starts.next() == 2)
@@ -47,17 +47,20 @@ struct LocalLinuxWorkspaceSizeTests {
             measure: { _ in
                 if await attempts.next() == 1 { throw CocoaError(.fileReadUnknown) }
                 return 123
-            },
-            persist: { _, size in #expect(size == 123) }
+            }
         )
         let workspace = makeWorkspace()
         do {
-            _ = try await refresher.refresh(workspace, directory: URL(fileURLWithPath: "/unused"))
+            _ = try await refresher.refresh(workspace, directory: URL(fileURLWithPath: "/unused")) { _, size in
+                #expect(size == 123)
+            }
             Issue.record("首次扫描应传递测量错误")
         } catch {
             #expect((error as? CocoaError)?.code == .fileReadUnknown)
         }
-        let size = try await refresher.refresh(workspace, directory: URL(fileURLWithPath: "/unused"))
+        let size = try await refresher.refresh(workspace, directory: URL(fileURLWithPath: "/unused")) { _, size in
+            #expect(size == 123)
+        }
         #expect(size == 123)
         #expect(await attempts.count == 2)
     }
@@ -68,6 +71,7 @@ struct LocalLinuxWorkspaceSizeTests {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = try PersistenceGRDBStore(chatsDirectory: directory)
+        let persistSize = store.makeLocalAgentWorkspaceSizeWriter()
         let original = makeWorkspace()
         try store.saveLocalAgentWorkspace(original)
         var newer = try #require(store.loadLocalAgentWorkspaces().first)
@@ -76,12 +80,12 @@ struct LocalLinuxWorkspaceSizeTests {
         newer.guestPath = "/mnt/workspaces/renamed"
         try store.saveLocalAgentWorkspace(newer)
         newer = try #require(store.loadLocalAgentWorkspaces().first)
-        try store.updateLocalAgentWorkspaceSize(original, sizeBytes: 456)
+        try persistSize(original, 456)
         newer.sizeBytes = 456
         #expect(try store.loadLocalAgentWorkspaces().first == newer)
 
         try store.deleteLocalAgentWorkspace(id: original.id)
-        try store.updateLocalAgentWorkspaceSize(original, sizeBytes: 999)
+        try persistSize(original, 999)
         #expect(try store.loadLocalAgentWorkspaces().isEmpty)
 
         let recreated = LocalAgentWorkspace(
@@ -90,10 +94,10 @@ struct LocalLinuxWorkspaceSizeTests {
             createdAt: original.createdAt.addingTimeInterval(60)
         )
         try store.saveLocalAgentWorkspace(recreated)
-        try store.updateLocalAgentWorkspaceSize(original, sizeBytes: 999)
+        try persistSize(original, 999)
         #expect(try store.loadLocalAgentWorkspaces().first?.sizeBytes == 0)
         let reloaded = try #require(store.loadLocalAgentWorkspaces().first)
-        try store.updateLocalAgentWorkspaceSize(reloaded, sizeBytes: 789)
+        try persistSize(reloaded, 789)
         #expect(try store.loadLocalAgentWorkspaces().first?.sizeBytes == 789)
     }
 
@@ -104,15 +108,20 @@ struct LocalLinuxWorkspaceSizeTests {
     private func makeRefresher(_ probe: MeasurementProbe) -> LocalLinuxWorkspaceSizeRefresher {
         LocalLinuxWorkspaceSizeRefresher(
             coalescingDelay: .zero,
-            measure: { _ in try await probe.measure() },
-            persist: { _, size in await probe.persist(size) }
+            measure: { _ in try await probe.measure() }
         )
     }
 
     // 同一 actor 内一次性提交请求，避免用墙钟延时猜测合并窗口是否已经结束。
-    private func scheduleBurst(on refresher: isolated LocalLinuxWorkspaceSizeRefresher, workspace: LocalAgentWorkspace) {
+    private func scheduleBurst(
+        on refresher: isolated LocalLinuxWorkspaceSizeRefresher,
+        workspace: LocalAgentWorkspace,
+        probe: MeasurementProbe
+    ) {
         for _ in 0..<50 {
-            refresher.schedule(workspace, directory: URL(fileURLWithPath: "/unused"))
+            refresher.schedule(workspace, directory: URL(fileURLWithPath: "/unused")) { _, size in
+                await probe.persist(size)
+            }
         }
     }
 

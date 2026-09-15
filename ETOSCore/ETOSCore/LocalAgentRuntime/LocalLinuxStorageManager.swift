@@ -139,14 +139,7 @@ public actor LocalLinuxStorageManager {
         self.fileManager = fileManager
         workspaceSizeRefresher = LocalLinuxWorkspaceSizeRefresher(
             // 后台扫描自建 FileManager，避免跨隔离域捕获调用方可能带 delegate 的实例。
-            measure: { directory in Self.directorySize(at: directory, fileManager: FileManager()) },
-            persist: { workspace, size in
-                guard Persistence.updateLocalAgentWorkspaceSize(workspace, sizeBytes: size) else {
-                    throw LocalLinuxRuntimeError.runtimeUnavailable(
-                        NSLocalizedString("无法更新 Linux 工作区统计。", comment: "Update Linux workspace size failure")
-                    )
-                }
-            }
+            measure: { directory in Self.directorySize(at: directory, fileManager: FileManager()) }
         )
         layout = LocalLinuxStorageLayout(
             documentsDirectory: documentsDirectory,
@@ -576,15 +569,23 @@ public actor LocalLinuxStorageManager {
     }
 
     nonisolated func scheduleWorkspaceSizeRefresh(_ workspace: LocalAgentWorkspace) {
-        guard let directory = try? hostURL(for: workspace) else { return }
+        guard let directory = try? hostURL(for: workspace),
+              let persist = Persistence.makeLocalAgentWorkspaceSizeWriter() else { return }
         Task { [workspaceSizeRefresher] in
-            await workspaceSizeRefresher.schedule(workspace, directory: directory)
+            await workspaceSizeRefresher.schedule(workspace, directory: directory, persist: persist)
         }
     }
 
     public func refreshWorkspaceSize(_ workspace: LocalAgentWorkspace) async throws -> LocalAgentWorkspace {
+        guard let persist = Persistence.makeLocalAgentWorkspaceSizeWriter() else {
+            throw LocalLinuxRuntimeError.runtimeUnavailable(
+                NSLocalizedString("无法更新 Linux 工作区统计。", comment: "更新 Linux 工作区统计失败")
+            )
+        }
         var updated = workspace
-        updated.sizeBytes = try await workspaceSizeRefresher.refresh(workspace, directory: hostURL(for: workspace))
+        updated.sizeBytes = try await workspaceSizeRefresher.refresh(
+            workspace, directory: hostURL(for: workspace), persist: persist
+        )
         return updated
     }
 
