@@ -246,6 +246,8 @@ ETOSCore/ETOSCoreTests/                       ← ETOSCore 层测试（147 个 S
 
     首次运行会构建 iSHApple 的 iOS / watchOS 设备与模拟器切片，以及当前命令要求的 llama.cpp 平台产物，耗时会明显长于后续构建。缓存命中后，脚本会直接复用现有结果；修改 iSH 不会触发 llama.cpp 重编，反之亦然。`--parallel` 默认按本机 CPU 数传给 CMake，也可使用 `--parallel=8`、`--jobs 8` 或 `-j8` 指定任务数。
 
+    更新原生子模块后，必须重新执行对应平台和配置的上述命令，再运行 Xcode 构建或测试。Xcode 本机构建不会自动执行此预构建脚本，可能仍链接旧静态库；脚本执行时才会核对源码缓存标记并更新产物。Xcode Cloud 会在 `ci_pre_xcodebuild.sh` 中执行设备 Release 预构建，本机模拟器构建通过不能替代该检查。
+
     主要产物如下：
 
     | 产物 | 位置 | 用途 |

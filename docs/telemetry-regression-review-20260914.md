@@ -2,6 +2,25 @@
 
 日期：2026-09-14；独立复查续验：2026-09-15。
 
+## Xcode Cloud 446：原生依赖严格编译失败
+
+用户提供的 Build 446 `ci_pre_xcodebuild` 日志确认：`ish-multiarch` 的 `8e1dd5fe` 在 `guest/aarch64/scalar-fp-conversion.h:101–102` 混用有符号指数与无符号尾数位宽，触发 `-Werror,-Wsign-conversion`。子模块拉取、RootFS 校验和云端工具安装均已通过，失败发生在 iPhoneOS arm64 的严格原生核心编译，尚未进入 Swift 编译。新增浮点指令提交引入了这两行，云端脚本本身无需修改。
+
+本机使用独立原生输出目录复现同样错误。此前 Xcode 构建没有执行原生预构建，实际 iSH 缓存标记仍为 `cf2e02a2`；因此上文及下文的历史 App 构建、Linux 运行测试只能证明当时链接的旧库，不能证明新子模块可全新编译。这是此前验证范围的遗漏。
+
+原生修复 `109aac67` 仅将两处差值中的尾数位宽显式转换为 `int`，与已有比较一致；位宽只有 23/52，既有舍入和范围检查保证位移计数非负且小于 64。独立只读复核未发现语义改变。App 同步子模块与双端版本清单、SBOM 和源码说明，RootFS 归档与迁移目标保持原样。README 补充原生更新后必须先运行预构建的说明。
+
+本次验证记录：
+
+- `/tmp/etos-cloud-build-446/ci_pre_xcodebuild.log` 与 `/tmp/etos-ish-cloud-20260915.log`：修复前云端和本机同点失败。
+- `/tmp/etos-ish-fp-fix-native-20260915.log`：修复后 Meson 原生测试 **235/235 通过**。
+- `/tmp/etos-native-iphoneos-446-final.log`：正式 Apple 门禁完成全部七切片的严格核心、完整内核/文件系统、XCFramework、Swift 6 公共包装及独立消费者验证，包含 `arm64_32`；日志无警告或错误。
+- `/tmp/etos-native-{watchos,iphonesimulator,watchsimulator}-446-final.log`：其他设备 Release、双端模拟器 Debug 的预构建通过。四个实际链接目录的静态库摘要与新门禁产物一致，iSH 缓存标记为干净源码 `109aac67`。
+- `/tmp/etos-app-446-fixed-build.log`：重新链接新原生库后，项目规定的 iOS 模拟器 App 构建通过，包含嵌入 watchOS App；只有两条原有 swift-cmark umbrella header 警告。
+- `/tmp/etos-app-linux-446-fixed.xcresult`：实际 App 资源的 Linux 回归 **2/2 个测试函数、3/3 个场景通过**，无失败、无跳过；覆盖清单与收据匹配、全新安装、已有系统保留内容及命令执行。未将本地结果记为新的 Xcode Cloud 归档已经通过。
+
+首次完整门禁还发现本机 LLVM 22.1.8 引用的 Z3 4.16 动态库已被本机包升级移除；通过 Homebrew 将 LLVM 更新至 23.1.1 后继续构建，镜像安装包与 Homebrew 官方 SHA-256 一致。另一次独立核心编译未设置门禁的归档时间环境，其输出在正式门禁的可复现性检查中被拒绝；移除该次生成的核心归档和链接探针，由正式门禁重新链接后通过。两次本机验证阻断都没有通过修改仓库或降低检查要求来绕过。
+
 ## 三份独立复查与本地构建
 
 本次由三个只读子代理分别审查渲染、共享持久化/Linux、测试覆盖与改动范围，主代理核对原始遥测报告、实际提交差异和候选问题，统一修改及验证。审查范围为 `90abb52b..bed10175`；#140 网络、#145 指令支持属于其他需求，不混入遥测性能修改的因果归因。
