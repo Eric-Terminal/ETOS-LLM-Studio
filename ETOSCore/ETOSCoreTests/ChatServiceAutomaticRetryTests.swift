@@ -216,18 +216,24 @@ extension ChatServiceTests {
         await cleanup()
     }
 
-    @Test("达到上限保留正文和错误，未新增正文的重试不重复创建版本")
+    @Test("两种判断模式达到上限均保留正文和错误，未新增正文的重试不重复创建版本", arguments: [true, false])
     @MainActor
-    func automaticRetryStopsAtLimit() async throws {
+    func automaticRetryStopsAtLimit(smartDetection: Bool) async throws {
         await cleanup()
         let config = AppConfigStore.shared
         let previous = config.maximumRequestRetries
+        let previousSmartDetection = config.requestRetrySmartDetectionEnabled
         config.maximumRequestRetries = 2
-        defer { config.maximumRequestRetries = previous }
+        config.requestRetrySmartDetectionEnabled = smartDetection
+        defer {
+            config.maximumRequestRetries = previous
+            config.requestRetrySmartDetectionEnabled = previousSmartDetection
+        }
         let service = automaticRetryService()
         AutomaticRetryURLProtocol.configure([
             .init(status: 200, body: "data: {\"choices\":[{\"delta\":{\"content\":\"保留正文\"}}]}\n\n", networkError: .networkConnectionLost),
-            .init(status: 503, body: "暂时不可用"), .init(status: 503, body: "仍不可用")
+            .init(status: smartDetection ? 503 : 400, body: "暂时不可用"),
+            .init(status: smartDetection ? 503 : 400, body: "仍不可用")
         ])
         await sendAutomaticallyRetriedMessage(using: service, streaming: true)
         #expect(AutomaticRetryURLProtocol.requests.count == 3)
@@ -286,14 +292,19 @@ extension ChatServiceTests {
         await cleanup()
     }
 
-    @Test("用户停止会立即取消退避等待，不再发起请求")
+    @Test("两种判断模式下用户停止都会立即取消退避等待，不再发起请求", arguments: [true, false])
     @MainActor
-    func automaticRetryCancellationStopsWaiting() async {
+    func automaticRetryCancellationStopsWaiting(smartDetection: Bool) async {
         await cleanup()
         let config = AppConfigStore.shared
         let previous = config.maximumRequestRetries
+        let previousSmartDetection = config.requestRetrySmartDetectionEnabled
         config.maximumRequestRetries = 3
-        defer { config.maximumRequestRetries = previous }
+        config.requestRetrySmartDetectionEnabled = smartDetection
+        defer {
+            config.maximumRequestRetries = previous
+            config.requestRetrySmartDetectionEnabled = previousSmartDetection
+        }
         let service = automaticRetryService()
         AutomaticRetryURLProtocol.configure([.init(status: 503, body: "服务繁忙")])
         let subscription = service.messagesForSessionSubject
@@ -311,10 +322,122 @@ extension ChatServiceTests {
         #expect(service.runningSessionIDsSubject.value.isEmpty)
         await cleanup()
     }
+
+    @Test("关闭智能判断后含媒体的中断回复保留旧版，并重新发送当前请求")
+    @MainActor
+    func automaticRetryRestartsInterruptedMediaResponse() async throws {
+        await cleanup()
+        let config = AppConfigStore.shared
+        let previousMaximum = config.maximumRequestRetries
+        let previousSmartDetection = config.requestRetrySmartDetectionEnabled
+        config.maximumRequestRetries = 1
+        config.requestRetrySmartDetectionEnabled = false
+        defer {
+            config.maximumRequestRetries = previousMaximum
+            config.requestRetrySmartDetectionEnabled = previousSmartDetection
+        }
+        let service = automaticRetryService()
+        let session = try #require(service.currentSessionSubject.value)
+        let user = ChatMessage(role: .user, content: "生成图片")
+        var interrupted = ChatMessage(role: .assistant, content: "已收到的部分")
+        interrupted.imageFileNames = ["interrupted.png"]
+        interrupted.toolCalls = [InternalToolCall(id: "unfinished", toolName: "save_memory", arguments: "{")]
+        service.persistAndPublishMessages([user, interrupted], for: session.id)
+        let request = URLRequest(url: URL(string: "https://retry.example/chat")!)
+        var attempts = 0
+        await service.withAutomaticRequestRetries(
+            request: request, loadingMessageID: interrupted.id, sessionID: session.id,
+            requestLogContext: .init(
+                requestID: UUID(), sessionID: session.id, providerID: nil,
+                providerName: "测试路由", modelID: "test", requestSource: .chat,
+                isStreaming: true, requestedAt: Date()
+            ),
+            initialPrefill: nil,
+            rebuildRequest: { _ in
+                Issue.record("含媒体的中断响应不应构建文本预填充请求")
+                return nil
+            }
+        ) { attemptRequest, loadingID, logContext, retryHandler in
+            attempts += 1
+            if attempts == 1 {
+                #expect(await retryHandler(ChatService.NetworkError.badStatusCode(code: 400, responseBody: nil)))
+            } else {
+                #expect(attemptRequest == request)
+                let messages = service.messagesSnapshot(for: session.id)
+                let loading = messages.first { $0.id == loadingID }
+                #expect(loadingID != interrupted.id)
+                #expect(loading?.content == "")
+                #expect(loading?.imageFileNames == nil)
+                #expect(messages.contains { $0.id == interrupted.id && $0.imageFileNames == ["interrupted.png"] })
+                #expect(ChatResponseAttemptSupport.visibleMessages(from: messages).count == 2)
+                service.persistRequestLog(context: logContext, status: .success, tokenUsage: nil, finishedAt: Date())
+            }
+        }
+        #expect(attempts == 2)
+        await cleanup()
+    }
+
+    @Test("智能判断开关控制 HTTP 400、认证、解析及无状态码服务错误的重试", arguments: [true, false], ["http400", "stream400", "http401", "invalid-json", "sse-error", "unparsed-error"])
+    @MainActor
+    func automaticRetryRespectsSmartDetection(smartDetection: Bool, failure: String) async {
+        await cleanup()
+        let config = AppConfigStore.shared
+        let previousMaximum = config.maximumRequestRetries
+        let previousSmartDetection = config.requestRetrySmartDetectionEnabled
+        config.maximumRequestRetries = 1
+        config.setValue(smartDetection, for: .requestRetrySmartDetectionEnabled)
+        defer {
+            config.maximumRequestRetries = previousMaximum
+            config.requestRetrySmartDetectionEnabled = previousSmartDetection
+        }
+        #expect(config.value(for: .requestRetrySmartDetectionEnabled) == .bool(smartDetection))
+        let streaming = ["stream400", "sse-error", "unparsed-error"].contains(failure)
+        let reply: AutomaticRetryURLProtocol.Reply
+        switch failure {
+        case "http400", "stream400": reply = .init(status: 400, body: "上游暂时拒绝")
+        case "http401": reply = .init(status: 401, body: "上游鉴权失败")
+        case "invalid-json": reply = .init(status: 200, body: "{")
+        case "sse-error": reply = .init(status: 200, body: "data: {\"error\":{\"message\":\"upstream rejected\"}}\n\n")
+        default: reply = .init(status: 200, body: #"{"error":{"message":"upstream rejected"}}"#)
+        }
+        let successBody = streaming
+            ? "data: {\"choices\":[{\"delta\":{\"content\":\"恢复成功\"}}]}\n\ndata: [DONE]\n\n"
+            : #"{"choices":[{"message":{"role":"assistant","content":"恢复成功"}}]}"#
+        let service = automaticRetryService()
+        AutomaticRetryURLProtocol.configure([reply, .init(status: 200, body: successBody)])
+        let recorder = RetryStatusRecorder()
+        let subscription = service.messagesForSessionSubject.sink { recorder.record($0) }
+        defer { subscription.cancel() }
+        await sendAutomaticallyRetriedMessage(using: service, streaming: streaming)
+        #expect(AutomaticRetryURLProtocol.requests.count == (smartDetection ? 1 : 2))
+        #expect(recorder.hasErrors == smartDetection)
+        if !smartDetection {
+            #expect(service.messagesForSessionSubject.value.last?.content == "恢复成功")
+            #expect(recorder.attempts == [1])
+        }
+        await cleanup()
+    }
 }
 
 @Suite("自动重试策略")
 struct ChatRequestRetryPolicyTests {
+    @Test("关闭智能判断时所有请求错误可重试，但主动取消及拒绝连接仍然终止")
+    func allErrorsRetryPolicy() {
+        let errors: [Error] = [
+            ChatService.NetworkError.badStatusCode(code: 400, responseBody: nil),
+            ChatService.NetworkError.badStatusCode(code: 401, responseBody: nil),
+            URLError(.badServerResponse), URLError(.cannotDecodeContentData),
+            NSError(domain: "APIAdapterError", code: 1)
+        ]
+        for error in errors {
+            #expect(ChatRequestRetryPolicy.isRetryable(error, smartDetectionEnabled: false))
+        }
+        let cancellations: [Error] = [CancellationError(), URLError(.cancelled), NetworkConnectionSecurityError.denied]
+        for error in cancellations {
+            #expect(!ChatRequestRetryPolicy.isRetryable(error, smartDetectionEnabled: false))
+        }
+    }
+
     @Test("指数退避有上限，仅临时网络与服务错误可重试")
     func retryPolicy() {
         #expect((1...8).map(ChatRequestRetryPolicy.delay) == [1, 2, 4, 8, 16, 30, 30, 30])
@@ -334,6 +457,7 @@ struct ChatRequestRetryPolicyTests {
     @Test("重试配置有默认值和边界，运行状态不写入历史，向导包含对应说明")
     func retrySettingsAndTransientState() throws {
         #expect(AppConfigKey.maximumRequestRetries.defaultValue == .integer(3))
+        #expect(AppConfigKey.requestRetrySmartDetectionEnabled.defaultValue == .bool(true))
         #expect(AppConfigStore.normalizedIntegerValue(-1, for: .maximumRequestRetries) == 0)
         #expect(AppConfigStore.normalizedIntegerValue(100, for: .maximumRequestRetries) == 10)
         var message = ChatMessage(role: .assistant, content: "前缀")
@@ -347,5 +471,6 @@ struct ChatRequestRetryPolicyTests {
         #expect(!String(decoding: encoded, as: UTF8.self).contains("requestRetryStatus"))
         #expect(try JSONDecoder().decode(ChatMessage.self, from: encoded).requestRetryStatus == nil)
         #expect(GuideDocumentCatalog.documents.first { $0.id == "settings-core" }?.content.contains("maximum_request_retries") == true)
+        #expect(GuideDocumentCatalog.documents.first { $0.id == "settings-core" }?.content.contains("request_retry_smart_detection") == true)
     }
 }

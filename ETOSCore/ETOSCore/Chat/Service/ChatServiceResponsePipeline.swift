@@ -354,8 +354,13 @@ extension ChatService {
                     sessionID: currentSessionID,
                     coalescer: &streamingPublishCoalescer
                 )
-                if let code = unparsedError.httpStatusCode,
-                   await retryHandler?(NetworkError.badStatusCode(code: code, responseBody: Data(unparsedError.body.utf8))) == true {
+                let retryError: Error
+                if let code = unparsedError.httpStatusCode {
+                    retryError = NetworkError.badStatusCode(code: code, responseBody: Data(unparsedError.body.utf8))
+                } else {
+                    retryError = URLError(.badServerResponse)
+                }
+                if await retryHandler?(retryError) == true {
                     return
                 }
                 addErrorMessage(
@@ -399,15 +404,15 @@ extension ChatService {
                     loadingMessageID: loadingMessageID,
                     sessionID: currentSessionID
                 )
-                let retryError: Error?
+                let retryError: Error
                 if let failure = streamFailureResponse, let code = failure.httpStatusCode {
                     retryError = NetworkError.badStatusCode(code: code, responseBody: Data(failure.body.utf8))
                 } else if streamTermination == nil {
                     retryError = URLError(.networkConnectionLost)
                 } else {
-                    retryError = nil
+                    retryError = URLError(.badServerResponse)
                 }
-                if let retryError, await retryHandler?(retryError) == true {
+                if await retryHandler?(retryError) == true {
                     return
                 }
                 await finalizeInterruptedReasoningMessageIfNeeded(

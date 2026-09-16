@@ -7,6 +7,7 @@ public struct ChatRequestRetrySettingsSection: View {
 
     public var body: some View {
         Section {
+            Toggle(NSLocalizedString("智能判断", comment: "自动重试错误筛选开关"), isOn: $appConfig.requestRetrySmartDetectionEnabled)
             Stepper(value: $appConfig.maximumRequestRetries, in: ChatRequestRetryPolicy.allowedMaximumRetries) {
                 Text(String(format: NSLocalizedString("最多重试：%d 次", comment: ""), appConfig.maximumRequestRetries))
                     .monospacedDigit()
@@ -14,7 +15,7 @@ public struct ChatRequestRetrySettingsSection: View {
         } header: {
             Text(NSLocalizedString("自动重试", comment: ""))
         } footer: {
-            Text(NSLocalizedString("网络中断或服务暂时不可用时自动重试。设为 0 可关闭。", comment: ""))
+            Text(NSLocalizedString("开启时仅重试临时错误；关闭后，所有请求错误都会重试。次数设为 0 可关闭自动重试。", comment: ""))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }

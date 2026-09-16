@@ -31,14 +31,17 @@ public enum ChatRequestRetryPolicy {
         min(30, pow(2, Double(max(0, min(retry - 1, 5)))))
     }
 
-    static func isRetryable(_ error: Error) -> Bool {
+    static func isRetryable(_ error: Error, smartDetectionEnabled: Bool = true) -> Bool {
+        // 用户主动停止或拒绝连接仍然结束请求，不受错误筛选开关影响。
+        guard !(error is CancellationError), !NetworkConnectionSecurityError.isRejection(error) else { return false }
+        guard smartDetectionEnabled else { return true }
         if case ChatService.NetworkError.badStatusCode(let code, _) = error {
             return [408, 429, 500, 502, 503, 504, 529].contains(code)
         }
-        let error = error as NSError
-        guard error.domain == NSURLErrorDomain else { return false }
+        let nsError = error as NSError
+        guard nsError.domain == NSURLErrorDomain else { return false }
         return [URLError.timedOut, .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed,
-                .networkConnectionLost, .notConnectedToInternet].contains { $0.rawValue == error.code }
+                .networkConnectionLost, .notConnectedToInternet].contains { $0.rawValue == nsError.code }
     }
 }
 
@@ -53,7 +56,9 @@ extension ChatService {
         rebuildRequest: (ChatMessage) -> URLRequest?,
         operation: (URLRequest, UUID, RequestLogContext, @escaping (Error) async -> Bool) async -> Void
     ) async {
-        let configuredMaximum = await MainActor.run { AppConfigStore.shared.maximumRequestRetries }
+        let (configuredMaximum, smartDetectionEnabled) = await MainActor.run {
+            (AppConfigStore.shared.maximumRequestRetries, AppConfigStore.shared.requestRetrySmartDetectionEnabled)
+        }
         let maximumRetries = min(10, max(0, configuredMaximum))
         var retryCount = 0
         var currentRequest = request
@@ -71,8 +76,9 @@ extension ChatService {
             )
             await operation(currentRequest, currentLoadingID, currentLogContext) { error in
                 guard !Task.isCancelled, retryCount < maximumRetries,
-                      ChatRequestRetryPolicy.isRetryable(error) else { return false }
-                if let message = self.messagesSnapshot(for: sessionID).first(where: { $0.id == currentLoadingID }),
+                      ChatRequestRetryPolicy.isRetryable(error, smartDetectionEnabled: smartDetectionEnabled) else { return false }
+                if smartDetectionEnabled,
+                   let message = self.messagesSnapshot(for: sessionID).first(where: { $0.id == currentLoadingID }),
                    !(message.imageFileNames ?? []).isEmpty || message.audioFileName != nil {
                     return false
                 }
@@ -85,6 +91,7 @@ extension ChatService {
                 messagesSnapshot(for: sessionID), loadingMessageID: currentLoadingID, sessionID: sessionID
             )
             let partial = messagesSnapshot(for: sessionID).first { $0.id == currentLoadingID }
+            let hasGeneratedMedia = !(partial?.imageFileNames ?? []).isEmpty || partial?.audioFileName != nil
             let statusCode: Int?
             if case NetworkError.badStatusCode(let code, _) = failure { statusCode = code } else { statusCode = nil }
             persistRequestLog(
@@ -114,14 +121,16 @@ extension ChatService {
                 try Task.checkCancellation()
             } catch { return }
 
-            if let partial, !partial.content.isEmpty, partial.content != prefix {
+            if let partial, hasGeneratedMedia || (!partial.content.isEmpty && partial.content != prefix) {
                 // 流式工具参数可能只收到一半；保留在旧版本中，不作为已完成调用重放。
-                var textPrefix = ChatMessage(id: partial.id, role: .assistant, content: partial.content)
-                textPrefix.reasoningContent = partial.reasoningContent
+                var retryTarget = hasGeneratedMedia ? partial : ChatMessage(id: partial.id, role: .assistant, content: partial.content)
+                retryTarget.reasoningContent = partial.reasoningContent
+                retryTarget.toolCalls = nil
                 setRequestRetryStatus(nil, messageID: currentLoadingID, sessionID: sessionID)
                 guard let retry = prepareMessageRetry(
-                    targetMessage: textPrefix, in: messagesSnapshot(for: sessionID), prefill: true
-                ), let rebuilt = rebuildRequest(textPrefix) else {
+                    targetMessage: retryTarget, in: messagesSnapshot(for: sessionID),
+                    prefill: !hasGeneratedMedia, restartingCurrentRequest: hasGeneratedMedia
+                ), let rebuilt = hasGeneratedMedia ? currentRequest : rebuildRequest(retryTarget) else {
                     addErrorMessage(NSLocalizedString("错误: 无法构建 API 请求。", comment: ""), sessionID: sessionID)
                     emitSessionRequestStatus(.error, sessionID: sessionID)
                     return
@@ -130,7 +139,8 @@ extension ChatService {
                 currentLoadingID = retry.loadingMessage.id
                 updateRequestLoadingMessageID(currentLoadingID, for: sessionID)
                 currentRequest = rebuilt
-                prefix = textPrefix.content
+                // 图片和音频无法拼接为文本前缀；保留中断版本，重新执行当前请求。
+                if !hasGeneratedMedia { prefix = retryTarget.content }
             }
 
             resetPartialResponseForRetry(messageID: currentLoadingID, sessionID: sessionID, prefix: prefix)

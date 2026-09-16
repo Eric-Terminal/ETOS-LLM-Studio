@@ -265,6 +265,8 @@ extension ChatService {
                     errorKind: "cancelled"
                 )
             } catch {
+                if isCancellationError(error) { throw error }
+                if await retryHandler?(error) == true { return }
                 logger.error("解析响应失败: \(error.localizedDescription)")
                 addErrorMessage(String(
                     format: NSLocalizedString("解析响应失败，请查看原始响应:\n%@", comment: "Response parse failed with raw response"),

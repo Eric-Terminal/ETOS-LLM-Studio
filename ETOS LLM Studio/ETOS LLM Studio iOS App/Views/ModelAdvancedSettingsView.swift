@@ -184,6 +184,7 @@ struct ModelAdvancedSettingsView: View {
             .double("top_p", label: NSLocalizedString("Top P", comment: "向导设置字段"), range: topPRange, get: { topPBinding.wrappedValue }, set: { topPBinding.wrappedValue = $0 }),
             .bool("streaming_enabled", label: NSLocalizedString("启用流式输出", comment: "向导设置字段"), get: { enableStreaming }, set: { enableStreaming = $0 }),
             .integer("maximum_request_retries", label: NSLocalizedString("最大重试次数", comment: ""), range: ChatRequestRetryPolicy.allowedMaximumRetries, get: { appConfig.maximumRequestRetries }, set: { appConfig.maximumRequestRetries = $0 }),
+            .bool("request_retry_smart_detection", label: NSLocalizedString("智能判断", comment: "自动重试错误筛选开关"), get: { appConfig.requestRetrySmartDetectionEnabled }, set: { appConfig.requestRetrySmartDetectionEnabled = $0 }),
             .bool("stream_include_usage", label: NSLocalizedString("流式附带官方 Token 用量", comment: "向导设置字段"), get: { enableOpenAIStreamIncludeUsage }, set: { enableOpenAIStreamIncludeUsage = $0 }),
             .bool("reasoning_summary", label: NSLocalizedString("启用思考摘要", comment: "向导设置字段"), get: { enableReasoningSummary }, set: { enableReasoningSummary = $0 }),
             .string("reasoning_content_echo_mode", label: NSLocalizedString("思维链回传", comment: "向导设置字段"), allowedValues: ReasoningContentEchoMode.allCases.map(\.rawValue), get: { ReasoningContentEchoMode.normalized(appConfig.reasoningContentEchoMode).rawValue }, set: { appConfig.reasoningContentEchoMode = $0 }),

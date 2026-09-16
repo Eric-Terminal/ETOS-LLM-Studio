@@ -71,6 +71,7 @@ extension AppConfigStore {
         case .aiTopPEnabled: aiTopPEnabled = value
         case .enableContextCompressionReminder: enableContextCompressionReminder = value
         case .enableStreaming: enableStreaming = value
+        case .requestRetrySmartDetectionEnabled: requestRetrySmartDetectionEnabled = value
         case .enableResponseSpeedMetrics: enableResponseSpeedMetrics = value
         case .requestLogEnabled: requestLogEnabled = value
         case .requestLogPlainMessageEnabled: requestLogPlainMessageEnabled = value

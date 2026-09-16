@@ -27,6 +27,7 @@ extension ChatService {
         targetMessage: ChatMessage,
         in sourceMessages: [ChatMessage],
         prefill: Bool = false,
+        restartingCurrentRequest: Bool = false,
         requestedAt: Date = Date()
     ) -> PreparedMessageRetry? {
         let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: sourceMessages)
@@ -43,13 +44,14 @@ extension ChatService {
             turn: turn,
             visibleMessages: visibleMessages
         )
-        let requestEndIndex = prefill ? targetIndex : retryRequestEndIndex(
+        let requestEndIndex = (prefill || restartingCurrentRequest) ? targetIndex : retryRequestEndIndex(
             targetIndex: targetIndex,
             turn: turn,
             visibleMessages: visibleMessages
         )
         guard !prefill || targetMessage.canPrefill else { return nil }
-        let continuesCurrentVersion = !prefill && shouldContinueCurrentRetryVersion(
+        // 自动重发含媒体的当前请求时，把残缺内容留在旧版，不复制到新请求的前缀。
+        let continuesCurrentVersion = !prefill && !restartingCurrentRequest && shouldContinueCurrentRetryVersion(
             targetMessage: targetMessage,
             targetIndex: targetIndex,
             turn: turn,
