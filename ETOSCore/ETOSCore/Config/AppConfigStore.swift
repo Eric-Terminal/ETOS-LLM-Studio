@@ -206,6 +206,7 @@ public final class AppConfigStore: ObservableObject {
         didSet { write(.contextCompressionReminderTokenThreshold, contextCompressionReminderTokenThreshold) }
     }
     @Published public var enableStreaming: Bool { didSet { write(.enableStreaming, enableStreaming) } }
+    @Published public var maximumRequestRetries: Int { didSet { write(.maximumRequestRetries, maximumRequestRetries) } }
     @Published public var enableResponseSpeedMetrics: Bool { didSet { write(.enableResponseSpeedMetrics, enableResponseSpeedMetrics) } }
     @Published public var requestLogEnabled: Bool { didSet { write(.requestLogEnabled, requestLogEnabled) } }
     @Published public var requestLogPlainMessageEnabled: Bool { didSet { write(.requestLogPlainMessageEnabled, requestLogPlainMessageEnabled) } }
@@ -645,6 +646,7 @@ public final class AppConfigStore: ObservableObject {
             Self.integerValue(.contextCompressionReminderTokenThreshold, userDefaults: userDefaults)
         )
         enableStreaming = Self.boolValue(.enableStreaming, userDefaults: userDefaults)
+        maximumRequestRetries = Self.integerValue(.maximumRequestRetries, userDefaults: userDefaults)
         enableResponseSpeedMetrics = Self.boolValue(.enableResponseSpeedMetrics, userDefaults: userDefaults)
         requestLogEnabled = Self.boolValue(.requestLogEnabled, userDefaults: userDefaults)
         requestLogPlainMessageEnabled = Self.boolValue(.requestLogPlainMessageEnabled, userDefaults: userDefaults)

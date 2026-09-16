@@ -169,6 +169,8 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var id: UUID
     public var role: MessageRole
     public var requestedAt: Date? // 对应请求的发起时间（用于会话 JSON 落盘）
+    /// 仅供当前请求显示，刻意不加入 CodingKeys，恢复历史时不会恢复重试状态。
+    public var requestRetryStatus: ChatRequestRetryStatus? = nil
 
     // MARK: - 多版本内容存储
     /// 所有版本的内容数组（内部存储）

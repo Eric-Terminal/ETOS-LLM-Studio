@@ -748,15 +748,6 @@ extension ChatService {
             )
             return
         }
-        RequestTransactionLogRegistry.bindRequest(
-            request,
-            requestID: requestLogContext.requestID,
-            requestedAt: requestLogContext.requestedAt,
-            providerName: requestLogContext.providerName,
-            modelID: requestLogContext.modelID,
-            isStreaming: requestLogContext.isStreaming
-        )
-
         await persistSentSystemPromptSnapshot(
             from: messagesToSend,
             loadingMessageID: loadingMessageID,
@@ -778,59 +769,81 @@ extension ChatService {
             )
         }()
 
-        if effectiveStreaming {
-            await handleStreamedResponse(
-                request: request,
-                provider: runnableModel.provider,
-                adapter: adapter,
-                loadingMessageID: loadingMessageID,
-                currentSessionID: currentSessionID,
-                userMessage: userMessage,
-                wasTemporarySession: wasTemporarySession,
-                aiTemperature: aiTemperature,
-                aiTopP: aiTopP,
-                systemPrompt: systemPrompt,
-                maxChatHistory: maxChatHistory,
-                availableTools: effectiveTools,
-                enableMemory: enableMemory,
-                enableMemoryWrite: enableMemoryWrite,
-                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
-                includeSystemTime: includeSystemTime,
-                systemTimeInjectionPosition: systemTimeInjectionPosition,
-                enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
-                periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
-                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
-                requestStartedAt: requestStartedAt,
-                requestLogContext: requestLogContext,
-                responsesFullInputFallbackRequest: responsesFullInputFallbackRequest
-            )
-        } else {
-            await handleStandardResponse(
-                request: request,
-                provider: runnableModel.provider,
-                adapter: adapter,
-                loadingMessageID: loadingMessageID,
-                currentSessionID: currentSessionID,
-                userMessage: userMessage,
-                wasTemporarySession: wasTemporarySession,
-                availableTools: effectiveTools,
-                aiTemperature: aiTemperature,
-                aiTopP: aiTopP,
-                systemPrompt: systemPrompt,
-                maxChatHistory: maxChatHistory,
-                enableMemory: enableMemory,
-                enableMemoryWrite: enableMemoryWrite,
-                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
-                includeSystemTime: includeSystemTime,
-                systemTimeInjectionPosition: systemTimeInjectionPosition,
-                enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
-                periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
-                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
-                requestStartedAt: requestStartedAt,
-                requestLogContext: requestLogContext,
-                messagesBeforeResponse: messagesToSend,
-                responsesFullInputFallbackRequest: responsesFullInputFallbackRequest
-            )
+        // 请求材料只准备一次。恢复时仅替换助手前缀，避免重复执行脚本、上传或工具。
+        let messagesBeforePrefill = assistantPrefill == nil ? messagesToSend : Array(messagesToSend.dropLast())
+        await withAutomaticRequestRetries(
+            request: request, loadingMessageID: loadingMessageID,
+            sessionID: currentSessionID, requestLogContext: requestLogContext,
+            initialPrefill: assistantPrefill,
+            rebuildRequest: { prefix in
+                var recoveryPayload = commonPayload
+                recoveryPayload[OpenAIAdapter.responsesForceFullInputControlKey] = true
+                return adapter.buildChatRequest(
+                    for: runnableModel, commonPayload: recoveryPayload,
+                    messages: messagesBeforePrefill + [ChatMessage(role: .assistant, content: prefix.content)],
+                    tools: effectiveTools, audioAttachments: audioAttachments,
+                    imageAttachments: imageAttachments, fileAttachments: fileAttachments
+                )
+            }
+        ) { attemptRequest, attemptLoadingID, attemptLogContext, retryHandler in
+            let fallbackRequest = self.openAIResponsesRequestUsesPreviousResponseID(attemptRequest)
+                ? responsesFullInputFallbackRequest : nil
+            if effectiveStreaming {
+                await handleStreamedResponse(
+                    request: attemptRequest,
+                    provider: runnableModel.provider,
+                    adapter: adapter,
+                    loadingMessageID: attemptLoadingID,
+                    currentSessionID: currentSessionID,
+                    userMessage: userMessage,
+                    wasTemporarySession: wasTemporarySession,
+                    aiTemperature: aiTemperature,
+                    aiTopP: aiTopP,
+                    systemPrompt: systemPrompt,
+                    maxChatHistory: maxChatHistory,
+                    availableTools: effectiveTools,
+                    enableMemory: enableMemory,
+                    enableMemoryWrite: enableMemoryWrite,
+                    enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+                    includeSystemTime: includeSystemTime,
+                    systemTimeInjectionPosition: systemTimeInjectionPosition,
+                    enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+                    periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
+                    enableResponseSpeedMetrics: enableResponseSpeedMetrics,
+                    requestStartedAt: attemptLogContext.requestedAt,
+                    requestLogContext: attemptLogContext,
+                    responsesFullInputFallbackRequest: fallbackRequest,
+                    retryHandler: retryHandler
+                )
+            } else {
+                await handleStandardResponse(
+                    request: attemptRequest,
+                    provider: runnableModel.provider,
+                    adapter: adapter,
+                    loadingMessageID: attemptLoadingID,
+                    currentSessionID: currentSessionID,
+                    userMessage: userMessage,
+                    wasTemporarySession: wasTemporarySession,
+                    availableTools: effectiveTools,
+                    aiTemperature: aiTemperature,
+                    aiTopP: aiTopP,
+                    systemPrompt: systemPrompt,
+                    maxChatHistory: maxChatHistory,
+                    enableMemory: enableMemory,
+                    enableMemoryWrite: enableMemoryWrite,
+                    enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+                    includeSystemTime: includeSystemTime,
+                    systemTimeInjectionPosition: systemTimeInjectionPosition,
+                    enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+                    periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
+                    enableResponseSpeedMetrics: enableResponseSpeedMetrics,
+                    requestStartedAt: attemptLogContext.requestedAt,
+                    requestLogContext: attemptLogContext,
+                    messagesBeforeResponse: messagesToSend,
+                    responsesFullInputFallbackRequest: fallbackRequest,
+                    retryHandler: retryHandler
+                )
+            }
         }
     }
 

@@ -101,16 +101,23 @@ extension ChatBubble {
                   (message.toolCalls ?? []).isEmpty {
             if showsStreamingIndicators {
                 ShimmeringText(
-                    text: NSLocalizedString("正在思考...", comment: ""),
+                    text: message.requestRetryStatus?.thinkingText ?? NSLocalizedString("正在思考...", comment: ""),
                     font: .subheadline,
                     baseColor: resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.75),
                     highlightColor: resolvedTextColor(default: Color.primary.opacity(0.85))
                 )
             } else {
-                Text(NSLocalizedString("正在思考...", comment: ""))
+                Text(message.requestRetryStatus?.thinkingText ?? NSLocalizedString("正在思考...", comment: ""))
                     .etFont(.subheadline)
                     .foregroundStyle(resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.75))
             }
+        }
+
+        if let retryStatus = message.requestRetryStatus,
+           !message.content.isEmpty || !(message.reasoningContent ?? "").isEmpty || !(message.toolCalls ?? []).isEmpty {
+            Text(retryStatus.thinkingText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
 
         if canUseTimeline {

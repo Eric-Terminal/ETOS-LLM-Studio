@@ -528,7 +528,8 @@ extension ChatBubble {
     }
 
     var shouldShowThinkingIndicator: Bool {
-        message.role == .assistant
+        if message.requestRetryStatus != nil { return true }
+        return message.role == .assistant
             && message.content.isEmpty
             && (message.reasoningContent ?? "").isEmpty
             && (message.toolCalls ?? []).isEmpty
@@ -536,7 +537,7 @@ extension ChatBubble {
 
     var currentThinkingText: String {
         guard shouldShowThinkingIndicator else { return "" }
-        return NSLocalizedString("正在思考...", comment: "")
+        return message.requestRetryStatus?.thinkingText ?? NSLocalizedString("正在思考...", comment: "")
     }
 }
 

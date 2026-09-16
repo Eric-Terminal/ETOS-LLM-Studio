@@ -8,7 +8,10 @@ extension ChatServiceTests {
     func prefillCreatesReversibleMergedVersion(streaming: Bool) async throws {
         await cleanup()
         setupMockResponsesForChatAndTitle()
-        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "续写。")
+        mockAdapter.responseToReturn = ChatMessage(
+            role: .assistant, content: "续写。",
+            providerResponseMetadata: [OpenAIAdapter.responsesResponseIDKey: .string("suffix-only-response")]
+        )
         let streamAdapter = RetryStreamingMockAdapter()
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [MockURLProtocol.self]
@@ -23,7 +26,7 @@ extension ChatServiceTests {
             Data("续写。\n".utf8)
         ))
         let user = ChatMessage(role: .user, content: "prompt")
-        let original = ChatMessage(role: .assistant, content: "原文 ", reasoningContent: "旧推理")
+        let original = ChatMessage(role: .assistant, content: "  原文 ", reasoningContent: "旧推理")
         let nextUser = ChatMessage(role: .user, content: "后续问题")
         let session = try #require(service.currentSessionSubject.value)
         service.updateMessages([user, original, nextUser], for: session.id)
@@ -38,19 +41,21 @@ extension ChatServiceTests {
 
         let sent = try #require(streaming ? streamAdapter.receivedMessages : mockAdapter.receivedMessages)
         #expect(sent.last?.role == .assistant)
-        #expect(sent.last?.content == "原文 ")
-        #expect(sent.filter { $0.content == "原文 " }.count == 1)
+        #expect(sent.last?.content == "  原文 ")
+        #expect(sent.filter { $0.content == "  原文 " }.count == 1)
         #expect(!sent.contains { $0.id == nextUser.id })
         let stored = service.messagesForSessionSubject.value
         let visible = ChatResponseAttemptSupport.visibleMessages(from: stored)
-        #expect(visible.contains { $0.content == "原文 续写。" && $0.reasoningContent == "旧推理" })
+        #expect(visible.contains { $0.content == "  原文 续写。" && $0.reasoningContent == "旧推理" })
+        let merged = try #require(visible.first { $0.role == .assistant })
+        #expect(merged.providerResponseMetadata?.isEmpty == true)
         #expect(visible.last?.id == nextUser.id)
         let old = try #require(stored.first { $0.id == original.id })
-        #expect(old.content == "原文 ")
+        #expect(old.content == "  原文 ")
         let oldAttemptID = try #require(old.responseAttemptID)
         let restored = ChatResponseAttemptSupport.selectAttempt(attemptID: oldAttemptID, groupID: user.id, in: stored)
-        #expect(ChatResponseAttemptSupport.visibleMessages(from: restored).map(\.content) == ["prompt", "原文 ", "后续问题"])
-        #expect(Persistence.loadMessages(for: session.id).contains { $0.content == "原文 续写。" })
+        #expect(ChatResponseAttemptSupport.visibleMessages(from: restored).map(\.content) == ["prompt", "  原文 ", "后续问题"])
+        #expect(Persistence.loadMessages(for: session.id).contains { $0.content == "  原文 续写。" })
         await cleanup()
     }
 

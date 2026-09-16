@@ -139,6 +139,7 @@ extension AppConfigStore {
     func setInteger(_ value: Int, for key: AppConfigKey) {
         switch key {
         case .maxChatHistory: maxChatHistory = value
+        case .maximumRequestRetries: maximumRequestRetries = Self.normalizedIntegerValue(value, for: key)
         case .contextCompressionReminderTokenThreshold:
             contextCompressionReminderTokenThreshold = Self.normalizedIntegerValue(value, for: key)
         case .restoreLastSessionWithinMinutes:
@@ -635,6 +636,8 @@ extension AppConfigStore {
 
     nonisolated static func normalizedIntegerValue(_ value: Int, for key: AppConfigKey) -> Int {
         switch key {
+        case .maximumRequestRetries:
+            return min(max(0, value), ChatRequestRetryPolicy.allowedMaximumRetries.upperBound)
         case .userMessagePreviewCharacterLimit:
             let range = ChatUserMessagePreview.characterLimitRange
             return min(max(value, range.lowerBound), range.upperBound)

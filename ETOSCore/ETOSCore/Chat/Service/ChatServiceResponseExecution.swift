@@ -173,8 +173,10 @@ extension ChatService {
         requestStartedAt: Date,
         requestLogContext: RequestLogContext,
         messagesBeforeResponse: [ChatMessage] = [],
-        responsesFullInputFallbackRequest: URLRequest? = nil
+        responsesFullInputFallbackRequest: URLRequest? = nil,
+        retryHandler: ((Error) async -> Bool)? = nil
     ) async {
+        let responsePrefix = messagesSnapshot(for: currentSessionID).first { $0.id == loadingMessageID }
         do {
             let data = try await fetchData(for: request, provider: provider)
             let rawResponse = String(data: data, encoding: .utf8) ?? NSLocalizedString("<二进制数据，无法以 UTF-8 解码>", comment: "Fallback for non-UTF8 response body")
@@ -188,7 +190,7 @@ extension ChatService {
             do {
                 var parsedMessage = try adapter.parseResponse(data: data)
                 // 非流式返回只包含新增后缀；流式接收器已直接追加到同一占位消息。
-                if let prefix = messagesSnapshot(for: currentSessionID).first(where: { $0.id == loadingMessageID }) {
+                if let prefix = responsePrefix {
                     parsedMessage.content = prefix.content + parsedMessage.content
                     parsedMessage.reasoningContent = (prefix.reasoningContent ?? "") + (parsedMessage.reasoningContent ?? "")
                 }
@@ -250,7 +252,8 @@ extension ChatService {
                     includeSystemTime: includeSystemTime,
                     systemTimeInjectionPosition: systemTimeInjectionPosition,
                     enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
-                    periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes
+                    periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
+                    isPrefillResponse: responsePrefix?.content.isEmpty == false
                 )
             } catch is CancellationError {
                 logger.info("请求在解析阶段被取消，已忽略后续处理。")
@@ -319,8 +322,12 @@ extension ChatService {
                     requestStartedAt: requestStartedAt,
                     requestLogContext: requestLogContext,
                     messagesBeforeResponse: messagesBeforeResponse,
-                    responsesFullInputFallbackRequest: nil
+                    responsesFullInputFallbackRequest: nil,
+                    retryHandler: retryHandler
                 )
+                return
+            }
+            if await retryHandler?(NetworkError.badStatusCode(code: code, responseBody: bodyData)) == true {
                 return
             }
             let bodyString: String
@@ -355,6 +362,7 @@ extension ChatService {
                     errorKind: "cancelled"
                 )
             } else {
+                if await retryHandler?(error) == true { return }
                 addErrorMessage(String(
                     format: NSLocalizedString("网络错误: %@", comment: "Network error with description"),
                     error.localizedDescription

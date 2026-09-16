@@ -414,6 +414,7 @@ extension AppConfigStore {
         case .enableContextCompressionReminder: return .bool(enableContextCompressionReminder)
         case .contextCompressionReminderTokenThreshold: return .integer(contextCompressionReminderTokenThreshold)
         case .enableStreaming: return .bool(enableStreaming)
+        case .maximumRequestRetries: return .integer(maximumRequestRetries)
         case .enableResponseSpeedMetrics: return .bool(enableResponseSpeedMetrics)
         case .requestLogEnabled: return .bool(requestLogEnabled)
         case .requestLogPlainMessageEnabled: return .bool(requestLogPlainMessageEnabled)

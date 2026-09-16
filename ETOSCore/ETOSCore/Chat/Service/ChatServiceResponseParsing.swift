@@ -437,7 +437,7 @@ extension ChatService {
     }
 
     /// 仅当思考标签位于回复开头时，才解析并移除其中内容。
-    func parseThoughtTags(from text: String) -> (content: String, reasoning: String) {
+    func parseThoughtTags(from text: String, trimWhitespace: Bool = true) -> (content: String, reasoning: String) {
         var scanIndex = text.startIndex
         var reasoningSegments: [String] = []
 
@@ -447,10 +447,10 @@ extension ChatService {
         }
 
         guard !reasoningSegments.isEmpty else {
-            return (text.trimmingCharacters(in: .whitespacesAndNewlines), "")
+            return (trimWhitespace ? text.trimmingCharacters(in: .whitespacesAndNewlines) : text, "")
         }
         let remainingContent = String(text[scanIndex...])
-        return (remainingContent.trimmingCharacters(in: .whitespacesAndNewlines), reasoningSegments.joined(separator: "\n\n"))
+        return (trimWhitespace ? remainingContent.trimmingCharacters(in: .whitespacesAndNewlines) : remainingContent, reasoningSegments.joined(separator: "\n\n"))
     }
 
     private func leadingThoughtBlock(in text: String, from startIndex: String.Index) -> (reasoning: String, upperBound: String.Index)? {

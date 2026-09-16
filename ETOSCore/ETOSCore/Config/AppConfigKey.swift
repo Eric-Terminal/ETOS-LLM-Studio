@@ -308,6 +308,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case enableContextCompressionReminder = "contextCompression.reminder.enabled"
     case contextCompressionReminderTokenThreshold = "contextCompression.reminder.tokenThreshold"
     case enableStreaming = "enableStreaming"
+    case maximumRequestRetries = "chat.maximumRequestRetries"
     case enableResponseSpeedMetrics = "enableResponseSpeedMetrics"
     case requestLogEnabled = "logs.request.enabled"
     case requestLogPlainMessageEnabled = "logs.request.plainMessageEnabled"
@@ -586,6 +587,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             #else
             return .bool(true)
             #endif
+        case .maximumRequestRetries:
+            return .integer(ChatRequestRetryPolicy.defaultMaximumRetries)
         case .enableResponseSpeedMetrics:
             #if os(watchOS)
             return .bool(false)

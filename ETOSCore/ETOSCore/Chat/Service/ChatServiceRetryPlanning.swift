@@ -43,7 +43,7 @@ extension ChatService {
             turn: turn,
             visibleMessages: visibleMessages
         )
-        let requestEndIndex = retryRequestEndIndex(
+        let requestEndIndex = prefill ? targetIndex : retryRequestEndIndex(
             targetIndex: targetIndex,
             turn: turn,
             visibleMessages: visibleMessages

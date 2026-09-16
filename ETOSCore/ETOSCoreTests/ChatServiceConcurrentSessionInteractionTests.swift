@@ -293,8 +293,11 @@ struct ChatServiceConcurrentSessionInteractionTests {
     }
 
     @MainActor
-    @Test("流式连接正常关闭但缺少结束标记时保留正文并报告中断")
+    @Test("关闭自动重试时，流式连接缺少结束标记会保留正文并报告中断")
     func testStreamingEOFWithoutTerminationSignalReportsInterruption() async {
+        let previousRetries = AppConfigStore.shared.maximumRequestRetries
+        AppConfigStore.shared.maximumRequestRetries = 0
+        defer { AppConfigStore.shared.maximumRequestRetries = previousRetries }
         let originalProviders = ConfigLoader.loadProviders()
         defer {
             replaceProviders(with: originalProviders)
@@ -363,8 +366,11 @@ struct ChatServiceConcurrentSessionInteractionTests {
     }
 
     @MainActor
-    @Test("流式尾部混入代理错误响应体时展示 HTTP 状态和完整详情")
+    @Test("关闭自动重试时，流式尾部代理错误仍展示 HTTP 状态和完整详情")
     func testStreamingTrailingProxyErrorBodyUsesHTTPErrorFormatting() async throws {
+        let previousRetries = AppConfigStore.shared.maximumRequestRetries
+        AppConfigStore.shared.maximumRequestRetries = 0
+        defer { AppConfigStore.shared.maximumRequestRetries = previousRetries }
         let originalProviders = ConfigLoader.loadProviders()
         defer {
             replaceProviders(with: originalProviders)

@@ -33,12 +33,14 @@ extension ChatService {
         enableResponseSpeedMetrics: Bool,
         requestStartedAt: Date,
         requestLogContext: RequestLogContext,
-        responsesFullInputFallbackRequest: URLRequest? = nil
+        responsesFullInputFallbackRequest: URLRequest? = nil,
+        retryHandler: ((Error) async -> Bool)? = nil
     ) async {
         var latestTokenUsage: MessageTokenUsage?
         var trailingUnparsedResponseBody = ""
         var trailingUnparsedHTTPStatusCode: Int?
         var messages = messagesSnapshot(for: currentSessionID)
+        let hasContentPrefix = messages.first { $0.id == loadingMessageID }?.content.isEmpty == false
         let streamingDisplayMode = await MainActor.run {
             ChatStreamingDisplayMode.normalized(AppConfigStore.shared.chatStreamingDisplayMode)
         }
@@ -54,6 +56,7 @@ extension ChatService {
         var streamingResponseByteCount = 0
         var hasReceivedStreamingLine = false
         var streamTermination: ChatMessagePart.StreamTermination?
+        var streamFailureResponse: (body: String, httpStatusCode: Int?)?
         let streamingSignpost = TelemetrySignpost.begin(
             .streamingResponseProcessing,
             correlatingWith: requestLogContext.requestID
@@ -128,6 +131,15 @@ extension ChatService {
                         }
                     case .failed:
                         streamTermination = incomingTermination
+                        // 部分服务把 503 等错误装在 HTTP 200 的 SSE 事件里。
+                        var failureBody = ""
+                        var failureStatusCode: Int?
+                        updateTrailingUnparsedStreamingResponse(
+                            with: line, body: &failureBody, httpStatusCode: &failureStatusCode
+                        )
+                        streamFailureResponse = makeUnparsedStreamingResponseError(
+                            body: failureBody, fallbackHTTPStatusCode: failureStatusCode
+                        )
                     }
                 }
                 trailingUnparsedResponseBody = ""
@@ -147,6 +159,11 @@ extension ChatService {
                     var didReceiveTextDelta = false
                     var didReceiveGeneratedDelta = false
                     var shouldForceStreamingPublish = false
+                    if messages[index].requestRetryStatus != nil,
+                       part.content?.isEmpty == false || part.reasoningContent?.isEmpty == false || part.toolCallDeltas?.isEmpty == false {
+                        messages[index].requestRetryStatus = nil
+                        shouldForceStreamingPublish = true
+                    }
                     if let contentPart = part.content {
                         messages[index].content += contentPart
                         if !contentPart.isEmpty {
@@ -337,6 +354,10 @@ extension ChatService {
                     sessionID: currentSessionID,
                     coalescer: &streamingPublishCoalescer
                 )
+                if let code = unparsedError.httpStatusCode,
+                   await retryHandler?(NetworkError.badStatusCode(code: code, responseBody: Data(unparsedError.body.utf8))) == true {
+                    return
+                }
                 addErrorMessage(
                     unparsedError.body,
                     sessionID: currentSessionID,
@@ -378,6 +399,17 @@ extension ChatService {
                     loadingMessageID: loadingMessageID,
                     sessionID: currentSessionID
                 )
+                let retryError: Error?
+                if let failure = streamFailureResponse, let code = failure.httpStatusCode {
+                    retryError = NetworkError.badStatusCode(code: code, responseBody: Data(failure.body.utf8))
+                } else if streamTermination == nil {
+                    retryError = URLError(.networkConnectionLost)
+                } else {
+                    retryError = nil
+                }
+                if let retryError, await retryHandler?(retryError) == true {
+                    return
+                }
                 await finalizeInterruptedReasoningMessageIfNeeded(
                     loadingMessageID: loadingMessageID,
                     in: currentSessionID
@@ -402,7 +434,9 @@ extension ChatService {
 
             var finalAssistantMessage: ChatMessage?
             if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
-                let (finalContent, extractedReasoning) = parseThoughtTags(from: messages[index].content)
+                let (finalContent, extractedReasoning) = parseThoughtTags(
+                    from: messages[index].content, trimWhitespace: !hasContentPrefix
+                )
                 messages[index].content = finalContent
                 if !extractedReasoning.isEmpty {
                     if messages[index].reasoningContent == nil { messages[index].reasoningContent = "" }
@@ -526,7 +560,8 @@ extension ChatService {
                     includeSystemTime: includeSystemTime,
                     systemTimeInjectionPosition: systemTimeInjectionPosition,
                     enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
-                    periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes
+                    periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
+                    isPrefillResponse: hasContentPrefix
                 )
             } else {
                 logCapturedStreamingResponse()
@@ -599,7 +634,8 @@ extension ChatService {
                     enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                     requestStartedAt: requestStartedAt,
                     requestLogContext: requestLogContext,
-                    responsesFullInputFallbackRequest: nil
+                    responsesFullInputFallbackRequest: nil,
+                    retryHandler: retryHandler
                 )
                 return
             }
@@ -609,6 +645,9 @@ extension ChatService {
                 sessionID: currentSessionID,
                 coalescer: &streamingPublishCoalescer
             )
+            if await retryHandler?(NetworkError.badStatusCode(code: code, responseBody: bodyData)) == true {
+                return
+            }
             addErrorMessage(bodySnippet, sessionID: currentSessionID, httpStatusCode: code)
             emitSessionRequestStatus(.error, sessionID: currentSessionID)
             persistRequestLog(
@@ -638,6 +677,23 @@ extension ChatService {
                     errorKind: "cancelled"
                 )
             } else {
+                // 重试前刷新未发布的尾部 token，确保预填充从真实接收边界开始。
+                messages = flushPendingStreamingMessages(
+                    messages, loadingMessageID: loadingMessageID,
+                    sessionID: currentSessionID, coalescer: &streamingPublishCoalescer
+                )
+                let retryError: Error
+                if let unparsedError = makeUnparsedStreamingResponseError(
+                    body: trailingUnparsedResponseBody, fallbackHTTPStatusCode: trailingUnparsedHTTPStatusCode
+                ), let code = unparsedError.httpStatusCode {
+                    retryError = NetworkError.badStatusCode(code: code, responseBody: Data(unparsedError.body.utf8))
+                } else {
+                    retryError = error
+                }
+                if await retryHandler?(retryError) == true {
+                    logCapturedStreamingResponse(isPartial: true)
+                    return
+                }
                 if let unparsedError = makeUnparsedStreamingResponseError(
                     body: trailingUnparsedResponseBody,
                     fallbackHTTPStatusCode: trailingUnparsedHTTPStatusCode
@@ -707,7 +763,8 @@ extension ChatService {
         includeSystemTime: Bool,
         systemTimeInjectionPosition: SystemTimeInjectionPosition = .front,
         enablePeriodicTimeLandmark: Bool = false,
-        periodicTimeLandmarkIntervalMinutes: Int = 30
+        periodicTimeLandmarkIntervalMinutes: Int = 30,
+        isPrefillResponse: Bool = false
     ) async {
         var responseMessage = responseMessage
         if let reasoning = responseMessage.reasoningContent {
@@ -715,8 +772,16 @@ extension ChatService {
             responseMessage.reasoningContent = normalized.isEmpty ? nil : normalized
         }
 
-        let (finalContent, extractedReasoning) = parseThoughtTags(from: responseMessage.content)
+        // 续写须保留原文缩进与拼接边界；只拆分推理标签，不裁掉已有空白。
+        let (finalContent, extractedReasoning) = parseThoughtTags(
+            from: responseMessage.content, trimWhitespace: !isPrefillResponse
+        )
         responseMessage.content = finalContent
+        if isPrefillResponse {
+            // 服务端缓存只代表本次后缀，不能冒充本地合并后的完整消息。
+            // 使用空字典覆盖流式占位上的旧元数据，让后续完整历史发送合并正文。
+            responseMessage.providerResponseMetadata = [:]
+        }
         if !extractedReasoning.isEmpty {
             let normalizedExtracted = normalizeEscapedNewlinesIfNeeded(extractedReasoning)
             if !normalizedExtracted.isEmpty {
