@@ -15,7 +15,7 @@ public struct ChatRequestRetryStatus: Hashable, Sendable {
     public var thinkingText: String {
         if let remainingSeconds {
             return String(
-                format: NSLocalizedString("正在思考·重试(%d/%d)·%d 秒后重试", comment: ""),
+                format: NSLocalizedString("正在思考·重试(%d/%d)·%ds", comment: ""),
                 attempt, maximumAttempts, remainingSeconds
             )
         }

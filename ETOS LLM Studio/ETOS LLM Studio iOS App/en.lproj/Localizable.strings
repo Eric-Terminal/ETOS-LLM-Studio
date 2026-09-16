@@ -7555,5 +7555,5 @@
 "最多重试：%d 次" = "Maximum retries: %d";
 "正在思考·重试(%d/%d)" = "Thinking·Retry(%d/%d)";
 "网络中断或服务暂时不可用时自动重试。设为 0 可关闭。" = "Retry automatically after a lost connection or temporary service failure. Set to 0 to disable.";
-"正在思考·重试(%d/%d)·%d 秒后重试" = "Thinking·Retry(%d/%d)·Retrying in %d s";
+"正在思考·重试(%d/%d)·%ds" = "Thinking·Retry(%d/%d)·%ds";
 "自动重试使用说明" = "During the wait, the current reply shows a countdown in seconds. It disappears when the request is sent; no error bubble is added while retrying. The limit excludes the first request; the default is 3 retries. Network interruptions and temporary server failures use exponential delays of 1, 2, 4 seconds, up to 30 seconds. Stop cancels the wait. Interrupted text is sent as an assistant prefill; the continuation is merged into a new version while the interrupted version remains available. This requires model API support. Authentication and request errors are not retried. After the limit, you can still use Continue with Prefill in the message menu.";
