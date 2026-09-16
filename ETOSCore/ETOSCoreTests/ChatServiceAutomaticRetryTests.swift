@@ -70,17 +70,29 @@ private final class AutomaticRetryURLProtocol: URLProtocol {
 private final class RetryStatusRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private var values: [ChatRequestRetryStatus] = []
+    private var receivedError = false
 
     func record(_ messages: [ChatMessage]) {
         lock.lock()
         defer { lock.unlock() }
         values.append(contentsOf: messages.compactMap(\.requestRetryStatus))
+        receivedError = receivedError || messages.contains { $0.role == .error }
     }
 
     var attempts: Set<Int> {
+        Set(statuses.map(\.attempt))
+    }
+
+    var statuses: [ChatRequestRetryStatus] {
         lock.lock()
         defer { lock.unlock() }
-        return Set(values.map(\.attempt))
+        return values
+    }
+
+    var hasErrors: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return receivedError
     }
 }
 
@@ -137,6 +149,38 @@ extension ChatServiceTests {
         #expect(Set(logs.map(\.requestID)).count == 2)
         #expect(logs.contains { $0.status == .failed })
         #expect(logs.contains { $0.status == .success })
+        await cleanup()
+    }
+
+    @Test("退避倒计时逐秒更新，发出请求后移除秒数，期间不插入错误气泡")
+    @MainActor
+    func automaticRetryCountdownUpdatesUntilNextRequest() async throws {
+        await cleanup()
+        let config = AppConfigStore.shared
+        let previous = config.maximumRequestRetries
+        config.maximumRequestRetries = 2
+        defer { config.maximumRequestRetries = previous }
+        let service = automaticRetryService()
+        AutomaticRetryURLProtocol.configure([
+            .init(status: 503, body: "服务繁忙"),
+            .init(status: 503, body: "仍需等待"),
+            .init(status: 200, body: #"{"choices":[{"message":{"role":"assistant","content":"恢复成功"}}]}"#)
+        ])
+        let recorder = RetryStatusRecorder()
+        let subscription = service.messagesForSessionSubject.sink { recorder.record($0) }
+        defer { subscription.cancel() }
+        let startedAt = Date()
+        await sendAutomaticallyRetriedMessage(using: service, streaming: false)
+        #expect(Date().timeIntervalSince(startedAt) >= 3)
+        #expect(AutomaticRetryURLProtocol.requests.count == 3)
+        let secondAttempt = recorder.statuses.filter { $0.attempt == 2 }
+        #expect(secondAttempt.first?.remainingSeconds == 2)
+        let oneSecondIndex = try #require(secondAttempt.firstIndex { $0.remainingSeconds == 1 })
+        let requestingIndex = try #require(secondAttempt.firstIndex { $0.remainingSeconds == nil })
+        #expect(oneSecondIndex < requestingIndex)
+        #expect(secondAttempt.last?.remainingSeconds == nil)
+        #expect(!recorder.hasErrors)
+        #expect(!service.messagesForSessionSubject.value.contains { $0.requestRetryStatus != nil })
         await cleanup()
     }
 
@@ -253,7 +297,7 @@ extension ChatServiceTests {
         let service = automaticRetryService()
         AutomaticRetryURLProtocol.configure([.init(status: 503, body: "服务繁忙")])
         let subscription = service.messagesForSessionSubject
-            .filter { $0.contains { $0.requestRetryStatus != nil } }
+            .filter { $0.contains { $0.requestRetryStatus?.remainingSeconds != nil } }
             .prefix(1)
             .sink { [weak service] _ in
                 Task { await service?.cancelOngoingRequest() }
@@ -294,8 +338,11 @@ struct ChatRequestRetryPolicyTests {
         #expect(AppConfigStore.normalizedIntegerValue(100, for: .maximumRequestRetries) == 10)
         var message = ChatMessage(role: .assistant, content: "前缀")
         let previous = message
-        message.requestRetryStatus = ChatRequestRetryStatus(attempt: 2, maximumAttempts: 3)
+        message.requestRetryStatus = ChatRequestRetryStatus(attempt: 2, maximumAttempts: 3, remainingSeconds: 2)
         #expect(!ETStreamingMessageUpdatePolicy.isTextOnlyChange(from: previous, to: message))
+        let waiting = message
+        message.requestRetryStatus = ChatRequestRetryStatus(attempt: 2, maximumAttempts: 3, remainingSeconds: 1)
+        #expect(!ETStreamingMessageUpdatePolicy.isTextOnlyChange(from: waiting, to: message))
         let encoded = try JSONEncoder().encode(message)
         #expect(!String(decoding: encoded, as: UTF8.self).contains("requestRetryStatus"))
         #expect(try JSONDecoder().decode(ChatMessage.self, from: encoded).requestRetryStatus == nil)

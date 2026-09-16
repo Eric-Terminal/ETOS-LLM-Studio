@@ -3,9 +3,23 @@ import Foundation
 public struct ChatRequestRetryStatus: Hashable, Sendable {
     public let attempt: Int
     public let maximumAttempts: Int
+    /// 仅退避等待期间有值，请求发出后不再显示倒计时。
+    public let remainingSeconds: Int?
+
+    init(attempt: Int, maximumAttempts: Int, remainingSeconds: Int? = nil) {
+        self.attempt = attempt
+        self.maximumAttempts = maximumAttempts
+        self.remainingSeconds = remainingSeconds
+    }
 
     public var thinkingText: String {
-        String(format: NSLocalizedString("正在思考·重试(%d/%d)", comment: ""), attempt, maximumAttempts)
+        if let remainingSeconds {
+            return String(
+                format: NSLocalizedString("正在思考·重试(%d/%d)·%d 秒后重试", comment: ""),
+                attempt, maximumAttempts, remainingSeconds
+            )
+        }
+        return String(format: NSLocalizedString("正在思考·重试(%d/%d)", comment: ""), attempt, maximumAttempts)
     }
 }
 
@@ -79,12 +93,24 @@ extension ChatService {
             )
 
             retryCount += 1
-            setRequestRetryStatus(
-                ChatRequestRetryStatus(attempt: retryCount, maximumAttempts: maximumRetries),
-                messageID: currentLoadingID, sessionID: sessionID
-            )
             do {
-                try await Task.sleep(for: .seconds(ChatRequestRetryPolicy.delay(forRetry: retryCount)))
+                // 使用同一单调时钟计算等待和显示，挂起恢复后不会补跑过期倒计时。
+                // 更新只存在于当前请求的退避期间，取消请求会同时结束等待。
+                let clock = ContinuousClock()
+                let deadline = clock.now.advanced(by: .seconds(ChatRequestRetryPolicy.delay(forRetry: retryCount)))
+                while clock.now < deadline {
+                    try Task.checkCancellation()
+                    let remaining = clock.now.duration(to: deadline).components
+                    let seconds = Int(remaining.seconds) + (remaining.attoseconds > 0 ? 1 : 0)
+                    guard seconds > 0 else { break }
+                    setRequestRetryStatus(
+                        ChatRequestRetryStatus(
+                            attempt: retryCount, maximumAttempts: maximumRetries, remainingSeconds: seconds
+                        ),
+                        messageID: currentLoadingID, sessionID: sessionID
+                    )
+                    try await clock.sleep(until: min(deadline, clock.now.advanced(by: .seconds(1))))
+                }
                 try Task.checkCancellation()
             } catch { return }
 

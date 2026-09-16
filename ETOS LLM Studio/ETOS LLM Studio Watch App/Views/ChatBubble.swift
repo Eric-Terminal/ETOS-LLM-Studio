@@ -605,9 +605,11 @@ struct ChatBubble: View {
                             baseColor: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.75),
                             highlightColor: resolvedTextColor(default: .primary.opacity(0.85))
                         )
+                        .monospacedDigit()
                     } else {
                         Text(currentThinkingText)
                             .etFont(.caption)
+                            .monospacedDigit()
                             .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.75))
                     }
                 }

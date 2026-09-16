@@ -106,9 +106,11 @@ extension ChatBubble {
                     baseColor: resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.75),
                     highlightColor: resolvedTextColor(default: Color.primary.opacity(0.85))
                 )
+                .monospacedDigit()
             } else {
                 Text(message.requestRetryStatus?.thinkingText ?? NSLocalizedString("正在思考...", comment: ""))
                     .etFont(.subheadline)
+                    .monospacedDigit()
                     .foregroundStyle(resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.75))
             }
         }
@@ -117,6 +119,7 @@ extension ChatBubble {
            !message.content.isEmpty || !(message.reasoningContent ?? "").isEmpty || !(message.toolCalls ?? []).isEmpty {
             Text(retryStatus.thinkingText)
                 .font(.caption)
+                .monospacedDigit()
                 .foregroundStyle(.secondary)
         }
 
