@@ -178,7 +178,7 @@ extension ChatView {
                                 let messageActionBarContinuesToNext = shouldContinueMessageActionBar(message, with: nextMessage)
                                 let connectsTimelineFromPrevious = shouldConnectTimeline(previousMessage, with: message)
                                 let connectsTimelineToNext = shouldConnectTimeline(message, with: nextMessage)
-                                let showsStreamingIndicators = viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
+                                let showsStreamingIndicators = viewModel.isActivelyStreaming(message)
                                 // 贴底流式气泡只跟随真实滚动偏移，避免相位弹簧与吸底校正互相拉扯。
                                 let isBottomPinnedStreamingBubble = showsStreamingIndicators && scrollCoordinator.shouldKeepBottomPinned
                                 let reportsSendFlightTarget = isSendFlightTarget(message.id)

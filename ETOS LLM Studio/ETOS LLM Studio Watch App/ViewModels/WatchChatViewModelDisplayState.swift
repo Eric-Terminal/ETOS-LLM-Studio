@@ -447,7 +447,7 @@ extension ChatViewModel {
 
     func scheduleReasoningMarkdownPreparationIfNeeded(for message: ChatMessage) {
         let messageID = message.id
-        let isStreamingReasoningMessage = isSendingMessage && latestAssistantMessageID == messageID
+        let isStreamingReasoningMessage = isActivelyStreaming(message)
         updateReasoningThinkingTitle(for: messageID, sourceText: message.reasoningContent)
         guard ChatReasoningRenderPolicy.shouldPrepareReasoningMarkdown(
             message: message,

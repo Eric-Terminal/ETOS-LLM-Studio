@@ -171,6 +171,8 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var requestedAt: Date? // 对应请求的发起时间（用于会话 JSON 落盘）
     /// 仅供当前请求显示，刻意不加入 CodingKeys，恢复历史时不会恢复重试状态。
     public var requestRetryStatus: ChatRequestRetryStatus? = nil
+    /// 实际流式请求的运行期标记，不持久化，也不从“最后一条助手消息”推断。
+    public var isReceivingStream: Bool = false
 
     // MARK: - 多版本内容存储
     /// 所有版本的内容数组（内部存储）

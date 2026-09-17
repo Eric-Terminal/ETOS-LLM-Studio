@@ -12,6 +12,41 @@ import Testing
 
 @Suite("流式 Markdown UI 策略")
 struct ETStreamingMarkdownPolicyTests {
+    @Test("真实流式消息结束后保留 Markdown 快照，非流式更新不发起交接", arguments: [true, false])
+    @MainActor
+    func responseTransitionPreservesOnlyActiveStream(receiving: Bool) {
+        var message = ChatMessage(role: .assistant, content: "# 标题")
+        message.isReceivingStream = receiving
+        let state = ChatMessageRenderState(message: message)
+        state.streamingMarkdownState.apply(ETStreamingMarkdownSnapshot(
+            messageID: message.id, sourceText: message.content, revision: 1,
+            committedBlocks: [], activeBlock: nil, isFinal: false
+        ))
+        var finished = message
+        finished.content += "\n\n完成"
+        finished.isReceivingStream = false
+        state.update(with: finished)
+
+        #expect(state.streamingMarkdownState.isAwaitingStaticHandoff(channel: .content) == receiving)
+        #expect(!state.streamingMarkdownState.isAwaitingStaticHandoff(channel: .reasoning))
+        #expect(state.streamingMarkdownState.contentSnapshot?.sourceText == message.content)
+        state.streamingMarkdownState.completeStaticHandoff(channel: .content)
+        #expect(!state.streamingMarkdownState.isAwaitingStaticHandoff(channel: .content))
+    }
+
+    @Test("流式标记不进入持久化，开始和结束接收必须刷新渲染结构")
+    func receivingStreamIsTransientAndStructural() throws {
+        let message = ChatMessage(role: .assistant, content: "正文")
+        var streaming = message
+        streaming.isReceivingStream = true
+        #expect(!ETStreamingMessageUpdatePolicy.isTextOnlyChange(from: message, to: streaming))
+        #expect(!ETStreamingMessageUpdatePolicy.isTextOnlyChange(from: streaming, to: message))
+
+        let restored = try JSONDecoder().decode(ChatMessage.self, from: JSONEncoder().encode(streaming))
+        #expect(restored.content == message.content)
+        #expect(!restored.isReceivingStream)
+    }
+
     @Test("助手加载占位从创建起保留流式气泡宽度")
     @MainActor
     func assistantLoadingPlaceholderRetainsStreamingWidth() {

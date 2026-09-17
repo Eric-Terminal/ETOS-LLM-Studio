@@ -47,7 +47,7 @@ struct WatchMessageRowView: View {
     }
 
     private var showsStreamingIndicators: Bool {
-        viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
+        viewModel.isActivelyStreaming(message)
     }
 
     private var hasActivePermission: Bool {

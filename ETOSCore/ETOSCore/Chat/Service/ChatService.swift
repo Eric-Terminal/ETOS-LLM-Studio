@@ -222,6 +222,7 @@ public class ChatService {
         var imageGenerationContext: ImageGenerationContext?
         var conversationRunID: UUID? = nil
         var rootConversationRunID: UUID? = nil
+        var hasFinishedResponse = false
     }
 
     struct ImageOCRPreprocessingResult {
@@ -560,15 +561,22 @@ public class ChatService {
     }
 
     func clearRequestContextIfNeeded(for sessionID: UUID, token: UUID) {
+        let canFinish = withRequestStateLock { () -> Bool in
+            guard requestContextBySessionID[sessionID]?.token == token else { return false }
+            requestContextBySessionID[sessionID]?.hasFinishedResponse = true
+            setSessionRunning(sessionID, isRunning: false)
+            return true
+        }
+        guard canFinish else { return }
+        // 刷盘期间允许新请求接管；清理快照前再次核对 token，防止清掉新请求的内存结果。
+        Persistence.flushPendingMessageWritesForSyncSnapshot()
         let didClear = withRequestStateLock { () -> Bool in
             guard let context = requestContextBySessionID[sessionID], context.token == token else { return false }
             requestContextBySessionID.removeValue(forKey: sessionID)
+            clearRuntimeMessagesSnapshot(for: sessionID)
             return true
         }
         guard didClear else { return }
-        setSessionRunning(sessionID, isRunning: false)
-        Persistence.flushPendingMessageWritesForSyncSnapshot()
-        clearRuntimeMessagesSnapshot(for: sessionID)
         Task {
             await ConversationRunCoordinator.shared.signal()
         }
@@ -601,7 +609,27 @@ public class ChatService {
     }
 
     func emitSessionRequestStatus(_ status: SessionRequestStatus, sessionID: UUID) {
-        if let runIDs = conversationRunIDs(for: sessionID) {
+        let runIDs = conversationRunIDs(for: sessionID)
+        let requestToken = withRequestStateLock { requestContextBySessionID[sessionID]?.token }
+        // 交互终态先于运行记录和同步元数据落盘；数据库繁忙不应继续占用停止按钮。
+        switch status {
+        case .started:
+            break
+        case .finished, .error:
+            if !Task.isCancelled {
+                withRequestStateLock {
+                    requestContextBySessionID[sessionID]?.hasFinishedResponse = true
+                    setSessionRunning(sessionID, isRunning: false)
+                }
+            }
+        case .cancelled:
+            // 主动停止仍需等待网络任务响应取消，不能按“响应已结束”跳过等待。
+            if !Task.isCancelled {
+                setSessionRunning(sessionID, isRunning: false)
+            }
+        }
+
+        if let runIDs {
             switch status {
             case .started:
                 _ = Persistence.updateConversationRunStatus(id: runIDs.runID, status: .running)
@@ -640,17 +668,13 @@ public class ChatService {
             }
         }
 
-        // 终态事件对外可见时，会话必须已经离开运行集合；实时活动和通知订阅者
-        // 会在收到事件后持有各自的短后台任务，完成快照与通知收尾。
-        switch status {
-        case .started:
-            break
-        case .finished, .error, .cancelled:
-            if !Task.isCancelled {
-                setSessionRunning(sessionID, isRunning: false)
-            }
+        // 快速重试已接管时，旧完成事件不能结束新一轮的通知和实时活动。
+        if status == .finished || status == .error,
+           let requestToken,
+           !withRequestStateLock({ requestContextBySessionID[sessionID]?.token == requestToken }) {
+            return
         }
-
+        // 通知与实时活动仍在运行记录落盘后收尾；按钮已通过运行集合提前恢复。
         let isVisibleSession = currentSessionSubject.value?.id == sessionID
             || chatSessionsSubject.value.contains(where: { $0.id == sessionID })
         if isVisibleSession {
@@ -1009,8 +1033,17 @@ public class ChatService {
 
     /// 取消指定会话正在进行的请求，并进行必要的状态恢复。
     public func cancelRequest(for sessionID: UUID) async {
-        guard let activeContext = withRequestStateLock({ requestContextBySessionID[sessionID] }),
-              let task = activeContext.task else { return }
+        guard let activeContext = withRequestStateLock({ requestContextBySessionID[sessionID] }) else { return }
+        if activeContext.hasFinishedResponse {
+            // 快速重试不等待上一请求的记账收尾，也不把已经失败的 Run 再改成“已取消”。
+            withRequestStateLock {
+                guard requestContextBySessionID[sessionID]?.token == activeContext.token else { return }
+                requestContextBySessionID.removeValue(forKey: sessionID)
+            }
+            activeContext.task?.cancel()
+            return
+        }
+        guard let task = activeContext.task else { return }
         task.cancel()
         if let runID = activeContext.conversationRunID {
             await LocalLinuxJobScheduler.shared.cancel(runID: runID)

@@ -24,6 +24,7 @@ extension ChatService {
         }
         var messages = messagesSnapshot(for: resolvedSessionID)
         let originalMessages = messages
+        let originalMessagesByID = Dictionary(uniqueKeysWithValues: originalMessages.map { ($0.id, $0) })
         var forcedMutationMessageIDs = Set<UUID>()
 
         // 格式化错误内容，使其更简洁易读
@@ -114,31 +115,17 @@ extension ChatService {
 
         let mutations: [(message: ChatMessage, afterMessageID: UUID?)] = messages.indices.compactMap { index in
             let message = messages[index]
-            if originalMessages.first(where: { $0.id == message.id }) == message,
+            if originalMessagesByID[message.id] == message,
                !forcedMutationMessageIDs.contains(message.id) {
                 return nil
             }
             let afterMessageID = index > messages.startIndex ? messages[messages.index(before: index)].id : nil
             return (message, afterMessageID)
         }
-        // UI 先同步采用内存结果，磁盘写入继续在后台逐条提交；否则入口在返回后
-        // 立即读取当前会话时，可能短暂看不到刚生成的错误气泡。
+        // 先排入有序写队列再发布；落盘结束不再重发旧消息，避免覆盖用户刚选择的重试版本。
         storeRuntimeMessagesSnapshot(messages, for: resolvedSessionID)
+        Persistence.enqueueConversationMessageUpserts(mutations, for: resolvedSessionID)
         publishMessagesIfCurrentSession(messages, for: resolvedSessionID)
-        Task { [weak self] in
-            guard let self else { return }
-            for mutation in mutations {
-                do {
-                    _ = try await self.upsertConversationMessage(
-                        mutation.message,
-                        to: resolvedSessionID,
-                        afterMessageID: mutation.afterMessageID
-                    )
-                } catch {
-                    self.logger.error("原子保存错误消息失败：\(error.localizedDescription)")
-                }
-            }
-        }
     }
 
     // MARK: - 附件转写
@@ -226,6 +213,7 @@ extension ChatService {
 
     func finalizeInterruptedReasoningMessage(_ message: ChatMessage, completedAt: Date = Date()) -> ChatMessage {
         var updated = message
+        updated.isReceivingStream = false
         let reasoning = (updated.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !reasoning.isEmpty else { return updated }
 

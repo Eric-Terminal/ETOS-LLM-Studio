@@ -47,6 +47,15 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
     
     public func update(with message: ChatMessage) {
         guard self.message != message else { return }
+        if self.message.isReceivingStream, !message.isReceivingStream, message.role == .assistant {
+            // 真正接收流的消息结束时保留最后一帧，直到后台静态 Markdown 准备完毕。
+            if streamingMarkdownState.contentSnapshot != nil {
+                streamingMarkdownState.beginStaticHandoff(channel: .content)
+            }
+            if streamingMarkdownState.reasoningSnapshot != nil {
+                streamingMarkdownState.beginStaticHandoff(channel: .reasoning)
+            }
+        }
         objectWillChange.send()
         self.message = message
         layoutRevision &+= 1

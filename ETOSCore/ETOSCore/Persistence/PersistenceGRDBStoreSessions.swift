@@ -418,6 +418,7 @@ extension PersistenceGRDBStore {
     func saveMessages(_ messages: [ChatMessage], for sessionID: UUID) {
         let normalizedMessages = normalizeToolCallsPlacement(in: messages)
         if Self.isRunningUnitTests {
+            flushPendingMessageWrites()
             saveMessagesIncrementally(normalizedMessages, for: sessionID)
             return
         }

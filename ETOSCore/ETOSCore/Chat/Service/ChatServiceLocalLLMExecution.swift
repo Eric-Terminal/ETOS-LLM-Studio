@@ -185,7 +185,9 @@ extension ChatService {
 
         let modelURL = localModelStore.fileURL(for: record)
         var diagnosticOptions: LocalLLMGenerationOptions?
+        setMessageReceivingStream(true, messageID: loadingMessageID, sessionID: currentSessionID)
         var messages = messagesSnapshot(for: currentSessionID)
+        defer { setMessageReceivingStream(false, messageID: loadingMessageID, sessionID: currentSessionID) }
         let streamingDisplayMode = await MainActor.run {
             ChatStreamingDisplayMode.normalized(AppConfigStore.shared.chatStreamingDisplayMode)
         }

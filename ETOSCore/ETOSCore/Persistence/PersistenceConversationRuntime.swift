@@ -55,6 +55,26 @@ extension Persistence {
         return deleted
     }
 
+    /// 与会话快照写入共用队列，确保错误落盘先于紧接着的手动重试，不回发旧 UI 快照。
+    static func enqueueConversationMessageUpserts(
+        _ mutations: [(message: ChatMessage, afterMessageID: UUID?)],
+        for sessionID: UUID
+    ) {
+        guard let store = activeGRDBStore() else { return }
+        store.messageWriteQueue.async {
+            for mutation in mutations {
+                do {
+                    _ = try store.upsertConversationMessageAtomically(
+                        mutation.message, to: sessionID, afterMessageID: mutation.afterMessageID
+                    )
+                } catch {
+                    logger.error("保存错误回复失败：\(error.localizedDescription)")
+                }
+            }
+            markConversationRuntimeChanged()
+        }
+    }
+
     // MARK: - 来源与授权
 
     @discardableResult

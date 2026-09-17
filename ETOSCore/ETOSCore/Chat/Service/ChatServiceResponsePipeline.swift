@@ -36,6 +36,8 @@ extension ChatService {
         responsesFullInputFallbackRequest: URLRequest? = nil,
         retryHandler: ((Error) async -> Bool)? = nil
     ) async {
+        setMessageReceivingStream(true, messageID: loadingMessageID, sessionID: currentSessionID)
+        defer { setMessageReceivingStream(false, messageID: loadingMessageID, sessionID: currentSessionID) }
         var latestTokenUsage: MessageTokenUsage?
         var trailingUnparsedResponseBody = ""
         var trailingUnparsedHTTPStatusCode: Int?
@@ -772,6 +774,7 @@ extension ChatService {
         isPrefillResponse: Bool = false
     ) async {
         var responseMessage = responseMessage
+        responseMessage.isReceivingStream = false
         if let reasoning = responseMessage.reasoningContent {
             let normalized = normalizeEscapedNewlinesIfNeeded(reasoning)
             responseMessage.reasoningContent = normalized.isEmpty ? nil : normalized
@@ -1035,8 +1038,9 @@ extension ChatService {
     }
 
     func finishSessionRequestAndCleanupFileHistory(sessionID: UUID) async {
+        let runID = conversationRunIDs(for: sessionID)?.runID
         emitSessionRequestStatus(.finished, sessionID: sessionID)
-        guard let runID = conversationRunIDs(for: sessionID)?.runID,
+        guard let runID,
               Persistence.loadConversationRun(id: runID)?.status.isTerminal == true else {
             return
         }
