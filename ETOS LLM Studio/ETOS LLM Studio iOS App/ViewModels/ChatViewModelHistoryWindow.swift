@@ -21,7 +21,7 @@ extension ChatViewModel {
         !automaticHistoryLoadingEnabled && lazyLoadMessageCount > 0
     }
 
-    func updateDisplayedMessages() {
+    func updateDisplayedMessages(forcePreparation: Bool = false) {
         ensureVisibleMessagesCachePrepared()
         ensureHistoryWindowPrepared()
         guard let historyWindow else {
@@ -34,7 +34,7 @@ extension ChatViewModel {
             in: historyWindow,
             from: visibleMessagesCache
         )
-        updateDisplayedStatesIfNeeded(subset)
+        updateDisplayedStatesIfNeeded(subset, forcePreparation: forcePreparation)
         updateHistoryBoundaryState(for: historyWindow)
     }
 
@@ -47,7 +47,8 @@ extension ChatViewModel {
             historyWindow,
             in: visibleMessagesCache,
             weightedBatchSize: count ?? incrementalHistoryBatchSize,
-            maximumWeightedCount: nil
+            maximumWeightedCount: nil,
+            index: preparedMessageSnapshot?.historyIndex
         )
         guard updated != historyWindow else { return false }
         self.historyWindow = updated
@@ -64,7 +65,8 @@ extension ChatViewModel {
             historyWindow,
             in: visibleMessagesCache,
             weightedBatchSize: count ?? automaticHistoryBatchSize,
-            maximumWeightedCount: automaticHistoryMaximumWindowSize
+            maximumWeightedCount: automaticHistoryMaximumWindowSize,
+            index: preparedMessageSnapshot?.historyIndex
         )
         guard updated != historyWindow else { return false }
         self.historyWindow = updated
@@ -81,7 +83,8 @@ extension ChatViewModel {
             historyWindow,
             in: visibleMessagesCache,
             weightedBatchSize: count ?? automaticHistoryBatchSize,
-            maximumWeightedCount: automaticHistoryMaximumWindowSize
+            maximumWeightedCount: automaticHistoryMaximumWindowSize,
+            index: preparedMessageSnapshot?.historyIndex
         )
         guard updated != historyWindow else { return false }
         self.historyWindow = updated
@@ -96,7 +99,8 @@ extension ChatViewModel {
         return ChatHistoryWindowSupport.position(
             of: messageID,
             in: visibleMessagesCache,
-            window: historyWindow
+            window: historyWindow,
+            index: preparedMessageSnapshot?.historyIndex
         )
     }
 
@@ -107,7 +111,8 @@ extension ChatViewModel {
         return ChatHistoryWindowSupport.distance(
             to: messageID,
             in: visibleMessagesCache,
-            window: historyWindow
+            window: historyWindow,
+            index: preparedMessageSnapshot?.historyIndex
         )
     }
 
@@ -123,7 +128,8 @@ extension ChatViewModel {
               let position = ChatHistoryWindowSupport.position(
                 of: messageID,
                 in: visibleMessagesCache,
-                window: historyWindow
+                window: historyWindow,
+                index: preparedMessageSnapshot?.historyIndex
               ) else {
             return false
         }
@@ -161,7 +167,8 @@ extension ChatViewModel {
                 1,
                 ChatHistoryWindowSupport.weightedCount(
                     in: visibleMessagesCache,
-                    window: historyWindow
+                    window: historyWindow,
+                    index: preparedMessageSnapshot?.historyIndex
                 )
             )
             : automaticHistoryMaximumWindowSize
@@ -173,14 +180,16 @@ extension ChatViewModel {
                 historyWindow,
                 in: visibleMessagesCache,
                 weightedBatchSize: weightedBatchSize,
-                maximumWeightedCount: maximumWeightedCount
+                maximumWeightedCount: maximumWeightedCount,
+                index: preparedMessageSnapshot?.historyIndex
             )
         case .later:
             updated = ChatHistoryWindowSupport.expandingLater(
                 historyWindow,
                 in: visibleMessagesCache,
                 weightedBatchSize: weightedBatchSize,
-                maximumWeightedCount: maximumWeightedCount
+                maximumWeightedCount: maximumWeightedCount,
+                index: preparedMessageSnapshot?.historyIndex
             )
         }
 
@@ -196,7 +205,8 @@ extension ChatViewModel {
         guard let centeredWindow = ChatHistoryWindowSupport.centered(
             on: messageID,
             in: visibleMessagesCache,
-            maximumWeightedCount: automaticHistoryMaximumWindowSize
+            maximumWeightedCount: automaticHistoryMaximumWindowSize,
+            index: preparedMessageSnapshot?.historyIndex
         ), centeredWindow != historyWindow else {
             return false
         }
@@ -223,7 +233,8 @@ extension ChatViewModel {
         }
         historyWindow = ChatHistoryWindowSupport.leading(
             in: visibleMessagesCache,
-            weightedLimit: weightedLimit
+            weightedLimit: weightedLimit,
+            index: preparedMessageSnapshot?.historyIndex
         )
         updateDisplayedMessages()
     }

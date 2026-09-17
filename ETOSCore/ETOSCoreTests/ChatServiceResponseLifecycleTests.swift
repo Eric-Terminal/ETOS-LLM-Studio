@@ -161,7 +161,7 @@ extension ChatServiceTests {
 
         let messages = service.messagesSnapshot(for: session.id)
         #expect(messages.last?.role == .error)
-        #expect(!messages.contains(where: \.isReceivingStream))
+        #expect(!messages.contains { $0.isReceivingStream })
         await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
     }
 }

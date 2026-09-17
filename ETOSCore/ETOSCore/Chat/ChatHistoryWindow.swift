@@ -36,6 +36,17 @@ public enum ChatHistoryWindowPosition: Equatable, Sendable {
     case later
 }
 
+/// 与可见分支一起在后台建立，翻页时不再重算整段会话的权重和位置。
+public struct ChatHistoryWindowIndex: Sendable {
+    let weights: [Int]
+    let positions: [UUID: Int]
+
+    public init(messages: [ChatMessage]) {
+        weights = ChatHistoryWindowSupport.weights(in: messages)
+        positions = Dictionary(uniqueKeysWithValues: messages.enumerated().map { ($0.element.id, $0.offset) })
+    }
+}
+
 public enum ChatHistoryWindowSupport {
     public static func weights(in messages: [ChatMessage]) -> [Int] {
         var hasAssistantSinceLatestUser = false
@@ -61,9 +72,10 @@ public enum ChatHistoryWindowSupport {
 
     public static func weightedCount(
         in messages: [ChatMessage],
-        window: ChatHistoryWindow? = nil
+        window: ChatHistoryWindow? = nil,
+        index: ChatHistoryWindowIndex? = nil
     ) -> Int {
-        let weights = weights(in: messages)
+        let weights = index?.weights ?? weights(in: messages)
         let range = (window ?? full(messageCount: messages.count)).clamped(to: messages.count).range
         return range.reduce(into: 0) { result, index in
             result += weights[index]
@@ -76,12 +88,13 @@ public enum ChatHistoryWindowSupport {
 
     public static func trailing(
         in messages: [ChatMessage],
-        weightedLimit: Int
+        weightedLimit: Int,
+        index: ChatHistoryWindowIndex? = nil
     ) -> ChatHistoryWindow {
         guard weightedLimit > 0, !messages.isEmpty else {
             return ChatHistoryWindow(lowerBound: messages.count, upperBound: messages.count)
         }
-        let weights = weights(in: messages)
+        let weights = index?.weights ?? weights(in: messages)
         let lower = lowerBound(
             endingAt: messages.count,
             weights: weights,
@@ -92,14 +105,15 @@ public enum ChatHistoryWindowSupport {
 
     public static func leading(
         in messages: [ChatMessage],
-        weightedLimit: Int
+        weightedLimit: Int,
+        index: ChatHistoryWindowIndex? = nil
     ) -> ChatHistoryWindow {
         guard weightedLimit > 0, !messages.isEmpty else {
             return ChatHistoryWindow(lowerBound: 0, upperBound: 0)
         }
         let upper = upperBound(
             startingAt: 0,
-            weights: weights(in: messages),
+            weights: index?.weights ?? weights(in: messages),
             weightedLimit: weightedLimit
         )
         return ChatHistoryWindow(lowerBound: 0, upperBound: upper)
@@ -108,14 +122,17 @@ public enum ChatHistoryWindowSupport {
     public static func centered(
         on messageID: UUID,
         in messages: [ChatMessage],
-        maximumWeightedCount: Int
+        maximumWeightedCount: Int,
+        index: ChatHistoryWindowIndex? = nil
     ) -> ChatHistoryWindow? {
+        let position = if let index { index.positions[messageID] }
+            else { messages.firstIndex(where: { $0.id == messageID }) }
         guard maximumWeightedCount > 0,
-              let targetIndex = messages.firstIndex(where: { $0.id == messageID }) else {
+              let targetIndex = position else {
             return nil
         }
 
-        let weights = weights(in: messages)
+        let weights = index?.weights ?? weights(in: messages)
         let leadingBudget = max(1, maximumWeightedCount / 2)
         var lower = lowerBound(
             endingAt: targetIndex + 1,
@@ -146,11 +163,12 @@ public enum ChatHistoryWindowSupport {
         _ window: ChatHistoryWindow,
         in messages: [ChatMessage],
         weightedBatchSize: Int,
-        maximumWeightedCount: Int?
+        maximumWeightedCount: Int?,
+        index: ChatHistoryWindowIndex? = nil
     ) -> ChatHistoryWindow {
         let current = window.clamped(to: messages.count)
         guard current.lowerBound > 0, weightedBatchSize > 0 else { return current }
-        let weights = weights(in: messages)
+        let weights = index?.weights ?? weights(in: messages)
         let lower = lowerBound(
             endingAt: current.lowerBound,
             weights: weights,
@@ -175,7 +193,8 @@ public enum ChatHistoryWindowSupport {
         _ window: ChatHistoryWindow,
         in messages: [ChatMessage],
         weightedBatchSize: Int,
-        maximumWeightedCount: Int
+        maximumWeightedCount: Int,
+        index: ChatHistoryWindowIndex? = nil
     ) -> ChatHistoryWindow {
         let current = window.clamped(to: messages.count)
         guard current.upperBound < messages.count,
@@ -183,7 +202,7 @@ public enum ChatHistoryWindowSupport {
               maximumWeightedCount > 0 else {
             return current
         }
-        let weights = weights(in: messages)
+        let weights = index?.weights ?? weights(in: messages)
         let upper = upperBound(
             startingAt: current.upperBound,
             weights: weights,
@@ -204,7 +223,9 @@ public enum ChatHistoryWindowSupport {
         _ window: ChatHistoryWindow,
         from previousMessages: [ChatMessage],
         to messages: [ChatMessage],
-        minimumTrailingWeightedCount: Int = 1
+        minimumTrailingWeightedCount: Int = 1,
+        previousIndex: ChatHistoryWindowIndex? = nil,
+        index: ChatHistoryWindowIndex? = nil
     ) -> ChatHistoryWindow? {
         let previous = window.clamped(to: previousMessages.count)
         guard !previous.range.isEmpty else { return nil }
@@ -212,17 +233,21 @@ public enum ChatHistoryWindowSupport {
         // 短会话增长时至少扩到平台基线，不能永久继承最初的一两条容量。
         let previousWeightedCount = max(
             minimumTrailingWeightedCount,
-            weightedCount(in: previousMessages, window: previous)
+            weightedCount(in: previousMessages, window: previous, index: previousIndex)
         )
 
         if followedTail {
-            return trailing(in: messages, weightedLimit: previousWeightedCount)
+            return trailing(in: messages, weightedLimit: previousWeightedCount, index: index)
         }
 
         let firstID = previousMessages[previous.lowerBound].id
         let lastID = previousMessages[previous.upperBound - 1].id
-        guard let lower = messages.firstIndex(where: { $0.id == firstID }),
-              let last = messages.firstIndex(where: { $0.id == lastID }),
+        let firstPosition = if let index { index.positions[firstID] }
+            else { messages.firstIndex(where: { $0.id == firstID }) }
+        let lastPosition = if let index { index.positions[lastID] }
+            else { messages.firstIndex(where: { $0.id == lastID }) }
+        guard let lower = firstPosition,
+              let last = lastPosition,
               lower <= last else {
             return nil
         }
@@ -241,9 +266,12 @@ public enum ChatHistoryWindowSupport {
     public static func position(
         of messageID: UUID,
         in messages: [ChatMessage],
-        window: ChatHistoryWindow
+        window: ChatHistoryWindow,
+        index: ChatHistoryWindowIndex? = nil
     ) -> ChatHistoryWindowPosition? {
-        guard let messageIndex = messages.firstIndex(where: { $0.id == messageID }) else {
+        let position = if let index { index.positions[messageID] }
+            else { messages.firstIndex(where: { $0.id == messageID }) }
+        guard let messageIndex = position else {
             return nil
         }
         let current = window.clamped(to: messages.count)
@@ -255,9 +283,12 @@ public enum ChatHistoryWindowSupport {
     public static func distance(
         to messageID: UUID,
         in messages: [ChatMessage],
-        window: ChatHistoryWindow
+        window: ChatHistoryWindow,
+        index: ChatHistoryWindowIndex? = nil
     ) -> Int? {
-        guard let messageIndex = messages.firstIndex(where: { $0.id == messageID }) else {
+        let position = if let index { index.positions[messageID] }
+            else { messages.firstIndex(where: { $0.id == messageID }) }
+        guard let messageIndex = position else {
             return nil
         }
         let current = window.clamped(to: messages.count)

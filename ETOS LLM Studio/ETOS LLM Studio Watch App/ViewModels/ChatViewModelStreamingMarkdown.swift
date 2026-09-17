@@ -20,8 +20,7 @@ extension ChatViewModel {
         guard isActivelyStreaming(message) else { return false }
         let rules = MessageRegexRuleStore.shared.rules
         guard !Self.hasVisualRegexRule(in: rules, for: message) else { return false }
-        guard let sessionID = currentSession?.id else { return true }
-        return RoleplayStore.shared.binding(sessionID: sessionID)?.htmlRenderingEnabled != true
+        return !messageRenderConfiguration.rendersHTML
     }
 
     func scheduleStreamingMarkdownPreparation(

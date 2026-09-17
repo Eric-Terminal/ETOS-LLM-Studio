@@ -84,9 +84,11 @@ class ChatViewModel: ObservableObject {
     @Published var reasoningThinkingTitleByMessageID: [UUID: String] = [:]
     var allMessagesForSession: [ChatMessage] = []
     @Published var responseAttemptVersionIndex: [UUID: ChatResponseAttemptVersionInfo] = [:]
-    let responseAttemptIndexWorker = ChatResponseAttemptIndexWorker()
-    var responseAttemptIndexTask: Task<Void, Never>?
-    var responseAttemptIndexRevision = 0
+    let messagePreparationQueue = DispatchQueue(label: "com.etos.chat.watch.message-preparation", qos: .userInitiated)
+    var preparedMessageSnapshot: ChatMessageListSnapshot?
+    @Published var latestMessageAllowsQuickRetry = false
+    let messageRenderingRefreshSubject = PassthroughSubject<Void, Never>()
+    var messageRenderConfiguration = ChatMessageRenderConfiguration()
     var responseAttemptIndexPublishedRevision = -1
     @Published var isHistoryFullyLoaded: Bool = false
     @Published var isLaterHistoryFullyLoaded: Bool = true
@@ -648,7 +650,7 @@ class ChatViewModel: ObservableObject {
             runningSessionIDs.remove(currentSessionID)
         }
         isSendingMessage = false
-        updateAutoReasoningPreviewState(with: allMessagesForSession)
+        updateAutoReasoningPreviewState()
 
         Task {
             await chatService.cancelOngoingRequest()
@@ -785,10 +787,8 @@ class ChatViewModel: ObservableObject {
     }
 
     var canQuickRetryLatestMessage: Bool {
-        ChatQuickRetrySupport.canRetryLatestMessage(
-            in: allMessagesForSession,
-            isSending: isSendingMessage || isSendDelayPending || isSendSubmissionPending
-        )
+        !isSendingMessage && !isSendDelayPending && !isSendSubmissionPending
+            && latestMessageAllowsQuickRetry
     }
 
     var isSendSubmissionPending: Bool {
@@ -798,7 +798,7 @@ class ChatViewModel: ObservableObject {
 
     func quickRetryLatestMessage() {
         guard canQuickRetryLatestMessage,
-              let latestMessage = ChatResponseAttemptSupport.visibleMessages(from: allMessagesForSession).last else {
+              let latestMessage = visibleMessagesCache.last else {
             return
         }
         retryMessage(latestMessage)

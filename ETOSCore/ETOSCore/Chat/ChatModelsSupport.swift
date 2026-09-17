@@ -60,8 +60,13 @@ public enum ChatQuickRetrySupport {
     public static func canRetryLatestMessage(in messages: [ChatMessage], isSending: Bool) -> Bool {
         guard !isSending else { return false }
         let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: messages)
-        guard visibleMessages.contains(where: { $0.role == .user }),
-              let latestMessage = visibleMessages.last else {
+        return canRetryLatestMessage(
+            visibleMessages.last, hasUserMessage: visibleMessages.contains { $0.role == .user }
+        )
+    }
+
+    public static func canRetryLatestMessage(_ latestMessage: ChatMessage?, hasUserMessage: Bool) -> Bool {
+        guard hasUserMessage, let latestMessage else {
             return false
         }
 

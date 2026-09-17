@@ -255,14 +255,30 @@ extension ChatViewModel {
             .map { [chatService] messages in
                 (
                     sessionID: chatService.currentSessionSubject.value?.id,
-                    messages: messages
+                    messages: messages,
+                    forceRendering: false
                 )
             }
+            .merge(with: messageRenderingRefreshSubject.map { [chatService] _ in
+                (
+                    sessionID: chatService.currentSessionSubject.value?.id,
+                    messages: chatService.messagesForSessionSubject.value,
+                    forceRendering: true
+                )
+            })
+            .receive(on: messagePreparationQueue)
+            .scan(Optional<ChatMessageListSnapshot>.none) { @Sendable previous, update in
+                ChatMessageListSnapshot(
+                    messages: update.messages, sessionID: update.sessionID, previous: previous,
+                    renderConfiguration: .load(sessionID: update.sessionID), forceRendering: update.forceRendering
+                )
+            }
+            .compactMap { @Sendable snapshot in snapshot }
             .receive(on: DispatchQueue.main)
             .sink { [weak self] update in
                 guard let self else { return }
                 guard update.sessionID == chatService.currentSessionSubject.value?.id else { return }
-                applyMessagesUpdate(update.messages, for: update.sessionID)
+                applyMessagesUpdate(update)
             }
             .store(in: &cancellables)
 
@@ -317,7 +333,7 @@ extension ChatViewModel {
                 }
                 WatchBackgroundGenerationKeepAliveManager.shared.setGenerationActive(!runningSessionIDs.isEmpty)
                 BackgroundGenerationAudioKeepAliveManager.shared.setGenerationActive(!runningSessionIDs.isEmpty)
-                updateAutoReasoningPreviewState(with: allMessagesForSession)
+                updateAutoReasoningPreviewState()
             }
             .store(in: &cancellables)
 
