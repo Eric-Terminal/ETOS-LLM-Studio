@@ -648,7 +648,7 @@ extension ContentView {
                 } else {
                     viewModel.clearPendingMessageJumpTarget()
                 }
-                ChatService.shared.setCurrentSession(selectedSession)
+                Task { await ChatService.shared.selectSession(selectedSession) }
                 isSessionListPresented = false
             },
             updateSessionAction: { session in

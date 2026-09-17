@@ -244,7 +244,7 @@ struct OpenETOSSessionIntent: AppIntent {
         }).value else {
             throw ETOSSystemEntryError.sessionNotFound
         }
-        ChatService.shared.setCurrentSession(value)
+        await ChatService.shared.selectSession(value)
         NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
         return .result(dialog: IntentDialog(stringLiteral: NSLocalizedString("已打开会话。", comment: "Open session intent result")))
     }

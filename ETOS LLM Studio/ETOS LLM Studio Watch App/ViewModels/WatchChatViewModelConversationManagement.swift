@@ -232,31 +232,43 @@ extension ChatViewModel {
     func saveDailyPulseCard(_ card: DailyPulseCard, from runID: UUID) -> ChatSession? {
         if let savedSessionID = card.savedSessionID,
            let existing = chatSessions.first(where: { $0.id == savedSessionID }) {
-            chatService.setCurrentSession(existing)
+            Task { [weak self] in await self?.chatService.selectSession(existing) }
             return existing
         }
         return DailyPulseManager.shared.saveCardAsSession(cardID: card.id, runID: runID)
     }
 
     func continueDailyPulseCard(_ card: DailyPulseCard, from runID: UUID) {
-        guard let session = saveDailyPulseCard(card, from: runID) else { return }
-        chatService.setCurrentSession(session)
-        userInput = DailyPulseManager.defaultContinuationPrompt(for: card)
+        let existing = card.savedSessionID.flatMap { id in chatSessions.first { $0.id == id } }
+        guard let session = existing
+            ?? DailyPulseManager.shared.saveCardAsSession(cardID: card.id, runID: runID) else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            await chatService.selectSession(session)
+            guard chatService.currentSessionSubject.value?.id == session.id else { return }
+            userInput = DailyPulseManager.defaultContinuationPrompt(for: card)
+        }
     }
 
     func applyDailyPulseContinuation(sessionID: UUID, prompt: String) {
         if let session = chatSessions.first(where: { $0.id == sessionID })
             ?? chatService.chatSessionsSubject.value.first(where: { $0.id == sessionID }) {
-            chatService.setCurrentSession(session)
+            Task { [weak self] in
+                guard let self else { return }
+                await chatService.selectSession(session)
+                guard chatService.currentSessionSubject.value?.id == session.id else { return }
+                userInput = prompt
+            }
+        } else {
+            userInput = prompt
         }
-        userInput = prompt
     }
 
     @discardableResult
     func setCurrentSessionIfExists(sessionID: UUID) -> Bool {
         if let session = chatSessions.first(where: { $0.id == sessionID })
             ?? chatService.chatSessionsSubject.value.first(where: { $0.id == sessionID }) {
-            chatService.setCurrentSession(session)
+            Task { [weak self] in await self?.chatService.selectSession(session) }
             return true
         }
         return false

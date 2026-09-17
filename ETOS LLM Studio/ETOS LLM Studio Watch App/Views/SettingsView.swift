@@ -191,7 +191,7 @@ struct SettingsView: View {
                             } else {
                                 viewModel.clearPendingMessageJumpTarget()
                             }
-                            ChatService.shared.setCurrentSession(selectedSession)
+                            Task { await ChatService.shared.selectSession(selectedSession) }
                             dismiss()
                         },
                         updateSessionAction: { session in

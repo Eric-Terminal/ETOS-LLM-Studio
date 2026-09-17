@@ -214,7 +214,7 @@ enum SystemEntryURLRouter {
                     Persistence.loadChatSession(id: sessionID)
                 }.value
                 if let session {
-                    ChatService.shared.setCurrentSession(session)
+                    await ChatService.shared.selectSession(session)
                     NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
                 }
                 return true

@@ -110,7 +110,7 @@ enum WatchSystemEntryURLRouter {
                 Persistence.loadChatSession(id: sessionID)
             }.value
             if let session {
-                ChatService.shared.setCurrentSession(session)
+                await ChatService.shared.selectSession(session)
             }
         } else if destination == "new-agent" {
             let session = ChatService.shared.createSavedSession(

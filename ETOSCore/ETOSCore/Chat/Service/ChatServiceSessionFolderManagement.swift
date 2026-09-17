@@ -167,6 +167,13 @@ extension ChatService {
     }
 
     public func setCurrentSession(_ session: ChatSession?) {
+        sessionSelectionLock.withLock {
+            sessionSelectionToken = UUID()
+            applyCurrentSession(session)
+        }
+    }
+
+    func applyCurrentSession(_ session: ChatSession?, preparedMessages: [ChatMessage]? = nil) {
         let currentSession = currentSessionSubject.value
         if currentSession == session { return }
 
@@ -186,7 +193,7 @@ extension ChatService {
 
         clearLocalLLMKVCache(for: currentSession?.id)
         currentSessionSubject.send(session)
-        let messages = session.map { messagesForSessionActivation($0.id) } ?? []
+        let messages = preparedMessages ?? session.map { messagesForSessionActivation($0.id) } ?? []
         if let session {
             storeRuntimeMessagesSnapshot(messages, for: session.id)
         }
