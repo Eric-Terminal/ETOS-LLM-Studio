@@ -48,12 +48,13 @@ extension Persistence {
         var configuration = Configuration()
         configuration.qos = DispatchQoS(qosClass: qos, relativePriority: 0)
         configuration.foreignKeysEnabled = true
+        // 等待策略必须先于连接准备生效，切换 WAL 时也可能遇到旧连接正在释放的锁。
+        configuration.busyMode = .timeout(5)
         configuration.prepareDatabase { db in
             try prepareSQLCipherIfNeeded(db)
             try db.execute(sql: "PRAGMA foreign_keys=ON")
             try db.execute(sql: "PRAGMA journal_mode=WAL")
             try db.execute(sql: "PRAGMA synchronous=NORMAL")
-            try db.execute(sql: "PRAGMA busy_timeout=5000")
             try db.execute(sql: "PRAGMA wal_autocheckpoint=1000")
             try db.execute(sql: "PRAGMA temp_store=MEMORY")
             try db.execute(sql: "PRAGMA mmap_size=\(mmapSize)")

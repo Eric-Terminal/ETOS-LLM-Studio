@@ -6,6 +6,8 @@ import Testing
 // 与加密／恢复测试共用串行套件，避免同时切换进程级数据库设置。
 extension PersistenceTests {
     @Test("加密启动备份也能复用未变副本并识别后续提交")
+    // 与其他加密测试保持一致，避免主线程配置观察者在进程级密钥切换期间穿插读盘。
+    @MainActor
     func encryptedBackupReusesVerifiedSnapshot() throws {
         cleanup(sessions: [])
         let previousBackupEnabled = enableLaunchBackupForTest()
