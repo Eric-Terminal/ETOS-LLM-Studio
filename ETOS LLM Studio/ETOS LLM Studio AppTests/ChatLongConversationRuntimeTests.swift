@@ -265,7 +265,21 @@ struct ChatLongConversationRuntimeTests {
         chatService.chatSessionsSubject.send([session])
         chatService.currentSessionSubject.send(session)
         chatService.messagesForSessionSubject.send(messages)
-        await settleMainQueue(duration: 0.2)
+        // 消息与 Markdown 已改为后台准备，固定等待不能保证取到最终气泡尺寸。
+        let preparationDeadline = ContinuousClock.now + .seconds(5)
+        while ContinuousClock.now < preparationDeadline {
+            if viewModel.allMessagesForSession == messages,
+               viewModel.visualMessagePrepareTasks.isEmpty,
+               viewModel.markdownPrepareTasks.isEmpty,
+               viewModel.reasoningMarkdownPrepareTasks.isEmpty {
+                break
+            }
+            await settleMainQueue(duration: 0.01)
+        }
+        try #require(viewModel.allMessagesForSession == messages)
+        try #require(viewModel.visualMessagePrepareTasks.isEmpty)
+        try #require(viewModel.markdownPrepareTasks.isEmpty)
+        try #require(viewModel.reasoningMarkdownPrepareTasks.isEmpty)
 
         let coordinator = ChatScrollCoordinator()
         let rootView = AnyView(
