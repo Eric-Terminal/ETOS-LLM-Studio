@@ -107,7 +107,10 @@ struct MCPBuiltInAppToolServerTests {
         ]))
         #expect(toolIDs.contains("language.detect"))
         #else
-        #expect(toolIDs.contains("vision.recognize_text"))
+        #expect(Set([
+            "vision.recognize_text", "vision.detect_barcodes",
+            "vision.classify_image", "vision.detect_document"
+        ]).isSubset(of: toolIDs))
         #expect(toolIDs.contains("language.detect"))
         #endif
 

@@ -7,7 +7,8 @@
 // ============================================================================
 
 import Foundation
-#if canImport(Vision) && canImport(ImageIO)
+// watchOS SDK 可以暴露 Vision 模块，但不提供这里使用的 VN 请求接口。
+#if canImport(Vision) && canImport(ImageIO) && !os(watchOS)
 @preconcurrency import Vision
 import ImageIO
 #endif
@@ -17,7 +18,7 @@ actor MCPNativeVisionExecutor {
     private static let maximumPixels = 48_000_000
 
     func execute(toolName: String, arguments: [String: Any]) async throws -> [String: Any] {
-        #if canImport(Vision) && canImport(ImageIO)
+        #if canImport(Vision) && canImport(ImageIO) && !os(watchOS)
         let source = try arguments.nativeRequiredString("source")
         let image = try loadImage(source: source)
         let orientation = try imageOrientation(arguments.nativeInt("orientation") ?? 1)
@@ -56,7 +57,7 @@ actor MCPNativeVisionExecutor {
     }
 }
 
-#if canImport(Vision) && canImport(ImageIO)
+#if canImport(Vision) && canImport(ImageIO) && !os(watchOS)
 private extension MCPNativeVisionExecutor {
     func loadImage(source: String) throws -> CGImage {
         let url = try MCPNativeFileAccess.readableURL(for: source)

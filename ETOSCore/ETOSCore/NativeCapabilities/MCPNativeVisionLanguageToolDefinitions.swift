@@ -41,7 +41,7 @@ enum MCPNativeVisionLanguageToolDefinitions {
 
     static func isToolAvailableOnCurrentPlatform(_ toolID: String) -> Bool {
         if toolID.hasPrefix("vision.") {
-            #if canImport(Vision) && canImport(ImageIO)
+            #if canImport(Vision) && canImport(ImageIO) && !os(watchOS)
             return true
             #else
             return false
