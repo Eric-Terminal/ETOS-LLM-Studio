@@ -308,7 +308,7 @@ for arch in $REQUESTED_ARCHS; do
     if [ ! -f "$ARCH_PRODUCT_LIBRARY" ] ||
        [ ! -f "$ARCH_PRODUCT_STAMP" ] ||
        [ "$(cat "$ARCH_PRODUCT_STAMP")" != "$ARCH_SIGNATURE" ] ||
-       ! xcrun lipo -verify_arch "$arch" "$ARCH_PRODUCT_LIBRARY" >/dev/null 2>&1; then
+       ! xcrun lipo "$ARCH_PRODUCT_LIBRARY" -verify_arch "$arch" >/dev/null 2>&1; then
         mkdir -p "$BUILD_DIR" "$ARCH_PRODUCT_DIR"
 
         CMAKE_EXTRA_ARGS=""
