@@ -203,7 +203,7 @@ public enum LocalLinuxChatPreviewPlacement: String, CaseIterable, Identifiable, 
 
 public enum LiquidGlassTintSetting {
     public static let minimumOpacity = 0.0
-    public static let maximumOpacity = 0.6
+    public static let maximumOpacity = 1.0
     public static let defaultOpacity = 0.3
     public static let opacityStep = 0.05
 
