@@ -141,12 +141,12 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             emphasisFontFamily: Self.resolvedCSSFontFamily(
                 role: .emphasis,
                 sampleText: content,
-                fallback: "var(--font-body)"
+                fallback: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
             ),
             strongFontFamily: Self.resolvedCSSFontFamily(
                 role: .strong,
                 sampleText: content,
-                fallback: "var(--font-body)"
+                fallback: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
             ),
             codeFontFamily: Self.resolvedCSSFontFamily(
                 role: .code,

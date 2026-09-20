@@ -25,6 +25,24 @@ extension View {
         lineSpacing: CGFloat,
         codeHighlightLimit: Int = 12_000
     ) -> some View {
+        ETMarkdownFontPreparation(sampleText: sampleText) { names in
+            self.etPreparedChatMarkdownBaseStyle(
+                textColor: textColor, emphasisTextColor: emphasisTextColor,
+                strongTextColor: strongTextColor, codeTextColor: codeTextColor,
+                usesCustomCodeTextColor: usesCustomCodeTextColor, isOutgoing: isOutgoing,
+                prefersDarkPalette: prefersDarkPalette, sampleText: sampleText,
+                fontScale: fontScale, lineSpacing: lineSpacing,
+                codeHighlightLimit: codeHighlightLimit, fontNames: names
+            )
+        }
+    }
+
+    private func etPreparedChatMarkdownBaseStyle(
+        textColor: Color, emphasisTextColor: Color, strongTextColor: Color, codeTextColor: Color,
+        usesCustomCodeTextColor: Bool, isOutgoing: Bool, prefersDarkPalette: Bool,
+        sampleText: String, fontScale: Double, lineSpacing: CGFloat,
+        codeHighlightLimit: Int, fontNames: ETMarkdownFontNames
+    ) -> some View {
         let codeBlockBackground = isOutgoing
             ? Color.white.opacity(0.16)
             : Color.primary.opacity(0.09)
@@ -36,14 +54,13 @@ extension View {
             : Color.primary.opacity(0.16)
         // 标题与操作按钮沿用正文色，避免自定义气泡颜色下固定白色失去对比度。
         let codeHeaderTextColor = textColor
-        let bodyFontName = FontLibrary.resolvePostScriptName(for: .body, sampleText: sampleText)
-        let emphasisFontName = FontLibrary.resolvePostScriptName(for: .emphasis, sampleText: sampleText)
-        let strongFontName = FontLibrary.resolvePostScriptName(for: .strong, sampleText: sampleText)
-        let codeFontName = FontLibrary.resolvePostScriptName(for: .code, sampleText: sampleText)
-        let usesCharacterFallback = FontLibrary.fallbackScope == .character
+        let bodyFontName = fontNames.body
+        let emphasisFontName = fontNames.emphasis
+        let strongFontName = fontNames.strong
+        let codeFontName = fontNames.code
         let bodyFontSize = CGFloat(17 * FontLibrary.normalizedFontScale(fontScale))
 
-        self
+        return self
             .markdownSoftBreakMode(.lineBreak)
             .markdownCodeSyntaxHighlighter(
                 ETCodeSyntaxHighlighter(
@@ -56,35 +73,37 @@ extension View {
             )
             .etFont(.body, sampleText: sampleText)
             .markdownTextStyle {
-                if !usesCharacterFallback,
-                   let bodyFontName,
+                if let bodyFontName,
                    !bodyFontName.isEmpty {
                     FontFamily(.custom(bodyFontName))
+                } else {
+                    FontFamily(.system(.default))
                 }
                 FontSize(bodyFontSize)
                 ForegroundColor(textColor)
             }
             .markdownTextStyle(\.emphasis) {
-                if !usesCharacterFallback,
-                   let emphasisFontName,
+                if let emphasisFontName,
                    !emphasisFontName.isEmpty {
                     FontFamily(.custom(emphasisFontName))
+                } else {
+                    FontFamily(.system(.default))
                 }
                 FontStyle(.italic)
                 ForegroundColor(emphasisTextColor)
             }
             .markdownTextStyle(\.strong) {
-                if !usesCharacterFallback,
-                   let strongFontName,
+                if let strongFontName,
                    !strongFontName.isEmpty {
                     FontFamily(.custom(strongFontName))
+                } else {
+                    FontFamily(.system(.default))
                 }
                 FontWeight(.bold)
                 ForegroundColor(strongTextColor)
             }
             .markdownTextStyle(\.code) {
-                if !usesCharacterFallback,
-                   let codeFontName,
+                if let codeFontName,
                    !codeFontName.isEmpty {
                     FontFamily(.custom(codeFontName))
                 } else {
@@ -138,8 +157,7 @@ extension View {
                         configuration.label
                             .fixedSize(horizontal: true, vertical: true)
                             .markdownTextStyle {
-                                if !usesCharacterFallback,
-                                   let codeFontName,
+                                if let codeFontName,
                                    !codeFontName.isEmpty {
                                     FontFamily(.custom(codeFontName))
                                 } else {

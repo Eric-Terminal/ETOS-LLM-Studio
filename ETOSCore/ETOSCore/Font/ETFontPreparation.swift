@@ -15,12 +15,29 @@ struct ETFontPreparationRequest: Equatable, Sendable {
 }
 
 @MainActor
-final class ETPreparedFontState: ObservableObject {
+protocol ETExportFontPreparing: AnyObject {
+    var needsPreparation: Bool { get }
+    func prepare() async throws -> Bool
+}
+
+@MainActor
+final class ETPreparedFontState: ObservableObject, ETExportFontPreparing {
     @Published private(set) var font: Font?
     var request: ETFontPreparationRequest?
     private var preparedRequest: ETFontPreparationRequest?
 
     var needsPreparation: Bool { request != preparedRequest }
+
+    var displayFont: Font? {
+        // 配置或字号变化后不能短暂借用旧字体；文字变化仍保留已准备的语义字体。
+        guard preparedRequest?.descriptor == request?.descriptor,
+              preparedRequest?.revision == request?.revision,
+              preparedRequest?.sizeCategory == request?.sizeCategory,
+              preparedRequest?.scaledBasePointSize == request?.scaledBasePointSize else {
+            return request?.descriptor?.initialFont
+        }
+        return font ?? request?.descriptor?.initialFont
+    }
 
     @discardableResult
     func prepare() async throws -> Bool {
@@ -37,11 +54,11 @@ final class ETPreparedFontState: ObservableObject {
 /// 离屏布局只登记实际用到的请求；截图前显式等待，避免依赖 ImageRenderer 不运行的 task。
 @MainActor
 public final class ETFontExportPreparation {
-    private var pending: [ObjectIdentifier: ETPreparedFontState] = [:]
+    private var pending: [ObjectIdentifier: any ETExportFontPreparing] = [:]
 
     public init() {}
 
-    func register(_ state: ETPreparedFontState) {
+    func register(_ state: any ETExportFontPreparing) {
         guard state.needsPreparation else { return }
         pending[ObjectIdentifier(state)] = state
     }
@@ -119,7 +136,7 @@ public struct ETFontModifier: ViewModifier {
 
     public func body(content: Content) -> some View {
         content
-            .font(descriptor.map { prepared.value.font ?? $0.systemFont })
+            .font(descriptor.map { prepared.value.displayFont ?? $0.initialFont })
             .task(id: TaskIdentity(request: prepared.value.request, revision: configurationRevision)) {
                 guard !prepared.isExporting else { return }
                 // 取消后的结果由状态对象丢弃；新请求会由 SwiftUI 的 task(id:) 重新准备。

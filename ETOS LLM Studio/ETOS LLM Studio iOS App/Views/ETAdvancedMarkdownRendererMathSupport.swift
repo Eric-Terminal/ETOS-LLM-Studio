@@ -50,11 +50,11 @@ struct ETMathWebShellConfiguration: Equatable {
             )
             let emphasisFontFamily = Self.cssFontFamily(
                 role: .emphasis,
-                fallback: "var(--font-body)"
+                fallback: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
             )
             let strongFontFamily = Self.cssFontFamily(
                 role: .strong,
-                fallback: "var(--font-body)"
+                fallback: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
             )
             let codeFontFamily = Self.cssFontFamily(
                 role: .code,

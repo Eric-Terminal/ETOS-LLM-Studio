@@ -21,6 +21,7 @@ public struct ChatAppearanceTextRuleRenderRequest: Hashable, Sendable {
     public let fontPointSize: Double
     public let fontScale: Double
     public let fontFallbackScope: FontFallbackScope
+    public let fontConfigurationRevision: String
 
     public init(
         source: String,
@@ -38,6 +39,7 @@ public struct ChatAppearanceTextRuleRenderRequest: Hashable, Sendable {
         self.fontPointSize = fontPointSize
         self.fontScale = fontScale
         self.fontFallbackScope = fontFallbackScope
+        self.fontConfigurationRevision = FontLibrary.adapterCacheToken()
     }
 }
 
@@ -66,7 +68,7 @@ public actor ChatAppearanceTextRuleRenderer {
         }
 
         let result = await Task.detached(priority: .userInitiated) {
-            Self.build(request: request)
+            await Self.build(request: request)
         }.value
         cache[request] = result.map(CachedResult.rendered) ?? .unsupported
         keyOrder.append(request)
@@ -76,7 +78,7 @@ public actor ChatAppearanceTextRuleRenderer {
 
     private nonisolated static func build(
         request: ChatAppearanceTextRuleRenderRequest
-    ) -> AttributedString? {
+    ) async -> AttributedString? {
         let activeColorRules = request.styleColors.customRules.filter { $0.isEnabled && $0.isConfigured }
         let activeFontRules = request.fontRules.filter {
             $0.rule.isEnabled && $0.rule.hasConfiguredMatch && !$0.postScriptNames.isEmpty
@@ -100,6 +102,7 @@ public actor ChatAppearanceTextRuleRenderer {
             attributed = AttributedString(request.source)
         }
 
+        await applySemanticFonts(to: &attributed)
         applySemanticColors(request.styleColors, to: &attributed)
         applyCustomColorRules(activeColorRules, to: &attributed)
         applyCustomFontRules(
@@ -109,6 +112,23 @@ public actor ChatAppearanceTextRuleRenderer {
             to: &attributed
         )
         return attributed
+    }
+
+    private nonisolated static func applySemanticFonts(
+        to attributed: inout AttributedString
+    ) async {
+        for run in attributed.runs {
+            guard let intent = run.inlinePresentationIntent,
+                  !intent.intersection([.code, .stronglyEmphasized, .emphasized]).isEmpty else { continue }
+            var descriptor = ETFont.body
+            if intent.contains(.code) { descriptor = descriptor.monospaced() }
+            if intent.contains(.stronglyEmphasized) { descriptor = descriptor.bold() }
+            if intent.contains(.emphasized) { descriptor = descriptor.italic() }
+            // 规则化 Text 同样显式设置每段字体，系统粗斜体不能继承外层自定义正文。
+            attributed[run.range].font = await ETFontResolver.shared.font(
+                for: descriptor, sampleText: String(attributed[run.range].characters)
+            )
+        }
     }
 
     private nonisolated static func applySemanticColors(

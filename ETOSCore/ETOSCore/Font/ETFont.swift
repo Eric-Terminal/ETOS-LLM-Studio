@@ -91,6 +91,20 @@ public struct ETFont: Hashable, Sendable {
         return applyingTraits(to: result)
     }
 
+    /// 新视图先沿用已注册的语义字体。这里只构造 SwiftUI 描述，不解析 Text 或查询字形。
+    var initialFont: Font {
+        guard FontLibrary.isCustomFontEnabled,
+              let name = FontLibrary.resolvedPostScriptName(for: role) else { return systemFont }
+        let size = basePointSize * CGFloat(FontLibrary.customFontScale)
+        let font: Font
+        if let textStyle {
+            font = .custom(name, size: size, relativeTo: textStyle)
+        } else {
+            font = .custom(name, size: size)
+        }
+        return applyingTraits(to: font)
+    }
+
     func applyingTraits(to font: Font) -> Font {
         var result = font
         if isItalic { result = result.italic() }
