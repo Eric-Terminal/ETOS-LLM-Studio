@@ -48,7 +48,7 @@ final class MCPNativeBluetoothExecutor: NSObject, @preconcurrency CBCentralManag
         })
         #elseif canImport(WatchKit)
         lifecycleObservers.append(center.addObserver(
-            forName: WKExtension.applicationDidEnterBackgroundNotification,
+            forName: WKApplication.didEnterBackgroundNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in

@@ -137,6 +137,7 @@ public struct InlineHTMLActionsView<Preview: View>: View {
         copied = true
     }
 
+    @MainActor
     private func export(data: Data, fileExtension: String) async throws {
         let url = try await Task.detached(priority: .userInitiated) {
             try InlineHTMLExportSupport.write(data: data, fileExtension: fileExtension)

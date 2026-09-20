@@ -381,7 +381,7 @@ extension TTSManager: AVAudioPlayerDelegate {
 #endif
 
 #if os(iOS) || os(watchOS)
-extension TTSManager: AVSpeechSynthesizerDelegate {
+extension TTSManager {
     nonisolated public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
         let utteranceID = ObjectIdentifier(utterance)
         Task { @MainActor [weak self] in

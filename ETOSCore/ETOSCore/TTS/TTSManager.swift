@@ -350,3 +350,8 @@ public final class TTSManager: NSObject, ObservableObject {
     }
 
 }
+
+#if os(iOS) || os(watchOS)
+// 语音代理继承 Sendable；在类型定义文件声明一致性，让编译器检查主线程隔离。
+extension TTSManager: AVSpeechSynthesizerDelegate {}
+#endif

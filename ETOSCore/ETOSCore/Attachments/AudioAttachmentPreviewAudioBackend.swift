@@ -77,7 +77,7 @@ actor AudioAttachmentPreviewAudioBackend: AudioAttachmentPreviewPlayback {
 private final class AudioAttachmentPreviewDelegate: NSObject, AVAudioPlayerDelegate {
     private let onFinish: @MainActor @Sendable (Bool) -> Void
 
-    init(onFinish: @escaping @MainActor @Sendable (Bool) -> Void) {
+    nonisolated init(onFinish: @escaping @MainActor @Sendable (Bool) -> Void) {
         self.onFinish = onFinish
     }
 

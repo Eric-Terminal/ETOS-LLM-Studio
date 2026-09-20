@@ -105,8 +105,8 @@ extension ChatViewModel {
         attachmentImportErrorMessage = nil
         let documentsDirectory = Self.documentsDirectory()
 
-        Task {
-            let result = await Task.detached(priority: .userInitiated) {
+        Task { [weak self] in
+            let result = await Task.detached(priority: .userInitiated) { [weak self] in
                 try await Self.loadAttachmentImportPayload(
                     from: source,
                     documentsDirectory: documentsDirectory,
@@ -118,13 +118,14 @@ extension ChatViewModel {
                 )
             }.result
 
+            guard let self else { return }
             switch result {
             case .success(let payload):
-                applyImportedAttachment(payload)
+                self.applyImportedAttachment(payload)
             case .failure(let error):
-                presentAttachmentImportError(error.localizedDescription)
+                self.presentAttachmentImportError(error.localizedDescription)
             }
-            attachmentImportInProgress = false
+            self.attachmentImportInProgress = false
             attachmentImportProgress = nil
         }
     }

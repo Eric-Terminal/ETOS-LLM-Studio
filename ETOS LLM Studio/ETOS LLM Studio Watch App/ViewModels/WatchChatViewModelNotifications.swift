@@ -112,7 +112,7 @@ extension ChatViewModel {
     }
 
     private var isApplicationInBackground: Bool {
-        WKExtension.shared().applicationState != .active
+        WKApplication.shared().applicationState != .active
     }
 
     private func latestAssistantReplyMarker(from messages: [ChatMessage]) -> AssistantReplyMarker? {

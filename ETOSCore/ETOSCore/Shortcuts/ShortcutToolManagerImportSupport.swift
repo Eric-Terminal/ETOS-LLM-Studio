@@ -470,7 +470,7 @@ extension ShortcutToolManager {
             }
         }
         #elseif os(watchOS)
-        WKExtension.shared().openSystemURL(url)
+        WKApplication.shared().openSystemURL(url)
         return true
         #else
         return false

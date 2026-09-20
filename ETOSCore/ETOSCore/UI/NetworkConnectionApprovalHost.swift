@@ -72,7 +72,7 @@ private struct NetworkConnectionApprovalHost: ViewModifier {
             controller.present(alert, animated: true)
         #elseif os(watchOS)
             guard let request = center.currentRequest else { return }
-            guard let controller = WKExtension.shared().visibleInterfaceController else {
+            guard let controller = WKApplication.shared().visibleInterfaceController else {
                 center.resolve(id: request.id, decision: .cancel)
                 return
             }

@@ -246,7 +246,7 @@ extension ChatViewModel {
                 refreshSessionScopedAppToolRequests()
                 imageGenerationFeedback = .idle
                 refreshCurrentSessionSendingState()
-                if WKExtension.shared().applicationState == .active {
+                if WKApplication.shared().applicationState == .active {
                     clearCurrentSessionReplyNotifications()
                 }
             }

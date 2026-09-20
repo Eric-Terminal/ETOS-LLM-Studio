@@ -69,7 +69,7 @@ public final class LegacyJSONMigrationManager: ObservableObject {
                 let result = try await Persistence.migrateLegacyJSONIncrementally(
                     shouldCleanupLegacyJSONAfterImport: false,
                     throttleInterval: 0.03,
-                    progressHandler: { progress in
+                    progressHandler: { [weak self] progress in
                         Task { @MainActor [weak self] in
                             self?.progress = progress
                         }
