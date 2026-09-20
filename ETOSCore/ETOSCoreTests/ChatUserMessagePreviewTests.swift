@@ -55,20 +55,15 @@ struct ChatUserMessagePreviewTests {
     }
 
     @MainActor
-    @Test("列表占位与截断都不改写原文、版本和附件，导出默认保留全文")
+    @Test("列表首帧使用预览且不改写原文、版本和附件，导出默认保留全文")
     func keepsBusinessMessageIntact() async {
         var message = ChatMessage(role: .user, content: "旧版本", imageFileNames: ["photo.png"], fileFileNames: ["notes.txt"])
         message.addVersion(String(repeating: "完整输入", count: 2_000))
-        let state = ChatMessageRenderState(message: message, defersUserContentPreparation: true)
-        #expect(state.visualMessage.content == "…")
-        #expect(state.message == message)
-
         let preview = await Task.detached { [message] in
             ChatUserMessagePreview(content: message.content)
         }.value
-        var visualMessage = message
-        visualMessage.content = preview.content
-        state.updateVisualMessage(visualMessage, isUserContentTruncated: preview.isTruncated)
+        let state = ChatMessageRenderState(message: message, userContentPreview: preview)
+        #expect(state.visualMessage.content == preview.content)
 
         #expect(state.isUserContentTruncated)
         #expect(state.message == message)
@@ -86,11 +81,13 @@ struct ChatUserMessagePreviewTests {
     }
 
     @MainActor
-    @Test("助手长回复和原有错误响应不进入用户消息占位")
+    @Test("助手长回复和原有错误响应不使用用户消息预览")
     func keepsOtherRolesUnchanged() {
         for role in [MessageRole.assistant, .system, .tool, .error] {
             let message = ChatMessage(role: role, content: String(repeating: "回复", count: 2_000))
-            let state = ChatMessageRenderState(message: message, defersUserContentPreparation: true)
+            let state = ChatMessageRenderState(
+                message: message, userContentPreview: ChatUserMessagePreview(content: "用户预览")
+            )
             #expect(state.visualMessage == message)
             #expect(!state.isUserContentTruncated)
         }

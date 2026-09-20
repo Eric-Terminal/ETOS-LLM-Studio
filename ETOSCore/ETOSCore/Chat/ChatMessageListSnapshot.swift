@@ -44,11 +44,17 @@ public struct ChatMessageListSnapshot: Sendable {
     public let renderConfiguration: ChatMessageRenderConfiguration
     public let forceRendering: Bool
     public let canQuickRetry: Bool
+    public let userContentPreviews: [UUID: ChatUserMessagePreview]
+    private let previewCharacterLimit: Int
+    private let visualRules: [MessageRegexRule]
+    private let userPreviewSources: [UUID: String]
     private let visiblePositions: [Int]
 
     public init(
         messages: [ChatMessage], sessionID: UUID?, previous: Self? = nil,
-        renderConfiguration: ChatMessageRenderConfiguration = .init(), forceRendering: Bool = false
+        renderConfiguration: ChatMessageRenderConfiguration = .init(), forceRendering: Bool = false,
+        previewCharacterLimit: Int = ChatUserMessagePreview.defaultCharacterLimit,
+        visualRules: [MessageRegexRule] = []
     ) {
         self.messages = messages
         self.sessionID = sessionID
@@ -56,6 +62,7 @@ public struct ChatMessageListSnapshot: Sendable {
         let previous = previous?.sessionID == sessionID ? previous : nil
         self.renderConfiguration = renderConfiguration
         self.forceRendering = forceRendering || previous?.renderConfiguration != renderConfiguration
+            || previous?.previewCharacterLimit != previewCharacterLimit || previous?.visualRules != visualRules
         baseRevision = previous?.revision
         let oldMessages = previous?.messages ?? []
         hasSameMessageIdentity = previous != nil && oldMessages.count == messages.count
@@ -100,6 +107,36 @@ public struct ChatMessageListSnapshot: Sendable {
             versionRevision = (previous?.versionRevision ?? 0) &+ 1
         }
         latestAssistantMessage = visibleMessages.last { $0.role == .assistant }
+        self.previewCharacterLimit = previewCharacterLimit
+        self.visualRules = visualRules
+        let canReusePreviews = previous?.previewCharacterLimit == previewCharacterLimit
+            && previous?.visualRules == visualRules && !self.forceRendering
+            && (!renderConfiguration.hasRoleplay || !topologyChanged)
+        // 角色上下文只解析一次，不能为每条历史用户消息重复扫描整个会话。
+        let resolvedRoleplay = renderConfiguration.hasRoleplay ? sessionID.flatMap {
+            RoleplayRuntime.resolve(sessionID: $0, messages: messages, store: .shared)
+        } : nil
+        var previews: [UUID: ChatUserMessagePreview] = [:]
+        var previewSources: [UUID: String] = [:]
+        // 与消息身份一起发布，避免主线程先插入省略号气泡，再等待第二轮后台任务。
+        for (position, message) in visibleMessages.enumerated() where message.role == .user {
+            previewSources[message.id] = message.content
+            if canReusePreviews, previous?.userPreviewSources[message.id] == message.content,
+               let cached = previous?.userContentPreviews[message.id] {
+                previews[message.id] = cached
+                continue
+            }
+            var visual = ChatService.visualMessage(from: message, rules: visualRules)
+            if let resolvedRoleplay {
+                visual.content = RoleplayRuntime.visualContent(
+                    visual.content, resolved: resolvedRoleplay, placement: .userInput,
+                    depth: max(0, messages.count - visiblePositions[position] - 1)
+                )
+            }
+            previews[message.id] = ChatUserMessagePreview(content: visual.content, characterLimit: previewCharacterLimit)
+        }
+        userContentPreviews = previews
+        userPreviewSources = previewSources
         canQuickRetry = ChatQuickRetrySupport.canRetryLatestMessage(
             visibleMessages.last, hasUserMessage: visibleMessages.contains { $0.role == .user }
         )

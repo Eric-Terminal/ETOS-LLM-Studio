@@ -25,13 +25,14 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
     @Published private var toolCallDisplayTitles: [String: String] = [:]
     private(set) var toolCallTitlePreparationTask: Task<Void, Never>?
     
-    public init(message: ChatMessage, defersUserContentPreparation: Bool = false) {
+    public init(message: ChatMessage, userContentPreview: ChatUserMessagePreview? = nil) {
         self.id = message.id
         self.message = message
         var initialVisualMessage = message
-        // 列表首次展示时也不能把全文交给渲染器；导出等完整展示场景不启用此占位。
-        if defersUserContentPreparation, message.role == .user, !message.content.isEmpty {
-            initialVisualMessage.content = "…"
+        // 列表快照在后台带回预览，首帧即可展示正文；导出不传预览，仍然保留全文。
+        if message.role == .user, let userContentPreview {
+            initialVisualMessage.content = userContentPreview.content
+            self.isUserContentTruncated = userContentPreview.isTruncated
         }
         self.visualMessage = initialVisualMessage
         self.roleplayHTML = nil

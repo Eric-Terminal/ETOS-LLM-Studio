@@ -160,6 +160,7 @@ extension ChatViewModel {
                 for state in self.messageStateByID.values where state.message.role == .user {
                     self.scheduleVisualMessagePreparationIfNeeded(for: state, source: state.message)
                 }
+                self.messageRenderingRefreshSubject.send(())
             }
             .store(in: &cancellables)
     }
@@ -270,7 +271,9 @@ extension ChatViewModel {
             .scan(Optional<ChatMessageListSnapshot>.none) { @Sendable previous, update in
                 ChatMessageListSnapshot(
                     messages: update.messages, sessionID: update.sessionID, previous: previous,
-                    renderConfiguration: .load(sessionID: update.sessionID), forceRendering: update.forceRendering
+                    renderConfiguration: .load(sessionID: update.sessionID), forceRendering: update.forceRendering,
+                    previewCharacterLimit: ChatUserMessagePreview.configuredCharacterLimit,
+                    visualRules: MessageRegexRuleStore.currentRules()
                 )
             }
             .compactMap { @Sendable snapshot in snapshot }

@@ -3,6 +3,42 @@ import Testing
 @testable import ETOSCore
 
 struct ChatMessageListSnapshotTests {
+    @Test("首个快照带齐长短用户消息预览，编辑和改变阈值后不复用旧正文")
+    func preparesUserPreviewBeforePublishing() async {
+        await Task.detached {
+            let short = ChatMessage(role: .user, content: "你好")
+            let long = ChatMessage(role: .user, content: "A👨‍👩‍👧‍👦e\u{301}Z")
+            let assistant = ChatMessage(role: .assistant, content: "回复")
+            let initial = ChatMessageListSnapshot(
+                messages: [short, long, assistant], sessionID: nil, previewCharacterLimit: 3
+            )
+            #expect(initial.userContentPreviews[short.id]?.content == "你好")
+            #expect(initial.userContentPreviews[short.id]?.isTruncated == false)
+            #expect(initial.userContentPreviews[long.id]?.content == "A👨‍👩‍👧‍👦e\u{301}…")
+            #expect(initial.userContentPreviews[long.id]?.isTruncated == true)
+            #expect(initial.userContentPreviews[assistant.id] == nil)
+            var edited = long
+            edited.content = "改短"
+            let updated = ChatMessageListSnapshot(
+                messages: [short, edited, assistant], sessionID: nil, previous: initial, previewCharacterLimit: 3
+            )
+            #expect(updated.userContentPreviews[edited.id]?.content == "改短")
+            #expect(updated.userContentPreviews[edited.id]?.isTruncated == false)
+            let enlarged = ChatMessageListSnapshot(
+                messages: initial.messages, sessionID: nil, previous: initial, previewCharacterLimit: 10
+            )
+            #expect(enlarged.userContentPreviews[long.id]?.content == long.content)
+            #expect(enlarged.userContentPreviews[long.id]?.isTruncated == false)
+            let rule = MessageRegexRule(pattern: "你好", replacement: "已替换", mode: .visualOnly)
+            let transformed = ChatMessageListSnapshot(
+                messages: initial.messages, sessionID: nil, previous: initial,
+                previewCharacterLimit: 3, visualRules: [rule]
+            )
+            #expect(transformed.userContentPreviews[short.id]?.content == "已替换")
+            #expect(transformed.messages.first?.content == "你好")
+        }.value
+    }
+
     @Test("长会话流式增长只产生一条差异，复用版本和历史窗口索引")
     func streamingGrowthReusesStructure() async {
         await Task.detached {

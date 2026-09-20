@@ -143,7 +143,9 @@ extension ChatViewModel {
                     continue
                 }
             } else {
-                let created = ChatMessageRenderState(message: message, defersUserContentPreparation: true)
+                let created = ChatMessageRenderState(
+                    message: message, userContentPreview: preparedMessageSnapshot?.userContentPreviews[message.id]
+                )
                 messageStateByID[message.id] = created
                 state = created
             }

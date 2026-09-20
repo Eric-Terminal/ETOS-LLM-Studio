@@ -14,6 +14,14 @@ public struct ChatUserMessagePreview: Sendable, Equatable {
     #endif
     public static let characterLimitRange = 1...100_000
 
+    /// 消息队列只读取内存设置，流式更新不能反复查询配置数据库。
+    public static var configuredCharacterLimit: Int {
+        guard case .integer(let value) = AppConfigStore.cachedValue(for: .userMessagePreviewCharacterLimit) else {
+            return defaultCharacterLimit
+        }
+        return value
+    }
+
     public let content: String
     public let isTruncated: Bool
 
