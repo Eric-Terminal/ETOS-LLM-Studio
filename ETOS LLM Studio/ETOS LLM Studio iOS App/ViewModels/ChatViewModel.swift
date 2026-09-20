@@ -428,6 +428,17 @@ final class ChatViewModel: ObservableObject {
     init(chatService: ChatService) {
         self.chatService = chatService
         self.ttsManager = .shared
+        if let target = ChatBackgroundStartupCache.shared.initialTarget {
+            backgroundDisplayTarget = DisplayImageTarget(
+                size: CGSize(width: target.width, height: target.height), scale: 1,
+                fillsBounds: backgroundContentMode == "fill"
+            )
+        }
+        if enableBackground, !currentBackgroundIsVideo {
+            currentBackgroundImageBlurredUIImage = ChatBackgroundStartupCache.shared.cachedImage(
+                named: currentBackgroundImage, radius: backgroundBlur
+            )
+        }
         self.backgroundImages = ConfigLoader.loadBackgroundImages()
         reloadGlobalSystemPromptEntries()
         

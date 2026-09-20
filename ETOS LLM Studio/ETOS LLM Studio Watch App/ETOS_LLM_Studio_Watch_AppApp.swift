@@ -27,6 +27,7 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
     @State private var hasTriggeredFeedbackRefreshOnLaunch = false
     
     init() {
+        _ = ChatBackgroundStartupCache.shared
         AppLanguageRuntime.applyConfiguredLanguage()
         SyncTemporaryFileCleaner.cleanupResidualTemporaryDirectoriesInBackground()
         DailyPulseDeliveryCoordinator.shared.activate()

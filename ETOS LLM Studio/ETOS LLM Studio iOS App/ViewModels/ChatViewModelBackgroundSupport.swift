@@ -30,7 +30,7 @@ extension ChatViewModel {
     func updateBackgroundDisplayTarget(size: CGSize, scale: CGFloat) {
         let target = DisplayImageTarget(size: size, scale: scale, fillsBounds: backgroundContentMode == "fill")
         guard !target.isEmpty, target != backgroundDisplayTarget else { return }
-        let isResize = !backgroundDisplayTarget.isEmpty
+        let isResize = currentBackgroundImageBlurredUIImage != nil
         backgroundDisplayTarget = target
         refreshBlurredBackgroundImage(coalescesResize: isResize)
     }
@@ -54,6 +54,13 @@ extension ChatViewModel {
                 // 键盘和窗口动画会逐帧改变尺寸；短暂复用旧位图，稳定后只解码最终尺寸。
                 do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
             }
+            if let cached = await ChatBackgroundStartupCache.shared.image(
+                named: expectedName, radius: expectedRadius, target: target
+            ) {
+                guard !Task.isCancelled else { return }
+                self?.currentBackgroundImageBlurredUIImage = cached
+                return
+            }
             let prepared = await DisplayImageLoader.shared.background(named: expectedName, target: target)
             guard !Task.isCancelled else { return }
             let cacheName = "\(expectedName)__display_\(target.width)x\(target.height)_\(target.fillsBounds)_\(prepared?.sourceRevision ?? "missing")"
@@ -70,6 +77,12 @@ extension ChatViewModel {
                   self.backgroundDisplayTarget == target else { return }
             if let rendered { self.blurredBackgroundImageCache.setObject(rendered, forKey: cacheKey) }
             self.currentBackgroundImageBlurredUIImage = rendered
+            if let rendered, let prepared {
+                await ChatBackgroundStartupCache.shared.store(
+                    rendered, named: expectedName, radius: expectedRadius,
+                    target: target, sourceRevision: prepared.sourceRevision
+                )
+            }
         }
     }
 

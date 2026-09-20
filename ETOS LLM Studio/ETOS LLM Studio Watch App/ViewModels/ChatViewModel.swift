@@ -479,6 +479,16 @@ class ChatViewModel: ObservableObject {
         logger.info("ChatViewModel initializing with specific service.")
         self.chatService = chatService
         self.ttsManager = .shared
+        let device = WKInterfaceDevice.current()
+        backgroundDisplayTarget = DisplayImageTarget(
+            size: device.screenBounds.size, scale: device.screenScale,
+            fillsBounds: backgroundContentMode == "fill"
+        )
+        if enableBackground, !currentBackgroundIsVideo {
+            currentBackgroundImageBlurredUIImage = ChatBackgroundStartupCache.shared.cachedImage(
+                named: currentBackgroundImage, radius: backgroundBlur
+            )
+        }
         self.backgroundImages = ConfigLoader.loadBackgroundImages()
         normalizeBackgroundOpacityIfNeeded()
         reloadGlobalSystemPromptEntries()

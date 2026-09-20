@@ -52,7 +52,7 @@ extension ChatViewModel {
     func updateBackgroundDisplayTarget(size: CGSize, scale: CGFloat) {
         let target = DisplayImageTarget(size: size, scale: scale, fillsBounds: backgroundContentMode == "fill")
         guard !target.isEmpty, target != backgroundDisplayTarget else { return }
-        let isResize = !backgroundDisplayTarget.isEmpty
+        let isResize = currentBackgroundImageBlurredUIImage != nil
         backgroundDisplayTarget = target
         refreshBlurredBackgroundImage(coalescesResize: isResize)
     }
@@ -75,6 +75,13 @@ extension ChatViewModel {
             if coalescesResize {
                 // 尺寸动画只准备最终位图，避免每帧解码和模糊整张背景。
                 do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+            }
+            if let cached = await ChatBackgroundStartupCache.shared.image(
+                named: expectedName, radius: expectedRadius, target: target
+            ) {
+                guard !Task.isCancelled else { return }
+                self?.currentBackgroundImageBlurredUIImage = cached
+                return
             }
             let prepared = await DisplayImageLoader.shared.background(named: expectedName, target: target)
             guard !Task.isCancelled else { return }
@@ -112,6 +119,12 @@ extension ChatViewModel {
                   self.backgroundDisplayTarget == target else { return }
             if let rendered { self.blurredBackgroundImageCache.setObject(rendered, forKey: cacheKey) }
             self.currentBackgroundImageBlurredUIImage = rendered
+            if let rendered, let prepared {
+                await ChatBackgroundStartupCache.shared.store(
+                    rendered, named: expectedName, radius: expectedRadius,
+                    target: target, sourceRevision: prepared.sourceRevision
+                )
+            }
         }
     }
 
