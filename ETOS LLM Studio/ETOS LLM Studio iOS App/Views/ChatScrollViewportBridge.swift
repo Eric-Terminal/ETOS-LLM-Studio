@@ -14,17 +14,20 @@ struct ChatScrollAnchorAdjustment: Equatable, Identifiable, Sendable {
     let deltaY: CGFloat
     let allowsTemporaryOverflow: Bool
     let allowsDuringProgrammaticScroll: Bool
+    let referenceDistanceToTop: CGFloat?
 
     nonisolated init(
         id: UUID = UUID(),
         deltaY: CGFloat,
         allowsTemporaryOverflow: Bool = false,
-        allowsDuringProgrammaticScroll: Bool = false
+        allowsDuringProgrammaticScroll: Bool = false,
+        referenceDistanceToTop: CGFloat? = nil
     ) {
         self.id = id
         self.deltaY = deltaY
         self.allowsTemporaryOverflow = allowsTemporaryOverflow
         self.allowsDuringProgrammaticScroll = allowsDuringProgrammaticScroll
+        self.referenceDistanceToTop = referenceDistanceToTop
     }
 }
 
@@ -352,7 +355,9 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
                 bottomInset: scrollView.adjustedContentInset.bottom
             )
             let targetOffsetY = ChatScrollMetricsObserver.anchorAdjustedContentOffsetY(
-                currentOffsetY: scrollView.contentOffset.y,
+                // 锚点可能经过一次原生定位才重新布局，必须使用扩窗前的位置避免重复补偿。
+                currentOffsetY: anchorAdjustment.referenceDistanceToTop.map { minimumOffsetY + $0 }
+                    ?? scrollView.contentOffset.y,
                 deltaY: anchorAdjustment.deltaY,
                 minimumOffsetY: minimumOffsetY,
                 maximumOffsetY: maximumOffsetY,

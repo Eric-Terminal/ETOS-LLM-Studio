@@ -61,8 +61,10 @@ final class ChatHistoryViewportAnchorController: ObservableObject {
         let baselineSnapshotRevision: UInt
         let mode: MutationMode
         let allowsDuringProgrammaticScroll: Bool
+        let referenceDistanceToTop: CGFloat?
         var compensatedMinY: CGFloat
         var isSettled: Bool
+        var didRequestRealization = false
     }
 
     private var rowFrames: [UUID: CGRect] = [:]
@@ -85,9 +87,14 @@ final class ChatHistoryViewportAnchorController: ObservableObject {
         guard let pendingMutation,
               pendingAdjustment == nil,
               snapshotRevision > pendingMutation.baselineSnapshotRevision,
-              displayedMessageIDs != pendingMutation.displayedMessageIDs,
-              let restoredFrame = newFrames[pendingMutation.messageID],
+              displayedMessageIDs != pendingMutation.displayedMessageIDs else {
+            return
+        }
+        guard let restoredFrame = newFrames[pendingMutation.messageID],
               Self.isUsable(restoredFrame) else {
+            // 扩窗可能使锚点暂时离开懒布局范围，不能提交上一轮的过渡几何。
+            pendingAdjustmentTask?.cancel()
+            pendingAdjustmentTask = nil
             return
         }
 
@@ -105,17 +112,31 @@ final class ChatHistoryViewportAnchorController: ObservableObject {
         }
     }
 
+    /// 只请求一次原生定位以恢复锚点布局；最终位置仍由加载前的几何与滚动基准决定。
+    func takeAnchorRealizationRequest(displayedMessageIDs: [UUID]) -> UUID? {
+        guard var mutation = pendingMutation,
+              mutation.mode == .settledOnce,
+              !mutation.didRequestRealization,
+              displayedMessageIDs != mutation.displayedMessageIDs,
+              rowFrames[mutation.messageID] == nil else { return nil }
+        mutation.didRequestRealization = true
+        pendingMutation = mutation
+        return mutation.messageID
+    }
+
     /// 只有拿到当前屏幕中的真实行 frame 后才允许改变历史窗口。
     func beginMutation(
         anchorMessageID: UUID,
         displayedMessageIDs: [UUID],
-        allowsDuringProgrammaticScroll: Bool = false
+        allowsDuringProgrammaticScroll: Bool = false,
+        referenceDistanceToTop: CGFloat? = nil
     ) -> Bool {
         startMutation(
             anchorMessageID: anchorMessageID,
             displayedMessageIDs: displayedMessageIDs,
             mode: .settledOnce,
-            allowsDuringProgrammaticScroll: allowsDuringProgrammaticScroll
+            allowsDuringProgrammaticScroll: allowsDuringProgrammaticScroll,
+            referenceDistanceToTop: referenceDistanceToTop
         ) != nil
     }
 
@@ -158,7 +179,8 @@ final class ChatHistoryViewportAnchorController: ObservableObject {
         anchorMessageID: UUID,
         displayedMessageIDs: [UUID],
         mode: MutationMode,
-        allowsDuringProgrammaticScroll: Bool
+        allowsDuringProgrammaticScroll: Bool,
+        referenceDistanceToTop: CGFloat? = nil
     ) -> UUID? {
         guard pendingMutation == nil,
               pendingAdjustment == nil,
@@ -176,6 +198,7 @@ final class ChatHistoryViewportAnchorController: ObservableObject {
             baselineSnapshotRevision: snapshotRevision,
             mode: mode,
             allowsDuringProgrammaticScroll: allowsDuringProgrammaticScroll,
+            referenceDistanceToTop: referenceDistanceToTop,
             compensatedMinY: frame.minY,
             isSettled: false
         )
@@ -309,7 +332,8 @@ final class ChatHistoryViewportAnchorController: ObservableObject {
                 deltaY: restoredMinY - pendingMutation.originalMinY,
                 allowsTemporaryOverflow: true,
                 allowsDuringProgrammaticScroll:
-                    pendingMutation.allowsDuringProgrammaticScroll
+                    pendingMutation.allowsDuringProgrammaticScroll,
+                referenceDistanceToTop: pendingMutation.referenceDistanceToTop
             )
         }
     }

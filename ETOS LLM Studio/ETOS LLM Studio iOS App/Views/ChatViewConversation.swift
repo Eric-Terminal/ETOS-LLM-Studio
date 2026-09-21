@@ -422,10 +422,19 @@ extension ChatView {
                 .frame(width: chatViewportWidth)
                 .coordinateSpace(.named(ChatMessageLayoutAudit.coordinateSpaceName))
                 .onPreferenceChange(ChatHistoryAnchorFramePreferenceKey.self) { frames in
-                    scrollCoordinator.chatHistoryViewportAnchorController.updateFrames(
+                    let controller = scrollCoordinator.chatHistoryViewportAnchorController
+                    let displayedMessageIDs = viewModel.displayMessages.map(\.id)
+                    controller.updateFrames(
                         frames,
-                        displayedMessageIDs: viewModel.displayMessages.map(\.id)
+                        displayedMessageIDs: displayedMessageIDs
                     )
+                    if let anchorID = controller.takeAnchorRealizationRequest(displayedMessageIDs: displayedMessageIDs) {
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            chatScrollProxy.scrollTo(ChatScrollTargetID.message(anchorID), anchor: .top)
+                        }
+                    }
                 }
                 .onPreferenceChange(ChatMessageLayoutFramePreferenceKey.self) { frames in
                     let displayedMessageIDs = viewModel.displayMessages.map(\.id)

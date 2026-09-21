@@ -303,7 +303,8 @@ final class ChatScrollCoordinator: ObservableObject {
               chatHistoryViewportAnchorController.beginMutation(
                 anchorMessageID: anchorMessageID,
                 displayedMessageIDs: displayedMessageIDs,
-                allowsDuringProgrammaticScroll: allowsDuringProgrammaticScroll
+                allowsDuringProgrammaticScroll: allowsDuringProgrammaticScroll,
+                referenceDistanceToTop: scrollDistanceToTop
               ) else {
             return false
         }
