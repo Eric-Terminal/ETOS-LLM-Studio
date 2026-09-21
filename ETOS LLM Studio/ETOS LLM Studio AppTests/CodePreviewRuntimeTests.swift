@@ -1,4 +1,5 @@
 import Combine
+import Darwin
 import ETOSCore
 import MarkdownUI
 import SwiftUI
@@ -16,6 +17,23 @@ struct CodePreviewRuntimeTests {
 
     @Test("普通会话 HTML 代码框可打开并运行网页", arguments: Scenario.allCases)
     func previewsHTMLCodeBlock(scenario: Scenario) async throws {
+        // 仅测试包启用系统的无障碍自动化桥，与 AccessibilitySnapshot/KIF 的测试宿主做法一致。
+        // SwiftUI 的环境值不会启动这个桥；退出用例时恢复原状态，正式 App 不使用这些符号。
+        let libraryPath = (ProcessInfo.processInfo.environment["IPHONE_SIMULATOR_ROOT"] ?? "")
+            + "/usr/lib/libAccessibility.dylib"
+        let library = try #require(dlopen(libraryPath, RTLD_LAZY), "无法加载测试用无障碍自动化桥")
+        defer { dlclose(library) }
+        let readAutomation = unsafeBitCast(
+            try #require(dlsym(library, "_AXSAutomationEnabled")),
+            to: (@convention(c) () -> Int32).self
+        )
+        let setAutomation = unsafeBitCast(
+            try #require(dlsym(library, "_AXSSetAutomationEnabled")),
+            to: (@convention(c) (Int32) -> Void).self
+        )
+        let previousAutomation = readAutomation()
+        setAutomation(1)
+        defer { setAutomation(previousAutomation) }
         let advanced = scenario != .basic
         let config = AppConfigStore.shared
         // 配置加载与 Markdown 准备均需完成，避免把启动占位或错误渲染分支计为通过。

@@ -11,6 +11,7 @@ import Testing
 import UIKit
 @testable import ETOS_LLM_Studio_App
 
+@Suite(.serialized, .timeLimit(.minutes(2)))
 struct ChatLongConversationRuntimeTests {
 
     @MainActor
@@ -242,7 +243,13 @@ struct ChatLongConversationRuntimeTests {
     ) async throws -> HostedChatFixture {
         let windowScene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let appConfig = AppConfigStore.shared
+        await appConfig.waitForPersistentStoreLoaded()
         let savedConfiguration = SavedChatConfiguration(appConfig: appConfig)
+        var fixtureCreated = false
+        defer {
+            // 准备阶段抛错也必须恢复配置，不能让一次失败改变后续用例的渲染模式。
+            if !fixtureCreated { savedConfiguration.restore(to: appConfig) }
+        }
         appConfig.chatTimelineNavigationEnabled = timelineNavigationEnabled
         appConfig.chatScrollAnimationEnabled = false
         appConfig.enableMarkdown = markdownEnabled
@@ -252,6 +259,7 @@ struct ChatLongConversationRuntimeTests {
         appConfig.lazyLoadMessageCount = lazyLoadMessageCount
 
         let chatService = ChatService()
+        await chatService.waitForInitialPersistenceStateIfNeeded()
         let viewModel = ChatViewModel(chatService: chatService)
         let session = ChatSession(
             id: UUID(),
@@ -265,16 +273,19 @@ struct ChatLongConversationRuntimeTests {
         chatService.chatSessionsSubject.send([session])
         chatService.currentSessionSubject.send(session)
         chatService.messagesForSessionSubject.send(messages)
-        // 消息与 Markdown 已改为后台准备，固定等待不能保证取到最终气泡尺寸。
-        let preparationDeadline = ContinuousClock.now + .seconds(5)
-        while ContinuousClock.now < preparationDeadline {
-            if viewModel.allMessagesForSession == messages,
-               viewModel.visualMessagePrepareTasks.isEmpty,
-               viewModel.markdownPrepareTasks.isEmpty,
-               viewModel.reasoningMarkdownPrepareTasks.isEmpty {
-                break
-            }
-            await settleMainQueue(duration: 0.01)
+        // 等待真实消息快照与其派生任务；这组用例验证滚动行为，不把机器负载当作解析时限。
+        // 整个用例仍受 Suite 的时间限制约束，任务没有清理或消息未发布时不会静默通过。
+        while viewModel.allMessagesForSession != messages {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        for task in Array(viewModel.visualMessagePrepareTasks.values) {
+            await task.value
+        }
+        for task in Array(viewModel.markdownPrepareTasks.values) {
+            await task.value
+        }
+        for task in Array(viewModel.reasoningMarkdownPrepareTasks.values) {
+            await task.value
         }
         try #require(viewModel.allMessagesForSession == messages)
         try #require(viewModel.visualMessagePrepareTasks.isEmpty)
@@ -296,6 +307,7 @@ struct ChatLongConversationRuntimeTests {
         host.view.frame = window.bounds
         await settleLayout(host.view, duration: 0.8)
 
+        fixtureCreated = true
         return HostedChatFixture(
             window: window,
             host: host,
