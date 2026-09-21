@@ -16,6 +16,7 @@ struct MessageActionsView: View {
     // MARK: - 属性与操作
     
     let message: ChatMessage
+    let isUserContentTruncated: Bool
     let responseAttemptVersionInfo: ChatResponseAttemptVersionInfo?
     let canRetry: Bool
     let canPrefill: Bool
@@ -49,6 +50,7 @@ struct MessageActionsView: View {
 
     init(
         message: ChatMessage,
+        isUserContentTruncated: Bool,
         responseAttemptVersionInfo: ChatResponseAttemptVersionInfo?,
         canRetry: Bool,
         canPrefill: Bool,
@@ -80,6 +82,7 @@ struct MessageActionsView: View {
         totalMessages: Int
     ) {
         self.message = message
+        self.isUserContentTruncated = isUserContentTruncated
         self.responseAttemptVersionInfo = responseAttemptVersionInfo
         self.canRetry = canRetry
         self.canPrefill = canPrefill
@@ -185,7 +188,7 @@ struct MessageActionsView: View {
                         Label(NSLocalizedString("内联内容", comment: ""), systemImage: "curlybraces.square")
                     }
                 }
-                if message.role == .user, !message.content.isEmpty {
+                if message.role == .user, isUserContentTruncated {
                     NavigationLink {
                         FullMessageContentView(content: message.content)
                     } label: {

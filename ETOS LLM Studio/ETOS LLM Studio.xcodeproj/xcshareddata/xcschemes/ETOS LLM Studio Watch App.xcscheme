@@ -84,7 +84,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "0796794E2F1278F2006562BC"
             BuildableName = "ETOS LLM Studio Watch App.app"
-            BlueprintName = "ETOS LLM Studio Watch App"
             ReferencedContainer = "container:ETOS LLM Studio.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -101,7 +100,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "0796794E2F1278F2006562BC"
             BuildableName = "ETOS LLM Studio Watch App.app"
-            BlueprintName = "ETOS LLM Studio Watch App"
             ReferencedContainer = "container:ETOS LLM Studio.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

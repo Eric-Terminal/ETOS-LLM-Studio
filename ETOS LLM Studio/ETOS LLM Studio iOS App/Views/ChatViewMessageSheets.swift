@@ -16,6 +16,7 @@ struct MessageActionSheet: View {
     ]
 
     let payload: MessageActionSheetPayload
+    let isUserContentTruncated: Bool
     let hasDisplayVersions: Bool
     let displayVersionCount: Int
     let displayCurrentVersionIndex: Int
@@ -113,7 +114,7 @@ struct MessageActionSheet: View {
                 Section {
                     InlineHTMLMessageActionsLink(message: message, contents: inlineContents)
 
-                    if message.role == .user, !message.content.isEmpty {
+                    if message.role == .user, isUserContentTruncated {
                         NavigationLink {
                             FullMessageContentView(content: message.content)
                         } label: {

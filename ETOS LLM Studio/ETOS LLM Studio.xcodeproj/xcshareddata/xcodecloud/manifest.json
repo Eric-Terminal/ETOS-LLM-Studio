@@ -1,0 +1,13 @@
+{
+  "id" : "611300b7-3ec6-485b-8696-d589540381fa",
+  "targets" : [
+    {
+      "id" : "45EE50E3-0FB6-4889-ACD8-3113CDD57B4D",
+      "name" : "ETOS LLM Studio Watch App Watch App"
+    },
+    {
+      "id" : "4F3620E9-3A8C-4DC0-B696-0625C2BEA0B5",
+      "name" : "ETOS LLM Studio iOS App"
+    }
+  ]
+}

@@ -90,48 +90,8 @@
 	</array>
 	<key>ETCommitHash</key>
 	<string>LocalBuild</string>
-	<key>LSSupportsOpeningDocumentsInPlace</key>
-	<true/>
 	<key>NSAlarmKitUsageDescription</key>
 	<string>Schedule alarms only when you explicitly invoke an alarm tool and confirm.</string>
-	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Scan and connect to nearby Bluetooth devices only when you explicitly invoke a Bluetooth tool.</string>
-	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Read, create, and update authorized calendar events only when you explicitly invoke a calendar tool.</string>
-	<key>NSCalendarsUsageDescription</key>
-	<string>Read, create, and update authorized calendar events only when you explicitly invoke a calendar tool.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Use the camera when you choose to capture an image for the model.</string>
-	<key>NSContactsUsageDescription</key>
-	<string>Read or update authorized contacts only when you explicitly invoke a contacts tool.</string>
-	<key>NSFaceIDUsageDescription</key>
-	<string>Use Face ID to unlock the app lock.</string>
-	<key>NSHealthShareUsageDescription</key>
-	<string>Read authorized health, sleep, and activity data only when you explicitly invoke a health tool.</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>Write authorized health records only when you explicitly invoke a health tool.</string>
-	<key>NSHomeKitUsageDescription</key>
-	<string>Read and control authorized homes and accessories only when you explicitly invoke a Home tool.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Connect to local debugging services and local-network tools you select.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Read your current location when you explicitly invoke a location tool, or keep an active response running when background generation is enabled.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Record audio when you use voice input.</string>
-	<key>NFCReaderUsageDescription</key>
-	<string>Scan or write nearby NFC tags only when you explicitly invoke an NFC tool.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Save generated or selected images to your photo library after you confirm.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Read and manage authorized photos when you select an image or explicitly invoke a Photos tool.</string>
-	<key>NSRemindersFullAccessUsageDescription</key>
-	<string>Read, create, and update authorized reminders only when you explicitly invoke a reminders tool.</string>
-	<key>NSRemindersUsageDescription</key>
-	<string>Read, create, and update authorized reminders only when you explicitly invoke a reminders tool.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Convert speech to text when you use voice input or explicitly invoke a transcription tool.</string>
-	<key>NSSupportsLiveActivities</key>
-	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

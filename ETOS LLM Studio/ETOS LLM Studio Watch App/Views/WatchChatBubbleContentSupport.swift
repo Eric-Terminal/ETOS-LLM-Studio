@@ -36,9 +36,12 @@ extension ChatBubble {
         if messageState.isUserContentTruncated {
             VStack(alignment: .leading) {
                 Text(content)
-                if let onOpenMore, !isSelectionMode {
-                    Button(action: onOpenMore) {
-                        Text(NSLocalizedString("更多", comment: ""))
+                if onOpenMore != nil, !isSelectionMode {
+                    NavigationLink {
+                        // 预览只用于气泡，全文页始终读取未截断的原始消息。
+                        FullMessageContentView(content: messageState.message.content)
+                    } label: {
+                        Text(NSLocalizedString("查看完整内容", comment: ""))
                             .etFont(.caption)
                     }
                     .buttonStyle(.plain)

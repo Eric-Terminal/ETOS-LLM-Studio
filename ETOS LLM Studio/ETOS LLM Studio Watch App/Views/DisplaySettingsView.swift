@@ -136,7 +136,7 @@ struct DisplaySettingsView: View {
             } header: {
                 Text(NSLocalizedString("长用户消息", comment: "长用户消息设置分组"))
             } footer: {
-                Text(NSLocalizedString("仅影响气泡显示；完整内容可在“更多”中查看。", comment: "长用户消息设置说明"))
+                Text(NSLocalizedString("仅影响气泡显示；折叠后可点按气泡下方查看完整内容。", comment: "长用户消息设置说明"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }

@@ -747,6 +747,7 @@ extension ContentView {
         if let message = viewModel.allMessagesForSession.first(where: { $0.id == messageID }) {
             MessageActionsView(
                 message: message,
+                isUserContentTruncated: viewModel.messageStateByID[message.id]?.isUserContentTruncated == true,
                 responseAttemptVersionInfo: viewModel.responseAttemptVersionInfo(for: message),
                 canRetry: viewModel.canRetry(message: message),
                 canPrefill: viewModel.selectedModel?.canRequestAssistantPrefill == true,

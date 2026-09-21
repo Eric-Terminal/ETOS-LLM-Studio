@@ -51,6 +51,7 @@ extension ChatView {
             ) { payload in
                 MessageActionSheet(
                     payload: payload,
+                    isUserContentTruncated: viewModel.messageStateByID[payload.message.id]?.isUserContentTruncated == true,
                     hasDisplayVersions: viewModel.hasDisplayVersions(for: payload.message),
                     displayVersionCount: viewModel.displayVersionCount(for: payload.message),
                     displayCurrentVersionIndex: viewModel.displayCurrentVersionIndex(for: payload.message),
