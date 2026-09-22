@@ -6,11 +6,69 @@
 // - 保障缓存化后解析结果保持稳定
 // ============================================================================
 
+import Foundation
 import Testing
 @testable import ETOSCore
 
 @Suite("ETMathContentParser Tests")
 struct ETMathContentParserTests {
+
+    @Test("交叠代码范围按并集保护，保留原文和两侧公式", arguments: [false, true])
+    func mergesOverlappingCodeRanges(reversed: Bool) throws {
+        let source = "前文 $x$ 中文🙂$a$交叠$b$结束 后文 $y$"
+        let first = try #require(source.range(of: "中文🙂$a$交叠"))
+        let second = try #require(source.range(of: "交叠$b$结束"))
+        let ranges = reversed ? [second, first] : [first, second]
+
+        // 直接提供触发 Build 447 崩溃的范围关系，避免依赖特定 Markdown 版本的源位置行为。
+        #expect(ETMathContentParser.parseSegments(in: source, codeRanges: ranges) == [
+            .text("前文 "), .inlineMath("x"),
+            .text(" 中文🙂$a$交叠$b$结束 后文 "), .inlineMath("y")
+        ])
+    }
+
+    @Test("包含和重复的代码范围不能让游标回退或重复原文", arguments: [false, true])
+    func preservesContainedAndDuplicateCodeRanges(reversed: Bool) throws {
+        let source = "前文 $x$ `中文🙂$a$ 与 $b$` 后文 $y$"
+        let outer = try #require(source.range(of: "`中文🙂$a$ 与 $b$`"))
+        let inner = try #require(source.range(of: "$a$"))
+        let ranges = reversed ? [inner, outer, outer] : [outer, outer, inner]
+
+        #expect(ETMathContentParser.parseSegments(in: source, codeRanges: ranges) == [
+            .text("前文 "), .inlineMath("x"),
+            .text(" `中文🙂$a$ 与 $b$` 后文 "), .inlineMath("y")
+        ])
+    }
+
+    @Test("乱序代码范围之间的正文仍能识别公式")
+    func parsesMathBetweenUnorderedCodeRanges() throws {
+        let source = "`$a$` 中间 $x$ 后面 `$b$`"
+        let first = try #require(source.range(of: "`$a$`"))
+        let second = try #require(source.range(of: "`$b$`"))
+
+        #expect(ETMathContentParser.parseSegments(in: source, codeRanges: [second, first]) == [
+            .text("`$a$` 中间 "), .inlineMath("x"), .text(" 后面 `$b$`")
+        ])
+    }
+
+    @Test("多段代码经 Markdown 采集后保持原文及公式边界", arguments: [
+        "`$a$\n$b$` 与 `$c$`",
+        "| 第一列 | 第二列 |\n| --- | --- |\n| `$a$` | `$b$` |",
+        "> `$a$` 与 `$b$`\n\n- `$c$`\n- `$d$`"
+    ])
+    func preservesMultipleCodeRanges(code: String) {
+        let source = "前文 $x$\n\n\(code)\n\n后文 $y$"
+        let expected: [ETMathContentSegment] = [
+            .text("前文 "), .inlineMath("x"),
+            .text("\n\n\(code)\n\n后文 "), .inlineMath("y")
+        ]
+
+        #expect(ETMathContentParser.parseSegments(in: source) == expected)
+        #expect(ETMathContentParser.parseSegments(in: source) == expected)
+        #expect(ETMathContentParser.containsMath(in: source))
+        #expect(ETMathContentParser.normalizedMathDelimiters(in: source)
+            == "前文 \\(x\\)\n\n\(code)\n\n后文 \\(y\\)")
+    }
 
     @Test("HTML 代码中的美元变量和 TeX 字面量不能被公式预处理改写", arguments: ["```", "~~~"])
     func preservesHTMLCode(fence: String) {

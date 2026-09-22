@@ -79,7 +79,11 @@ public enum ETMathContentParser {
         // 复用 Markdown 语法树识别围栏、缩进和行内代码，避免另写一套不一致的围栏规则。
         var collector = ETMathCodeRangeCollector(source: source)
         collector.visit(Document(parsing: source))
-        guard !collector.ranges.isEmpty else { return parseMathSegments(in: source) }
+        return parseSegments(in: source, codeRanges: collector.ranges)
+    }
+
+    static func parseSegments(in source: String, codeRanges: [Range<String.Index>]) -> [ETMathContentSegment] {
+        guard !codeRanges.isEmpty else { return parseMathSegments(in: source) }
 
         var segments: [ETMathContentSegment] = []
         var textBuffer = ""
@@ -98,9 +102,15 @@ public enum ETMathContentParser {
         }
 
         var cursor = source.startIndex
-        for range in collector.ranges {
-            appendMath(in: source[cursor..<range.lowerBound])
-            textBuffer.append(contentsOf: source[range])
+        // Markdown 遍历结果中的源码范围可能乱序或交叠，不能直接用下一个起点构造切片。
+        // 按源码顺序取保护范围的并集，游标只前进，避免崩溃、重复文本或把代码重新识别为公式。
+        for range in codeRanges.sorted(by: { $0.lowerBound < $1.lowerBound }) {
+            guard range.upperBound > cursor else { continue }
+            if cursor < range.lowerBound {
+                appendMath(in: source[cursor..<range.lowerBound])
+            }
+            let protectedStart = max(cursor, range.lowerBound)
+            textBuffer.append(contentsOf: source[protectedStart..<range.upperBound])
             cursor = range.upperBound
         }
         appendMath(in: source[cursor...])
