@@ -31,6 +31,7 @@ extension Persistence {
         if let store = cachedGRDBStore {
             return store
         }
+        guard !isGRDBStoreReplacementInProgress else { return nil }
 
         if let failedAt = lastGRDBStoreInitializationFailedAt,
            Date().timeIntervalSince(failedAt) < grdbStoreRetryInterval {
@@ -88,6 +89,7 @@ extension Persistence {
             if let store = cachedAuxiliaryStores[kind] {
                 return store
             }
+            guard !isAuxiliaryStoreReplacementInProgress else { return nil }
 
             if let failedAt = lastAuxiliaryStoreInitializationFailedAt[kind],
                Date().timeIntervalSince(failedAt) < auxiliaryStoreRetryInterval {

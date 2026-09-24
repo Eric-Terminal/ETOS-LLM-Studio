@@ -23,6 +23,9 @@ extension Persistence {
     }
 
     static func installSnapshotDatabases(_ sources: SnapshotRestoreDatabaseURLs) throws {
+        // 连续恢复必须连同重开连接、重建索引一起串行，避免第二次恢复关闭第一批新连接。
+        databaseReplacementLock.lock()
+        defer { databaseReplacementLock.unlock() }
         let fileManager = FileManager.default
         let targets = snapshotRestoreTargetURLs()
         let shouldPreserveDatabaseEncryption = databaseEncryptionHasStoredPassphrase()
@@ -63,14 +66,18 @@ extension Persistence {
         )
         defer { try? fileManager.removeItem(at: rollbackDirectory) }
 
-        var didPrepareRollback = false
         do {
-            try closeActiveStoresForSnapshotRestore()
-            resetLaunchBackupStateForSnapshotRestore()
-            try prepareSnapshotRestoreRollback(replacements: replacements, rollbackDirectory: rollbackDirectory)
-            didPrepareRollback = true
-            for replacement in replacements {
-                try replaceDatabaseFile(replacement)
+            try withClosedStoresForDatabaseReplacement {
+                resetLaunchBackupStateForSnapshotRestore()
+                try prepareSnapshotRestoreRollback(replacements: replacements, rollbackDirectory: rollbackDirectory)
+                do {
+                    for replacement in replacements {
+                        try replaceDatabaseFile(replacement)
+                    }
+                } catch {
+                    restoreSnapshotRollback(replacements: replacements, rollbackDirectory: rollbackDirectory)
+                    throw error
+                }
             }
             bootstrapGRDBStoreOnLaunch()
             activeGRDBStore()?.rebuildMessagesFTSIndex()
@@ -78,9 +85,6 @@ extension Persistence {
                 writeDatabaseEncryptionEnabled(true)
             }
         } catch {
-            if didPrepareRollback {
-                restoreSnapshotRollback(replacements: replacements, rollbackDirectory: rollbackDirectory)
-            }
             bootstrapGRDBStoreOnLaunch()
             throw error
         }
@@ -96,16 +100,45 @@ extension Persistence {
 }
 
 extension Persistence {
+    static func withClosedStoresForDatabaseReplacement<T>(_ operation: () throws -> T) throws -> T {
+        databaseReplacementLock.lock()
+        defer { databaseReplacementLock.unlock() }
+
+        grdbStoreLock.withLock { isGRDBStoreReplacementInProgress = true }
+        auxiliaryStoreLock.withLock { isAuxiliaryStoreReplacementInProgress = true }
+        defer {
+            grdbStoreLock.withLock {
+                cachedGRDBStore = nil
+                lastGRDBStoreInitializationFailedAt = nil
+                isGRDBStoreReplacementInProgress = false
+            }
+            auxiliaryStoreLock.withLock {
+                cachedAuxiliaryStores.removeAll()
+                lastAuxiliaryStoreInitializationFailedAt.removeAll()
+                isAuxiliaryStoreReplacementInProgress = false
+            }
+        }
+
+        // 保留已关闭的 Store 作为旧任务的终点：读写会被 GRDB 拒绝，而不会重开即将
+        // 被替换的文件。访问方只持有短缓存锁，不等待恢复 I/O；已有连接不会误入 JSON 回退。
+        try closeActiveStoresForSnapshotRestore()
+        return try operation()
+    }
+
     static func closeActiveStoresForSnapshotRestore() throws {
         grdbStoreLock.lock()
         let chatStore = cachedGRDBStore
-        cachedGRDBStore = nil
+        if !isGRDBStoreReplacementInProgress {
+            cachedGRDBStore = nil
+        }
         lastGRDBStoreInitializationFailedAt = nil
         grdbStoreLock.unlock()
 
         auxiliaryStoreLock.lock()
         let auxiliaryStores = Array(cachedAuxiliaryStores.values)
-        cachedAuxiliaryStores.removeAll()
+        if !isAuxiliaryStoreReplacementInProgress {
+            cachedAuxiliaryStores.removeAll()
+        }
         lastAuxiliaryStoreInitializationFailedAt.removeAll()
         auxiliaryStoreLock.unlock()
 

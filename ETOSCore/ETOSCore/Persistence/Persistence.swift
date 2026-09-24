@@ -23,6 +23,10 @@ public enum Persistence {
     static let compatibilityReminderLock = NSLock()
     static let requestLogLock = NSLock()
     static let grdbStoreLock = NSLock()
+    static let databaseReplacementLock = NSRecursiveLock()
+    // 分别由对应的缓存锁保护；关闭连接到文件替换完成之间不能重新打开数据库。
+    static var isGRDBStoreReplacementInProgress = false
+    static var isAuxiliaryStoreReplacementInProgress = false
     static var cachedGRDBStore: PersistenceGRDBStore?
     static var lastGRDBStoreInitializationFailedAt: Date?
     static let grdbStoreRetryInterval: TimeInterval = 2

@@ -12,6 +12,9 @@ import GRDB
 
 extension Persistence {
     public static func createLaunchBackupPointIfEnabled() {
+        // 启动备份会直接打开原始 SQLite 文件，不能与恢复时的文件替换交错。
+        guard databaseReplacementLock.try() else { return }
+        defer { databaseReplacementLock.unlock() }
         cleanupInterruptedLaunchBackupInstalls()
         guard isLaunchBackupEnabled() else { return }
         guard !hasPendingLaunchRecoveryRequest() else { return }

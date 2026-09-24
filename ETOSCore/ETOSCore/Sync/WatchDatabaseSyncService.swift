@@ -548,6 +548,8 @@ private extension PersistenceGRDBStore {
 extension Persistence {
     static func installWatchSyncDatabases(_ sources: [WatchSyncDatabaseKind: URL]) throws {
         guard !sources.isEmpty else { return }
+        databaseReplacementLock.lock()
+        defer { databaseReplacementLock.unlock() }
 
         let fileManager = FileManager.default
         let targets = snapshotRestoreTargetURLs()
@@ -588,14 +590,18 @@ extension Persistence {
         )
         defer { try? fileManager.removeItem(at: rollbackDirectory) }
 
-        var didPrepareRollback = false
         do {
-            try closeActiveStoresForSnapshotRestore()
-            resetLaunchBackupStateForSnapshotRestore()
-            try prepareSnapshotRestoreRollback(replacements: replacements, rollbackDirectory: rollbackDirectory)
-            didPrepareRollback = true
-            for replacement in replacements {
-                try replaceDatabaseFile(replacement)
+            try withClosedStoresForDatabaseReplacement {
+                resetLaunchBackupStateForSnapshotRestore()
+                try prepareSnapshotRestoreRollback(replacements: replacements, rollbackDirectory: rollbackDirectory)
+                do {
+                    for replacement in replacements {
+                        try replaceDatabaseFile(replacement)
+                    }
+                } catch {
+                    restoreSnapshotRollback(replacements: replacements, rollbackDirectory: rollbackDirectory)
+                    throw error
+                }
             }
             bootstrapGRDBStoreOnLaunch()
             if sources.keys.contains(.chat) {
@@ -606,9 +612,6 @@ extension Persistence {
             }
             NotificationCenter.default.post(name: .snapshotRestoreDidFinish, object: nil)
         } catch {
-            if didPrepareRollback {
-                restoreSnapshotRollback(replacements: replacements, rollbackDirectory: rollbackDirectory)
-            }
             bootstrapGRDBStoreOnLaunch()
             throw error
         }
