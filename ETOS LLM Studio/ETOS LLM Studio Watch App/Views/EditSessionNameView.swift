@@ -51,13 +51,16 @@ struct EditSessionNameView: View {
                 Section(NSLocalizedString("会话名称", comment: "")) {
                     TextField(NSLocalizedString("输入新名称", comment: ""), text: $newName.watchKeyboardNewlineBinding())
                 }
+
+                PromptMacroHelpSection {
+                    PromptMacroHelpView().watchGuideEntry()
+                }
+
                 Section(NSLocalizedString("会话提示词", comment: "Conversation-specific prompts")) {
                     TextField(NSLocalizedString("会话系统提示词", comment: "Conversation system prompt"), text: $systemPrompt.watchKeyboardNewlineBinding())
                     TextField(NSLocalizedString("主题提示", comment: ""), text: $topicPrompt.watchKeyboardNewlineBinding())
                     TextField(NSLocalizedString("增强提示词", comment: ""), text: $enhancedPrompt.watchKeyboardNewlineBinding())
                 }
-
-                PromptMacroHelpSection()
 
                 Section(NSLocalizedString("首选模型", comment: "Preferred conversation model")) {
                     Picker(NSLocalizedString("首选模型", comment: "Preferred conversation model"), selection: $preferredModelIdentifier) {
@@ -79,6 +82,20 @@ struct EditSessionNameView: View {
                 .buttonStyle(.borderedProminent)
             }
             .navigationTitle(NSLocalizedString("编辑话题", comment: ""))
+            .guideSettingsPageContext(
+                id: GuidePageID(rawValue: "session-editor-\(session.id.uuidString)"),
+                title: NSLocalizedString("编辑话题", comment: ""),
+                documents: [GuideDocumentReference(id: "settings-core", title: "Core Settings")],
+                settings: [
+                    .string("name", label: NSLocalizedString("会话名称", comment: ""), get: { newName }, set: { newName = $0 }),
+                    .string("system_prompt", label: NSLocalizedString("会话系统提示词", comment: ""), get: { systemPrompt }, set: { systemPrompt = $0 }),
+                    .string("topic_prompt", label: NSLocalizedString("主题提示", comment: ""), get: { topicPrompt }, set: { topicPrompt = $0 }),
+                    .string("enhanced_prompt", label: NSLocalizedString("增强提示词", comment: ""), get: { enhancedPrompt }, set: { enhancedPrompt = $0 }),
+                    .readOnly("preferred_model", label: NSLocalizedString("首选模型", comment: ""), value: { .string(preferredModelIdentifier) }),
+                    .readOnly("save_required", label: NSLocalizedString("修改后需要保存", comment: "向导保存说明"), value: { .bool(true) })
+                ]
+            )
+            .watchGuideEntry()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(NSLocalizedString("取消", comment: "")) {

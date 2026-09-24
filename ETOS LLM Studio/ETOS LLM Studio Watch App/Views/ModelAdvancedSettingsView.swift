@@ -122,6 +122,10 @@ struct ModelAdvancedSettingsView: View {
             }
 
             if destination == .prompts {
+                PromptMacroHelpSection {
+                    PromptMacroHelpView().watchGuideEntry()
+                }
+
                 Section {
                     Toggle(
                         NSLocalizedString("在模型选择器中显示提示词", comment: "Show prompt shortcut in model picker"),
@@ -193,8 +197,6 @@ struct ModelAdvancedSettingsView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             }
-
-                PromptMacroHelpSection()
 
                 Section {
                     Toggle(NSLocalizedString("发送系统时间", comment: ""), isOn: $includeSystemTimeInPrompt)
@@ -996,11 +998,13 @@ private struct GlobalSystemPromptEditorView: View {
     var body: some View {
         NavigationStack {
             List {
+                PromptMacroHelpSection {
+                    PromptMacroHelpView().watchGuideEntry()
+                }
+
                 TextField(NSLocalizedString("提示词名称", comment: ""), text: $title.watchKeyboardNewlineBinding())
                 TextField(NSLocalizedString("提示词内容", comment: ""), text: $content.watchKeyboardNewlineBinding(), axis: .vertical)
                     .lineLimit(4...10)
-
-                PromptMacroHelpSection()
 
                 Button(NSLocalizedString("保存修改", comment: "")) {
                     onSave(title, content)

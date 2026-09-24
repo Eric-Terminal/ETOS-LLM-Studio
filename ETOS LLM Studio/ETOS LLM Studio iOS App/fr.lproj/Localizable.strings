@@ -7636,6 +7636,9 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "正在思考·重试(%d/%d)·%ds" = "Réflexion·Nouvel essai(%d/%d)·%ds";
 "自动重试使用说明" = "La détection intelligente est activée par défaut et ne réessaie que les erreurs temporaires. Désactivez-la pour réessayer toute erreur de requête API, y compris HTTP 400, les refus du fournisseur sans code d’état et les réponses invalides. Cela convient aux services qui alternent entre plusieurs fournisseurs. Pendant l’attente, un compte à rebours en secondes s’affiche dans la réponse actuelle. Il disparaît à l’envoi de la requête ; aucune bulle d’erreur n’est ajoutée pendant les nouveaux essais. La limite exclut la requête initiale ; 3 nouveaux essais sont autorisés par défaut. Les coupures réseau et pannes temporaires entraînent une attente de 1, 2, 4 secondes, jusqu’à 30 secondes. Arrêter annule l’attente. Le texte interrompu sert de préremplissage assistant ; la suite est ajoutée dans une nouvelle version et la version interrompue est conservée. L’API du modèle doit le prendre en charge. Lorsque la détection intelligente est activée, les erreurs d’authentification et de paramètres ne sont pas réessayées. Après la limite, utilisez Continuer avec préremplissage dans le menu du message.";
 
+// 提示词宏介绍入口
+"prompt.macros.intro.summary" = "Utilisez des macros pour insérer l’heure actuelle, les informations de l’appareil ou le prompt du modèle lors de l’envoi.";
+
 // 模型提示词宏与时间、重试次数输入
 "model.prompt.title" = "Prompt du modèle";
 "model.prompt.footer" = "Insérez {{model_prompt}} dans un prompt pour utiliser le texte de ce modèle. Une valeur vide ne rajoute rien.";

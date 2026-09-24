@@ -23,6 +23,8 @@ struct ChatQuickPromptEditorView: View {
 
     var body: some View {
         Form {
+            PromptMacroHelpSection()
+
             Section {
                 FullscreenMultilineTextInput(
                     identity: selectedSystemPrompt?.id.uuidString ?? "system-prompt-none",
@@ -68,11 +70,15 @@ struct ChatQuickPromptEditorView: View {
             } header: {
                 Text(NSLocalizedString("增强提示词", comment: ""))
             }
-
-            PromptMacroHelpSection()
         }
         .navigationTitle(NSLocalizedString("提示词", comment: "快速提示词编辑器标题"))
         .navigationBarTitleDisplayMode(.inline)
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "chat-quick-prompts-\(viewModel.currentSession?.id.uuidString ?? "none")-\(viewModel.selectedGlobalSystemPromptEntryID?.uuidString ?? "none")"),
+            title: NSLocalizedString("提示词", comment: "快速提示词编辑器标题"),
+            documents: [GuideDocumentReference(id: "settings-core", title: "Core Settings")],
+            settings: guideSettings
+        )
         .onAppear(perform: syncDrafts)
         .onChange(of: selectedSystemPrompt?.content ?? "") { _, content in
             systemPromptDraft = content
@@ -86,6 +92,29 @@ struct ChatQuickPromptEditorView: View {
         .onChange(of: viewModel.currentSession?.enhancedPrompt ?? "") { _, prompt in
             enhancedPromptDraft = prompt
         }
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        var settings: [GuidePageSetting] = [
+            .readOnly("save_required", label: NSLocalizedString("修改后需要保存", comment: "向导保存说明"), value: { .bool(false) })
+        ]
+        if selectedSystemPrompt != nil {
+            settings.append(.string("system_prompt", label: NSLocalizedString("系统提示词", comment: ""), get: { systemPromptDraft }, set: {
+                systemPromptDraft = $0
+                viewModel.updateSelectedGlobalSystemPromptContent($0)
+            }))
+        }
+        if viewModel.currentSession != nil {
+            settings.append(.string("topic_prompt", label: NSLocalizedString("当前话题提示词", comment: ""), get: { topicPromptDraft }, set: {
+                topicPromptDraft = $0
+                updateTopicPrompt($0)
+            }))
+            settings.append(.string("enhanced_prompt", label: NSLocalizedString("增强提示词", comment: ""), get: { enhancedPromptDraft }, set: {
+                enhancedPromptDraft = $0
+                updateEnhancedPrompt($0)
+            }))
+        }
+        return settings
     }
 
     private func promptIdentity(suffix: String) -> String {

@@ -18,6 +18,10 @@ struct WatchQuickPromptEditorView: View {
 
     var body: some View {
         List {
+            PromptMacroHelpSection {
+                PromptMacroHelpView().watchGuideEntry()
+            }
+
             Section(NSLocalizedString("系统提示词", comment: "模型选择器快速提示词编辑器分组")) {
                 TextField(
                     NSLocalizedString("自定义全局系统提示词", comment: ""),
@@ -51,10 +55,29 @@ struct WatchQuickPromptEditorView: View {
                 .lineLimit(3...8)
                 .disabled(viewModel.currentSession == nil)
             }
-
-            PromptMacroHelpSection()
         }
         .navigationTitle(NSLocalizedString("提示词", comment: "快速提示词编辑器标题"))
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "chat-quick-prompts-\(viewModel.currentSession?.id.uuidString ?? "none")-\(viewModel.selectedGlobalSystemPromptEntryID?.uuidString ?? "none")"),
+            title: NSLocalizedString("提示词", comment: "快速提示词编辑器标题"),
+            documents: [GuideDocumentReference(id: "settings-core", title: "Core Settings")],
+            settings: guideSettings
+        )
+        .watchGuideEntry()
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        var settings: [GuidePageSetting] = [
+            .readOnly("save_required", label: NSLocalizedString("修改后需要保存", comment: "向导保存说明"), value: { .bool(false) })
+        ]
+        if selectedSystemPrompt != nil {
+            settings.append(.string("system_prompt", label: NSLocalizedString("系统提示词", comment: ""), get: { systemPromptBinding.wrappedValue }, set: { systemPromptBinding.wrappedValue = $0 }))
+        }
+        if viewModel.currentSession != nil {
+            settings.append(.string("topic_prompt", label: NSLocalizedString("当前话题提示词", comment: ""), get: { topicPromptBinding.wrappedValue }, set: { topicPromptBinding.wrappedValue = $0 }))
+            settings.append(.string("enhanced_prompt", label: NSLocalizedString("增强提示词", comment: ""), get: { enhancedPromptBinding.wrappedValue }, set: { enhancedPromptBinding.wrappedValue = $0 }))
+        }
+        return settings
     }
 
     private var systemPromptBinding: Binding<String> {

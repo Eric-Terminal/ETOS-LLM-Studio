@@ -630,6 +630,8 @@ struct SessionInfoSheet: View {
                     }
                 }
 
+                PromptMacroHelpSection()
+
                 Section {
                     VStack(alignment: .leading) {
                         Text(NSLocalizedString("会话系统提示词", comment: "Conversation system prompt"))
@@ -657,8 +659,6 @@ struct SessionInfoSheet: View {
                 } footer: {
                     Text(NSLocalizedString("这些提示词只对当前会话生效，App 的工具协议与运行约束不会被替换。", comment: "Conversation prompt editor footer"))
                 }
-
-                PromptMacroHelpSection()
 
                 Section(NSLocalizedString("首选模型", comment: "Preferred conversation model")) {
                     Picker(NSLocalizedString("首选模型", comment: "Preferred conversation model"), selection: preferredModelBinding) {
@@ -738,6 +738,19 @@ struct SessionInfoSheet: View {
                 }
             }
             .navigationTitle(NSLocalizedString("会话信息", comment: ""))
+            .guideSettingsPageContext(
+                id: GuidePageID(rawValue: "session-editor-\(sessionDraft.id.uuidString)"),
+                title: NSLocalizedString("会话信息", comment: ""),
+                documents: [GuideDocumentReference(id: "settings-core", title: "Core Settings")],
+                settings: [
+                    .string("name", label: NSLocalizedString("会话名称", comment: ""), get: { sessionDraft.name }, set: { sessionDraft.name = $0 }),
+                    .string("system_prompt", label: NSLocalizedString("会话系统提示词", comment: ""), get: { optionalTextBinding(\.systemPrompt).wrappedValue }, set: { optionalTextBinding(\.systemPrompt).wrappedValue = $0 }),
+                    .string("topic_prompt", label: NSLocalizedString("主题提示", comment: ""), get: { optionalTextBinding(\.topicPrompt).wrappedValue }, set: { optionalTextBinding(\.topicPrompt).wrappedValue = $0 }),
+                    .string("enhanced_prompt", label: NSLocalizedString("增强提示词", comment: ""), get: { optionalTextBinding(\.enhancedPrompt).wrappedValue }, set: { optionalTextBinding(\.enhancedPrompt).wrappedValue = $0 }),
+                    .readOnly("preferred_model", label: NSLocalizedString("首选模型", comment: ""), value: { .string(sessionDraft.preferredModelIdentifier ?? "") }),
+                    .readOnly("save_required", label: NSLocalizedString("修改后需要保存", comment: "向导保存说明"), value: { .bool(true) })
+                ]
+            )
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(NSLocalizedString("取消", comment: "")) { dismiss() }

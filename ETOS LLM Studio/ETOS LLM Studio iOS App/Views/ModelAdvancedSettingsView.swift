@@ -317,6 +317,8 @@ struct ModelAdvancedSettingsView: View {
                 )
             }
 
+            PromptMacroHelpSection()
+
             Section {
                 Toggle(
                     NSLocalizedString("在模型选择器中显示提示词", comment: "Show prompt shortcut in model picker"),
@@ -414,8 +416,6 @@ struct ModelAdvancedSettingsView: View {
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
             }
-
-            PromptMacroHelpSection()
 
             Section {
                 NavigationLink {
@@ -1271,6 +1271,8 @@ private struct GlobalSystemPromptEditorView: View {
     var body: some View {
         NavigationStack {
             Form {
+                PromptMacroHelpSection()
+
                 TextField(NSLocalizedString("提示词名称", comment: ""), text: $title)
                 FullscreenMultilineTextInput(
                     identity: entry.id.uuidString,
@@ -1286,8 +1288,6 @@ private struct GlobalSystemPromptEditorView: View {
                         onSave(title, newValue)
                     }
                 )
-
-                PromptMacroHelpSection()
             }
             .navigationTitle(NSLocalizedString("编辑提示词", comment: ""))
             .toolbar {

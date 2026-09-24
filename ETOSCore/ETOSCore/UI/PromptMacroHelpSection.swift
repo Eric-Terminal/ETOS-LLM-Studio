@@ -1,49 +1,88 @@
 import SwiftUI
 
-/// 在各提示词入口复用静态说明，设备状态只在发送请求时采集。
-public struct PromptMacroHelpSection: View {
-    #if os(watchOS)
-    @State private var showsMacros = false
-    #endif
+/// 编辑页只保留介绍入口，完整教程在独立页面中阅读。
+public struct PromptMacroHelpSection<Details: View>: View {
+    @State private var isShowingDetails = false
+    private let details: () -> Details
 
-    public init() {}
+    // 手表由 App 层为详情接入向导入口，共享组件不依赖平台的向导会话视图。
+    public init(@ViewBuilder details: @escaping () -> Details) {
+        self.details = details
+    }
 
     public var body: some View {
         Section {
-            settingsIntroCard
-
-            #if os(watchOS)
-            // watchOS 没有 DisclosureGroup，使用独立按钮行控制下方内容，避免整段说明参与点击。
-            Button {
-                showsMacros.toggle()
-            } label: {
-                HStack {
-                    Text(NSLocalizedString("查看可用宏", value: "Available macros", comment: "展开提示词宏列表"))
-                    Spacer()
-                    Image(systemName: showsMacros ? "chevron.up" : "chevron.down")
-                        .foregroundStyle(.secondary)
+            VStack(alignment: .leading) {
+                Text(NSLocalizedString("提示词宏", value: "Prompt macros", comment: "提示词宏帮助标题"))
+                    #if os(watchOS)
+                    .font(.footnote.weight(.semibold))
+                    #else
+                    .font(.headline)
+                    #endif
+                Text(NSLocalizedString("prompt.macros.intro.summary", value: "Use macros to insert the current time, device information or model prompt when sending a message.", comment: "提示词宏介绍卡片摘要"))
+                    #if os(watchOS)
+                    .font(.caption2)
+                    #else
+                    .font(.footnote)
+                    #endif
+                    .foregroundStyle(.secondary)
+                Button {
+                    isShowingDetails = true
+                } label: {
+                    Text(NSLocalizedString("进一步了解…", value: "Learn more…", comment: "打开提示词宏介绍页面"))
+                        .font(.footnote)
+                        .foregroundStyle(.blue)
                 }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
-            if showsMacros {
-                macroList
-            }
-            #else
-            DisclosureGroup(NSLocalizedString("查看可用宏", value: "Available macros", comment: "展开提示词宏列表")) {
-                macroList
-            }
-            #endif
-        } header: {
-            Text(NSLocalizedString("提示词宏", value: "Prompt macros", comment: "提示词宏帮助标题"))
-        } footer: {
-            Text(NSLocalizedString(
-                "提示词宏缓存说明",
-                value: "Changing values may reduce cache reuse from their position onward. Enhancement prompts are placed at the end. You choose where to use macros; actual caching depends on the provider and API format.",
-                comment: "动态宏位置与缓存效果，使用位置由用户选择"
-            ))
-            .font(.footnote)
-            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .sheet(isPresented: $isShowingDetails) {
+            NavigationStack {
+                details()
+            }
+        }
+    }
+}
+
+public extension PromptMacroHelpSection where Details == PromptMacroHelpView {
+    init() {
+        self.init { PromptMacroHelpView() }
+    }
+}
+
+/// 只读帮助页声明自己的上下文，避免向导沿用来源编辑页的可写字段。
+public struct PromptMacroHelpView: View {
+    public init() {}
+
+    public var body: some View {
+        ScrollView {
+            VStack(alignment: .leading) {
+                usageInstructions
+                macroList
+                Text(NSLocalizedString(
+                    "提示词宏缓存说明",
+                    value: "Changing values may reduce cache reuse from their position onward. Enhancement prompts are placed at the end. You choose where to use macros; actual caching depends on the provider and API format.",
+                    comment: "动态宏位置与缓存效果，使用位置由用户选择"
+                ))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+        }
+        .navigationTitle(NSLocalizedString("提示词宏", value: "Prompt macros", comment: "提示词宏帮助标题"))
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .guideSettingsPageContext(
+            id: "settings-prompt-macro-help",
+            title: NSLocalizedString("提示词宏", value: "Prompt macros", comment: "提示词宏帮助标题"),
+            documents: [GuideDocumentReference(id: "settings-core", title: "Core Settings")],
+            settings: [
+                .readOnly("read_only", label: NSLocalizedString("提示词宏", value: "Prompt macros", comment: "提示词宏帮助标题"), value: { .bool(true) })
+            ]
+        )
     }
 
     @ViewBuilder
@@ -134,7 +173,7 @@ public struct PromptMacroHelpSection: View {
         )
     }
 
-    private var settingsIntroCard: some View {
+    private var usageInstructions: some View {
         VStack(alignment: .leading) {
             Text(NSLocalizedString(
                 "提示词宏使用说明",
