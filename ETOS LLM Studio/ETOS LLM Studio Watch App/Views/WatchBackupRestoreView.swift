@@ -338,18 +338,24 @@ struct WatchBackupRestoreView: View {
         let snapshotKind = selectedSnapshotKind
 
         Task.detached(priority: .userInitiated) {
+            let diagnostics = SnapshotDiagnostics()
+            diagnostics.record("operation.begin", details: ["kind": snapshotKind.rawValue, "destination": "file", "encrypted": String(password != nil)])
             do {
+                diagnostics.record("writes.flush.begin")
                 await AppConfigStore.shared.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
                 MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
-                let fileURL = try SnapshotBuilder.buildSnapshot(kind: snapshotKind)
+                let fileURL = try SnapshotBuilder.buildSnapshot(kind: snapshotKind, diagnostics: diagnostics)
                 if let password {
+                    diagnostics.record("encryption.begin", fileURL: fileURL)
                     try WatchSnapshotFileWriter.encryptSnapshotInPlace(
                         fileURL,
                         password: password,
                         useStrongDerivation: useStrongDerivation
                     )
+                    diagnostics.record("encryption.completed", fileURL: fileURL)
                 }
+                diagnostics.record("operation.completed", fileURL: fileURL)
 
                 await MainActor.run {
                     if let existing = snapshotFileURL {
@@ -364,6 +370,7 @@ struct WatchBackupRestoreView: View {
                     snapshotStatusMessage = NSLocalizedString("快照已生成，可通过分享发送到其他设备。", comment: "")
                 }
             } catch {
+                diagnostics.recordFailure(error)
                 await MainActor.run {
                     isCreatingSnapshot = false
                     snapshotErrorMessage = error.localizedDescription
@@ -385,19 +392,24 @@ struct WatchBackupRestoreView: View {
         let snapshotKind = selectedSnapshotKind
 
         Task.detached(priority: .userInitiated) {
+            let diagnostics = SnapshotDiagnostics()
+            diagnostics.record("operation.begin", details: ["kind": snapshotKind.rawValue, "destination": "s3", "encrypted": String(password != nil)])
             do {
+                diagnostics.record("writes.flush.begin")
                 await AppConfigStore.shared.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
                 MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
 
-                let fileURL = try SnapshotBuilder.buildSnapshot(kind: snapshotKind)
+                let fileURL = try SnapshotBuilder.buildSnapshot(kind: snapshotKind, diagnostics: diagnostics)
                 defer { try? FileManager.default.removeItem(at: fileURL) }
                 if let password {
+                    diagnostics.record("encryption.begin", fileURL: fileURL)
                     try WatchSnapshotFileWriter.encryptSnapshotInPlace(
                         fileURL,
                         password: password,
                         useStrongDerivation: useStrongDerivation
                     )
+                    diagnostics.record("encryption.completed", fileURL: fileURL)
                 }
 
                 let result = try await SyncPackageUploadService.uploadSnapshot(
@@ -407,8 +419,10 @@ struct WatchBackupRestoreView: View {
                         Task { @MainActor in
                             uploadProgress = progress
                         }
-                    }
+                    },
+                    diagnostics: diagnostics
                 )
+                diagnostics.record("operation.completed")
                 await MainActor.run {
                     if password != nil {
                         snapshotPassword = ""
@@ -425,6 +439,7 @@ struct WatchBackupRestoreView: View {
                     }
                 }
             } catch {
+                diagnostics.recordFailure(error)
                 await MainActor.run {
                     isUploadingSnapshot = false
                     uploadProgress = nil

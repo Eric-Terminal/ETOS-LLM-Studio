@@ -9,6 +9,7 @@
 import Testing
 import Foundation
 import GRDB
+import ZIPFoundation
 @testable import ETOSCore
 
 extension PersistenceTests {
@@ -190,6 +191,20 @@ extension PersistenceTests {
         #expect(result.backupKind == .database)
         #expect(Set(result.includedDatabaseNames) == ["chat-store.sqlite", "config-store.sqlite", "memory-store.sqlite"])
         #expect(result.includedFilePaths.isEmpty)
+
+        let extractedDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("snapshot-content-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: extractedDirectory, withIntermediateDirectories: true)
+        defer { removeIfExists(extractedDirectory) }
+        let archive = try Archive(url: result.fileURL, accessMode: .read)
+        let chatEntry = try #require(archive["Databases/chat-store.sqlite"])
+        let exportedChatURL = extractedDirectory.appendingPathComponent("chat-store.sqlite")
+        _ = try archive.extract(chatEntry, to: exportedChatURL)
+        #expect(Persistence.isDatabaseHealthy(at: exportedChatURL, encrypted: false))
+        #expect(sqliteCount(exportedChatURL, sql: "SELECT COUNT(*) FROM messages") == messages.count)
+        #expect(sqliteCount(exportedChatURL, sql: "PRAGMA freelist_count") == 0)
+        #expect(!sqliteExists(exportedChatURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE name = 'messages_fts'"))
+        // 瘦身只能发生在快照副本上，原库搜索能力必须保留。
+        #expect(sqliteExists(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE name = 'messages_fts'"))
     }
 
     @Test("完整快照会打包用户文件并可恢复")

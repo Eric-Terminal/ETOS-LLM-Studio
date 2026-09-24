@@ -213,6 +213,32 @@ struct SyncPackageUploadServiceTests {
         #expect(capturedFileURL == fileURL)
     }
 
+    @Test("S3 文件签名覆盖空文件、整块和末尾不足一块的内容", arguments: [0, 1_048_576, 2_097_169])
+    func testS3FileHashAcrossChunkBoundaries(byteCount: Int) async throws {
+        let endpoint = try #require(URL(string: "https://example.com"))
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("snapshot-hash-\(UUID().uuidString).elsbackup")
+        var payload = Data(repeating: 0x35, count: byteCount)
+        if !payload.isEmpty { payload[payload.count - 1] = 0xA7 }
+        try payload.write(to: fileURL)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+        let expectedHash = SHA256.hash(data: payload).map { String(format: "%02x", $0) }.joined()
+        let configuration = S3CompatibleUploadConfiguration(
+            endpoint: endpoint, region: "auto", bucket: "backups", accessKeyID: "test", secretAccessKey: "test"
+        )
+
+        _ = try await SyncPackageUploadService.uploadSnapshot(
+            fileURL: fileURL,
+            s3: configuration,
+            transport: { request, bodyURL in
+                #expect(request.value(forHTTPHeaderField: "x-amz-content-sha256") == expectedHash)
+                #expect(request.httpBody == nil)
+                #expect(bodyURL == fileURL)
+                let response = try #require(HTTPURLResponse(url: endpoint, statusCode: 200, httpVersion: nil, headerFields: nil))
+                return (Data(), response)
+            }
+        )
+    }
+
     @Test("S3 兼容上传缺少凭据时会在发送前报错")
     func testS3UploadSnapshotRequiresCredentials() async throws {
         let endpoint = try #require(URL(string: "https://s3.us-east-1.amazonaws.com"))

@@ -225,6 +225,14 @@ Launch backups live in the app sandbox. They **do not** auto-sync to iCloud or c
 
 For long-term retention you must **periodically take full snapshots** to iCloud Drive or S3.
 
+### App exits while preparing a backup
+
+Before upload progress appears, the app exports databases, removes rebuildable search indexes, compacts and compresses the copy, and applies password encryption if selected. The compressed backup size does not represent the memory needed during preparation.
+
+If the issue persists after updating, reopen **App Logs on the affected device**, choose the date, and open the file containing `snapshot` in its name. Check the last entries in the `Snapshot` category; API request logging does not need to be enabled. Checkpoints are persisted before each step and include elapsed time, current memory usage, file size, and free disk space. They exclude conversations, backup passwords, and S3/R2 credentials.
+
+`database.vacuum.begin` identifies database compaction; `archive` identifies compression; `encryption` identifies password encryption; `upload.sign.begin` identifies upload signing; and `upload.request.begin` precedes the network request. A missing completion entry does not distinguish memory termination, a system interruption, or manually closing the app. Look for `JetsamEvent` reports as well: [memory termination reports differ from ordinary crash reports](https://developer.apple.com/documentation/xcode/identifying-high-memory-use-with-jetsam-event-reports), so a missing app IPS report on the phone does not establish that backup preparation succeeded.
+
 ## Next
 
 - What the Watch can do → [Using Apple Watch](/en/tips/watch-usage)

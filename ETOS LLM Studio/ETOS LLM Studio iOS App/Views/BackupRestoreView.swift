@@ -300,20 +300,27 @@ struct BackupRestoreView: View {
         let snapshotKind = selectedSnapshotKind
 
         Task.detached(priority: .userInitiated) {
+            let diagnostics = SnapshotDiagnostics()
+            diagnostics.record("operation.begin", details: ["kind": snapshotKind.rawValue, "destination": "documents", "encrypted": String(password != nil)])
             do {
+                diagnostics.record("writes.flush.begin")
                 await AppConfigStore.shared.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
                 MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
-                let snapshotURL = try SnapshotBuilder.buildSnapshot(kind: snapshotKind)
+                let snapshotURL = try SnapshotBuilder.buildSnapshot(kind: snapshotKind, diagnostics: diagnostics)
                 if let password {
+                    diagnostics.record("encryption.begin", fileURL: snapshotURL)
                     try BackupRestoreFileWriter.encryptSnapshotInPlace(
                         snapshotURL,
                         password: password,
                         useStrongDerivation: useStrongPasswordDerivation
                     )
+                    diagnostics.record("encryption.completed", fileURL: snapshotURL)
                 }
+                diagnostics.record("export.begin", fileURL: snapshotURL)
                 let destinationURL = try BackupRestoreFileWriter.exportSnapshotToDocuments(snapshotURL)
                 try? FileManager.default.removeItem(at: snapshotURL)
+                diagnostics.record("operation.completed", fileURL: destinationURL)
                 await MainActor.run {
                     if password != nil {
                         exportPassword = ""
@@ -326,6 +333,7 @@ struct BackupRestoreView: View {
                     )
                 }
             } catch {
+                diagnostics.recordFailure(error)
                 await MainActor.run {
                     isCreatingSnapshot = false
                     errorMessage = error.localizedDescription
@@ -344,20 +352,26 @@ struct BackupRestoreView: View {
         let snapshotKind = selectedSnapshotKind
 
         Task.detached(priority: .userInitiated) {
+            let diagnostics = SnapshotDiagnostics()
+            diagnostics.record("operation.begin", details: ["kind": snapshotKind.rawValue, "destination": "share", "encrypted": String(password != nil)])
             var snapshotURL: URL?
             do {
+                diagnostics.record("writes.flush.begin")
                 await AppConfigStore.shared.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
                 MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
-                let fileURL = try SnapshotBuilder.buildSnapshot(kind: snapshotKind)
+                let fileURL = try SnapshotBuilder.buildSnapshot(kind: snapshotKind, diagnostics: diagnostics)
                 snapshotURL = fileURL
                 if let password {
+                    diagnostics.record("encryption.begin", fileURL: fileURL)
                     try BackupRestoreFileWriter.encryptSnapshotInPlace(
                         fileURL,
                         password: password,
                         useStrongDerivation: useStrongPasswordDerivation
                     )
+                    diagnostics.record("encryption.completed", fileURL: fileURL)
                 }
+                diagnostics.record("operation.completed", fileURL: fileURL)
                 await MainActor.run {
                     if let existing = snapshotSharePayload?.fileURL {
                         try? FileManager.default.removeItem(at: existing)
@@ -371,6 +385,7 @@ struct BackupRestoreView: View {
                     statusMessage = NSLocalizedString("快照文件已准备好，可在系统分享面板中保存或发送。", comment: "")
                 }
             } catch {
+                diagnostics.recordFailure(error)
                 if let snapshotURL {
                     try? FileManager.default.removeItem(at: snapshotURL)
                 }
@@ -455,19 +470,24 @@ struct BackupRestoreView: View {
         let snapshotKind = selectedSnapshotKind
 
         Task.detached(priority: .userInitiated) {
+            let diagnostics = SnapshotDiagnostics()
+            diagnostics.record("operation.begin", details: ["kind": snapshotKind.rawValue, "destination": "s3", "encrypted": String(password != nil)])
             do {
+                diagnostics.record("writes.flush.begin")
                 await AppConfigStore.shared.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
                 MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
 
-                let snapshotURL = try SnapshotBuilder.buildSnapshot(kind: snapshotKind)
+                let snapshotURL = try SnapshotBuilder.buildSnapshot(kind: snapshotKind, diagnostics: diagnostics)
                 defer { try? FileManager.default.removeItem(at: snapshotURL) }
                 if let password {
+                    diagnostics.record("encryption.begin", fileURL: snapshotURL)
                     try BackupRestoreFileWriter.encryptSnapshotInPlace(
                         snapshotURL,
                         password: password,
                         useStrongDerivation: useStrongPasswordDerivation
                     )
+                    diagnostics.record("encryption.completed", fileURL: snapshotURL)
                 }
 
                 let result = try await SyncPackageUploadService.uploadSnapshot(
@@ -477,8 +497,10 @@ struct BackupRestoreView: View {
                         Task { @MainActor in
                             uploadProgress = progress
                         }
-                    }
+                    },
+                    diagnostics: diagnostics
                 )
+                diagnostics.record("operation.completed")
                 await MainActor.run {
                     if password != nil {
                         exportPassword = ""
@@ -498,6 +520,7 @@ struct BackupRestoreView: View {
                     }
                 }
             } catch {
+                diagnostics.recordFailure(error)
                 await MainActor.run {
                     isUploadingSnapshot = false
                     uploadProgress = nil

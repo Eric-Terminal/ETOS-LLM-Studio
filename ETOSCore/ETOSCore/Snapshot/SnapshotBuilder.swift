@@ -43,16 +43,24 @@ public enum SnapshotBuilder {
     @discardableResult
     public static func buildSnapshot(
         kind: BackupKind = .database,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        diagnostics: SnapshotDiagnostics? = nil
     ) throws -> URL {
-        try buildSnapshotResult(kind: kind, fileManager: fileManager).fileURL
+        try buildSnapshotResult(kind: kind, fileManager: fileManager, diagnostics: diagnostics).fileURL
     }
 
     public static func buildSnapshotResult(
         kind: BackupKind = .database,
         now: Date = Date(),
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        diagnostics: SnapshotDiagnostics? = nil
     ) throws -> Result {
+        let diagnostics = diagnostics ?? SnapshotDiagnostics()
+        diagnostics.record("build.begin", details: ["kind": kind.rawValue])
+        var completed = false
+        defer {
+            if !completed { diagnostics.record("build.failed", level: .error) }
+        }
         let workingDirectory = try SyncTemporaryFileCleaner.makeDirectoryURL(
             prefix: "ETOS-Snapshot",
             temporaryDirectory: fileManager.temporaryDirectory,
@@ -62,7 +70,8 @@ public enum SnapshotBuilder {
         try fileManager.createDirectory(at: payloadDirectory, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: workingDirectory) }
 
-        let databaseItems = try cloneDatabases(to: payloadDirectory)
+        let databaseItems = try cloneDatabases(to: payloadDirectory, diagnostics: diagnostics)
+        diagnostics.record("files.collect.begin")
         let fileItems = try collectFiles(for: kind)
         let manifestURL = payloadDirectory.appendingPathComponent("manifest.json", isDirectory: false)
         let manifest = Manifest(
@@ -77,12 +86,19 @@ public enum SnapshotBuilder {
         try encoder.encode(manifest).write(to: manifestURL, options: .atomic)
 
         let archiveURL = try makeArchiveURL(now: now, fileManager: fileManager)
+        defer {
+            if !completed { try? fileManager.removeItem(at: archiveURL) }
+        }
+        diagnostics.record("archive.begin", details: ["fileCount": String(fileItems.count)])
         try createArchive(
             at: archiveURL,
             payloadDirectory: payloadDirectory,
             databaseItems: databaseItems,
-            fileItems: fileItems
+            fileItems: fileItems,
+            diagnostics: diagnostics
         )
+        diagnostics.record("build.completed", fileURL: archiveURL)
+        completed = true
         return Result(
             fileURL: archiveURL,
             createdAt: now,
@@ -101,6 +117,19 @@ public enum SnapshotBuilder {
         return path.split(separator: "/").allSatisfy { component in
             !component.isEmpty && component != "." && component != ".."
         }
+    }
+
+    /// 仅用于已导出的明文副本，不能修改正在使用的数据库连接配置。
+    static func makeSnapshotCompactionConfiguration() -> Configuration {
+        var configuration = Persistence.makePlainDatabaseConfiguration()
+        configuration.prepareDatabase { db in
+            // SQLCipher 的 TEMP_STORE=2 默认把 VACUUM 的临时整库留在内存中。
+            // 导出副本本来就是明文，允许临时页落盘，避免手表为瘦身再承担一份整库内存。
+            try db.execute(sql: "PRAGMA temp_store=FILE")
+            try db.execute(sql: "PRAGMA cache_size=-2048")
+            try db.execute(sql: "PRAGMA mmap_size=0")
+        }
+        return configuration
     }
 }
 
@@ -173,7 +202,7 @@ private extension SnapshotBuilder {
         }
     }
 
-    static func cloneDatabases(to payloadDirectory: URL) throws -> [DatabaseItem] {
+    static func cloneDatabases(to payloadDirectory: URL, diagnostics: SnapshotDiagnostics) throws -> [DatabaseItem] {
         guard let chatStore = Persistence.activeGRDBStore() else {
             throw SnapshotError.chatStoreUnavailable
         }
@@ -193,9 +222,12 @@ private extension SnapshotBuilder {
         var items: [DatabaseItem] = []
         for source in sources {
             let databaseURL = payloadDirectory.appendingPathComponent(source.fileName, isDirectory: false)
+            diagnostics.record("database.export.begin", details: ["database": source.fileName])
             try cloneDatabase(source, to: databaseURL)
+            diagnostics.record("database.export.completed", fileURL: databaseURL, details: ["database": source.fileName])
             if case .chat = source {
-                try removeChatFTSObjects(from: databaseURL)
+                try removeChatFTSObjects(from: databaseURL, diagnostics: diagnostics)
+                diagnostics.record("database.compacted.validate.begin", fileURL: databaseURL)
                 guard Persistence.isDatabaseHealthy(at: databaseURL, encrypted: false) else {
                     throw NSError(domain: "SnapshotBuilder", code: 5, userInfo: [
                         NSLocalizedDescriptionKey: NSLocalizedString("聊天数据库快照瘦身后完整性检查失败", comment: "")
@@ -333,10 +365,11 @@ private extension SnapshotBuilder {
         Persistence.removeSQLiteSidecars(at: destinationURL)
     }
 
-    static func removeChatFTSObjects(from databaseURL: URL) throws {
+    static func removeChatFTSObjects(from databaseURL: URL, diagnostics: SnapshotDiagnostics) throws {
+        diagnostics.record("database.fts.remove.begin", fileURL: databaseURL)
         let queue = try DatabaseQueue(
             path: databaseURL.path,
-            configuration: Persistence.makePlainDatabaseConfiguration()
+            configuration: makeSnapshotCompactionConfiguration()
         )
         defer { try? queue.close() }
 
@@ -353,7 +386,11 @@ private extension SnapshotBuilder {
                 WHERE type = 'table' AND (name LIKE 'sessions_fts_%' OR name LIKE 'messages_fts_%')
                 """
             )
+            diagnostics.record("database.vacuum.begin", fileURL: databaseURL, details: [
+                "tempStore": String(try Int.fetchOne(db, sql: "PRAGMA temp_store") ?? -1)
+            ])
             try db.execute(sql: "VACUUM")
+            diagnostics.record("database.vacuum.completed", fileURL: databaseURL)
         }
     }
 
@@ -385,7 +422,8 @@ private extension SnapshotBuilder {
         at archiveURL: URL,
         payloadDirectory: URL,
         databaseItems: [DatabaseItem],
-        fileItems: [FileItem]
+        fileItems: [FileItem],
+        diagnostics: SnapshotDiagnostics
     ) throws {
         try Persistence.removeItemIfExists(at: archiveURL)
         let archive = try Archive(url: archiveURL, accessMode: .create)
@@ -395,10 +433,16 @@ private extension SnapshotBuilder {
             compressionMethod: .deflate
         )
         for item in databaseItems {
-            try archive.addEntry(with: item.archivePath, fileURL: item.fileURL, compressionMethod: .deflate)
+            diagnostics.record("archive.database.begin", fileURL: item.fileURL, details: ["database": item.fileName])
+            try autoreleasepool {
+                try archive.addEntry(with: item.archivePath, fileURL: item.fileURL, compressionMethod: .deflate)
+            }
         }
+        diagnostics.record("archive.files.begin", details: ["fileCount": String(fileItems.count)])
         for item in fileItems {
-            try archive.addEntry(with: item.archivePath, fileURL: item.fileURL, compressionMethod: .deflate)
+            try autoreleasepool {
+                try archive.addEntry(with: item.archivePath, fileURL: item.fileURL, compressionMethod: .deflate)
+            }
         }
     }
 

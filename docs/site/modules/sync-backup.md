@@ -219,6 +219,14 @@ Watch 数据完全靠 iPhone 同步过来。**如果你想把 Watch 转移给另
 | iCloud 一直在转 | iCloud Drive 网络问题 | 系统设置检查 iCloud 状态 |
 | 跨设备数据冲突 | 双端同时编辑 | 后写入的会覆盖；建议**只在 iPhone 配置**，Watch 用来读 |
 
+### 生成备份时 App 退出
+
+上传进度出现前，App 会先导出数据库、移除可重建的搜索索引、整理数据库文件、压缩，并按所选设置加密。备份文件大小是压缩后的体积，不能用它判断生成过程需要多少内存。
+
+如果更新后仍在备份时退出，重新打开**出问题的设备**上的「应用日志」，选择对应日期和文件名含 `snapshot` 的日志。查看 `Snapshot` 分类的最后几条记录；不需要开启 API 请求日志。检查点会在进入各步骤前落盘，并记录步骤、耗时、当时的内存占用、文件大小与剩余磁盘空间，不记录聊天内容、备份密码或 S3/R2 凭证。
+
+`database.vacuum.begin` 表示正在整理数据库，`archive` 表示压缩，`encryption` 表示密码加密，`upload.sign.begin` 表示计算上传签名，`upload.request.begin` 表示即将发送上传请求。没有完成记录只能说明流程没有正常走到结尾，不能单凭它区分内存终止、系统中断或手动退出。系统因内存压力终止 App 时，应同时留意 `JetsamEvent`；[这类报告与普通崩溃报告不同](https://developer.apple.com/documentation/xcode/identifying-high-memory-use-with-jetsam-event-reports)，手机没有显示 App 的 IPS 并不等于备份流程正常。
+
 ### 启动备份的物理位置
 
 启动备份点存在 App 沙盒里。**不会**自动同步到 iCloud 或上云。

@@ -302,10 +302,12 @@ public enum SyncPackageUploadService {
         timeout: TimeInterval = 30,
         now: Date = Date(),
         transport: FileTransport? = nil,
-        progress: ProgressHandler? = nil
+        progress: ProgressHandler? = nil,
+        diagnostics: SnapshotDiagnostics? = nil
     ) async throws -> SyncPackageUploadResult {
         let fileName = suggestedFileName ?? fileURL.lastPathComponent
         reportInitialProgress(for: fileURL, progress: progress)
+        diagnostics?.record("upload.sign.begin", fileURL: fileURL)
         let request = try makeS3UploadRequest(
             fileURL: fileURL,
             suggestedFileName: fileName.isEmpty ? "ETOS-Snapshot.\(SnapshotBuilder.fileExtension)" : fileName,
@@ -313,6 +315,7 @@ public enum SyncPackageUploadService {
             timeout: timeout,
             now: now
         )
+        diagnostics?.record("upload.request.begin", fileURL: fileURL)
 
         let sender = transport ?? { request, fileURL in
             try await uploadFile(request: request, fileURL: fileURL, progress: progress)
@@ -327,6 +330,7 @@ public enum SyncPackageUploadService {
             throw SyncPackageUploadError.unexpectedStatusCode(httpResponse.statusCode, preview)
         }
         reportCompletedProgress(for: fileURL, progress: progress)
+        diagnostics?.record("upload.completed", details: ["httpStatus": String(httpResponse.statusCode)])
 
         return SyncPackageUploadResult(
             statusCode: httpResponse.statusCode,
@@ -810,9 +814,14 @@ private extension SyncPackageUploadService {
             defer { try? handle.close() }
             var hasher = SHA256()
             while true {
-                let chunk = try handle.read(upToCount: 1024 * 1024) ?? Data()
-                if chunk.isEmpty { break }
-                hasher.update(data: chunk)
+                // 每块读取结束就释放 Foundation 临时对象，避免长任务延迟回收整文件的读取缓冲。
+                let hasMoreData = try autoreleasepool {
+                    let chunk = try handle.read(upToCount: 1024 * 1024) ?? Data()
+                    guard !chunk.isEmpty else { return false }
+                    hasher.update(data: chunk)
+                    return true
+                }
+                if !hasMoreData { break }
             }
             return hexString(Data(hasher.finalize()))
         } catch {
