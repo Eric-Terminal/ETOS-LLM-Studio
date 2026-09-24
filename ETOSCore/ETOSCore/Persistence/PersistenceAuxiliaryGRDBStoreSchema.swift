@@ -956,6 +956,12 @@ extension PersistenceAuxiliaryGRDBStore {
             }
         }
 
+        if supportsConfigRelationalSchema {
+            migrator.registerMigration("v22_add_provider_model_prompt") { db in
+                try db.execute(sql: "ALTER TABLE provider_models ADD COLUMN prompt TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         if supportsMemoryRelationalSchema {
             migrator.registerMigration("v2_create_memory_domain_tables") { db in
                 try db.execute(sql: """

@@ -73,6 +73,10 @@ public struct PromptMacroHelpSection: View {
             )
         )
         macroGroup(
+            NSLocalizedString("model.prompt.title", value: "Model prompt", comment: "模型专属提示词"),
+            description: NSLocalizedString("model.prompt.help", value: "Write model-specific instructions in Model settings → Model prompt, then place {{model_prompt}} in a system, conversation, topic or enhancement prompt, or chat input. Each request inserts the selected model's text at that position; an empty value inserts nothing. The text is not added automatically and macros inside it are not recursively expanded.", comment: "模型提示词宏完整教程")
+        )
+        macroGroup(
             NSLocalizedString("称呼与会话", value: "Names and conversation", comment: "提示词宏分组"),
             description: NSLocalizedString(
                 "提示词宏会话列表",

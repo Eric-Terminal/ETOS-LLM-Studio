@@ -309,6 +309,7 @@ struct LocalModelStoreTests {
         provider.models[0].kind = .embedding
         provider.models[0].capabilities = [.toolCalling, .embedding, .reasoning]
         provider.models[0].overrideParameters["provider_only"] = .string("kept")
+        provider.models[0].prompt = "本地模型专属指令"
         provider.models[0].requestBodyControls = [
             ModelRequestBodyControl(
                 title: "归一化",
@@ -331,6 +332,7 @@ struct LocalModelStoreTests {
         #expect(restored.models.first?.supportsStreaming == true)
         #expect(restored.models.first?.supportsEmbedding == true)
         #expect(restored.models.first?.overrideParameters["provider_only"] == .string("kept"))
+        #expect(restored.models.first?.prompt == "本地模型专属指令")
         #expect(restored.models.first?.requestBodyControls.count == 1)
     }
 

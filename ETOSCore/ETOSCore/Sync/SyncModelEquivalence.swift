@@ -60,6 +60,7 @@ extension Model {
         requestBodyOverrideMode == other.requestBodyOverrideMode &&
         rawRequestBodyJSON == other.rawRequestBodyJSON &&
         requestBodyControls == other.requestBodyControls &&
+        prompt == other.prompt &&
         pricing?.normalized == other.pricing?.normalized
     }
 }

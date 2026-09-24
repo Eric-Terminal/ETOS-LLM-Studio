@@ -7329,7 +7329,10 @@
 "正在思考·重试(%d/%d)·%ds" = "Thinking·Retry(%d/%d)·%ds";
 "自动重试使用说明" = "Smart detection is on by default and retries only temporary errors. Turn it off to retry any API request error, including HTTP 400, upstream rejections without a status code, and invalid responses. This can help with services that route requests between upstream providers. During the wait, the current reply shows a countdown in seconds. It disappears when the request is sent; no error bubble is added while retrying. The limit excludes the first request; the default is 3 retries. Network interruptions and temporary server failures use exponential delays of 1, 2, 4 seconds, up to 30 seconds. Stop cancels the wait. Interrupted text is sent as an assistant prefill; the continuation is merged into a new version while the interrupted version remains available. This requires model API support. With smart detection on, authentication and request errors are not retried. After the limit, you can still use Continue with Prefill in the message menu.";
 
-// 时间与重试次数输入
+// 模型提示词宏与时间、重试次数输入
+"model.prompt.title" = "Model prompt";
+"model.prompt.footer" = "Use {{model_prompt}} in a prompt to insert this model's text. Empty values insert nothing.";
+"model.prompt.help" = "Write model-specific instructions in Model settings → Model prompt, then place {{model_prompt}} in a system, conversation, topic or enhancement prompt, or chat input. Each request inserts the selected model's text at that position; an empty value inserts nothing. The text is not added automatically and macros inside it are not recursively expanded.";
 "pricing.time.invalid" = "Enter a time from 00:00 to 23:59. The last valid time is kept until then.";
 "pricing.time.help" = "Enter a 24-hour time, such as 12:30 (00:00–23:59).";
 "retry.count.invalid" = "Enter a whole number from 0 to 10. The last valid value is kept until then.";

@@ -269,7 +269,8 @@ private func prepareConfigDatabase(
             "v18_create_local_linux_configuration",
             "v19_add_mcp_local_stdio_transport",
             "v20_add_local_linux_command_rule_suffix",
-            "v21_add_feedback_referenced_commit_tracking"
+            "v21_add_feedback_referenced_commit_tracking",
+            "v22_add_provider_model_prompt"
         ]
         for migration in appliedMigrations + migrationsAfterV4 {
             try db.execute(

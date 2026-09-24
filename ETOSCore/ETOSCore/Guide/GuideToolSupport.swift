@@ -144,6 +144,7 @@ public enum GuideToolCatalog {
         name: "propose_model_configuration",
         description: "提出当前模型的基础配置修改。只填写确实需要变化的字段。",
         parameters: objectSchema(properties: [
+            "model_prompt": stringProperty("仅在提示词引用 {{model_prompt}} 时插入的模型专属文本，空字符串表示清空"),
             "display_name": stringProperty("App 内显示名称"),
             "model_id": stringProperty("API 请求使用的模型 ID"),
             "picker_group": stringProperty("模型选择器分组名称，空字符串表示不分组"),

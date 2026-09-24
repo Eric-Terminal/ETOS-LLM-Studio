@@ -45,7 +45,7 @@ enum PromptMacroResolver {
     ]
     static let supportedNames: Set<String> = timeNames.union(batteryNames)
         .union(audioNames).union(screenNames).union(storageNames).union(hardwareNames).union([
-            "model_id", "model_name", "provider_id", "provider_name", "api_format",
+            "model_id", "model_name", "model_prompt", "provider_id", "provider_name", "api_format",
             "nickname", "user", "char", "assistant_name", "chat_id", "chat_name", "message_count",
             "locale", "language", "system_locale", "app_name", "app_version", "app_build",
             "platform", "system_version", "device_info", "device_model", "device_name",

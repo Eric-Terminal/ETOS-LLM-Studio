@@ -7406,7 +7406,10 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "正在思考·重试(%d/%d)·%ds" = "Pensando·Reintento(%d/%d)·%ds";
 "自动重试使用说明" = "La detección inteligente está activada por defecto y solo reintenta errores temporales. Desactívala para reintentar cualquier error de solicitud de API, incluidos HTTP 400, rechazos del proveedor sin código de estado y respuestas no válidas. Es útil para servicios que alternan entre proveedores. Durante la espera, la respuesta actual muestra una cuenta atrás en segundos. Desaparece al enviar la solicitud; no se añaden burbujas de error durante los reintentos. El límite excluye la solicitud inicial; por defecto se permiten 3 reintentos. Los cortes de red y fallos temporales usan esperas de 1, 2, 4 segundos, hasta 30 segundos. Detener cancela la espera. El texto interrumpido se envía como prefill del asistente y se combina con la continuación en una nueva versión; la anterior se conserva. La API del modelo debe admitirlo. Con la detección inteligente activada, no se reintentan errores de autenticación ni de parámetros. Tras alcanzar el límite, puedes usar Continuar con prefill en el menú del mensaje.";
 
-// 时间与重试次数输入
+// 模型提示词宏与时间、重试次数输入
+"model.prompt.title" = "Prompt del modelo";
+"model.prompt.footer" = "Inserta {{model_prompt}} en un prompt para usar el texto de este modelo. Si está vacío, no se inserta nada.";
+"model.prompt.help" = "Escribe instrucciones específicas en Ajustes del modelo → Prompt del modelo y coloca {{model_prompt}} en un prompt de sistema, conversación, tema, refuerzo o en un mensaje. Cada solicitud inserta el texto del modelo seleccionado en esa posición; si está vacío, no se inserta nada. El texto no se añade automáticamente y sus macros no se expanden de forma recursiva.";
 "pricing.time.invalid" = "Introduce una hora entre 00:00 y 23:59. Hasta entonces se conserva la última hora válida.";
 "pricing.time.help" = "Introduce una hora en formato de 24 horas, como 12:30 (00:00–23:59).";
 "retry.count.invalid" = "Introduce un entero de 0 a 10. Hasta entonces se conserva el último valor válido.";

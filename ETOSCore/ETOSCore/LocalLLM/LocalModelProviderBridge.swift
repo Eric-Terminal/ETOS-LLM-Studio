@@ -93,7 +93,8 @@ public enum LocalModelProviderBridge {
             requestBodyOverrideMode: existingModel?.requestBodyOverrideMode ?? .keyValue,
             rawRequestBodyJSON: existingModel?.rawRequestBodyJSON,
             requestBodyControls: existingModel?.requestBodyControls ?? [],
-            pricing: existingModel?.pricing
+            pricing: existingModel?.pricing,
+            prompt: existingModel?.prompt ?? ""
         )
     }
 

@@ -35,6 +35,7 @@ enum PromptMacroRenderer {
             values.merge([
                 "model_id": model.model.modelName,
                 "model_name": modelName,
+                "model_prompt": model.model.prompt,
                 "provider_id": model.provider.id.uuidString,
                 "provider_name": model.provider.name,
                 "api_format": model.effectiveAPIFormat,

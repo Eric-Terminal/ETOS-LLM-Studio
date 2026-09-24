@@ -3,6 +3,45 @@ import Testing
 @testable import ETOSCore
 
 extension ChatServiceTests {
+    @Test("实际请求按模型展开专属提示词，切换到未配置模型后清空且存储保留宏")
+    func modelPromptIsResolvedOnlyForTheCurrentRequest() async throws {
+        await cleanup()
+        setupMockResponsesForChatAndTitle()
+        var provider = dummyModel.provider
+        provider.models[0].prompt = "只属于模型甲的指令"
+        chatService.saveProviderFromManagement(provider)
+        let firstModel = try #require(activatedChatModels().first { $0.id == dummyModel.id })
+        let nextModel = try #require(activatedChatModels().first { $0.id != dummyModel.id })
+        var session = createPermanentTestSession(name: "模型专属宏")
+        session.toolContextIsolationEnabled = true
+        session.preferredModelIdentifier = firstModel.id
+        chatService.setCurrentSession(session)
+
+        await chatService.sendAndProcessMessage(
+            content: "user[{{model_prompt}}]", aiTemperature: 0, aiTopP: 1, systemPrompt: "global[{{model_prompt}}]",
+            maxChatHistory: 10, enableStreaming: false, enhancedPrompt: nil,
+            enableMemory: false, enableMemoryWrite: false, includeSystemTime: false
+        )
+        let first = try #require(mockAdapter.receivedMessages)
+        #expect(first.contains { $0.content.contains("global[只属于模型甲的指令]") })
+        let user = try #require(first.first { $0.role == .user && $0.content == "user[只属于模型甲的指令]" })
+
+        session.preferredModelIdentifier = nextModel.id
+        chatService.setCurrentSession(session)
+        await chatService.sendAndProcessMessage(
+            content: "继续", aiTemperature: 0, aiTopP: 1, systemPrompt: "global[{{model_prompt}}]",
+            maxChatHistory: 10, enableStreaming: false, enhancedPrompt: nil,
+            enableMemory: false, enableMemoryWrite: false, includeSystemTime: false
+        )
+        let second = try #require(mockAdapter.receivedMessages)
+        #expect(mockAdapter.receivedChatModel?.id == nextModel.id)
+        #expect(second.contains { $0.content.contains("global[]") })
+        #expect(second.first { $0.id == user.id }?.content == "user[]")
+        #expect(!second.contains { $0.content.contains("只属于模型甲的指令") })
+        #expect(Persistence.loadMessages(for: session.id).first { $0.id == user.id }?.content == "user[{{model_prompt}}]")
+        await cleanup()
+    }
+
     @Test("提示词与用户消息共享请求快照，三括号保留字面宏且持久化保持原文")
     func promptMacrosRenderAtRequestBoundary() async throws {
         await cleanup()

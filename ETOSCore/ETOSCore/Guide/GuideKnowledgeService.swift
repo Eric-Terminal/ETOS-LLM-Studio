@@ -143,6 +143,8 @@ public enum GuideDocumentCatalog {
 
             提供商负责 Base URL、API 格式、请求路径、凭据和独立代理；模型负责模型名、显示名、能力、激活状态及请求体覆盖。只有模型明确启用了“工具调用”能力时，才可被选作用户自有向导模型。
 
+            模型设置有独立的“模型提示词”输入区。填写后，在全局系统、会话系统、话题、增强提示词或聊天输入中引用 {{model_prompt}}，发送时才会插入本轮实际模型的专属内容；未填写时展开为空，未引用则不会自动追加。插入内容不递归展开通用宏。配置随模型保存和同步，本地模型也支持；切换模型会在下一轮重新取值。模型页向导通过 model_prompt 字段提出修改，原生确认后保存，支持撤销。
+
             在提供商的“模型配置”页面，向导可以按模型 ID 提交结构化 JSON，新增模型或只更新指定字段。模型 ID 是合并键；省略的字段会保留原值，新增或更新的模型会加入“已添加”列表。删除必须由用户明确提出，并且所有变更都会先显示原生确认预览，确认后才保存。
 
             测试连接不会替代保存。编辑完成后先执行原生连接测试，再在最终预览中确认提供商与模型配置，最后一次性保存并选中，避免产生半配置状态。
@@ -218,9 +220,11 @@ public enum GuideDocumentCatalog {
 
             全局系统、会话系统、话题、增强提示词和普通用户消息都支持通用宏。{{battery_level}} 会在每轮请求中展开，{{{battery_level}}} 则发送字面量 {{battery_level}}。存储和显示保留原文，历史用户消息中的动态宏也会按本轮设备状态重新求值。未知宏保持原文，已支持但无法读取的值返回 unknown。放置位置由用户选择；动态值可能减少从所在位置起的前缀缓存复用，增强提示词位于尾部。
 
+            {{model_prompt}} 读取模型设置中填写的专属提示词，未填写时为空；只有引用才插入，不自动追加，也不递归展开其中的通用宏。每轮按实际选中的模型重新取值。全局提示词列表与当前选择入口会滚动显示过长名称。
+
             nickname 与 user 是同一个用户称呼，来自当前绑定或默认 Persona（用户身份）的名字，未设置时回退为本地化的“用户”。char 与 assistant_name 是同一个助手称呼，来自第一个绑定角色的名字，未绑定时回退为本轮模型名称。例子：用户身份叫 Eric、角色叫“小晖”时，“你是 {{char}}，请称呼我为 {{user}}”发送为“你是 小晖，请称呼我为 Eric”。
 
-            通用宏完整名称：cur_date、cur_time、cur_datetime、utc_datetime、weekday、timestamp、timezone、timezone_offset；model_id、model_name、provider_id、provider_name、api_format；nickname、user、char、assistant_name、chat_id、chat_name、message_count；locale、language、system_locale、app_name、app_version、app_build；platform、system_version、device_info、device_model、device_name；battery_level、battery_state、is_charging、low_power_mode、thermal_state、system_uptime；volume_level、audio_output_type、audio_output_name、audio_input_type、audio_input_name、other_audio_playing；screen_brightness、screen_width、screen_height、screen_scale；storage_free_bytes、storage_total_bytes、storage_free_gb、storage_total_gb、storage_free_percent、physical_memory_bytes、physical_memory_gb、processor_count、active_processor_count。
+            通用宏完整名称：cur_date、cur_time、cur_datetime、utc_datetime、weekday、timestamp、timezone、timezone_offset；model_id、model_name、model_prompt、provider_id、provider_name、api_format；nickname、user、char、assistant_name、chat_id、chat_name、message_count；locale、language、system_locale、app_name、app_version、app_build；platform、system_version、device_info、device_model、device_name；battery_level、battery_state、is_charging、low_power_mode、thermal_state、system_uptime；volume_level、audio_output_type、audio_output_name、audio_input_type、audio_input_name、other_audio_playing；screen_brightness、screen_width、screen_height、screen_scale；storage_free_bytes、storage_total_bytes、storage_free_gb、storage_total_gb、storage_free_percent、physical_memory_bytes、physical_memory_gb、processor_count、active_processor_count。
 
             电量、音量、亮度和存储剩余百分比是 0–100 的整数，不带百分号。GB 按十进制保留两位小数；存储来自 App 文档目录所在卷，物理内存表示总 RAM。屏幕宽高单位是点，screen_scale 是每点像素数；watchOS 不开放亮度读数，因此 screen_brightness 返回 unknown。音量和输入输出路由只读取系统报告的音频快照，前后台或路由切换后可能延迟更新；不更改音频会话、不播放声音、不请求录音权限。没有报告路由时返回 none，多端口以逗号分隔。音量为零不代表开启静音模式。
             """
