@@ -36,6 +36,8 @@ final class InlineSpeechRecorderController: ObservableObject {
     private var recordingStartDate: Date?
     private var recordingTimer: Timer?
     private var playbackTask: Task<Void, Never>?
+    private let recordingAudioSession = SpeechRecordingAudioSession()
+    private var recordingRequestID: UUID?
     private let sampleCount = 56
 
     func prepareForRecording() {
@@ -49,6 +51,8 @@ final class InlineSpeechRecorderController: ObservableObject {
 
     func start(format: AudioRecordingFormat) async throws {
         resetRecorderResources(removeRecordedFile: true)
+        let requestID = UUID()
+        recordingRequestID = requestID
         recordingDuration = 0
         waveformSamples = Array(repeating: 0.08, count: sampleCount)
         if phase == .idle {
@@ -57,13 +61,19 @@ final class InlineSpeechRecorderController: ObservableObject {
             }
         }
         let permissionGranted = await requestMicrophonePermission()
+        guard recordingRequestID == requestID else { return }
         guard permissionGranted else {
             throw Self.localizedError(NSLocalizedString("麦克风权限被拒绝，请到设置中开启。", comment: ""))
         }
 
-        let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .spokenAudio, options: [.duckOthers])
-        try session.setActive(true, options: .notifyOthersOnDeactivation)
+        do {
+            try await recordingAudioSession.activate()
+        } catch {
+            guard recordingRequestID == requestID else { return }
+            throw error
+        }
+        // 权限或路由切换期间可能已取消，迟到的激活结果不能重新开始录音。
+        guard recordingRequestID == requestID else { return }
 
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("speech-\(UUID().uuidString).\(format.fileExtension)")
         let recorder = try AVAudioRecorder(url: url, settings: Self.recordingSettings(for: format))
@@ -147,6 +157,7 @@ final class InlineSpeechRecorderController: ObservableObject {
     }
 
     private func resetRecorderResources(removeRecordedFile: Bool) {
+        recordingRequestID = nil
         stopRecordingTimer()
         stopPreviewPlayback()
         audioRecorder?.stop()
@@ -156,7 +167,7 @@ final class InlineSpeechRecorderController: ObservableObject {
         }
         recordingURL = nil
         recordingStartDate = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        recordingAudioSession.deactivate()
     }
 
     private func startRecordingTimer() {

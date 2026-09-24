@@ -77,7 +77,10 @@ extension ChatViewModel {
             }
         }
 
+        let requestID = UUID()
+        speechRecordingRequestID = requestID
         let permissionGranted = await requestMicrophonePermission()
+        guard speechRecordingRequestID == requestID else { return }
         guard permissionGranted else {
             presentSpeechError(NSLocalizedString("麦克风权限被拒绝，请到设置中开启。", comment: ""))
             isSpeechRecordingPreparing = false
@@ -88,6 +91,7 @@ extension ChatViewModel {
 
         if shouldUseSystemSpeechStreaming {
             let speechPermissionGranted = await SystemSpeechRecognizerService.requestAuthorization()
+            guard speechRecordingRequestID == requestID else { return }
             guard speechPermissionGranted else {
                 presentSpeechError(NSLocalizedString("语音识别权限被拒绝，请到设置中开启。", comment: ""))
                 isSpeechRecordingPreparing = false
@@ -132,9 +136,8 @@ extension ChatViewModel {
         }
 
         do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playAndRecord, mode: .spokenAudio, options: [.duckOthers])
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
+            try await recordingAudioSession.activate()
+            guard speechRecordingRequestID == requestID else { return }
 
             if let existingURL = speechRecordingURL {
                 try? FileManager.default.removeItem(at: existingURL)
@@ -181,6 +184,8 @@ extension ChatViewModel {
             resetRecordingVisuals()
             startRecordingTimer()
         } catch {
+            guard speechRecordingRequestID == requestID else { return }
+            recordingAudioSession.deactivate()
             presentSpeechError(
                 String(
                     format: NSLocalizedString("开始录音失败: %@", comment: ""),
@@ -310,6 +315,7 @@ extension ChatViewModel {
     }
 
     func cancelSpeechRecording() {
+        speechRecordingRequestID = nil
         if let streamSession = systemSpeechStreamingSession {
             streamSession.stop()
             systemSpeechStreamingSession = nil
@@ -325,6 +331,7 @@ extension ChatViewModel {
             try? FileManager.default.removeItem(at: url)
         }
         audioRecorder = nil
+        recordingAudioSession.deactivate()
         speechRecordingURL = nil
         isSpeechRecorderPresented = false
         speechStreamingTranscript = ""
