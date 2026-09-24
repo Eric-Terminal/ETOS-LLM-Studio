@@ -1,13 +1,16 @@
 import SwiftUI
 
 /// JSON 草稿仅在父消息编辑器保存后才落库。向导只能获知状态，不能读取可能包含凭据的调用内容。
-public struct MessageToolCallsEditor: View {
+public struct MessageToolCallsEditor<Help: View>: View {
     @Binding private var json: String
     @State private var isAdding = false
     @State private var errorMessage: String?
-    @State private var showsHelp = false
+    private let help: () -> Help
 
-    public init(json: Binding<String>) { _json = json }
+    public init(json: Binding<String>, @ViewBuilder help: @escaping () -> Help) {
+        _json = json
+        self.help = help
+    }
 
     public var body: some View {
         Form {
@@ -59,30 +62,12 @@ public struct MessageToolCallsEditor: View {
         } message: { Text(errorMessage ?? "") }
     }
 
-    @ViewBuilder
     private var settingsIntroCard: some View {
-        #if os(watchOS)
-        Button(NSLocalizedString("编辑说明", comment: "")) { showsHelp.toggle() }
-            .buttonStyle(.plain)
-        if showsHelp {
-            Text(helpText)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-        #else
-        DisclosureGroup(NSLocalizedString("编辑说明", comment: "")) {
-            Text(helpText)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                #if os(iOS)
-                .textSelection(.enabled)
-                #endif
-        }
-        #endif
-    }
-
-    private var helpText: String {
-        NSLocalizedString("使用 JSON 数组编辑调用。每项包含 id、toolName 和 arguments（JSON 对象或包含对象的字符串）；可选 result、resultDisposition 和 providerSpecificFields。新增一项即可添加调用，删除一项可移除调用，[] 表示清空。id 必须唯一，建议保留现有 id 以维持结果关联。result 为字符串，状态可为 completed、failed 或 rejected。修改会同步同轮对话中的关联结果；这些记录会用于后续聊天历史。", comment: "")
+        SettingsHelpCard(
+            title: NSLocalizedString("编辑说明", value: "Editing guide", comment: "工具调用介绍卡标题"),
+            summary: NSLocalizedString("可以添加、修改或移除调用；正文为空也可以保存。", value: "Add, edit, or remove calls. Messages with an empty body can also be saved.", comment: "工具调用介绍卡摘要"),
+            details: help
+        )
     }
 
     private func appendCall() {
@@ -101,5 +86,11 @@ public struct MessageToolCallsEditor: View {
                 json = updated
             } catch { errorMessage = error.localizedDescription }
         }
+    }
+}
+
+public extension MessageToolCallsEditor where Help == MessageToolCallsHelpView {
+    init(json: Binding<String>) {
+        self.init(json: json) { MessageToolCallsHelpView() }
     }
 }

@@ -11,7 +11,6 @@ import ETOSCore
 
 struct FeedbackCenterView: View {
     @ObservedObject private var service = FeedbackService.shared
-    @State private var showsIntro = false
 
     var body: some View {
         List {
@@ -73,18 +72,19 @@ struct FeedbackCenterView: View {
         }
     }
 
-    @ViewBuilder
     private var settingsIntroCard: some View {
-        Button(NSLocalizedString("反馈与处理进度", comment: "反馈介绍卡标题")) {
-            showsIntro.toggle()
-        }
-        .buttonStyle(.plain)
-        if showsIntro {
-            Text(NSLocalizedString("反馈助手使用说明", comment: "反馈介绍卡教程"))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .lineLimit(nil)
-                .fixedSize(horizontal: false, vertical: true)
+        SettingsHelpCard(
+            title: NSLocalizedString("反馈与处理进度", value: "Feedback and progress", comment: "反馈介绍卡标题"),
+            summary: NSLocalizedString("应用内提交问题与建议，并追踪处理进度。", value: "Submit issues or suggestions in-app and track progress.", comment: "反馈介绍卡摘要")
+        ) {
+            SettingsHelpText(NSLocalizedString("反馈助手使用说明", comment: "反馈介绍卡教程"))
+                .guideSettingsPageContext(
+                    id: "feedback-introduction",
+                    title: NSLocalizedString("反馈与处理进度", value: "Feedback and progress", comment: "反馈介绍页标题"),
+                    documents: [GuideDocumentReference(id: "feedback-assistant", title: NSLocalizedString("反馈助手", comment: ""))],
+                    settings: [.readOnly("read_only", label: NSLocalizedString("反馈与处理进度", comment: ""), value: { .bool(true) })]
+                )
+                .watchGuideEntry()
         }
     }
 }

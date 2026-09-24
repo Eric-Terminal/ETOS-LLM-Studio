@@ -67,8 +67,10 @@ struct EditMessageView: View {
                 if message.role == .assistant || message.role == .tool {
                     Section {
                         NavigationLink(NSLocalizedString("工具调用 JSON", comment: "")) {
-                            MessageToolCallsEditor(json: $toolCallsJSON)
-                                .watchGuideEntry()
+                            MessageToolCallsEditor(json: $toolCallsJSON) {
+                                MessageToolCallsHelpView().watchGuideEntry()
+                            }
+                            .watchGuideEntry()
                         }
                         .disabled(!isPrepared || isSaving)
                     } footer: {

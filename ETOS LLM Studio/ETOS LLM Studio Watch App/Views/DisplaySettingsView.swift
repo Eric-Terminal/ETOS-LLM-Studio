@@ -29,7 +29,6 @@ struct DisplaySettingsView: View {
 
     @ObservedObject private var appConfig = AppConfigStore.shared
     @ObservedObject private var appearanceProfileManager = ChatAppearanceProfileManager.shared
-    @State private var showsUserMessagePreviewHelp = false
 
     // watchOS 的数值输入仅提供 Formatter 重载，整数计数保持无分组分隔符。
     private static let characterCountFormatter: NumberFormatter = {
@@ -127,18 +126,12 @@ struct DisplaySettingsView: View {
             }
 
             Section {
+                settingsIntroCard
                 TextField(
                     NSLocalizedString("预览字符数", comment: "长用户消息预览设置"),
                     value: $appConfig.userMessagePreviewCharacterLimit,
                     formatter: Self.characterCountFormatter
                 )
-                settingsIntroCard
-            } header: {
-                Text(NSLocalizedString("长用户消息", comment: "长用户消息设置分组"))
-            } footer: {
-                Text(NSLocalizedString("仅影响气泡显示；折叠后可点按气泡下方查看完整内容。", comment: "长用户消息设置说明"))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
             }
 
             Section(
@@ -235,25 +228,19 @@ struct DisplaySettingsView: View {
         ]
     }
 
-    @ViewBuilder
     private var settingsIntroCard: some View {
-        // watchOS 没有 DisclosureGroup；按钮独占一行，避免说明文字触发误点。
-        Button {
-            showsUserMessagePreviewHelp.toggle()
-        } label: {
-            HStack {
-                Text(NSLocalizedString("进一步了解…", comment: ""))
-                Spacer()
-                Image(systemName: showsUserMessagePreviewHelp ? "chevron.up" : "chevron.down")
-            }
-            .etFont(.footnote)
-            .foregroundStyle(.secondary)
-        }
-        .buttonStyle(.plain)
-        if showsUserMessagePreviewHelp {
-            Text(String(format: NSLocalizedString("超过设定字符数的用户消息会在气泡中截断，不限制行数。修改后会更新当前会话的预览，保存、发送给模型、复制和导出仍使用完整内容。默认值为 %ld 字符，可填写 1–100000。", comment: "长用户消息预览教程"), ChatUserMessagePreview.defaultCharacterLimit))
-                .etFont(.footnote)
-                .foregroundStyle(.secondary)
+        SettingsHelpCard(
+            title: NSLocalizedString("长用户消息", value: "Long user messages", comment: "长用户消息介绍卡标题"),
+            summary: NSLocalizedString("仅影响气泡显示；折叠后可点按气泡下方查看完整内容。", value: "Only affects bubble display. Tap below a collapsed bubble to view the full content.", comment: "长用户消息介绍卡摘要")
+        ) {
+            SettingsHelpText(String(format: NSLocalizedString("超过设定字符数的用户消息会在气泡中截断，不限制行数。修改后会更新当前会话的预览，保存、发送给模型、复制和导出仍使用完整内容。默认值为 %ld 字符，可填写 1–100000。", value: "User messages longer than the character limit are truncated in chat bubbles, with no line limit. Changes refresh previews in the current conversation. Saving, sending to the model, copying, and exporting still use the full content. The default is %ld characters; enter a value from 1 to 100000.", comment: "长用户消息预览教程"), ChatUserMessagePreview.defaultCharacterLimit))
+                .guideSettingsPageContext(
+                    id: "user-message-preview-introduction",
+                    title: NSLocalizedString("长用户消息", value: "Long user messages", comment: "长用户消息介绍页标题"),
+                    documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+                    settings: [.readOnly("read_only", label: NSLocalizedString("长用户消息", comment: ""), value: { .bool(true) })]
+                )
+                .watchGuideEntry()
         }
     }
 
