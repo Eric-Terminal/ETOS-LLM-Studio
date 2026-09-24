@@ -551,17 +551,20 @@ private struct ModelPricingTimeOverrideSettingsView: View {
         Form {
             Section(
                 header: Text(NSLocalizedString("峰谷时间段", comment: "Peak valley pricing time range section")),
-                footer: Text(NSLocalizedString("开始和结束时间相同时表示全天；跨午夜时间段会从所选重复日自动延续到次日。", comment: "Peak valley pricing time range footer"))
+                footer: VStack(alignment: .leading) {
+                    Text(NSLocalizedString("pricing.time.help", value: "Enter a 24-hour time, such as 12:30 (00:00–23:59).", comment: "峰谷时间输入说明"))
+                    Text(NSLocalizedString("开始和结束时间相同时表示全天；跨午夜时间段会从所选重复日自动延续到次日。", comment: "Peak valley pricing time range footer"))
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             ) {
-                DatePicker(
-                    NSLocalizedString("开始时间", comment: ""),
-                    selection: startTimeBinding,
-                    displayedComponents: .hourAndMinute
+                ModelPricingTimeTextField(
+                    title: NSLocalizedString("开始时间", comment: ""),
+                    minuteOfDay: $timeOverride.startMinuteOfDay
                 )
-                DatePicker(
-                    NSLocalizedString("结束时间", comment: ""),
-                    selection: endTimeBinding,
-                    displayedComponents: .hourAndMinute
+                ModelPricingTimeTextField(
+                    title: NSLocalizedString("结束时间", comment: ""),
+                    minuteOfDay: $timeOverride.endMinuteOfDay
                 )
                 NavigationLink {
                     ModelPricingWeekdaySelectionView(weekdays: $timeOverride.weekdays)
@@ -633,19 +636,6 @@ private struct ModelPricingTimeOverrideSettingsView: View {
         .json(key, label: label, schema: GuideModelPricingSettingsSupport.optionalPriceSchema, get: { GuideModelPricingSettingsSupport.priceValue(text.wrappedValue) }, normalize: GuideModelPricingSettingsSupport.normalizePrice, set: { text.wrappedValue = try GuideModelPricingSettingsSupport.priceText(from: $0) })
     }
 
-    private var startTimeBinding: Binding<Date> {
-        Binding(
-            get: { ModelPricingTimeOverrideDraft.date(fromMinuteOfDay: timeOverride.startMinuteOfDay) },
-            set: { timeOverride.startMinuteOfDay = ModelPricingTimeOverrideDraft.minuteOfDay(from: $0) }
-        )
-    }
-
-    private var endTimeBinding: Binding<Date> {
-        Binding(
-            get: { ModelPricingTimeOverrideDraft.date(fromMinuteOfDay: timeOverride.endMinuteOfDay) },
-            set: { timeOverride.endMinuteOfDay = ModelPricingTimeOverrideDraft.minuteOfDay(from: $0) }
-        )
-    }
 }
 
 private struct ModelPricingWeekdaySelectionView: View {
@@ -863,18 +853,6 @@ struct ModelPricingTimeOverrideDraft: Identifiable, Equatable {
         return timeOverride.isEffectivelyEmpty ? nil : timeOverride
     }
 
-    nonisolated static func date(fromMinuteOfDay minute: Int) -> Date {
-        let minute = ModelPricingTimeOverride.normalizedMinute(minute)
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        return calendar.date(from: DateComponents(year: 2001, month: 1, day: 1, hour: minute / 60, minute: minute % 60)) ?? Date()
-    }
-
-    nonisolated static func minuteOfDay(from date: Date) -> Int {
-        let calendar = Calendar.current
-        let components = calendar.dateComponents([.hour, .minute], from: date)
-        return ModelPricingTimeOverride.normalizedMinute((components.hour ?? 0) * 60 + (components.minute ?? 0))
-    }
 }
 
 private extension String {

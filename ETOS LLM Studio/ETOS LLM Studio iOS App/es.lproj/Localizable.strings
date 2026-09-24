@@ -7635,3 +7635,9 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "开启时仅重试临时错误；关闭后，所有请求错误都会重试。次数设为 0 可关闭自动重试。" = "Activada: reintenta solo errores temporales. Desactivada: reintenta todos los errores de solicitud. Establece el límite en 0 para desactivar los reintentos.";
 "正在思考·重试(%d/%d)·%ds" = "Pensando·Reintento(%d/%d)·%ds";
 "自动重试使用说明" = "La detección inteligente está activada por defecto y solo reintenta errores temporales. Desactívala para reintentar cualquier error de solicitud de API, incluidos HTTP 400, rechazos del proveedor sin código de estado y respuestas no válidas. Es útil para servicios que alternan entre proveedores. Durante la espera, la respuesta actual muestra una cuenta atrás en segundos. Desaparece al enviar la solicitud; no se añaden burbujas de error durante los reintentos. El límite excluye la solicitud inicial; por defecto se permiten 3 reintentos. Los cortes de red y fallos temporales usan esperas de 1, 2, 4 segundos, hasta 30 segundos. Detener cancela la espera. El texto interrumpido se envía como prefill del asistente y se combina con la continuación en una nueva versión; la anterior se conserva. La API del modelo debe admitirlo. Con la detección inteligente activada, no se reintentan errores de autenticación ni de parámetros. Tras alcanzar el límite, puedes usar Continuar con prefill en el menú del mensaje.";
+
+// 时间与重试次数输入
+"pricing.time.invalid" = "Introduce una hora entre 00:00 y 23:59. Hasta entonces se conserva la última hora válida.";
+"pricing.time.help" = "Introduce una hora en formato de 24 horas, como 12:30 (00:00–23:59).";
+"retry.count.invalid" = "Introduce un entero de 0 a 10. Hasta entonces se conserva el último valor válido.";
+"retry.count.help" = "Introduce un entero de 0 a 10. Los cambios válidos se guardan automáticamente.";

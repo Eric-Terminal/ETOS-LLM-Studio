@@ -27,6 +27,13 @@ public enum ChatRequestRetryPolicy {
     public static let defaultMaximumRetries = 3
     public static let allowedMaximumRetries = 0...10
 
+    static func maximumRetries(from text: String) -> Int? {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, text.utf8.allSatisfy({ (48...57).contains($0) }),
+              let count = Int(text), allowedMaximumRetries.contains(count) else { return nil }
+        return count
+    }
+
     static func delay(forRetry retry: Int) -> TimeInterval {
         min(30, pow(2, Double(max(0, min(retry - 1, 5)))))
     }

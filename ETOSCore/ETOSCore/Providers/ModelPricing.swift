@@ -512,6 +512,19 @@ extension ModelPricingTimeOverride {
 }
 
 public enum ModelPricingTimeRangeText {
+    /// 直接解析墙上时间，避免日期选择器受历法、夏令时或时区换算影响。
+    nonisolated public static func minuteOfDay(from text: String) -> Int? {
+        let parts = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "：", with: ":")
+            .split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 2,
+              (1...2).contains(parts[0].count), parts[1].count == 2,
+              parts.allSatisfy({ $0.utf8.allSatisfy { (48...57).contains($0) } }),
+              let hour = Int(parts[0]), let minute = Int(parts[1]),
+              (0...23).contains(hour), (0...59).contains(minute) else { return nil }
+        return hour * 60 + minute
+    }
+
     nonisolated public static func text(
         startMinuteOfDay: Int,
         endMinuteOfDay: Int

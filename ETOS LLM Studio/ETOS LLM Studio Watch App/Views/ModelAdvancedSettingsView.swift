@@ -146,13 +146,10 @@ struct ModelAdvancedSettingsView: View {
                         deleteGlobalSystemPromptEntry: deleteGlobalSystemPromptEntry
                     )
                 } label: {
-                    HStack {
-                        Text(NSLocalizedString("提示词列表", comment: ""))
-                        Spacer()
-                        Text(displayTitle(for: selectedGlobalPromptEntry))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
+                    MarqueeTitleSubtitleLabel(
+                        title: NSLocalizedString("提示词列表", comment: ""),
+                        subtitle: displayTitle(for: selectedGlobalPromptEntry)
+                    )
                 }
             }
 
@@ -908,24 +905,9 @@ private struct GlobalSystemPromptPickerView: View {
                         selectGlobalSystemPromptEntry(entry.id)
                         dismiss()
                     } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(displayTitle(for: entry))
-                                    .lineLimit(1)
-                                Text(displayPreview(for: entry))
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-
-                            Spacer()
-
-                            if selectedEntryID == entry.id {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.blue)
-                            }
-                        }
+                        GlobalSystemPromptSelectionLabel(entry: entry, isSelected: selectedEntryID == entry.id)
                     }
+                    .buttonStyle(.plain)
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         Button(role: .destructive) {
                             deleteGlobalSystemPromptEntry(entry.id)
@@ -994,18 +976,6 @@ private struct GlobalSystemPromptPickerView: View {
         return settings
     }
 
-    private func displayTitle(for entry: GlobalSystemPromptEntry) -> String {
-        let trimmedTitle = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedTitle.isEmpty ? NSLocalizedString("未命名提示词", comment: "") : trimmedTitle
-    }
-
-    private func displayPreview(for entry: GlobalSystemPromptEntry) -> String {
-        let trimmedContent = entry.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedContent.isEmpty {
-            return NSLocalizedString("空提示词（不发送）", comment: "")
-        }
-        return trimmedContent.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-    }
 }
 
 private struct GlobalSystemPromptEditorView: View {

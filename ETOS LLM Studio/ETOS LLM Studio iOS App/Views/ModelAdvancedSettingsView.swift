@@ -347,10 +347,10 @@ struct ModelAdvancedSettingsView: View {
                         deleteGlobalSystemPromptEntry: deleteGlobalSystemPromptEntry
                     )
                 } label: {
-                    LabeledContent(NSLocalizedString("提示词列表", comment: "")) {
-                        Text(displayTitle(for: selectedGlobalPromptEntry))
-                            .foregroundStyle(.secondary)
-                    }
+                    MarqueeTitleSubtitleLabel(
+                        title: NSLocalizedString("提示词列表", comment: ""),
+                        subtitle: displayTitle(for: selectedGlobalPromptEntry)
+                    )
                 }
             } header: {
                 Text(NSLocalizedString("全局系统提示词", comment: ""))
@@ -1169,23 +1169,7 @@ private struct GlobalSystemPromptPickerView: View {
                         selectGlobalSystemPromptEntry(entry.id)
                         dismiss()
                     } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(displayTitle(for: entry))
-                                    .lineLimit(1)
-                                Text(displayPreview(for: entry))
-                                    .etFont(.footnote)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-
-                            Spacer()
-
-                            if selectedEntryID == entry.id {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.blue)
-                            }
-                        }
+                        GlobalSystemPromptSelectionLabel(entry: entry, isSelected: selectedEntryID == entry.id)
                     }
                     .buttonStyle(.plain)
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -1267,18 +1251,6 @@ private struct GlobalSystemPromptPickerView: View {
         return settings
     }
 
-    private func displayTitle(for entry: GlobalSystemPromptEntry) -> String {
-        let trimmedTitle = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedTitle.isEmpty ? NSLocalizedString("未命名提示词", comment: "") : trimmedTitle
-    }
-
-    private func displayPreview(for entry: GlobalSystemPromptEntry) -> String {
-        let trimmedContent = entry.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedContent.isEmpty {
-            return NSLocalizedString("空提示词（不发送）", comment: "")
-        }
-        return trimmedContent.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-    }
 }
 
 private struct GlobalSystemPromptEditorView: View {
