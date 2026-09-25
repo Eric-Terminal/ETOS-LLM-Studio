@@ -2,20 +2,21 @@
 // ReplyActivityRunTracker.swift
 // ============================================================================
 
-import ETOSCore
 import Foundation
 
 /// 普通 Chat 没有 Agent Run，使用轻量快照补齐实时活动所需的稳定运行身份。
-struct ReplyActivityRunTracker {
-    private(set) var snapshotsBySessionID: [UUID: ETOSRunSnapshot] = [:]
+public struct ReplyActivityRunTracker {
+    public private(set) var snapshotsBySessionID: [UUID: ETOSRunSnapshot] = [:]
 
-    var recentSnapshots: [ETOSRunSnapshot] {
+    public init() {}
+
+    public var recentSnapshots: [ETOSRunSnapshot] {
         snapshotsBySessionID.values
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
     @discardableResult
-    mutating func record(
+    public mutating func record(
         status: ChatService.SessionRequestStatus,
         sessionID: UUID,
         title: String,
@@ -23,8 +24,10 @@ struct ReplyActivityRunTracker {
         newRunID: UUID = UUID()
     ) -> ETOSRunSnapshot {
         let previous = snapshotsBySessionID[sessionID]
+        // 已结束的 Activity 不能重新激活；同一会话的新回复必须使用新的运行身份。
+        let startsNewRun = status == .started && previous.map { Self.isTerminal($0.status) } == true
         let snapshot = ETOSRunSnapshot(
-            id: previous?.id ?? newRunID,
+            id: startsNewRun ? newRunID : (previous?.id ?? newRunID),
             sessionID: sessionID,
             title: title,
             status: Self.snapshotStatus(status),
@@ -36,7 +39,7 @@ struct ReplyActivityRunTracker {
         return snapshot
     }
 
-    mutating func mergePersisted(
+    public mutating func mergePersisted(
         _ snapshots: [ETOSRunSnapshot],
         runningSessionIDs: Set<UUID>,
         now: Date = Date()
@@ -59,7 +62,7 @@ struct ReplyActivityRunTracker {
     }
 
     @discardableResult
-    mutating func remove(sessionIDs: Set<UUID>) -> Bool {
+    public mutating func remove(sessionIDs: Set<UUID>) -> Bool {
         let originalCount = snapshotsBySessionID.count
         for sessionID in sessionIDs {
             snapshotsBySessionID.removeValue(forKey: sessionID)
@@ -88,20 +91,20 @@ struct ReplyActivityRunTracker {
     }
 }
 
-enum BackgroundReplyNotificationPolicy {
-    enum ApplicationVisibility {
+public enum BackgroundReplyNotificationPolicy {
+    public enum ApplicationVisibility {
         case active
         case inactive
         case background
     }
 
-    enum Action: Equatable {
+    public enum Action: Equatable {
         case suppress
         case resolveTransition
         case deliver
     }
 
-    static func action(for visibility: ApplicationVisibility) -> Action {
+    public static func action(for visibility: ApplicationVisibility) -> Action {
         switch visibility {
         case .active: return .suppress
         case .inactive: return .resolveTransition
@@ -110,16 +113,16 @@ enum BackgroundReplyNotificationPolicy {
     }
 }
 
-enum ReplyActivityDismissalDecision: Equatable {
+public enum ReplyActivityDismissalDecision: Equatable {
     case immediate
     case after(Date)
 }
 
-enum ReplyActivityDismissalPolicy {
+public enum ReplyActivityDismissalPolicy {
     // 终态只承担即时反馈；后台完成另有本地通知，避免系统默认策略长期堆积卡片。
-    static let terminalVisibilityDuration: TimeInterval = 30
+    public static let terminalVisibilityDuration: TimeInterval = 30
 
-    static func terminalDecision(
+    public static func terminalDecision(
         updatedAt: Date,
         now: Date = Date()
     ) -> ReplyActivityDismissalDecision {
@@ -128,10 +131,12 @@ enum ReplyActivityDismissalPolicy {
     }
 }
 
-actor ReplyActivitySnapshotStore {
+public actor ReplyActivitySnapshotStore {
     private let fileName = "chat-replies.json"
 
-    func load() -> [ETOSRunSnapshot] {
+    public init() {}
+
+    public func load() -> [ETOSRunSnapshot] {
         guard let layout = ETOSSharedStorageLayout.resolve() else { return [] }
         return (try? ETOSSharedFileStore.read(
             [ETOSRunSnapshot].self,
@@ -140,7 +145,7 @@ actor ReplyActivitySnapshotStore {
         )) ?? []
     }
 
-    func save(_ snapshots: [ETOSRunSnapshot]) {
+    public func save(_ snapshots: [ETOSRunSnapshot]) {
         guard let layout = ETOSSharedStorageLayout.resolve() else { return }
         try? layout.prepare()
         try? ETOSSharedFileStore.write(

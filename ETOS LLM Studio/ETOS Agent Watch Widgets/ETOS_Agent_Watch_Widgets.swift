@@ -3,6 +3,7 @@
 // ETOS Agent Watch Widgets
 // ============================================================================
 
+import AppIntents
 import ETOSCore
 import SwiftUI
 import WidgetKit
@@ -13,6 +14,20 @@ private struct ETOSWatchWidgetEntry: TimelineEntry {
 }
 
 private struct ETOSWatchWidgetProvider: TimelineProvider {
+    var suggestsRecentTask = false
+
+    @available(watchOS 11.0, *)
+    func relevance() async -> WidgetRelevance<Void> {
+        guard suggestsRecentTask,
+              let interval = loadSnapshot().recentRuns.first?.smartStackRelevanceInterval() else {
+            return WidgetRelevance([])
+        }
+        if #available(watchOS 26.0, *) {
+            return WidgetRelevance([WidgetRelevanceAttribute(context: .date(interval: interval, kind: .default))])
+        }
+        return WidgetRelevance([WidgetRelevanceAttribute(context: .date(from: interval.start, to: interval.end))])
+    }
+
     func placeholder(in context: Context) -> ETOSWatchWidgetEntry {
         ETOSWatchWidgetEntry(
             date: Date(),
@@ -90,7 +105,10 @@ private struct ETOSWatchRecentTaskView: View {
             )
         case .accessoryRectangular:
             VStack(alignment: .leading) {
-                Label(NSLocalizedString("最近任务", comment: "Watch recent tasks title"), systemImage: "clock.arrow.circlepath")
+                Label(
+                    run.map { statusTitle($0.status) } ?? NSLocalizedString("最近任务", comment: "Watch recent tasks title"),
+                    systemImage: run.map { icon(for: $0.status) } ?? "clock.arrow.circlepath"
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text(run?.title ?? NSLocalizedString("暂无最近任务", comment: "Empty watch recent task"))
@@ -113,6 +131,18 @@ private struct ETOSWatchRecentTaskView: View {
         case .completed: return "checkmark.circle.fill"
         case .failed: return "exclamationmark.triangle.fill"
         case .cancelled: return "xmark.circle"
+        }
+    }
+
+    private func statusTitle(_ status: ETOSTaskSnapshotStatus) -> String {
+        switch status {
+        case .queued: return NSLocalizedString("排队中", comment: "任务等待运行")
+        case .running: return NSLocalizedString("运行中", comment: "任务正在生成回复")
+        case .waitingForApproval: return NSLocalizedString("等待批准", comment: "任务等待批准")
+        case .waitingForInput: return NSLocalizedString("等待输入", comment: "任务等待用户输入")
+        case .completed: return NSLocalizedString("已完成", comment: "任务已完成")
+        case .failed: return NSLocalizedString("失败", comment: "任务运行失败")
+        case .cancelled: return NSLocalizedString("已取消", comment: "任务已取消")
         }
     }
 
@@ -171,13 +201,13 @@ struct ETOSWatchRecentTaskWidget: Widget {
     let kind = "ETOSWatchRecentTaskWidget"
 
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: ETOSWatchWidgetProvider()) { entry in
+        StaticConfiguration(kind: kind, provider: ETOSWatchWidgetProvider(suggestsRecentTask: true)) { entry in
             ETOSWatchRecentTaskView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
                 .widgetURL(entry.snapshot.recentRuns.first.map { ETOSSystemEntryURL.openSession($0.sessionID) })
         }
         .configurationDisplayName(NSLocalizedString("最近任务", comment: "Watch recent task widget name"))
-        .description(NSLocalizedString("查看最近 Agent 任务。", comment: "Watch recent task widget description"))
+        .description(NSLocalizedString("查看最近对话和 Agent 任务。", comment: "最近任务小组件说明"))
         .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }

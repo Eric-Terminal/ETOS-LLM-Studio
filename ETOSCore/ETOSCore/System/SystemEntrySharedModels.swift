@@ -261,6 +261,19 @@ public struct ETOSRunSnapshot: Codable, Equatable, Identifiable, Sendable {
     public let updatedAt: Date
     public let requiresApp: Bool
 
+    public var isTerminal: Bool {
+        status == .completed || status == .failed || status == .cancelled
+    }
+
+    /// 生成状态失去更新后有明确失效时间，避免异常退出留下永久推荐卡片。
+    public func smartStackRelevanceInterval(now: Date = Date()) -> DateInterval? {
+        let end = updatedAt.addingTimeInterval(
+            isTerminal ? ReplyActivityDismissalPolicy.terminalVisibilityDuration : 8 * 60 * 60
+        )
+        guard end > now else { return nil }
+        return DateInterval(start: min(startedAt, updatedAt), end: end)
+    }
+
     public init(
         id: UUID,
         sessionID: UUID,

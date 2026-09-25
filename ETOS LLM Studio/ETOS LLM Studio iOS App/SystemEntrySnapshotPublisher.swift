@@ -62,7 +62,7 @@ final class SystemEntrySnapshotPublisher {
             await self?.persistReplyRuns()
         }
         let isTerminal = event.status != .started
-        scheduleRefresh(immediately: isTerminal, protectBackgroundWork: isTerminal)
+        scheduleRefresh(immediately: true, protectBackgroundWork: isTerminal)
     }
 
     private func scheduleRefresh(

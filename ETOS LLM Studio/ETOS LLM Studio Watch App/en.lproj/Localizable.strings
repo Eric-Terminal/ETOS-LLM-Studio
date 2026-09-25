@@ -6511,6 +6511,7 @@
 "暂无最近任务" = "No recent tasks";
 "最近任务" = "Recent Tasks";
 "查看最近 Agent 任务。" = "View the latest Agent task.";
+"查看最近对话和 Agent 任务。" = "View recent chats and Agent tasks.";
 "查看每日脉冲摘要。" = "View your Daily Pulse summary.";
 "新的 Agent 任务" = "New Agent Task";
 "需要重新启动 Linux" = "Linux needs to restart";

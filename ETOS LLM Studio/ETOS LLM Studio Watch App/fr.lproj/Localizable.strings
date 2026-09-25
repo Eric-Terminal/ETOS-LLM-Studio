@@ -6588,6 +6588,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "暂无最近任务" = "Aucune tâche récente";
 "最近任务" = "Tâches récentes";
 "查看最近 Agent 任务。" = "Affichez la dernière tâche Agent.";
+"查看最近对话和 Agent 任务。" = "Consultez les discussions et les tâches Agent récentes.";
 "查看每日脉冲摘要。" = "Affichez le résumé Daily Pulse.";
 "新的 Agent 任务" = "Nouvelle tâche Agent";
 "需要重新启动 Linux" = "Linux doit être redémarré";

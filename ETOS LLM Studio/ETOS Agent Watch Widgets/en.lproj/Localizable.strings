@@ -2,10 +2,17 @@
 // 仅打包本扩展及其共享入口代码需要的文案，保留全部支持语言。
 
 "Daily Pulse" = "Daily Pulse";
+"失败" = "Failed";
+"已取消" = "Cancelled";
+"已完成" = "Completed";
 "快速打开 ETOS Agent 任务入口。" = "Quickly open the ETOS Agent task entry.";
+"排队中" = "Queued";
 "整理本周资料" = "Organize this week’s files";
 "新建 Agent 任务" = "New Agent Task";
 "暂无最近任务" = "No recent tasks";
 "最近任务" = "Recent Tasks";
-"查看最近 Agent 任务。" = "View the latest Agent task.";
+"查看最近对话和 Agent 任务。" = "View recent chats and Agent tasks.";
 "查看每日脉冲摘要。" = "View your Daily Pulse summary.";
+"等待批准" = "Waiting for Approval";
+"等待输入" = "waiting for input";
+"运行中" = "Running";
