@@ -61,16 +61,14 @@ enum SystemFileProviderDomainManager {
                     return
                 }
                 let newDomain = domain
-                NSFileProviderManager.add(newDomain) { error in
-                    Task { @MainActor in
-                        registrationInFlight = false
-                        if let error {
-                            recordFailure("注册工作区", error: error)
-                            return
-                        }
-                        activeDomain = newDomain
-                        signalChanges()
-                    }
+                do {
+                    try await NSFileProviderManager.add(newDomain)
+                    registrationInFlight = false
+                    activeDomain = newDomain
+                    signalChanges()
+                } catch {
+                    registrationInFlight = false
+                    recordFailure("注册工作区", error: error)
                 }
             }
         }
