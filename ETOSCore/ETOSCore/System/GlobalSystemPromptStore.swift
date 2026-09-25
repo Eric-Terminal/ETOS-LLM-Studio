@@ -116,6 +116,30 @@ public enum GlobalSystemPromptStore {
         return snapshot
     }
 
+    /// 创建独立副本并保留当前选择；调用方应在后台执行，避免长提示词落盘阻塞交互。
+    public static func duplicateEntry(
+        id: UUID,
+        userDefaults: UserDefaults = .standard
+    ) -> (snapshot: GlobalSystemPromptSnapshot, entry: GlobalSystemPromptEntry?) {
+        let current = load(userDefaults: userDefaults)
+        guard let index = current.entries.firstIndex(where: { $0.id == id }) else {
+            return (current, nil)
+        }
+        let source = current.entries[index]
+        let sourceTitle = source.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = sourceTitle.isEmpty
+            ? NSLocalizedString("未命名提示词", value: "Untitled Prompt", comment: "未命名提示词副本来源名称")
+            : sourceTitle
+        let copy = GlobalSystemPromptEntry(
+            title: String(format: NSLocalizedString("global_prompt.copy_title", value: "%@ (Copy)", comment: "全局提示词副本名称"), title),
+            content: source.content
+        )
+        var entries = current.entries
+        entries.insert(copy, at: index + 1)
+        let snapshot = save(entries: entries, selectedEntryID: current.selectedEntryID, userDefaults: userDefaults)
+        return (snapshot, copy)
+    }
+
     /// 仅更新当前生效提示词到数据库与 AppConfig 镜像。
     @discardableResult
     public static func saveActiveSystemPrompt(_ prompt: String) -> GlobalSystemPromptSnapshot {

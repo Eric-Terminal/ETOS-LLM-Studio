@@ -1914,6 +1914,9 @@
 "未分类" = "Uncategorized";
 "未启用" = "Disabled";
 "未命名提示词" = "Untitled Prompt";
+"global_prompt.duplicate" = "Дублировать";
+"global_prompt.copy_title" = "%@ (копия)";
+"global_prompt.swipe_hint" = "Смахните инструкцию, чтобы изменить её или создать копию.";
 "未找到匹配的搜索结果。" = "No matching search results.";
 "未添加" = "Not Added";
 "未设置独立代理时，将自动使用全局代理配置。" = "When no independent proxy is set, the global proxy configuration is used automatically.";

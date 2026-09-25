@@ -14,6 +14,40 @@ import GRDB
 @Suite("Global System Prompt Store Tests")
 struct GlobalSystemPromptStoreTests {
 
+    @Test("创建提示词副本保留完整正文、独立身份与原选择，修改副本不影响原文", arguments: ["日常助手", "  \n "])
+    func duplicatePreservesSourceAndSelection(title: String) throws {
+        let suiteName = "com.ETOS.tests.globalPrompt.duplicate.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let source = GlobalSystemPromptEntry(
+            title: title, content: "  {{model_prompt}}\n保持换行与空白。\r\n ",
+            updatedAt: Date(timeIntervalSince1970: 1)
+        )
+        let selected = GlobalSystemPromptEntry(title: "当前使用", content: "当前生效的提示词")
+        GlobalSystemPromptStore.save(entries: [source, selected], selectedEntryID: selected.id, userDefaults: defaults)
+
+        let result = GlobalSystemPromptStore.duplicateEntry(id: source.id, userDefaults: defaults)
+        let copy = try #require(result.entry)
+        #expect(copy.id != source.id)
+        #expect(copy.content == source.content)
+        #expect(!copy.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        #expect(copy.title != source.title)
+        #expect(copy.updatedAt > source.updatedAt)
+        #expect(result.snapshot.entries == [source, copy, selected])
+        #expect(result.snapshot.selectedEntryID == selected.id)
+        #expect(result.snapshot.activeSystemPrompt == selected.content)
+        #expect(GlobalSystemPromptStore.load(userDefaults: defaults) == result.snapshot)
+
+        var edited = copy
+        edited.content = "独立修改副本"
+        let saved = GlobalSystemPromptStore.save(
+            entries: [source, edited, selected], selectedEntryID: selected.id, userDefaults: defaults
+        )
+        #expect(saved.entries.first == source)
+        #expect(saved.entries[1].content == edited.content)
+        #expect(saved.activeSystemPrompt == selected.content)
+    }
+
     @Test("legacy systemPrompt migrates into first entry")
     func testLegacyPromptMigration() {
         let suiteName = "com.ETOS.tests.globalPrompt.migrate.\(UUID().uuidString)"

@@ -232,6 +232,8 @@ public enum GuideDocumentCatalog {
 
             {{model_prompt}} 读取模型设置中填写的专属提示词，未填写时为空；只有引用才插入，不自动追加，也不递归展开其中的通用宏。每轮按实际选中的模型重新取值。全局提示词列表与当前选择入口会滚动显示过长名称。
 
+            全局提示词选择器在 iOS 与 watchOS 都可滑动一行，在“更多”旁点击“创建副本”；iOS 长按菜单也有同一操作。副本保留完整正文，使用独立 ID 和带“副本”的名称，插在原条目之后并直接打开编辑器。副本创建时已保存，关闭编辑器不会撤销创建；当前生效的提示词保持不变，需要回到列表点选副本才切换。编辑副本不会修改原条目。列表向导通过 duplicate_requires_native_action 明确此操作须在原生页面点击，不提供自动复制工具；列表刷新后会包含副本，编辑页上下文按条目 ID 隔离，旧条目的提案不能用于副本。
+
             nickname 与 user 是同一个用户称呼，来自当前绑定或默认 Persona（用户身份）的名字，未设置时回退为本地化的“用户”。char 与 assistant_name 是同一个助手称呼，来自第一个绑定角色的名字，未绑定时回退为本轮模型名称。例子：用户身份叫 Eric、角色叫“小晖”时，“你是 {{char}}，请称呼我为 {{user}}”发送为“你是 小晖，请称呼我为 Eric”。
 
             通用宏完整名称：cur_date、cur_time、cur_datetime、utc_datetime、weekday、timestamp、timezone、timezone_offset；model_id、model_name、model_prompt、provider_id、provider_name、api_format；nickname、user、char、assistant_name、chat_id、chat_name、message_count；locale、language、system_locale、app_name、app_version、app_build；platform、system_version、device_info、device_model、device_name；battery_level、battery_state、is_charging、low_power_mode、thermal_state、system_uptime；volume_level、audio_output_type、audio_output_name、audio_input_type、audio_input_name、other_audio_playing；screen_brightness、screen_width、screen_height、screen_scale；storage_free_bytes、storage_total_bytes、storage_free_gb、storage_total_gb、storage_free_percent、physical_memory_bytes、physical_memory_gb、processor_count、active_processor_count。

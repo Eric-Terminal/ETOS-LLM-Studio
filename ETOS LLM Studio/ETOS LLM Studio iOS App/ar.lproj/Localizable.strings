@@ -2161,6 +2161,9 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "未分类" = "Uncategorized";
 "未启用" = "Disabled";
 "未命名提示词" = "Untitled Prompt";
+"global_prompt.duplicate" = "إنشاء نسخة";
+"global_prompt.copy_title" = "%@ (نسخة)";
+"global_prompt.swipe_hint" = "اسحب التعليمة لتعديلها أو إنشاء نسخة منها.";
 "未找到匹配的搜索结果" = "No matching results found";
 "未找到匹配的搜索结果。" = "No matching search results.";
 "未添加" = "Not Added";

@@ -525,6 +525,7 @@ struct SettingsView: View {
             enablePeriodicTimeLandmark: $viewModel.enablePeriodicTimeLandmark,
             periodicTimeLandmarkIntervalMinutes: $viewModel.periodicTimeLandmarkIntervalMinutes,
             addGlobalSystemPromptEntry: viewModel.addGlobalSystemPromptEntry,
+            duplicateGlobalSystemPromptEntry: viewModel.duplicateGlobalSystemPromptEntry,
             selectGlobalSystemPromptEntry: viewModel.selectGlobalSystemPromptEntry,
             updateSelectedGlobalSystemPromptContent: viewModel.updateSelectedGlobalSystemPromptContent,
             updateGlobalSystemPromptEntry: viewModel.updateGlobalSystemPromptEntry,

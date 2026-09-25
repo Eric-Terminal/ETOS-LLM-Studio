@@ -127,6 +127,18 @@ extension ChatViewModel {
         isPersistingGlobalSystemPrompts = false
     }
 
+    func duplicateGlobalSystemPromptEntry(_ id: UUID) async -> GlobalSystemPromptEntry? {
+        guard !isPersistingGlobalSystemPrompts else { return nil }
+        globalSystemPromptReloadTask?.cancel()
+        isPersistingGlobalSystemPrompts = true
+        defer { isPersistingGlobalSystemPrompts = false }
+        let result = await Task.detached(priority: .userInitiated) {
+            GlobalSystemPromptStore.duplicateEntry(id: id)
+        }.value
+        applyGlobalSystemPromptSnapshot(result.snapshot)
+        return result.entry
+    }
+
     func applyGlobalSystemPromptSnapshot(_ snapshot: GlobalSystemPromptSnapshot) {
         if globalSystemPromptEntries != snapshot.entries {
             globalSystemPromptEntries = snapshot.entries

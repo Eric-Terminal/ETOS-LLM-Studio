@@ -59,6 +59,7 @@ struct ModelAdvancedSettingsView: View {
     @Binding var periodicTimeLandmarkIntervalMinutes: Int
 
     let addGlobalSystemPromptEntry: () -> Void
+    let duplicateGlobalSystemPromptEntry: (UUID) async -> GlobalSystemPromptEntry?
     let selectGlobalSystemPromptEntry: (UUID?) -> Void
     let updateSelectedGlobalSystemPromptContent: (String) -> Void
     let updateGlobalSystemPromptEntry: (UUID, String, String) -> Void
@@ -145,6 +146,7 @@ struct ModelAdvancedSettingsView: View {
                         entries: globalSystemPromptEntries,
                         selectedEntryID: selectedGlobalSystemPromptEntryID,
                         addGlobalSystemPromptEntry: addGlobalSystemPromptEntry,
+                        duplicateGlobalSystemPromptEntry: duplicateGlobalSystemPromptEntry,
                         selectGlobalSystemPromptEntry: selectGlobalSystemPromptEntry,
                         updateGlobalSystemPromptEntry: updateGlobalSystemPromptEntry,
                         deleteGlobalSystemPromptEntry: deleteGlobalSystemPromptEntry
@@ -884,12 +886,14 @@ private struct GlobalSystemPromptPickerView: View {
     let entries: [GlobalSystemPromptEntry]
     let selectedEntryID: UUID?
     let addGlobalSystemPromptEntry: () -> Void
+    let duplicateGlobalSystemPromptEntry: (UUID) async -> GlobalSystemPromptEntry?
     let selectGlobalSystemPromptEntry: (UUID?) -> Void
     let updateGlobalSystemPromptEntry: (UUID, String, String) -> Void
     let deleteGlobalSystemPromptEntry: (UUID) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var editingEntry: GlobalSystemPromptEntry?
+    @State private var duplicatingEntryID: UUID?
 
     var body: some View {
         List {
@@ -901,7 +905,7 @@ private struct GlobalSystemPromptPickerView: View {
                 }
             }
 
-            Section(NSLocalizedString("全局系统提示词", comment: "")) {
+            Section {
                 ForEach(entries) { entry in
                     Button {
                         selectGlobalSystemPromptEntry(entry.id)
@@ -924,11 +928,31 @@ private struct GlobalSystemPromptPickerView: View {
                             Label(NSLocalizedString("更多", comment: ""), systemImage: "ellipsis.circle")
                         }
                         .tint(.blue)
+                        Button {
+                            duplicatingEntryID = entry.id
+                        } label: {
+                            Label(NSLocalizedString("global_prompt.duplicate", value: "Duplicate", comment: "创建全局提示词副本"), systemImage: "doc.on.doc")
+                        }
+                        .tint(.orange)
                     }
                 }
+            } header: {
+                Text(NSLocalizedString("全局系统提示词", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("global_prompt.swipe_hint", value: "Swipe a prompt to edit it or create a copy.", comment: "全局提示词列表滑动操作提示"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
         }
         .navigationTitle(NSLocalizedString("全局提示词", comment: ""))
+        .disabled(duplicatingEntryID != nil)
+        .task(id: duplicatingEntryID) {
+            guard let id = duplicatingEntryID else { return }
+            let copy = await duplicateGlobalSystemPromptEntry(id)
+            guard !Task.isCancelled else { return }
+            duplicatingEntryID = nil
+            editingEntry = copy
+        }
         .guideSettingsPageContext(
             id: "settings-global-system-prompts",
             title: NSLocalizedString("全局提示词", comment: "全局提示词列表向导上下文标题"),
@@ -946,6 +970,11 @@ private struct GlobalSystemPromptPickerView: View {
     private var guideSettings: [GuidePageSetting] {
         var settings: [GuidePageSetting] = [
             .readOnly(
+                "duplicate_requires_native_action",
+                label: NSLocalizedString("global_prompt.duplicate", value: "Duplicate", comment: "创建全局提示词副本"),
+                value: { .bool(true) }
+            ),
+            .readOnly(
                 "entries",
                 label: NSLocalizedString("全局系统提示词列表", comment: "全局提示词向导字段"),
                 value: {
@@ -960,7 +989,7 @@ private struct GlobalSystemPromptPickerView: View {
             )
         ]
         let entryIDs = entries.map { $0.id.uuidString }
-        if !entryIDs.isEmpty {
+        if !entryIDs.isEmpty, duplicatingEntryID == nil {
             settings.append(
                 .string(
                     "selected_entry_id",
@@ -1015,7 +1044,7 @@ private struct GlobalSystemPromptEditorView: View {
             .navigationTitle(NSLocalizedString("编辑提示词", comment: ""))
         }
         .guideSettingsPageContext(
-            id: "settings-global-system-prompt-editor",
+            id: GuidePageID(rawValue: "settings-global-system-prompt-editor-\(entry.id.uuidString)"),
             title: NSLocalizedString("编辑提示词", comment: "全局提示词编辑向导上下文标题"),
             documents: [GuideDocumentReference(id: "settings-core", title: "Core Settings")],
             settings: [

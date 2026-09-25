@@ -2554,6 +2554,9 @@
 "取消搜索" = "Cancel Search";
 "搜索模型" = "Search Models";
 "未命名提示词" = "Untitled Prompt";
+"global_prompt.duplicate" = "Duplicate";
+"global_prompt.copy_title" = "%@ (Copy)";
+"global_prompt.swipe_hint" = "Swipe a prompt to edit it or create a copy.";
 "空提示词（不发送）" = "Empty prompt (not sent)";
 "分段 %d/%d" = "Segment %d/%d";
 "已暂停" = "Paused";
