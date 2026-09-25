@@ -32,7 +32,7 @@ public enum GuideRequestBodyControlKnowledge {
         return GuideDocument(
             id: "model-request-body",
             title: chinese ? "模型请求体与结构化控制" : "Model Request Body and Structured Controls",
-            keywords: ["结构化控制", "请求体", "JSON", "思考", "推理", "关闭思考", "调整思考", "思考预算", "推理强度", "隐藏思考", "联网搜索", "温度", "参数", "滑块", "reasoning", "thinking", "budget", "temperature", "response_format", "controls"],
+            keywords: ["结构化控制", "请求体", "JSON", "思考", "推理", "关闭思考", "调整思考", "思考预算", "推理强度", "隐藏思考", "联网搜索", "温度", "参数", "滑块", "彩虹", "扫光", "reasoning", "thinking", "budget", "temperature", "response_format", "controls", "rainbow", "shimmer"],
             content: chinese ? chineseDocument : englishDocument
         )
     }
@@ -53,6 +53,8 @@ public enum GuideRequestBodyControlKnowledge {
     optionGroup 的每个选项包含 id、title 和 payload。default_option_id 是默认档位，已有运行态选择优先；想“现在改成高”需提交 current_option_id，想“现在开启开关”需 current_active。current_option_id 空字符串清除当前覆盖、回到默认，并非禁用该组。default_option_id 为空且没有当前选择时普通组选项不叠加；滑块则回退到首个锚点。slider_enabled 要求至少两个选项：兼容的单个数值路径会插值，其他 JSON 组合只切换离散档位；slider_granularity 控制数值粒度，current_slider_position 为 0–1 的位置。选档位会清除旧滑块位置，两种 current 选择不要同时提交。
 
     模型页工具 propose_model_request_body_controls 的 controls 是增量列表：新增控制省略 id，更新沿用快照 ID；未提及的控制保持不变，新项追加在列表末尾。省略字段保留原值；提交 payload 会替换该字段，提交 options 会替换完整选项列表，修改或保留选项要沿用原 ID。已有隐藏认证字段省略或回传 <hidden> 时会保留；用户主动给出新秘密可以覆写，预览脱敏。remove_control_ids 必须显式列出要删除的控制。类型转换请明确删除旧控制并新增新类型，不要顺便改其他控制。用户确认后模型页保存配置及当前选择；控制详情页仍是模型编辑草稿，按该页 requires_save 说明完成保存。
+
+    “最高档彩虹效果”（rainbow_at_maximum）只在启用的滑块控制到达当前最后一档时生效。普通思考提示使用单色扫光；若发起请求时至少一个控制满足上述条件且已开启彩虹，该次请求的思考提示使用彩虹扫光。判断以滑块实际端点为准，接近最高档但未到达时仍是单色；新增或重排选项后，最高档跟随最后一项。请求中的样式不随之后切换模型或档位而改变，也不写入聊天历史。系统“减弱动态效果”开启时不播放扫光。
 
     少样本（必须先确认真实上游协议；以下参数不保证适用于所有提供商或所有同名模型）：
     1. 用户：“我想低中高切换思考强度。”已确认此服务的 OpenAI 兼容接口支持 reasoning_effort 的 low/medium/high → 可提交：
@@ -77,6 +79,8 @@ public enum GuideRequestBodyControlKnowledge {
     optionGroup options contain id, title and payload. Existing runtime choices override default_option_id. Use current_option_id or current_active to change the current selection as well. An empty current_option_id clears the override and returns to defaults, rather than disabling the group; it also clears the old slider position. Ordinary groups without a current/default option contribute nothing. Sliders with no selection use the first anchor. slider_enabled requires two options: compatible single numeric paths interpolate, while other payloads use discrete presets. slider_granularity is the numeric step, and current_slider_position is a position from 0 to 1. Do not send current_option_id and current_slider_position together.
 
     propose_model_request_body_controls accepts an incremental controls list. Omit id when creating a control; use snapshot IDs to update existing ones. Untargeted controls remain unchanged; new ones append. Omitted fields remain unchanged; supplied payload replaces that field, and options replaces the complete option list (retain stable IDs). Omitted or <hidden> existing credential values are preserved. User-supplied new credentials can be written but previews are redacted. Delete only explicit remove_control_ids. Change kind by explicitly deleting and creating. After native confirmation the model page saves controls and current choices. Individual control editors update a model draft: follow requires_save to finish saving.
+
+    Rainbow at Maximum (rainbow_at_maximum) applies only when an enabled slider control reaches its current last option. Thinking indicators normally use a monochrome sweep. A request uses a rainbow sweep if at least one enabled slider has this effect enabled and is at its actual maximum endpoint when the request starts. Being near the last option is insufficient; adding or reordering options changes which option is highest. Later model or level changes do not alter an ongoing request's appearance, and the appearance is not saved in chat history. Reduce Motion disables the sweep animation.
 
     Few-shot examples, ONLY after checking the actual upstream API. These parameters are not universal:
     1. “Let me switch reasoning low/medium/high.” The selected OpenAI-compatible service explicitly supports these reasoning_effort values:

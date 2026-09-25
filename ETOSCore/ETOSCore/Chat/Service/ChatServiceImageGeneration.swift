@@ -325,6 +325,9 @@ extension ChatService {
         logger.info(
             "构建生图请求: session=\(currentSessionID.uuidString), model=\(runnableModel.model.modelName), referenceCount=\(referenceImages.count)"
         )
+        await prepareThinkingSweepAppearance(
+            for: runnableModel, messageID: loadingMessageID, sessionID: currentSessionID
+        )
         if let configurationError = providerConfigurationValidationErrorMessage(
             for: runnableModel.provider,
             action: NSLocalizedString("发送生图请求", comment: "Send image generation request action")

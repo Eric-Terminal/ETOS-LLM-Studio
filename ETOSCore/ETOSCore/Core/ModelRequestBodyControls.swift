@@ -360,6 +360,20 @@ public struct ModelRequestBodyControlState: Codable, Hashable, Sendable {
 }
 
 public enum ModelRequestBodyControlCompiler {
+    /// 与滑块共用端点判定，连续数值接近最高档时不能因最近选项已是末档而提前变色。
+    public static func usesRainbowThinkingSweep(
+        controls: [ModelRequestBodyControl],
+        state: ModelRequestBodyControlState
+    ) -> Bool {
+        controls.contains { control in
+            guard control.isEnabled, control.isSliderEnabled, control.usesRainbowAtMaximum,
+                  let descriptor = ModelRequestBodyControlSliderDescriptor(control: control) else {
+                return false
+            }
+            return descriptor.isMaximumPosition(descriptor.position(in: state))
+        }
+    }
+
     public static func effectiveOverrideParameters(
         base: [String: JSONValue],
         controls: [ModelRequestBodyControl],

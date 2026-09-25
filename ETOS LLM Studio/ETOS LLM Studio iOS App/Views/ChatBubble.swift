@@ -340,6 +340,7 @@ struct ChatBubble: View {
         .environment(\.inlineHTMLMessageIdentity, InlineHTMLMessageIdentity(
             messageID: message.id, versionIndex: message.getCurrentVersionIndex()
         ))
+        .environment(\.thinkingSweepUsesRainbow, messageState.message.usesRainbowThinkingSweep)
         .onDisappear {
             setChatBubbleLocalPresentationBlocked(false)
         }

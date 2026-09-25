@@ -307,7 +307,7 @@ extension ChatService {
                 // 如果新消息没有附带工具调用，则沿用之前的记录，方便在最终答案中回顾工具使用详情。
                 return preservedToolCalls
             }()
-            let updatedMessage = ChatMessage(
+            var updatedMessage = ChatMessage(
                 id: loadingMessageID, // 保持ID不变
                 role: newMessage.role,
                 content: newMessage.content,
@@ -334,6 +334,7 @@ extension ChatService {
                 responseAttemptIndex: newMessage.responseAttemptIndex ?? messages[index].responseAttemptIndex,
                 selectedResponseAttemptID: newMessage.selectedResponseAttemptID ?? messages[index].selectedResponseAttemptID
             )
+            updatedMessage.usesRainbowThinkingSweep = messages[index].usesRainbowThinkingSweep
             let atomizedMessages = ChatMessageAtomicContentSupport.atomized(updatedMessage)
             var updatedMessages = messages
             updatedMessages.replaceSubrange(index...index, with: atomizedMessages)

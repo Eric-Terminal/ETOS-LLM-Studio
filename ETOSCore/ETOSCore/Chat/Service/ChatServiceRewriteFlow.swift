@@ -148,6 +148,11 @@ extension ChatService {
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
             let targetModel = self.detachedChatCompletionFallbackModel()
+            if let targetModel {
+                await self.prepareThinkingSweepAppearance(
+                    for: targetModel, messageID: loadingMessageID, sessionID: resolvedSessionID
+                )
+            }
             let sanitizedContent: String
             if let selectionTarget {
                 let replacement = try await self.generatePartialRewriteReplacement(

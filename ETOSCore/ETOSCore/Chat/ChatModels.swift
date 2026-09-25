@@ -173,6 +173,8 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var requestRetryStatus: ChatRequestRetryStatus? = nil
     /// 实际流式请求的运行期标记，不持久化，也不从“最后一条助手消息”推断。
     public var isReceivingStream: Bool = false
+    /// 当次请求的扫光样式快照，不持久化，避免历史消息继承运行时动画配置。
+    public var usesRainbowThinkingSweep: Bool = false
 
     // MARK: - 多版本内容存储
     /// 所有版本的内容数组（内部存储）

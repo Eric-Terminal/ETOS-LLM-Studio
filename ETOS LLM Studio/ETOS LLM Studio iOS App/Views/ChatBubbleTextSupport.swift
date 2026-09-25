@@ -14,10 +14,9 @@ struct ShimmeringText: View {
     let font: ETFont
     let baseColor: Color
     let highlightColor: Color
-    var duration: Double = 5
 
     var body: some View {
-        RainbowSweepForeground(baseColor: baseColor, duration: duration) {
+        ThinkingSweepForeground(baseColor: baseColor, highlightColor: highlightColor) {
             Text(text)
                 .etFont(font, sampleText: text)
         }

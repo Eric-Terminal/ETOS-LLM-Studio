@@ -125,6 +125,10 @@ extension ChatService {
             return
         }
 
+        let usesRainbowThinkingSweep = await prepareThinkingSweepAppearance(
+            for: runnableModel, messageID: loadingMessageID, sessionID: currentSessionID
+        )
+
         // 先按实际模型展开发送副本，并保护字面宏，再交给角色与脚本模板处理。
         let requestStartedAt = Date()
         let promptMacroRequest = await PromptMacroRenderer.render(
@@ -786,6 +790,10 @@ extension ChatService {
                 )
             }
         ) { attemptRequest, attemptLoadingID, attemptLogContext, retryHandler in
+            // 自动续写可能创建新占位，仍沿用这次请求的档位快照。
+            setMessageThinkingSweep(
+                usesRainbow: usesRainbowThinkingSweep, messageID: attemptLoadingID, sessionID: currentSessionID
+            )
             let fallbackRequest = self.openAIResponsesRequestUsesPreviousResponseID(attemptRequest)
                 ? responsesFullInputFallbackRequest : nil
             if effectiveStreaming {

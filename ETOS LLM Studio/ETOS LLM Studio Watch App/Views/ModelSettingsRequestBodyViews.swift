@@ -545,7 +545,7 @@ struct RequestBodyOptionDetailView: View {
                         isOn: maximumRainbowEnabled
                     )
                 } footer: {
-                    Text(NSLocalizedString("开启后，滑块到达当前最后一档时，档位文字与滑块会显示流动彩虹。", comment: ""))
+                    Text(NSLocalizedString("开启后，滑块到达当前最后一档时，档位文字与滑块会显示流动彩虹。", value: "When enabled, the highest level shows a rainbow on the label and slider. Requests started at that level also use a rainbow sweep for thinking indicators.", comment: "最高档彩虹与请求思考扫光说明"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
