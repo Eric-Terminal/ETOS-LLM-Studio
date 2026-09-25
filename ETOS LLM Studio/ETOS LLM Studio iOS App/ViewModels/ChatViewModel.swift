@@ -402,6 +402,7 @@ final class ChatViewModel: ObservableObject {
     var backgroundBlurTask: Task<Void, Never>?
     var isApplicationActive: Bool = true
     var pendingReplyNotificationContextBySessionID: [UUID: PendingBackgroundReplyNotificationContext] = [:]
+    var pendingReplyNotificationDeliveryCount = 0
     var askUserInputRequestsBySessionID: [UUID: [AppToolAskUserInputRequest]] = [:]
     var toolInputDraftRequestsBySessionID: [UUID: [AppToolInputDraftRequest]] = [:]
     var pendingToolSupplementMessagesBySessionID: [UUID: [String]] = [:]

@@ -451,6 +451,7 @@ class ChatViewModel: ObservableObject {
     var isPersistingGlobalSystemPrompts = false
     var lastAutoPlayedAssistantMessageID: UUID?
     var pendingReplyNotificationContextBySessionID: [UUID: PendingBackgroundReplyNotificationContext] = [:]
+    var pendingReplyNotificationDeliveryCount = 0
     var askUserInputRequestsBySessionID: [UUID: [AppToolAskUserInputRequest]] = [:]
     var toolInputDraftRequestsBySessionID: [UUID: [AppToolInputDraftRequest]] = [:]
     var pendingToolSupplementMessagesBySessionID: [UUID: [String]] = [:]

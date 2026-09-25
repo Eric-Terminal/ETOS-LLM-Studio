@@ -37,35 +37,37 @@ extension ChatViewModel {
         }
     }
 
-    func prepareBackgroundReplyNotificationContext(for sessionID: UUID) {
-        let messages = sessionID == currentSession?.id
-            ? allMessagesForSession
-            : Persistence.loadMessages(for: sessionID)
-        let baseline = latestAssistantReplyMarker(from: messages)
+    func prepareBackgroundReplyNotificationContext(for sessionID: UUID, messages: [ChatMessage]) {
         pendingReplyNotificationContextBySessionID[sessionID] = PendingBackgroundReplyNotificationContext(
-            baselineMarker: baseline,
+            baselineMessages: messages,
             sessionName: notificationSessionName(for: sessionID)
         )
     }
 
-    func notifyIfAssistantReplyFinishedInBackground(for sessionID: UUID) {
-        scheduleBackgroundReplyNotificationIfNeeded(for: sessionID)
+    func notifyIfAssistantReplyFinishedInBackground(for sessionID: UUID, messages: [ChatMessage]) {
+        scheduleBackgroundReplyNotificationIfNeeded(for: sessionID, messages: messages)
     }
 
-    func notifyIfAssistantReplyFinishedFromOffscreenSession(_ sessionID: UUID) {
-        scheduleBackgroundReplyNotificationIfNeeded(for: sessionID)
+    func notifyIfAssistantReplyFinishedFromOffscreenSession(_ sessionID: UUID, messages: [ChatMessage]) {
+        scheduleBackgroundReplyNotificationIfNeeded(for: sessionID, messages: messages)
     }
 
-    private func scheduleBackgroundReplyNotificationIfNeeded(for sessionID: UUID) {
+    private func scheduleBackgroundReplyNotificationIfNeeded(for sessionID: UUID, messages: [ChatMessage]) {
         enforceBackgroundReplyNotificationEnabled()
+        defer { refreshBackgroundGenerationState() }
         guard let context = pendingReplyNotificationContextBySessionID.removeValue(forKey: sessionID) else { return }
 #if canImport(UserNotifications)
         let action = BackgroundReplyNotificationPolicy.action(for: applicationVisibility)
         guard action != .suppress else { return }
+        pendingReplyNotificationDeliveryCount += 1
         let backgroundTaskLease = ApplicationBackgroundTaskLease(name: "chat.reply.notification")
         Task { @MainActor [weak self, backgroundTaskLease] in
             defer { backgroundTaskLease.end() }
             guard let self else { return }
+            defer {
+                pendingReplyNotificationDeliveryCount -= 1
+                refreshBackgroundGenerationState()
+            }
             if action == .resolveTransition {
                 try? await Task.sleep(for: .milliseconds(350))
             }
@@ -73,28 +75,24 @@ extension ChatViewModel {
                 return
             }
 
-            let messages: [ChatMessage]
-            if sessionID == currentSession?.id {
-                messages = allMessagesForSession
-            } else {
-                messages = await Task.detached(priority: .utility) {
-                    Persistence.loadMessages(for: sessionID)
-                }.value
-            }
+            let baselineMessages = context.baselineMessages
+            let (baseline, latestMarker) = await Task.detached(priority: .utility) {
+                (Self.latestAssistantReplyMarker(from: baselineMessages), Self.latestAssistantReplyMarker(from: messages))
+            }.value
             guard BackgroundReplyNotificationPolicy.action(for: applicationVisibility) == .deliver else {
                 return
             }
-            guard let latestMarker = latestAssistantReplyMarker(from: messages) else { return }
-            guard latestMarker != context.baselineMarker else { return }
+            guard let latestMarker else { return }
+            guard latestMarker != baseline else { return }
             guard latestMarker != lastNotifiedAssistantMarker else { return }
-            lastNotifiedAssistantMarker = latestMarker
 
-            _ = await AppLocalNotificationCenter.shared.postChatReplyFinishedNotification(
+            let delivered = await AppLocalNotificationCenter.shared.postChatReplyFinishedNotification(
                 sessionID: sessionID,
                 sessionName: context.sessionName,
                 snippet: notificationSnippet(for: latestMarker),
                 messageID: latestMarker.id
             )
+            if delivered { lastNotifiedAssistantMarker = latestMarker }
         }
 #endif
     }
@@ -150,7 +148,7 @@ extension ChatViewModel {
 #endif
     }
 
-    func latestAssistantReplyMarker(from messages: [ChatMessage]) -> AssistantReplyMarker? {
+    nonisolated static func latestAssistantReplyMarker(from messages: [ChatMessage]) -> AssistantReplyMarker? {
         for message in ChatResponseAttemptSupport.visibleMessages(from: messages).reversed() where message.role == .assistant {
             let normalizedText = normalizedNotificationText(message.content)
             let imageCount = message.imageFileNames?.count ?? 0
@@ -187,7 +185,7 @@ extension ChatViewModel {
         return NSLocalizedString("你收到了新的回复。", comment: "Background reply notification fallback for generic response")
     }
 
-    func normalizedNotificationText(_ text: String) -> String {
+    nonisolated static func normalizedNotificationText(_ text: String) -> String {
         let collapsed = text
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -195,11 +193,25 @@ extension ChatViewModel {
     }
 
     func truncatedText(_ text: String, maxLength: Int) -> String {
-        guard text.count > maxLength else { return text }
-        return String(text.prefix(maxLength - 1)) + "…"
+        let prefix = String(text.prefix(maxLength + 1))
+        guard prefix.count > maxLength else { return text }
+        return String(prefix.prefix(maxLength - 1)) + "…"
     }
 
 #if canImport(UIKit)
+    func refreshBackgroundGenerationState() {
+        // 按钮可提前恢复，但运行记录落盘和通知投递结束前不能释放后台执行时间。
+        let active = !runningSessionIDs.isEmpty || !pendingReplyNotificationContextBySessionID.isEmpty
+            || pendingReplyNotificationDeliveryCount > 0
+        if active {
+            beginBackgroundTaskIfNeeded()
+        } else {
+            endBackgroundTaskIfNeeded()
+        }
+        BackgroundGenerationKeepAliveManager.shared.setGenerationActive(active)
+        BackgroundGenerationAudioKeepAliveManager.shared.setGenerationActive(active)
+    }
+
     func beginBackgroundTaskIfNeeded() {
         guard activeBackgroundTaskIdentifier == .invalid else { return }
         activeBackgroundTaskIdentifier = UIApplication.shared.beginBackgroundTask(withName: "chat.reply.background") { [weak self] in

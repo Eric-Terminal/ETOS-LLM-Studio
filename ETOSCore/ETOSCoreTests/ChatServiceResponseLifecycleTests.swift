@@ -20,6 +20,47 @@ private actor ResponseCleanupGate {
 }
 
 extension ChatServiceTests {
+    @Test("删除运行中的会话发布取消事件以释放通知与后台保活")
+    func deletingRequestPublishesCancellation() throws {
+        let session = createPermanentTestSession(name: "删除运行中的会话")
+        let service = try #require(chatService)
+        service.setRequestContext(.init(
+            token: UUID(), task: nil, loadingMessageID: nil, imageGenerationContext: nil
+        ), for: session.id)
+        var statuses: [ChatService.SessionRequestStatus] = []
+        let subscription = service.sessionRequestStatusSubject.sink { event in
+            if event.sessionID == session.id { statuses.append(event.status) }
+        }
+        defer { subscription.cancel() }
+        service.cancelRequestForSessionDeletion(session.id)
+        #expect(statuses == [.cancelled])
+        #expect(!service.runningSessionIDsSubject.value.contains(session.id))
+    }
+
+    @Test("回复通知事件固定开始与完成时的消息，不受切换会话或后续快照覆盖", arguments: [false, true])
+    func replyEventsCarryTheirOwnMessageSnapshots(offscreen: Bool) throws {
+        let session = createPermanentTestSession(name: "通知消息快照")
+        let service = try #require(chatService)
+        let previous = ChatMessage(role: .assistant, content: "上一轮回复")
+        let reply = ChatMessage(role: .assistant, content: "本轮完整回复")
+        var events: [ChatService.SessionRequestStatusEvent] = []
+        let subscription = service.sessionRequestStatusSubject.sink { event in
+            if event.sessionID == session.id { events.append(event) }
+        }
+        defer { subscription.cancel() }
+
+        service.persistAndPublishMessages([previous], for: session.id)
+        service.emitSessionRequestStatus(.started, sessionID: session.id)
+        if offscreen { service.currentSessionSubject.send(nil) }
+        service.persistAndPublishMessages([previous, reply], for: session.id)
+        service.emitSessionRequestStatus(.finished, sessionID: session.id)
+        service.persistAndPublishMessages([], for: session.id)
+
+        #expect(events.count == 2)
+        #expect(events.first?.messages == [previous])
+        #expect(events.last?.messages == [previous, reply])
+    }
+
     @Test("回复成功或失败时先释放按钮，再落盘运行状态，最后通知订阅者", arguments: [true, false])
     func responseCompletionReleasesInteractionBeforePersistence(failed: Bool) async throws {
         let session = createPermanentTestSession(name: "响应收尾顺序")

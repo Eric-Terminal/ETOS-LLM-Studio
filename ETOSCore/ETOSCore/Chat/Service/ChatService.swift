@@ -114,10 +114,13 @@ public class ChatService {
     public struct SessionRequestStatusEvent: Sendable {
         public let sessionID: UUID
         public let status: SessionRequestStatus
+        /// 固定事件发生时的消息，通知不能依赖异步渲染缓存或稍后切换到的会话。
+        public let messages: [ChatMessage]
 
-        public init(sessionID: UUID, status: SessionRequestStatus) {
+        public init(sessionID: UUID, status: SessionRequestStatus, messages: [ChatMessage]) {
             self.sessionID = sessionID
             self.status = status
+            self.messages = messages
         }
     }
 
@@ -586,14 +589,21 @@ public class ChatService {
 
     /// 会话删除是同步操作，先移除并取消请求上下文，避免已删除会话继续接收异步回写。
     func cancelRequestForSessionDeletion(_ sessionID: UUID) {
-        let task = withRequestStateLock {
-            requestContextBySessionID.removeValue(forKey: sessionID)?.task
+        let context = withRequestStateLock {
+            requestContextBySessionID.removeValue(forKey: sessionID)
         }
-        task?.cancel()
+        context?.task?.cancel()
         Task {
             await LocalLinuxJobScheduler.shared.cancel(sessionID: sessionID)
         }
         setSessionRunning(sessionID, isRunning: false)
+        // 删除路径不会再经过正常请求终态；显式释放通知上下文，避免后台保活悬挂。
+        if context != nil,
+           currentSessionSubject.value?.id == sessionID || chatSessionsSubject.value.contains(where: { $0.id == sessionID }) {
+            sessionRequestStatusSubject.send(SessionRequestStatusEvent(
+                sessionID: sessionID, status: .cancelled, messages: []
+            ))
+        }
     }
 
     private func setSessionRunning(_ sessionID: UUID, isRunning: Bool) {
@@ -680,7 +690,14 @@ public class ChatService {
         let isVisibleSession = currentSessionSubject.value?.id == sessionID
             || chatSessionsSubject.value.contains(where: { $0.id == sessionID })
         if isVisibleSession {
-            sessionRequestStatusSubject.send(SessionRequestStatusEvent(sessionID: sessionID, status: status))
+            // 请求结束前运行时快照仍在内存中；此处只复制数组引用，不回读数据库或等待 UI 预处理。
+            let messages = status == .started || status == .finished
+                ? (currentSessionSubject.value?.id == sessionID
+                   ? messagesForSessionSubject.value : (runtimeMessagesSnapshot(for: sessionID) ?? []))
+                : []
+            sessionRequestStatusSubject.send(SessionRequestStatusEvent(
+                sessionID: sessionID, status: status, messages: messages
+            ))
             switch status {
             case .started:
                 requestStatusSubject.send(.started)

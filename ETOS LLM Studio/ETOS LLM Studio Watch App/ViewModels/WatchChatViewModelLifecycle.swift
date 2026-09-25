@@ -329,13 +329,7 @@ extension ChatViewModel {
                 self.runningSessionIDs = runningSessionIDs
                 refreshCurrentSessionSendingState()
                 flushPendingToolSupplementMessagesIfPossible()
-                if runningSessionIDs.isEmpty {
-                    stopExtendedSession()
-                } else {
-                    startExtendedSession()
-                }
-                WatchBackgroundGenerationKeepAliveManager.shared.setGenerationActive(!runningSessionIDs.isEmpty)
-                BackgroundGenerationAudioKeepAliveManager.shared.setGenerationActive(!runningSessionIDs.isEmpty)
+                refreshBackgroundGenerationState()
                 updateAutoReasoningPreviewState()
             }
             .store(in: &cancellables)
@@ -353,19 +347,20 @@ extension ChatViewModel {
                 guard let self else { return }
                 switch event.status {
                 case .started:
-                    prepareBackgroundReplyNotificationContext(for: event.sessionID)
+                    prepareBackgroundReplyNotificationContext(for: event.sessionID, messages: event.messages)
                 case .finished:
                     if event.sessionID == currentSession?.id {
-                        notifyIfAssistantReplyFinishedInBackground(for: event.sessionID)
+                        notifyIfAssistantReplyFinishedInBackground(for: event.sessionID, messages: event.messages)
                         autoPlayLatestAssistantMessageIfNeeded()
                     } else {
-                        notifyIfAssistantReplyFinishedFromOffscreenSession(event.sessionID)
+                        notifyIfAssistantReplyFinishedFromOffscreenSession(event.sessionID, messages: event.messages)
                     }
                 case .error, .cancelled:
                     pendingReplyNotificationContextBySessionID.removeValue(forKey: event.sessionID)
                 @unknown default:
                     pendingReplyNotificationContextBySessionID.removeValue(forKey: event.sessionID)
                 }
+                refreshBackgroundGenerationState()
             }
             .store(in: &cancellables)
 

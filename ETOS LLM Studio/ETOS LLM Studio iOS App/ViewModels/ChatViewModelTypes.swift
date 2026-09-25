@@ -39,7 +39,7 @@ extension ChatViewModel {
         )
     }
 
-    struct AssistantReplyMarker: Equatable {
+    nonisolated struct AssistantReplyMarker: Equatable, Sendable {
         let id: UUID
         let versionIndex: Int
         let normalizedContent: String
@@ -49,7 +49,7 @@ extension ChatViewModel {
     }
 
     struct PendingBackgroundReplyNotificationContext {
-        let baselineMarker: AssistantReplyMarker?
+        let baselineMessages: [ChatMessage]
         let sessionName: String?
     }
 
