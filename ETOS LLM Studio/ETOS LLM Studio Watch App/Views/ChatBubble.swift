@@ -57,6 +57,7 @@ struct ChatBubble: View {
     let isSelected: Bool
     let onToggleSelection: () -> Void
     let onOpenMore: (() -> Void)?
+    let onOpenFullContent: ((ChatMessage) -> Void)?
     let sourceConversationName: String?
     let onOpenSourceConversation: (() -> Void)?
     let onOpenConversation: ((UUID) -> Void)?
@@ -113,6 +114,7 @@ struct ChatBubble: View {
         isSelected: Bool = false,
         onToggleSelection: @escaping () -> Void = {},
         onOpenMore: (() -> Void)? = nil,
+        onOpenFullContent: ((ChatMessage) -> Void)? = nil,
         sourceConversationName: String? = nil,
         onOpenSourceConversation: (() -> Void)? = nil,
         onOpenConversation: ((UUID) -> Void)? = nil,
@@ -154,6 +156,7 @@ struct ChatBubble: View {
         self.isSelected = isSelected
         self.onToggleSelection = onToggleSelection
         self.onOpenMore = onOpenMore
+        self.onOpenFullContent = onOpenFullContent
         self.sourceConversationName = sourceConversationName
         self.onOpenSourceConversation = onOpenSourceConversation
         self.onOpenConversation = onOpenConversation

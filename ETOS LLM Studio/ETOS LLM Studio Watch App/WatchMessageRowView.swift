@@ -27,6 +27,7 @@ struct WatchMessageRowView: View {
     let isSelected: Bool
     let onToggleSelection: () -> Void
     let onOpenMore: () -> Void
+    let onOpenFullContent: (ChatMessage) -> Void
 
     private var message: ChatMessage {
         state.message
@@ -132,6 +133,7 @@ struct WatchMessageRowView: View {
             isSelected: isSelected,
             onToggleSelection: onToggleSelection,
             onOpenMore: hasActivePermission ? nil : onOpenMore,
+            onOpenFullContent: hasActivePermission ? nil : onOpenFullContent,
             sourceConversationName: message.sourceSessionID.flatMap { sourceSessionID in
                 viewModel.chatSessions.first(where: { $0.id == sourceSessionID })?.name
             },

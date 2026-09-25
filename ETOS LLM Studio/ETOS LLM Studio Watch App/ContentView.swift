@@ -32,6 +32,7 @@ struct ContentView: View {
     @State var settingsDestination: WatchSettingsNavigationDestination?
     @State var isSessionListPresented = false
     @State var messageActionsTarget: WatchMessageActionsNavigationTarget?
+    @State var fullMessageContentTarget: ChatMessage?
     @State var messageRewriteTarget: WatchMessageRewriteNavigationTarget?
     @State var isMessageSelectionMode = false
     @State var selectedMessageIDs: Set<UUID> = []

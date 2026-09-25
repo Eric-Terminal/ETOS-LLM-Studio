@@ -17,6 +17,15 @@ extension ChatView {
             .navigationDestination(item: $navigationDestination) { destination in
                 quickActionDestinationView(for: destination)
             }
+            // 根页面持有导航，避开气泡身份重建；布尔绑定也避免导航框架对长正文做哈希。
+            .navigationDestination(isPresented: Binding(
+                get: { fullMessageContentTarget != nil },
+                set: { if !$0 { fullMessageContentTarget = nil } }
+            )) {
+                if let message = fullMessageContentTarget {
+                    FullMessageContentView(content: message.content)
+                }
+            }
             .sheet(item: $editingMessage) { message in
                 NavigationStack {
                     EditMessageView(message: message) { updatedMessage in

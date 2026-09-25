@@ -132,6 +132,15 @@ extension ContentView {
         .navigationDestination(item: $messageActionsTarget) { target in
             messageActionsView(for: target.id)
         }
+        // 根页面持有导航，避开 List 行手势；布尔绑定也避免导航框架对长正文做哈希。
+        .navigationDestination(isPresented: Binding(
+            get: { fullMessageContentTarget != nil },
+            set: { if !$0 { fullMessageContentTarget = nil } }
+        )) {
+            if let message = fullMessageContentTarget {
+                FullMessageContentView(content: message.content)
+            }
+        }
         .navigationDestination(item: $selectedMessagesExportTarget) { target in
             ChatExportFormatsView(
                 session: viewModel.currentSession,
@@ -367,6 +376,7 @@ extension ContentView {
             || viewModel.activeSheet != nil
             || fullErrorContent != nil
             || messageActionsTarget != nil
+            || fullMessageContentTarget != nil
             || messageRewriteTarget != nil
             || selectedMessagesExportTarget != nil
             || isMessageSelectionMode

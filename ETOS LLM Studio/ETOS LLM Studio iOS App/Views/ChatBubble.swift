@@ -53,6 +53,7 @@ struct ChatBubble: View {
     let isSelected: Bool
     let onToggleSelection: () -> Void
     let onOpenMore: ((ChatMessage) -> Void)?
+    let onOpenFullContent: ((ChatMessage) -> Void)?
     let onDownloadImageAttachment: ((String) -> Void)?
     let onDeleteImageAttachment: ((String) -> Void)?
     let sourceConversationName: String?
@@ -111,6 +112,7 @@ struct ChatBubble: View {
         isSelected: Bool = false,
         onToggleSelection: @escaping () -> Void = {},
         onOpenMore: ((ChatMessage) -> Void)? = nil,
+        onOpenFullContent: ((ChatMessage) -> Void)? = nil,
         onDownloadImageAttachment: ((String) -> Void)? = nil,
         onDeleteImageAttachment: ((String) -> Void)? = nil,
         sourceConversationName: String? = nil,
@@ -157,6 +159,7 @@ struct ChatBubble: View {
         self.isSelected = isSelected
         self.onToggleSelection = onToggleSelection
         self.onOpenMore = onOpenMore
+        self.onOpenFullContent = onOpenFullContent
         self.onDownloadImageAttachment = onDownloadImageAttachment
         self.onDeleteImageAttachment = onDeleteImageAttachment
         self.sourceConversationName = sourceConversationName

@@ -303,6 +303,9 @@ extension ChatView {
                                     onOpenMore: { latestMessage in
                                         messageActionSheetPayload = MessageActionSheetPayload(message: latestMessage)
                                     },
+                                    onOpenFullContent: { latestMessage in
+                                        fullMessageContentTarget = latestMessage
+                                    },
                                     onDownloadImageAttachment: { fileName in
                                         Task {
                                             await downloadImagesToPhotoLibrary(fileNames: [fileName])

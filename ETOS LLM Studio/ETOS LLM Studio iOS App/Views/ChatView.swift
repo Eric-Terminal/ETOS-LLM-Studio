@@ -34,6 +34,7 @@ struct ChatView: View {
     @State var isChatVisible = false
     @StateObject var scrollCoordinator = ChatScrollCoordinator()
     @State var navigationDestination: ChatQuickAction?
+    @State var fullMessageContentTarget: ChatMessage?
     @State var selectedChatQuickActions: [ChatQuickAction] = ChatQuickActionSelection.fallback
     @State var isChatQuickActionFolderPresented = false
     @State var isTemporaryChatEnabled = false
@@ -368,6 +369,7 @@ struct ChatView: View {
 
     var chatToolPermissionAutoPresentationBlocked: Bool {
         navigationDestination != nil
+            || fullMessageContentTarget != nil
             || isChatQuickActionFolderPresented
             || editingMessage != nil
             || viewModel.messageRewritePayload != nil

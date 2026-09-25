@@ -132,6 +132,9 @@ extension ContentView {
                     },
                     onOpenMore: {
                         messageActionsTarget = WatchMessageActionsNavigationTarget(id: message.id)
+                    },
+                    onOpenFullContent: { latestMessage in
+                        fullMessageContentTarget = latestMessage
                     }
                 )
                 .onAppear {
