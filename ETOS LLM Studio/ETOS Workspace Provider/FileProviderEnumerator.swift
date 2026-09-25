@@ -9,66 +9,84 @@ import Foundation
 
 final class FileProviderEnumerator: NSObject, NSFileProviderEnumerator {
     private let identifier: NSFileProviderItemIdentifier
-    private let storage: FileProviderStorage
+    private let domainIdentifier: NSFileProviderDomainIdentifier
 
-    init(identifier: NSFileProviderItemIdentifier, storage: FileProviderStorage) {
+    init(identifier: NSFileProviderItemIdentifier, domainIdentifier: NSFileProviderDomainIdentifier) {
         self.identifier = identifier
-        self.storage = storage
+        self.domainIdentifier = domainIdentifier
     }
 
     func invalidate() {}
 
     func enumerateItems(for observer: NSFileProviderEnumerationObserver, startingAt page: NSFileProviderPage) {
-        do {
-            observer.didEnumerate(try storage.children(of: normalizedContainerIdentifier))
-            observer.finishEnumerating(upTo: nil)
-        } catch {
-            observer.finishEnumeratingWithError(error)
+        FileProviderStorage.queue.async { [self] in
+            do {
+                let storage = try FileProviderStorage()
+                observer.didEnumerate(try storage.items(in: identifier))
+                observer.finishEnumerating(upTo: nil)
+            } catch {
+                observer.finishEnumeratingWithError(error)
+            }
         }
     }
 
     func enumerateChanges(for observer: NSFileProviderChangeObserver, from anchor: NSFileProviderSyncAnchor) {
-        do {
-            let current = try storage.children(of: normalizedContainerIdentifier)
-            let previous = try loadManifest(anchor: anchor)
-            let currentIDs = Set(current.map { $0.itemIdentifier.rawValue })
-            let deleted = previous.subtracting(currentIDs).map { NSFileProviderItemIdentifier($0) }
-            if !deleted.isEmpty { observer.didDeleteItems(withIdentifiers: deleted) }
-            if !current.isEmpty { observer.didUpdate(current) }
-            let newAnchor = try saveManifest(currentIDs)
-            observer.finishEnumeratingChanges(upTo: newAnchor, moreComing: false)
-        } catch {
-            observer.finishEnumeratingWithError(error)
+        FileProviderStorage.queue.async { [self] in
+            do {
+                let storage = try FileProviderStorage()
+                let anchors = anchorStore(storage: storage)
+                let previous = try anchors.load(anchor.rawValue)
+                let items = try storage.items(in: identifier)
+                let current = snapshot(items)
+                // 先持久化本轮快照，失败时不向系统发布半套增量。
+                let newAnchor = try anchors.save(current)
+                let deleted = current.deletedIdentifiers(since: previous).map { NSFileProviderItemIdentifier($0) }
+                let updated = current.updatedIdentifiers(since: previous)
+                if !deleted.isEmpty { observer.didDeleteItems(withIdentifiers: deleted) }
+                let changedItems = items.filter { updated.contains($0.itemIdentifier.rawValue) }
+                if !changedItems.isEmpty { observer.didUpdate(changedItems) }
+                observer.finishEnumeratingChanges(upTo: NSFileProviderSyncAnchor(newAnchor), moreComing: false)
+                // 系统只保证工作集有单个消费者；普通目录可能同时被多个 App 枚举。
+                if identifier == .workingSet {
+                    try? anchors.prune(keeping: [anchor.rawValue, newAnchor])
+                }
+            } catch ETOSWorkspaceSyncAnchorStore.AnchorError.expired {
+                observer.finishEnumeratingWithError(NSFileProviderError(.syncAnchorExpired))
+            } catch {
+                observer.finishEnumeratingWithError(error)
+            }
         }
     }
 
     func currentSyncAnchor(completionHandler: @escaping (NSFileProviderSyncAnchor?) -> Void) {
-        let identifiers = (try? storage.children(of: normalizedContainerIdentifier))?.map {
-            $0.itemIdentifier.rawValue
-        } ?? []
-        completionHandler(try? saveManifest(Set(identifiers)))
+        FileProviderStorage.queue.async { [self] in
+            do {
+                let storage = try FileProviderStorage()
+                let current = snapshot(try storage.items(in: identifier))
+                completionHandler(NSFileProviderSyncAnchor(try anchorStore(storage: storage).save(current)))
+            } catch {
+                // 目录读取失败不能伪装成空快照，否则会漏报删除或覆盖系统的同步基线。
+                NSLog("无法创建 ETOS 工作区同步锚点：%@", error.localizedDescription)
+                completionHandler(nil)
+            }
+        }
     }
 
-    private var normalizedContainerIdentifier: NSFileProviderItemIdentifier {
-        if identifier == .workingSet { return .rootContainer }
-        return identifier
+    private func anchorStore(storage: FileProviderStorage) -> ETOSWorkspaceSyncAnchorStore {
+        ETOSWorkspaceSyncAnchorStore(
+            receipts: storage.layout.receipts,
+            // iOS 的默认域与显式工作区域可能共用扩展进程，不能互相回收同步锚点。
+            containerIdentifier: domainIdentifier.rawValue + "/" + identifier.rawValue,
+            fileManager: storage.fileManager
+        )
     }
 
-    private func saveManifest(_ identifiers: Set<String>) throws -> NSFileProviderSyncAnchor {
-        let token = UUID().uuidString
-        let directory = storage.layout.receipts.appendingPathComponent("FileProviderAnchors", isDirectory: true)
-        let url = directory.appendingPathComponent("\(token).json")
-        try ETOSSharedFileStore.write(Array(identifiers).sorted(), to: url, fileManager: storage.fileManager)
-        return NSFileProviderSyncAnchor(Data(token.utf8))
-    }
-
-    private func loadManifest(anchor: NSFileProviderSyncAnchor) throws -> Set<String> {
-        guard let token = String(data: anchor.rawValue, encoding: .utf8),
-              UUID(uuidString: token) != nil else { return [] }
-        let url = storage.layout.receipts
-            .appendingPathComponent("FileProviderAnchors", isDirectory: true)
-            .appendingPathComponent("\(token).json")
-        guard storage.fileManager.fileExists(atPath: url.path) else { return [] }
-        return Set(try ETOSSharedFileStore.read([String].self, from: url, maximumBytes: 2 * 1_024 * 1_024))
+    private func snapshot(_ items: [FileProviderItem]) -> ETOSWorkspaceSyncSnapshot {
+        ETOSWorkspaceSyncSnapshot(versions: Dictionary(uniqueKeysWithValues: items.map { item in
+            let version = item.itemVersion
+            // 长度前缀确保任意二进制版本的组合也不会产生歧义。
+            let prefix = Data("\(version.contentVersion.count):".utf8)
+            return (item.itemIdentifier.rawValue, prefix + version.contentVersion + version.metadataVersion)
+        }))
     }
 }

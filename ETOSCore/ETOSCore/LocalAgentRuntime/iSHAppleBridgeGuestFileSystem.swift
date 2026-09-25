@@ -175,6 +175,7 @@ public extension iSHAppleBridgeAdapter {
             }
         }
         try requireSuccess(status, operation: "写入 Linux 文件")
+        ETOSSharedWorkspaceFiles.notifyChange()
     }
 
     func editGuestFile(
@@ -205,6 +206,7 @@ public extension iSHAppleBridgeAdapter {
             }
         }
         try requireSuccess(status, operation: "编辑 Linux 文件")
+        ETOSSharedWorkspaceFiles.notifyChange()
     }
 
     /// 在 iSH guest 内以固定缓冲区复制，避免大文件进入 Swift `Data`。
@@ -229,6 +231,7 @@ public extension iSHAppleBridgeAdapter {
             }
         }
         try requireSuccess(status, operation: "复制 Linux 文件")
+        ETOSSharedWorkspaceFiles.notifyChange()
     }
 
     func removeGuestFile(
@@ -242,6 +245,7 @@ public extension iSHAppleBridgeAdapter {
             etosISHGuestFileRemove(requestID, path, noFollow ? 1 : 0, recursive ? 1 : 0)
         }
         try requireSuccess(status, operation: "删除 Linux 文件")
+        ETOSSharedWorkspaceFiles.notifyChange()
     }
 
     func renameGuestFile(
@@ -258,6 +262,7 @@ public extension iSHAppleBridgeAdapter {
             }
         }
         try requireSuccess(status, operation: "移动 Linux 文件")
+        ETOSSharedWorkspaceFiles.notifyChange()
     }
 
     func createGuestDirectory(
@@ -272,6 +277,7 @@ public extension iSHAppleBridgeAdapter {
             etosISHGuestFileMkdir(requestID, path, noFollow ? 1 : 0, mode, createParents ? 1 : 0)
         }
         try requireSuccess(status, operation: "创建 Linux 目录")
+        ETOSSharedWorkspaceFiles.notifyChange()
     }
 
     private func validateGuestFileRequest(path: String, requestID: UInt64) throws {

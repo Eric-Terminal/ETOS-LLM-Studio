@@ -140,7 +140,6 @@ final class SystemEntrySnapshotPublisher {
         }
         WidgetCenter.shared.reloadTimelines(ofKind: "ETOSRecentTasksWidget")
         WidgetCenter.shared.reloadTimelines(ofKind: "ETOSDailyPulseWidget")
-        SystemFileProviderDomainManager.signalChanges()
         guard !Task.isCancelled else { return }
         await updateLiveActivities(with: result.runs)
     }

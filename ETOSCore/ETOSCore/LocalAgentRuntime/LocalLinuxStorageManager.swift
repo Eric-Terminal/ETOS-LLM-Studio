@@ -569,6 +569,8 @@ public actor LocalLinuxStorageManager {
     }
 
     nonisolated func scheduleWorkspaceSizeRefresh(_ workspace: LocalAgentWorkspace) {
+        // Shell/PTY 即使失败也可能已经写入 Shared；同步不依赖工作区统计能否落库。
+        ETOSSharedWorkspaceFiles.notifyChange()
         guard let directory = try? hostURL(for: workspace),
               let persist = Persistence.makeLocalAgentWorkspaceSizeWriter() else { return }
         Task { [workspaceSizeRefresher] in
@@ -606,6 +608,7 @@ public actor LocalLinuxStorageManager {
             guard !relativePath.isEmpty else { continue }
             try archive.addEntry(with: relativePath, fileURL: item, compressionMethod: .deflate)
         }
+        ETOSSharedWorkspaceFiles.notifyChange()
         return archiveURL
     }
 
@@ -622,6 +625,9 @@ public actor LocalLinuxStorageManager {
     }
 
     public func deleteSystem(deleteUserData: Bool) throws {
+        defer {
+            if deleteUserData { ETOSSharedWorkspaceFiles.notifyChange() }
+        }
         if fileManager.fileExists(atPath: layout.system.path) {
             try fileManager.removeItem(at: layout.system)
         }

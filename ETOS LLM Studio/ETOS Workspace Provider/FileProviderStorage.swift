@@ -8,8 +8,21 @@ import FileProvider
 import Foundation
 
 struct FileProviderStorage {
+    // File Provider 可并发回调；磁盘请求串行放到后台，避免读到扩展自身尚未完成的移动/替换。
+    static let queue = DispatchQueue(label: "com.ericterminal.els.workspace-provider.storage", qos: .utility)
+
+    static func perform(_ operation: @escaping (Progress) -> Void) -> Progress {
+        let progress = Progress(totalUnitCount: 1)
+        queue.async {
+            defer { progress.completedUnitCount = 1 }
+            operation(progress)
+        }
+        return progress
+    }
+
     let layout: ETOSSharedStorageLayout
     let fileManager: FileManager
+    let files: ETOSSharedWorkspaceFiles
 
     init(fileManager: FileManager = .default) throws {
         guard let layout = ETOSSharedStorageLayout.resolve(fileManager: fileManager) else {
@@ -17,7 +30,8 @@ struct FileProviderStorage {
         }
         self.layout = layout
         self.fileManager = fileManager
-        try layout.prepare(fileManager: fileManager)
+        files = ETOSSharedWorkspaceFiles(layout: layout, fileManager: fileManager)
+        try files.prepare()
     }
 
     func identifier(for url: URL) throws -> NSFileProviderItemIdentifier {
@@ -81,24 +95,22 @@ struct FileProviderStorage {
         return relative
     }
 
-    func children(of identifier: NSFileProviderItemIdentifier) throws -> [FileProviderItem] {
+    func items(in identifier: NSFileProviderItemIdentifier) throws -> [FileProviderItem] {
+        if identifier == .workingSet {
+            return try files.workingSet().map { try FileProviderItem(url: $0, storage: self) }
+        }
         if identifier == .rootContainer {
             return try [layout.shared, layout.exports].map { try FileProviderItem(url: $0, storage: self) }
         }
         let directory = try url(for: identifier)
         let values = try directory.resourceValues(forKeys: [.isDirectoryKey])
-        guard values.isDirectory == true else { throw NSFileProviderError(.noSuchItem) }
-        return try fileManager.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: Array(FileProviderItem.resourceKeys),
-            options: [.skipsHiddenFiles]
-        )
-        .prefix(10_000)
-        .compactMap { url in
-            let values = try url.resourceValues(forKeys: [.isSymbolicLinkKey])
-            return values.isSymbolicLink == true ? nil : try FileProviderItem(url: url, storage: self)
+        if values.isDirectory != true {
+            // 系统也会为正在编辑的单个文档创建枚举器。
+            return [try FileProviderItem(url: directory, storage: self)]
         }
-        .sorted { $0.filename.localizedStandardCompare($1.filename) == .orderedAscending }
+        return try files.children(of: directory)
+            .map { try FileProviderItem(url: $0, storage: self) }
+            .sorted { $0.filename.localizedStandardCompare($1.filename) == .orderedAscending }
     }
 
     func validatedName(_ name: String) throws -> String {
