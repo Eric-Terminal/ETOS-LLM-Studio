@@ -611,7 +611,7 @@ private struct WatchChatTranscriptBubbleRow: View {
             enableAdvancedRenderer: configuration.enableAdvancedRenderer,
             enableExperimentalToolResultDisplay: true,
             enableMathRendering: false,
-            showsStreamingIndicators: false,
+            isCurrentResponse: false,
             mergeWithPrevious: row.mergeWithPrevious,
             mergeWithNext: row.mergeWithNext,
             messageActionBarContinuesToNext: row.messageActionBarContinuesToNext,

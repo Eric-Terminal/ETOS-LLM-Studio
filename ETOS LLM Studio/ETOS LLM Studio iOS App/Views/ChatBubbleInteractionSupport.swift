@@ -99,7 +99,7 @@ extension ChatBubble {
         } else if message.role == .assistant,
                   (message.reasoningContent ?? "").isEmpty,
                   (message.toolCalls ?? []).isEmpty {
-            if showsStreamingIndicators {
+            if shouldShimmerThinkingPlaceholder {
                 ShimmeringText(
                     text: message.requestRetryStatus?.thinkingText ?? NSLocalizedString("正在思考...", comment: ""),
                     font: .subheadline,

@@ -744,6 +744,20 @@ extension ChatBubble {
         return activeToolPermissionRequest == nil
     }
 
+    // 消息状态只通知气泡自身；不能沿用外层列表在占位插入时计算的流式标记。
+    var showsStreamingIndicators: Bool {
+        isCurrentResponse
+            && messageState.message.role == .assistant
+            && messageState.message.isReceivingStream
+    }
+
+    var shouldShimmerThinkingPlaceholder: Bool {
+        // 等待首包和非流式响应也需要扫光，但不能因此启用流式 Markdown 渲染。
+        isCurrentResponse
+            && messageState.message.role == .assistant
+            && messageState.message.responseMetrics?.responseCompletedAt == nil
+    }
+
     var shouldShimmerReasoningHeader: Bool {
         showsStreamingIndicators
             && message.role == .assistant

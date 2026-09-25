@@ -269,7 +269,8 @@ extension ChatView {
                                     enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
                                     enableExperimentalToolResultDisplay: true,
                                     enableMathRendering: viewModel.enableAdvancedRenderer,
-                                    showsStreamingIndicators: showsStreamingIndicators,
+                                    isCurrentResponse: viewModel.isSendingMessage
+                                        && viewModel.latestAssistantMessageID == state.id,
                                     mergeWithPrevious: mergeWithPrevious,
                                     mergeWithNext: mergeWithNext,
                                     messageActionBarContinuesToNext: messageActionBarContinuesToNext,

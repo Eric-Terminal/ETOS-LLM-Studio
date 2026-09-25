@@ -47,10 +47,6 @@ struct WatchMessageRowView: View {
         )
     }
 
-    private var showsStreamingIndicators: Bool {
-        viewModel.isActivelyStreaming(message)
-    }
-
     private var hasActivePermission: Bool {
         guard let request = toolPermissionCenter.activeRequest,
               request.sourceSessionID == nil || request.sourceSessionID == viewModel.currentSession?.id,
@@ -98,7 +94,8 @@ struct WatchMessageRowView: View {
             enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
             enableExperimentalToolResultDisplay: true,
             enableMathRendering: viewModel.isMathRenderingEnabled(for: message.id),
-            showsStreamingIndicators: showsStreamingIndicators,
+            isCurrentResponse: viewModel.isSendingMessage
+                && viewModel.latestAssistantMessageID == state.id,
             mergeWithPrevious: mergeWithPrevious,
             mergeWithNext: mergeWithNext,
             messageActionBarContinuesToNext: messageActionBarContinuesToNext,

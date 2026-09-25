@@ -38,7 +38,7 @@ struct ChatBubble: View {
     let enableAdvancedRenderer: Bool
     let enableExperimentalToolResultDisplay: Bool
     let enableMathRendering: Bool
-    let showsStreamingIndicators: Bool
+    let isCurrentResponse: Bool
     let mergeWithPrevious: Bool
     let mergeWithNext: Bool
     let messageActionBarContinuesToNext: Bool
@@ -95,7 +95,7 @@ struct ChatBubble: View {
         enableAdvancedRenderer: Bool = false,
         enableExperimentalToolResultDisplay: Bool = true,
         enableMathRendering: Bool = false,
-        showsStreamingIndicators: Bool,
+        isCurrentResponse: Bool,
         mergeWithPrevious: Bool,
         mergeWithNext: Bool,
         messageActionBarContinuesToNext: Bool = false,
@@ -137,7 +137,7 @@ struct ChatBubble: View {
         self.enableAdvancedRenderer = enableAdvancedRenderer
         self.enableExperimentalToolResultDisplay = enableExperimentalToolResultDisplay
         self.enableMathRendering = enableMathRendering
-        self.showsStreamingIndicators = showsStreamingIndicators
+        self.isCurrentResponse = isCurrentResponse
         self.mergeWithPrevious = mergeWithPrevious
         self.mergeWithNext = mergeWithNext
         self.messageActionBarContinuesToNext = messageActionBarContinuesToNext
@@ -617,7 +617,7 @@ struct ChatBubble: View {
                 }
 
                 if shouldShowThinkingIndicator {
-                    if showsStreamingIndicators {
+                    if shouldShimmerThinkingPlaceholder {
                         ShimmeringText(
                             text: currentThinkingText,
                             font: .caption,

@@ -405,7 +405,7 @@ private struct ChatTranscriptExportForeground: View {
                             && !row.disablesAdvancedRenderer,
                         enableExperimentalToolResultDisplay: true,
                         enableMathRendering: configuration.enableAdvancedRenderer,
-                        showsStreamingIndicators: false,
+                        isCurrentResponse: false,
                         mergeWithPrevious: row.mergeWithPrevious,
                         mergeWithNext: row.mergeWithNext,
                         messageActionBarContinuesToNext: row.messageActionBarContinuesToNext,
