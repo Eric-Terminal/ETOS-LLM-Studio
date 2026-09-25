@@ -434,7 +434,7 @@ struct GuideConversationView: View {
                     Text(mutation.label)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Text(mutation.newValue.prettyPrintedCompact())
+                    GuideMutationValueView(mutation: mutation)
                         .lineLimit(2)
                         .multilineTextAlignment(.trailing)
                 }

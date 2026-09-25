@@ -409,7 +409,7 @@ private struct WatchGuideProposalConfirmationView: View {
                 ForEach(proposal.mutations) { mutation in
                     VStack(alignment: .leading) {
                         Text(mutation.label)
-                        Text(mutation.newValue.prettyPrintedCompact())
+                        GuideMutationValueView(mutation: mutation)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(4)

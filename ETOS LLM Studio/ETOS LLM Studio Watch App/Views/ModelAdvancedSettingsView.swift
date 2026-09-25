@@ -1042,6 +1042,7 @@ private struct GlobalSystemPromptEditorView: View {
                 .buttonStyle(.borderedProminent)
             }
             .navigationTitle(NSLocalizedString("编辑提示词", comment: ""))
+            .watchGuideEntry()
         }
         .guideSettingsPageContext(
             id: GuidePageID(rawValue: "settings-global-system-prompt-editor-\(entry.id.uuidString)"),
@@ -1057,6 +1058,5 @@ private struct GlobalSystemPromptEditorView: View {
                 )
             ]
         )
-        .watchGuideEntry()
     }
 }
