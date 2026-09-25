@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio Watch App
 //
-// watchOS 不悬浮窗口；设置页进入的二级页面复用同一段可恢复对话。
+// watchOS 使用独立对话窗口，保留来源设置页并复用同一段可恢复对话。
 // ============================================================================
 
 import SwiftUI
@@ -137,11 +137,18 @@ private struct WatchGuideEntryModifier: ViewModifier {
                             Image(systemName: "questionmark.bubble")
                         }
                         .accessibilityLabel(NSLocalizedString("询问当前页面", comment: "手表当前页面向导入口"))
+                        .accessibilityIdentifier("watchGuideEntry")
                     }
                 }
             }
-            .navigationDestination(isPresented: $isPresented) {
-                WatchGuideConversationView(controller: controller)
+            // 配置页可能自带导航栈；模态窗口不依赖入口修饰符所在的栈层级。
+            // 固定上下文的生命周期覆盖整个窗口，查看确认页或编辑消息时不能提前解除。
+            .sheet(isPresented: $isPresented, onDismiss: {
+                GuideContextCoordinator.shared.unpinActivePage()
+            }) {
+                NavigationStack {
+                    WatchGuideConversationView(controller: controller)
+                }
             }
     }
 }
@@ -153,6 +160,7 @@ extension View {
 }
 
 struct WatchGuideConversationView: View {
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject var controller: GuideConversationController
     @ObservedObject private var router: GuideModelRouter
     @ObservedObject private var coordinator = GuideContextCoordinator.shared
@@ -168,6 +176,43 @@ struct WatchGuideConversationView: View {
 
     var body: some View {
         List {
+            // 输入操作始终位于列表开头，不随历史长度或可用模型数量向下移动。
+            Section(NSLocalizedString("问题", comment: "手表向导问题输入分组")) {
+                TextField(NSLocalizedString("询问这个页面…", comment: "手表向导输入框占位"), text: $input)
+                    .accessibilityIdentifier("watchGuideInput")
+                if controller.isResponding {
+                    Button(NSLocalizedString("停止生成", comment: "手表停止向导生成按钮"), role: .destructive) {
+                        controller.cancel()
+                    }
+                } else {
+                    Button(NSLocalizedString("发送", comment: "手表发送向导问题按钮")) {
+                        send()
+                    }
+                    .accessibilityIdentifier("watchGuideSend")
+                    .disabled(
+                        input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || controller.isRestoringHistory
+                            || controller.pendingProposal != nil
+                            || controller.isAwaitingToolContinuation
+                    )
+                }
+            }
+
+            Section(NSLocalizedString("回答模型", comment: "手表向导模型线路分组")) {
+                NavigationLink {
+                    WatchGuideModelRouteSelectionView(router: router, preservesSourceContext: true)
+                } label: {
+                    MarqueeTitleSubtitleSelectionRow(
+                        title: selectedModelTitle,
+                        subtitle: router.route == .userModel ? router.selectedUserModel?.provider.name : nil,
+                        isSelected: false,
+                        subtitleUIFont: .preferredFont(forTextStyle: .caption2)
+                    )
+                }
+                .accessibilityLabel(NSLocalizedString("选择向导模型", comment: "向导线路菜单辅助标签"))
+                .accessibilityIdentifier("watchGuideModelPicker")
+            }
+
             if controller.isRestoringHistory {
                 ProgressView()
             } else if controller.messages.isEmpty {
@@ -230,45 +275,17 @@ struct WatchGuideConversationView: View {
                     }
                 }
             }
-
-            Section(NSLocalizedString("回答模型", comment: "手表向导模型线路分组")) {
-                routeButton(
-                    title: NSLocalizedString("内置免费向导", comment: "内置向导线路名称"),
-                    selected: router.route == .builtIn
-                ) {
-                    router.useBuiltIn()
-                }
-                ForEach(router.availableUserModels, id: \.id) { model in
-                    routeButton(
-                        title: "\(model.model.displayName) · \(model.provider.name)",
-                        selected: router.route == .userModel && router.selectedUserModel?.id == model.id
-                    ) {
-                        router.selectUserModel(model)
-                    }
-                }
-            }
-
-            Section(NSLocalizedString("问题", comment: "手表向导问题输入分组")) {
-                TextField(NSLocalizedString("询问这个页面…", comment: "手表向导输入框占位"), text: $input)
-                if controller.isResponding {
-                    Button(NSLocalizedString("停止生成", comment: "手表停止向导生成按钮"), role: .destructive) {
-                        controller.cancel()
-                    }
-                } else {
-                    Button(NSLocalizedString("发送", comment: "手表发送向导问题按钮")) {
-                        send()
-                    }
-                    .disabled(
-                        input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            || controller.isRestoringHistory
-                            || controller.pendingProposal != nil
-                            || controller.isAwaitingToolContinuation
-                    )
-                }
-            }
         }
         .navigationTitle(NSLocalizedString("页面向导", comment: "手表向导标题"))
         .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .accessibilityLabel(NSLocalizedString("关闭", comment: "关闭手表向导窗口"))
+            }
             ToolbarItemGroup(placement: .topBarTrailing) {
                 if controller.canUndo {
                     GuideUndoButton(controller: controller)
@@ -280,9 +297,6 @@ struct WatchGuideConversationView: View {
                 }
                 .accessibilityLabel(NSLocalizedString("清空向导上下文", comment: "手表清空向导按钮"))
             }
-        }
-        .onDisappear {
-            coordinator.unpinActivePage()
         }
         .sheet(item: $editingMessage) { message in
             WatchGuideMessageEditorView(controller: controller, message: message)
@@ -331,11 +345,12 @@ struct WatchGuideConversationView: View {
         }
     }
 
-    private func routeButton(title: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: selected ? "checkmark.circle.fill" : "circle")
+    private var selectedModelTitle: String {
+        guard router.route == .userModel else {
+            return NSLocalizedString("内置免费向导", comment: "内置向导线路名称")
         }
-        .buttonStyle(.plain)
+        return router.selectedUserModel?.model.displayName
+            ?? NSLocalizedString("所选向导模型当前不可用。", comment: "向导所选模型失效提示")
     }
 
     private func send() {

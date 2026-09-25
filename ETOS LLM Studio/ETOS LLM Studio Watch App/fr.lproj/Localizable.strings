@@ -7418,3 +7418,8 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "pricing.time.help" = "Saisissez une heure au format 24 heures, par exemple 12:30 (00:00–23:59).";
 "retry.count.invalid" = "Saisissez un entier de 0 à 10. La dernière valeur valide est conservée jusque-là.";
 "retry.count.help" = "Saisissez un entier de 0 à 10. Les modifications valides sont enregistrées automatiquement.";
+
+/* 手表页面向导入口与操作教程 */
+"选择向导模型" = "Choisir le modèle du guide";
+"watch.guide.entry.footer" = "Touchez le bouton du guide en haut d’une page de réglages compatible pour poser une question dans une fenêtre distincte.";
+"watch.guide.usage.details" = "Ouvrez la page de réglages concernée et touchez la bulle avec un point d’interrogation en haut. Saisissez votre question en haut de la fenêtre du guide, puis touchez Envoyer.\n\nTouchez le modèle de réponse actuel pour en choisir un autre. Le sélecteur reprend les groupes de fournisseurs et les dossiers du sélecteur principal. Le guide gratuit intégré reste disponible en haut. Choisir un modèle vous ramène à la conversation.\n\nLe guide conserve la page de réglages d’origine comme contexte pendant le choix du modèle, la modification d’un message ou l’examen d’une proposition de changement. Fermez le guide pour revenir à cette page.";

@@ -100,6 +100,9 @@ public final class GuideContextCoordinator: ObservableObject {
             proposalBuilder: buildProposal,
             proposalExecutor: execute
         )
+        if pinnedRegistration?.token == token {
+            pinnedRegistration = registrations[index]
+        }
         refreshActivePage()
     }
 
@@ -164,10 +167,10 @@ public final class GuideContextCoordinator: ObservableObject {
     }
 
     private var currentRegistration: Registration? {
-        // 导航容器的后备上下文只在当前页没有更精确声明时接管。
-        // watchOS 进入向导二级页后，固定的来源页也应优先于设置根容器。
-        registrations.last(where: { !$0.isFallback })
-            ?? pinnedRegistration
+        // 向导窗口及其确认、模型选择子页始终使用打开窗口时的来源页。
+        // 来源页暂时消失时，仍留在导航栈里的父页不能抢走上下文。
+        pinnedRegistration
+            ?? registrations.last(where: { !$0.isFallback })
             ?? registrations.last
     }
 }

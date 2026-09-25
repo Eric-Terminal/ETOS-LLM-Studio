@@ -9,15 +9,42 @@
 import Foundation
 import Combine
 
+/// 在提供商变化时统一准备索引与分组，长模型列表不在手表渲染过程中重新整理。
+public struct GuideModelOptions {
+    public let models: [RunnableModel]
+    public let modelIDsAllowingNone: [String]
+    public let modelsByID: [String: RunnableModel]
+    public let providerGroups: [RunnableModelProviderGroup]
+    public let groupsByProviderID: [UUID: RunnableModelProviderGroup]
+
+    public init(providers: [Provider]) {
+        models = providers.flatMap { provider -> [RunnableModel] in
+            guard !LocalModelProviderBridge.isLocalProvider(provider) else { return [] }
+            return provider.models.compactMap { model in
+                guard model.isActivated,
+                      model.isConversationModel,
+                      model.isChatModel,
+                      model.supportsToolCalling else { return nil }
+                return RunnableModel(provider: provider, model: model)
+            }
+        }
+        modelIDsAllowingNone = [""] + models.map(\.id)
+        modelsByID = Dictionary(uniqueKeysWithValues: models.map { ($0.id, $0) })
+        providerGroups = RunnableModelGrouping.groups(models: models, providerOrder: providers)
+        groupsByProviderID = Dictionary(uniqueKeysWithValues: providerGroups.map { ($0.id, $0) })
+    }
+}
+
 @MainActor
 public final class GuideModelRouter: ObservableObject {
     private let appConfig: AppConfigStore
     private let chatService: ChatService
     private let builtInClient: any GuideCompletionClient
-    private var availableUserModelByID: [String: RunnableModel] = [:]
     private var cancellables = Set<AnyCancellable>()
 
-    @Published public private(set) var availableUserModels: [RunnableModel] = []
+    @Published public private(set) var modelOptions = GuideModelOptions(providers: [])
+
+    public var availableUserModels: [RunnableModel] { modelOptions.models }
 
     public init(
         appConfig: AppConfigStore? = nil,
@@ -36,11 +63,11 @@ public final class GuideModelRouter: ObservableObject {
     }
 
     public var selectedUserModel: RunnableModel? {
-        availableUserModelByID[appConfig.guidePreferredModelIdentifier]
+        modelOptions.modelsByID[appConfig.guidePreferredModelIdentifier]
     }
 
     public func selectUserModel(_ model: RunnableModel) {
-        guard availableUserModelByID[model.id] != nil else { return }
+        guard modelOptions.modelsByID[model.id] != nil else { return }
         appConfig.guidePreferredModelIdentifier = model.id
         route = .userModel
     }
@@ -63,25 +90,11 @@ public final class GuideModelRouter: ObservableObject {
         let processingQueue = DispatchQueue(label: "com.ericterminal.etos.guide-model-options", qos: .userInitiated)
         chatService.providersSubject
             .receive(on: processingQueue)
-            .map(Self.makeEligibleUserModels)
+            .map(GuideModelOptions.init(providers:))
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] models in
-                self?.availableUserModels = models
-                self?.availableUserModelByID = Dictionary(uniqueKeysWithValues: models.map { ($0.id, $0) })
+            .sink { [weak self] options in
+                self?.modelOptions = options
             }
             .store(in: &cancellables)
-    }
-
-    private nonisolated static func makeEligibleUserModels(from providers: [Provider]) -> [RunnableModel] {
-        providers.flatMap { provider -> [RunnableModel] in
-            guard !LocalModelProviderBridge.isLocalProvider(provider) else { return [] }
-            return provider.models.compactMap { model in
-                guard model.isActivated,
-                      model.isConversationModel,
-                      model.isChatModel,
-                      model.supportsToolCalling else { return nil }
-                return RunnableModel(provider: provider, model: model)
-            }
-        }
     }
 }

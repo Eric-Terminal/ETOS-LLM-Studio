@@ -7418,3 +7418,8 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "pricing.time.help" = "Introduce una hora en formato de 24 horas, como 12:30 (00:00–23:59).";
 "retry.count.invalid" = "Introduce un entero de 0 a 10. Hasta entonces se conserva el último valor válido.";
 "retry.count.help" = "Introduce un entero de 0 a 10. Los cambios válidos se guardan automáticamente.";
+
+/* 手表页面向导入口与操作教程 */
+"选择向导模型" = "Elegir modelo de la guía";
+"watch.guide.entry.footer" = "Toca el botón de la guía en la parte superior de una página de ajustes compatible para preguntar en una ventana independiente.";
+"watch.guide.usage.details" = "Abre la página de ajustes en la que necesitas ayuda y toca la burbuja con un signo de interrogación en la parte superior. Escribe tu pregunta arriba en la ventana de la guía y toca Enviar.\n\nToca el modelo de respuesta actual para elegir otro. El selector utiliza los mismos grupos de proveedores y carpetas que el selector principal. La guía gratuita integrada siempre está disponible arriba. Al elegir un modelo vuelves a la conversación.\n\nLa guía conserva la página de ajustes original como contexto mientras eliges un modelo, editas un mensaje o revisas una propuesta de cambio. Cierra la guía para volver a esa página.";

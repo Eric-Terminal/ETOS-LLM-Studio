@@ -7341,3 +7341,8 @@
 "pricing.time.help" = "Enter a 24-hour time, such as 12:30 (00:00–23:59).";
 "retry.count.invalid" = "Enter a whole number from 0 to 10. The last valid value is kept until then.";
 "retry.count.help" = "Enter a whole number from 0 to 10. Valid changes are saved automatically.";
+
+/* 手表页面向导入口与操作教程 */
+"选择向导模型" = "Choose Guide Model";
+"watch.guide.entry.footer" = "Tap the guide button at the top of a supported settings page to ask a question in a separate window.";
+"watch.guide.usage.details" = "Open a settings page and tap the question-mark bubble at the top. Enter your question at the top of the guide window, then tap Send.\n\nTap the current answer model to choose another one. The model picker follows your main model picker’s provider grouping and folders. The built-in guide remains available at the top. Choosing a model returns to the conversation.\n\nThe guide keeps the original settings page as its context while you choose a model, edit a message or review a proposed change. Close the guide to return to that page.";

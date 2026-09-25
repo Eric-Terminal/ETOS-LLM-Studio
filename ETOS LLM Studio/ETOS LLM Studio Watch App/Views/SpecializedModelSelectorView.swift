@@ -369,12 +369,40 @@ struct SpecializedModelSelectorView: View {
     }
 }
 
-private struct WatchGuideModelRouteSelectionView: View {
+struct WatchGuideModelRouteSelectionView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var router: GuideModelRouter
     @ObservedObject private var appConfig = AppConfigStore.shared
+    @State private var selectedProviderID: UUID?
+    @State private var showsAllModels = false
+
+    let preservesSourceContext: Bool
+
+    init(router: GuideModelRouter, preservesSourceContext: Bool = false) {
+        self.router = router
+        self.preservesSourceContext = preservesSourceContext
+        _selectedProviderID = State(
+            initialValue: router.selectedUserModel?.provider.id ?? router.modelOptions.providerGroups.first?.id
+        )
+    }
 
     var body: some View {
+        if preservesSourceContext {
+            // 对话内切换回答模型仍属于原来的求助过程，不替换来源页或递归打开向导。
+            modelList
+        } else {
+            modelList
+                .guideSettingsPageContext(
+                    id: "settings-guide-model-route",
+                    title: NSLocalizedString("页面向导模型", comment: "页面向导模型向导上下文标题"),
+                    documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")],
+                    settings: guideSettings
+                )
+                .watchGuideEntry()
+        }
+    }
+
+    private var modelList: some View {
         List {
             Section {
                 Button {
@@ -390,65 +418,121 @@ private struct WatchGuideModelRouteSelectionView: View {
                 }
             }
 
-            Section(NSLocalizedString("使用我的模型", comment: "用户向导模型分组")) {
-                if router.availableUserModels.isEmpty {
+            if router.availableUserModels.isEmpty {
+                Section(NSLocalizedString("使用我的模型", comment: "用户向导模型分组")) {
                     Text(NSLocalizedString("没有已启用且支持工具调用的云端聊天模型。仍可继续使用内置免费向导。", comment: "向导无用户模型说明"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
-                } else {
-                    ForEach(router.availableUserModels, id: \.id) { model in
-                        Button {
-                            router.selectUserModel(model)
-                            dismiss()
-                        } label: {
-                            MarqueeTitleSubtitleSelectionRow(
-                                title: model.model.displayName,
-                                subtitle: "\(model.provider.name) · \(model.model.modelName)",
-                                isSelected: router.route == .userModel &&
-                                    appConfig.guidePreferredModelIdentifier == model.id,
-                                subtitleUIFont: .monospacedSystemFont(
-                                    ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
-                                    weight: .regular
-                                )
-                            )
+                }
+            } else if appConfig.watchModelPickerGroupsByProvider && !showsAllModels {
+                Section(NSLocalizedString("提供商", comment: "向导模型提供商分组")) {
+                    Picker(NSLocalizedString("提供商", comment: "向导模型提供商选择"), selection: $selectedProviderID) {
+                        ForEach(router.modelOptions.providerGroups) { group in
+                            Text(group.provider.name).tag(Optional(group.id))
                         }
+                    }
+                }
+                if let selectedProviderID,
+                   let group = router.modelOptions.groupsByProviderID[selectedProviderID] {
+                    Section(NSLocalizedString("使用我的模型", comment: "用户向导模型分组")) {
+                        modelTreeRows(group.pickerLayout.rootItems)
+                    }
+                }
+                Section {
+                    Button {
+                        showsAllModels = true
+                    } label: {
+                        Label(NSLocalizedString("全部模型", comment: "显示全部向导模型"), systemImage: "square.grid.2x2")
+                    }
+                }
+            } else {
+                Section(NSLocalizedString("使用我的模型", comment: "用户向导模型分组")) {
+                    ForEach(router.availableUserModels) { model in
+                        modelButton(model)
                     }
                 }
             }
         }
         .navigationTitle(NSLocalizedString("页面向导模型", comment: "页面向导模型选择标题"))
-        .guideSettingsPageContext(
-            id: "settings-guide-model-route",
-            title: NSLocalizedString("页面向导模型", comment: "页面向导模型向导上下文标题"),
-            documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")],
-            settings: [
-                .string(
-                    "route",
-                    label: NSLocalizedString("页面向导回答线路", comment: "专用模型向导字段"),
-                    allowedValues: GuideRoute.allCases.map(\.rawValue),
-                    allowsEmpty: false,
-                    get: { router.route.rawValue },
-                    set: { route in
-                        if route == GuideRoute.builtIn.rawValue {
-                            router.useBuiltIn()
-                        } else if let selected = router.selectedUserModel {
-                            router.selectUserModel(selected)
-                        }
+        .onReceive(router.$modelOptions) { options in
+            syncSelectedProvider(options)
+        }
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        [
+            .string(
+                "route",
+                label: NSLocalizedString("页面向导回答线路", comment: "专用模型向导字段"),
+                allowedValues: GuideRoute.allCases.map(\.rawValue),
+                allowsEmpty: false,
+                get: { router.route.rawValue },
+                set: { route in
+                    if route == GuideRoute.builtIn.rawValue {
+                        router.useBuiltIn()
+                    } else if let selected = router.selectedUserModel {
+                        router.selectUserModel(selected)
                     }
-                ),
-                .string(
-                    "model_id",
-                    label: NSLocalizedString("页面向导模型", comment: "专用模型向导字段"),
-                    allowedValues: [""] + router.availableUserModels.map(\.id),
-                    get: { router.selectedUserModel?.id ?? "" },
-                    set: { modelID in
-                        guard let model = router.availableUserModels.first(where: { $0.id == modelID }) else { return }
-                        router.selectUserModel(model)
+                }
+            ),
+            .string(
+                "model_id",
+                label: NSLocalizedString("页面向导模型", comment: "专用模型向导字段"),
+                allowedValues: router.modelOptions.modelIDsAllowingNone,
+                get: { router.selectedUserModel?.id ?? "" },
+                set: { modelID in
+                    guard let model = router.modelOptions.modelsByID[modelID] else { return }
+                    router.selectUserModel(model)
+                }
+            )
+        ]
+    }
+
+    private func syncSelectedProvider(_ options: GuideModelOptions) {
+        if let selectedProviderID, options.groupsByProviderID[selectedProviderID] != nil { return }
+        selectedProviderID = options.modelsByID[appConfig.guidePreferredModelIdentifier]?.provider.id
+            ?? options.providerGroups.first?.id
+    }
+
+    private func modelTreeRows(_ items: [RunnableModelPickerRootItem]) -> AnyView {
+        AnyView(ForEach(items) { item in
+            switch item {
+            case .model(let model):
+                modelButton(model)
+            case .group(let group):
+                let isExpanded = appConfig.watchModelPickerExpandedGroupIDs.contains(group.id)
+                Button {
+                    if isExpanded {
+                        appConfig.watchModelPickerExpandedGroupIDs.remove(group.id)
+                    } else {
+                        appConfig.watchModelPickerExpandedGroupIDs.insert(group.id)
                     }
+                } label: {
+                    Label(group.name, systemImage: isExpanded ? "folder.fill" : "folder")
+                }
+                .buttonStyle(.plain)
+                if isExpanded {
+                    modelTreeRows(group.items)
+                }
+            }
+        })
+    }
+
+    private func modelButton(_ model: RunnableModel) -> some View {
+        Button {
+            router.selectUserModel(model)
+            dismiss()
+        } label: {
+            MarqueeTitleSubtitleSelectionRow(
+                title: model.model.displayName,
+                subtitle: "\(model.provider.name) · \(model.model.modelName)",
+                isSelected: router.route == .userModel && appConfig.guidePreferredModelIdentifier == model.id,
+                subtitleUIFont: .monospacedSystemFont(
+                    ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
+                    weight: .regular
                 )
-            ]
-        )
-        .watchGuideEntry()
+            )
+        }
     }
 }
 

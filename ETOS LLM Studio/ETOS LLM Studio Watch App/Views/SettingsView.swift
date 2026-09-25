@@ -85,7 +85,7 @@ struct SettingsView: View {
                 settingsContent
             }
         }
-        // 上下文与入口挂在整个设置导航容器上，进入未单独声明的子页时仍可继续使用向导。
+        // 后备上下文覆盖整个设置容器；入口由栈内页面提供，避免与子页工具栏重复。
         .guidePageContext(
             descriptor: GuidePageDescriptor(
                 id: "watch-settings-root",
@@ -108,7 +108,6 @@ struct SettingsView: View {
                 ])
             }
         )
-        .watchGuideEntry()
     }
 
     private var settingsContent: some View {
@@ -330,6 +329,7 @@ struct SettingsView: View {
             .onChange(of: viewModel.activatedModelListVersion) { _, _ in
                 ensureSelectedModel(in: viewModel.activatedConversationModels)
             }
+            .watchGuideEntry()
             .navigationDestination(item: $requestedDestination) { destination in
                 switch destination {
                 case .model:
