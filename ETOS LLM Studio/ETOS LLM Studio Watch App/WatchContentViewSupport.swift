@@ -138,7 +138,10 @@ extension ContentView {
             set: { if !$0 { fullMessageContentTarget = nil } }
         )) {
             if let message = fullMessageContentTarget {
-                FullMessageContentView(content: message.content)
+                FullMessageContentView(
+                    content: message.content,
+                    rendersMath: message.role == .assistant
+                )
             }
         }
         .navigationDestination(item: $selectedMessagesExportTarget) { target in

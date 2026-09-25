@@ -5,10 +5,29 @@
 // ============================================================================
 
 import Foundation
+import ETOSCore
 import Testing
 @testable import ETOS_LLM_Studio_Watch_App
 
 struct WatchMathHTMLDocumentTests {
+
+    @Test("后台准备的全文公式页保留长回复首尾并规范化裸 TeX")
+    func testFullMathDocumentCanBePreparedOffMainActor() async {
+        let content = "回复开头标记。" + String(repeating: "完整说明。", count: 600)
+            + #"计算结果为 \frac{1}{2}。回复结尾标记。"#
+        let html = await Task.detached {
+            WatchWebHTMLDocumentFactory.mathDocument(
+                content: ETMathContentParser.normalizedMathDelimiters(in: content),
+                prefersDarkPalette: true,
+                fontScale: 1
+            )
+        }.value
+
+        #expect(html.contains("回复开头标记。"))
+        #expect(html.contains("回复结尾标记。"))
+        #expect(html.contains(#"\\(\\frac{1}{2}\\)"#))
+        #expect(html.contains("renderProtectedMath(tokenized.expressions);"))
+    }
 
     @Test("LaTeX 括号定界符会在 Markdown 解析前受到保护")
     func testMathDelimitersAreTokenizedBeforeMarkdown() throws {

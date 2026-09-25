@@ -359,6 +359,8 @@ extension ChatViewModel {
             return
         }
 
+        // 版本或正文已变化，旧公式标记不能继续决定新消息的全文入口是否可见。
+        preparedMarkdownByMessageID.removeValue(forKey: messageID)
         let generation = (markdownPrepareGenerations[messageID] ?? 0) &+ 1
         markdownPrepareGenerations[messageID] = generation
         markdownPrepareTasks[messageID]?.cancel()

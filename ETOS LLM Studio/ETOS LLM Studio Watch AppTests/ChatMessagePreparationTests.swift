@@ -6,6 +6,49 @@ import Testing
 @MainActor
 @Suite("watchOS 消息预处理与缓存", .serialized)
 struct ChatMessagePreparationTests {
+    @Test("长助手回复保留全文并识别公式，修改为代码示例后移除公式标记")
+    func assistantMathPreviewKeepsFullContentAndTracksEdits() async throws {
+        let viewModel = ChatViewModel(chatService: ChatService(adapters: [:]))
+        viewModel.cancellables.removeAll()
+        viewModel.currentSession = nil
+        let content = String(repeating: "公式前的说明。", count: 300)
+            + #"计算结果为 \(\frac{1}{2}\)。"#
+            + String(repeating: "公式后的说明。", count: 300)
+        let message = ChatMessage(role: .assistant, content: content)
+        let state = ChatMessageRenderState(message: message)
+        viewModel.messageStateByID[message.id] = state
+
+        viewModel.scheduleVisualMessagePreparationIfNeeded(for: state, source: message)
+        await viewModel.visualMessagePrepareTasks[message.id]?.value
+        await viewModel.markdownPrepareTasks[message.id]?.value
+
+        let prepared = try #require(viewModel.preparedMarkdownByMessageID[message.id])
+        #expect(prepared.containsMathContent)
+        #expect(prepared.sourceText == content)
+        #expect(prepared.mathRenderText == content)
+        #expect(state.visualMessage.content == content)
+        #expect(!state.isUserContentTruncated)
+
+        var revised = message
+        revised.content = """
+        代码中的 LaTeX 只是示例：
+        ```latex
+        \\[x + y\\]
+        ```
+        行内代码 `\\(x + y\\)` 也保持原样。
+        """
+        state.update(with: revised)
+        viewModel.scheduleVisualMessagePreparationIfNeeded(for: state, source: revised)
+        await viewModel.visualMessagePrepareTasks[message.id]?.value
+        await viewModel.markdownPrepareTasks[message.id]?.value
+
+        let updated = try #require(viewModel.preparedMarkdownByMessageID[message.id])
+        #expect(!updated.containsMathContent)
+        #expect(updated.sourceText == revised.content)
+        #expect(state.visualMessage.content == revised.content)
+        #expect(!state.isUserContentTruncated)
+    }
+
     @Test("流式更新与历史扩窗复用已有气泡，显式刷新仍重建显示准备")
     func historyExpansionReusesPreparedRows() async throws {
         let config = AppConfigStore.shared

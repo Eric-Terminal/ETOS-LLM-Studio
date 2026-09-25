@@ -439,6 +439,22 @@ struct ChatBubble: View {
                 imageAttachmentsView(fileNames: imageFileNames, isOutgoing: false)
             }
 
+            if message.role == .assistant,
+               !showsStreamingIndicators,
+               preparedMarkdownPayload?.containsMathContent == true,
+               let onOpenFullContent,
+               !isSelectionMode {
+                Button {
+                    // 公式页沿用已应用展示正则的正文，与气泡及“更多”中的公式预览保持一致。
+                    onOpenFullContent(message)
+                } label: {
+                    Text(NSLocalizedString("查看完整内容", comment: ""))
+                        .etFont(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+
             if shouldShowMessageActionBar {
                 messageActionBarRow
             }

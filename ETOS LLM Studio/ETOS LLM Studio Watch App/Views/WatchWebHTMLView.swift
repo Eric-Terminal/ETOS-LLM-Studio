@@ -282,7 +282,7 @@ final class WatchRoleplayScriptMessageHandler: NSObject {
 }
 
 enum WatchWebHTMLDocumentFactory {
-    static func mathDocument(
+    nonisolated static func mathDocument(
         content: String,
         prefersDarkPalette: Bool,
         fontScale: Double
@@ -600,7 +600,7 @@ enum WatchWebHTMLDocumentFactory {
 """
     }
 
-    private static func jsonLiteral(_ value: String) -> String {
+    nonisolated private static func jsonLiteral(_ value: String) -> String {
         guard let data = try? JSONEncoder().encode(value),
               let encoded = String(data: data, encoding: .utf8) else {
             return "\"\""
