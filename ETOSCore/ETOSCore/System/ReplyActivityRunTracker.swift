@@ -24,10 +24,9 @@ public struct ReplyActivityRunTracker {
         newRunID: UUID = UUID()
     ) -> ETOSRunSnapshot {
         let previous = snapshotsBySessionID[sessionID]
-        // 已结束的 Activity 不能重新激活；同一会话的新回复必须使用新的运行身份。
-        let startsNewRun = status == .started && previous.map { Self.isTerminal($0.status) } == true
+        // 同一会话持续复用展示身份；系统 Activity 是否可更新由发布器单独判断。
         let snapshot = ETOSRunSnapshot(
-            id: startsNewRun ? newRunID : (previous?.id ?? newRunID),
+            id: previous?.id ?? newRunID,
             sessionID: sessionID,
             title: title,
             status: Self.snapshotStatus(status),

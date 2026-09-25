@@ -39,10 +39,10 @@ struct ReplyActivityRunTrackerTests {
         #expect(finished.updatedAt == finishedAt)
     }
 
-    @Test("同一会话完成、失败或取消后的下一轮使用新的实时活动身份", arguments: [
+    @Test("同一会话完成、失败或取消后的下一轮保持展示身份", arguments: [
         ChatService.SessionRequestStatus.finished, .error, .cancelled
     ])
-    func nextReplyDoesNotReuseEndedActivity(status: ChatService.SessionRequestStatus) {
+    func nextReplyKeepsSessionPresentationIdentity(status: ChatService.SessionRequestStatus) {
         var tracker = ReplyActivityRunTracker()
         let sessionID = UUID()
         let first = tracker.record(status: .started, sessionID: sessionID, title: "第一轮")
@@ -52,10 +52,60 @@ struct ReplyActivityRunTrackerTests {
             status: .started, sessionID: sessionID, title: "第二轮", newRunID: nextRunID
         )
 
-        #expect(next.id == nextRunID)
-        #expect(next.id != first.id)
+        #expect(next.id == first.id)
         #expect(next.status == .running)
         #expect(tracker.recentSnapshots.count == 1)
+    }
+
+    @Test("同一会话连续十轮回复只保留一个展示身份和最新状态")
+    func tenRepliesKeepOneSessionSnapshot() {
+        var tracker = ReplyActivityRunTracker()
+        let sessionID = UUID()
+        let identity = UUID()
+        for turn in 0..<10 {
+            let startedAt = Date(timeIntervalSince1970: TimeInterval(turn * 10))
+            let started = tracker.record(
+                status: .started, sessionID: sessionID, title: "连续对话", now: startedAt,
+                newRunID: turn == 0 ? identity : UUID()
+            )
+            let finished = tracker.record(
+                status: .finished, sessionID: sessionID, title: "连续对话",
+                now: startedAt.addingTimeInterval(5)
+            )
+            #expect(started.id == identity)
+            #expect(finished.id == identity)
+            #expect(finished.startedAt == startedAt)
+            #expect(tracker.recentSnapshots == [finished])
+        }
+    }
+
+    @Test("恢复已完成会话后继续回复仍复用持久化的展示身份")
+    func restoredSessionKeepsPresentationIdentity() {
+        let sessionID = UUID()
+        let restored = ETOSRunSnapshot(
+            id: UUID(), sessionID: sessionID, title: "恢复的会话", status: .completed,
+            startedAt: Date(timeIntervalSince1970: 100), updatedAt: Date(timeIntervalSince1970: 200)
+        )
+        var tracker = ReplyActivityRunTracker()
+        tracker.mergePersisted([restored], runningSessionIDs: [])
+        let next = tracker.record(status: .started, sessionID: sessionID, title: "继续回复")
+        #expect(next.id == restored.id)
+        #expect(tracker.recentSnapshots == [next])
+    }
+
+    @Test("不同会话独立展示，继续其中一个会话不会新增或覆盖另一个")
+    func separatesSessionsWithoutDuplicatingReplies() {
+        var tracker = ReplyActivityRunTracker()
+        let firstSessionID = UUID()
+        let secondSessionID = UUID()
+        let first = tracker.record(status: .started, sessionID: firstSessionID, title: "会话一")
+        let second = tracker.record(status: .started, sessionID: secondSessionID, title: "会话二")
+        tracker.record(status: .finished, sessionID: firstSessionID, title: "会话一")
+        let next = tracker.record(status: .started, sessionID: firstSessionID, title: "会话一")
+        #expect(next.id == first.id)
+        #expect(next.id != second.id)
+        #expect(tracker.snapshotsBySessionID[secondSessionID] == second)
+        #expect(tracker.recentSnapshots.count == 2)
     }
 
     @Test("生成期间重复开始事件不会创建第二个活动")

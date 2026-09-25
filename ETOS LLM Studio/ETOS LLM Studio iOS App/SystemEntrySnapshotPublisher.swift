@@ -18,6 +18,10 @@ final class SystemEntrySnapshotPublisher {
     private var refreshBackgroundLease: ApplicationBackgroundTaskLease?
     private var replyRunTracker = ReplyActivityRunTracker()
     private let replySnapshotStore = ReplyActivitySnapshotStore()
+    // 已 end 的卡片仍可能在锁屏保留，保存句柄以便下一轮开始前立即清理。
+    private var knownLiveActivities: [String: Activity<ETOSAgentActivityAttributes>] = [:]
+    private var pendingLiveActivityRuns: [ETOSRunSnapshot]?
+    private var liveActivityUpdateTask: Task<Void, Never>?
 
     private init() {}
 
@@ -130,12 +134,14 @@ final class SystemEntrySnapshotPublisher {
             }
             return (runs: runs, agentSessionIDs: agentSessionIDs)
         }.value
+        guard !Task.isCancelled else { return }
         if replyRunTracker.remove(sessionIDs: result.agentSessionIDs) {
             await persistReplyRuns()
         }
         WidgetCenter.shared.reloadTimelines(ofKind: "ETOSRecentTasksWidget")
         WidgetCenter.shared.reloadTimelines(ofKind: "ETOSDailyPulseWidget")
         SystemFileProviderDomainManager.signalChanges()
+        guard !Task.isCancelled else { return }
         await updateLiveActivities(with: result.runs)
     }
 
@@ -145,10 +151,48 @@ final class SystemEntrySnapshotPublisher {
 
     private func updateLiveActivities(with runs: [ETOSRunSnapshot]) async {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        pendingLiveActivityRuns = runs
+        if liveActivityUpdateTask == nil {
+            // ActivityKit 的异步调用会让出主线程；串行收敛到最新快照，避免两次刷新同时创建卡片。
+            liveActivityUpdateTask = Task { [weak self] in
+                guard let self else { return }
+                while let pending = pendingLiveActivityRuns {
+                    pendingLiveActivityRuns = nil
+                    await reconcileLiveActivities(with: pending)
+                }
+                liveActivityUpdateTask = nil
+            }
+        }
+        await liveActivityUpdateTask?.value
+    }
+
+    private func reconcileLiveActivities(with runs: [ETOSRunSnapshot]) async {
         let byID = Dictionary(uniqueKeysWithValues: runs.map { ($0.id, $0) })
         for activity in Activity<ETOSAgentActivityAttributes>.activities {
+            knownLiveActivities[activity.id] = activity
+        }
+        let activities = knownLiveActivities.values.sorted {
+            let lhsCanUpdate = $0.activityState == .active || $0.activityState == .stale
+            let rhsCanUpdate = $1.activityState == .active || $1.activityState == .stale
+            if lhsCanUpdate != rhsCanUpdate { return lhsCanUpdate }
+            return $0.id < $1.id
+        }
+        var retainedSessionIDs: Set<UUID> = []
+        for activity in activities {
+            if activity.activityState == .dismissed {
+                knownLiveActivities.removeValue(forKey: activity.id)
+                continue
+            }
             guard let snapshot = byID[activity.attributes.runID] else {
                 await activity.end(nil, dismissalPolicy: .immediate)
+                knownLiveActivities.removeValue(forKey: activity.id)
+                continue
+            }
+            // 只能复用仍可更新的系统活动。已结束卡片先移除，再允许为同一会话创建替代卡片。
+            let canUpdate = activity.activityState == .active || activity.activityState == .stale
+            if retainedSessionIDs.contains(snapshot.sessionID) || (!snapshot.isTerminal && !canUpdate) {
+                await activity.end(nil, dismissalPolicy: .immediate)
+                knownLiveActivities.removeValue(forKey: activity.id)
                 continue
             }
             let content = ActivityContent(
@@ -159,16 +203,19 @@ final class SystemEntrySnapshotPublisher {
                 switch ReplyActivityDismissalPolicy.terminalDecision(updatedAt: snapshot.updatedAt) {
                 case .immediate:
                     await activity.end(content, dismissalPolicy: .immediate)
+                    knownLiveActivities.removeValue(forKey: activity.id)
                 case .after(let dismissalDate):
-                    await activity.end(content, dismissalPolicy: .after(dismissalDate))
+                    if canUpdate {
+                        await activity.end(content, dismissalPolicy: .after(dismissalDate))
+                    }
                 }
             } else {
                 await activity.update(content)
             }
+            retainedSessionIDs.insert(snapshot.sessionID)
         }
 
-        let activeIDs = Set(Activity<ETOSAgentActivityAttributes>.activities.map(\.attributes.runID))
-        for snapshot in runs where !isTerminal(snapshot.status) && !activeIDs.contains(snapshot.id) {
+        for snapshot in runs where !isTerminal(snapshot.status) && !retainedSessionIDs.contains(snapshot.sessionID) {
             let attributes = ETOSAgentActivityAttributes(
                 runID: snapshot.id,
                 sessionID: snapshot.sessionID,
@@ -179,7 +226,10 @@ final class SystemEntrySnapshotPublisher {
                 state: contentState(snapshot),
                 staleDate: Date().addingTimeInterval(15 * 60)
             )
-            _ = try? Activity.request(attributes: attributes, content: content)
+            if let activity = try? Activity.request(attributes: attributes, content: content) {
+                knownLiveActivities[activity.id] = activity
+                retainedSessionIDs.insert(snapshot.sessionID)
+            }
         }
     }
 
