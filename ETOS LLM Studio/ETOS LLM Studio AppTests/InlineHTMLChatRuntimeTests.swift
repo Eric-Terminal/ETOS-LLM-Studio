@@ -51,11 +51,16 @@ struct InlineHTMLChatRuntimeTests {
         service.currentSessionSubject.send(session)
         service.messagesForSessionSubject.send([message])
         for _ in 0..<200 {
-            if model.messages.first?.roleplayHTML?.containsHTML == true { break }
+            if model.messages.first?.message.id == message.id { break }
             try await Task.sleep(for: .milliseconds(20))
         }
         let state = try #require(model.messages.first)
         #expect(state.message.id == message.id)
+        // 消息先进入列表，HTML 再由后台任务准备；等待真实任务，避免把调度延迟判成渲染失败。
+        if state.roleplayHTML?.containsHTML != true {
+            let preparation = try #require(model.visualMessagePrepareTasks[message.id], "消息应已启动 HTML 预处理")
+            await preparation.value
+        }
         #expect(state.roleplayHTML?.containsHTML == true)
         #expect(model.enableMarkdown)
         #expect(model.enableAdvancedRenderer == (mode == .advancedMarkdown))
