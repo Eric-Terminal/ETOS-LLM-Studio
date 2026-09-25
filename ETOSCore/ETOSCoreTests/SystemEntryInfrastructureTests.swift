@@ -8,14 +8,47 @@ import Testing
 
 @Suite("系统入口基础设施测试", .serialized)
 struct SystemEntryInfrastructureTests {
-    @Test("回复完成通知在前台静默且保留会话路由")
+    @Test("查看 A 时 A 的回复静默，切到 B 后 A 的回复通知可投递并展示")
     func chatReplyNotificationForegroundPolicy() {
-        let sessionID = UUID()
-        let userInfo = AppLocalNotificationCenter.chatReplyFinishedUserInfo(sessionID: sessionID)
+        let sessionA = UUID()
+        let sessionB = UUID()
+        let userInfo = AppLocalNotificationCenter.chatReplyFinishedUserInfo(sessionID: sessionA)
 
         #expect(AppLocalNotificationCenter.notificationTargetsChatSession(userInfo: userInfo))
-        #expect(!AppLocalNotificationCenter.notificationShouldPresentWhileForeground(userInfo: userInfo))
-        #expect(AppLocalNotificationCenter.notificationShouldPresentWhileForeground(userInfo: [:]))
+        #expect(userInfo["session_id"] as? String == sessionA.uuidString)
+        #expect(BackgroundReplyNotificationPolicy.action(
+            for: .active, isCurrentSession: sessionA == sessionB
+        ) == .deliver)
+        #expect(AppLocalNotificationCenter.notificationShouldPresentWhileForeground(
+            userInfo: userInfo, currentSessionID: sessionB
+        ))
+        // 同一条已提交的通知在真正展示前重读会话，用户切回 A 后不再弹出。
+        #expect(!AppLocalNotificationCenter.notificationShouldPresentWhileForeground(
+            userInfo: userInfo, currentSessionID: sessionA
+        ))
+    }
+
+    @Test("前台没有选中会话时仍展示其他会话的回复通知")
+    func chatReplyPresentsWithoutSelectedSession() {
+        let userInfo = AppLocalNotificationCenter.chatReplyFinishedUserInfo(sessionID: UUID())
+        #expect(AppLocalNotificationCenter.notificationShouldPresentWhileForeground(
+            userInfo: userInfo, currentSessionID: nil
+        ))
+    }
+
+    @Test("普通通知和上下文提醒不受回复通知的会话静默规则影响")
+    func nonReplyForegroundPolicyIsPreserved() {
+        let sessionID = UUID()
+        #expect(AppLocalNotificationCenter.notificationShouldPresentWhileForeground(
+            userInfo: [:], currentSessionID: sessionID
+        ))
+        #expect(AppLocalNotificationCenter.notificationShouldPresentWhileForeground(
+            userInfo: AppLocalNotificationCenter.contextCompressionUserInfo(sessionID: sessionID),
+            currentSessionID: sessionID
+        ))
+        #expect(!AppLocalNotificationCenter.notificationShouldPresentWhileForeground(
+            userInfo: ["suppress_when_foreground": true], currentSessionID: sessionID
+        ))
     }
 
     @Test("工作区路径拒绝越界与保留目录")

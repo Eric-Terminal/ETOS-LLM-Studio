@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import Combine
 import WatchKit
 import ETOSCore
 #if canImport(UserNotifications)
@@ -52,7 +53,7 @@ extension ChatViewModel {
         guard let context = pendingReplyNotificationContextBySessionID.removeValue(forKey: sessionID) else { return }
 #if canImport(UserNotifications)
         enforceBackgroundReplyNotificationEnabled()
-        let action = BackgroundReplyNotificationPolicy.action(for: applicationVisibility)
+        let action = replyNotificationAction(for: sessionID)
         guard action != .suppress else { return }
         pendingReplyNotificationDeliveryCount += 1
         Task { @MainActor [weak self] in
@@ -64,12 +65,12 @@ extension ChatViewModel {
             if action == .resolveTransition {
                 try? await Task.sleep(for: .milliseconds(350))
             }
-            guard BackgroundReplyNotificationPolicy.action(for: applicationVisibility) == .deliver else { return }
+            guard replyNotificationAction(for: sessionID) == .deliver else { return }
             let baselineMessages = context.baselineMessages
             let (baseline, latestMarker) = await Task.detached(priority: .utility) {
                 (Self.latestAssistantReplyMarker(from: baselineMessages), Self.latestAssistantReplyMarker(from: messages))
             }.value
-            guard BackgroundReplyNotificationPolicy.action(for: applicationVisibility) == .deliver else { return }
+            guard replyNotificationAction(for: sessionID) == .deliver else { return }
             guard let latestMarker, latestMarker != baseline, latestMarker != lastNotifiedAssistantMarker else { return }
             let delivered = await AppLocalNotificationCenter.shared.postChatReplyFinishedNotification(
                 sessionID: sessionID,
@@ -96,6 +97,14 @@ extension ChatViewModel {
         case .background: return .background
         @unknown default: return .inactive
         }
+    }
+
+    private func replyNotificationAction(for sessionID: UUID) -> BackgroundReplyNotificationPolicy.Action {
+        // 会话切换也在异步发布，使用服务的当前会话，避免拿滞后的界面状态抑制通知。
+        BackgroundReplyNotificationPolicy.action(
+            for: applicationVisibility,
+            isCurrentSession: chatService.currentSessionSubject.value?.id == sessionID
+        )
     }
 
     nonisolated static func latestAssistantReplyMarker(from messages: [ChatMessage]) -> AssistantReplyMarker? {

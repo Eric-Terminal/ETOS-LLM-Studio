@@ -597,7 +597,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2660;
-				LastUpgradeCheck = 2620;
+				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					073CA6DA2E8CFD65004516A0 = {
 						CreatedOnToolsVersion = 26.0.1;
@@ -1285,7 +1285,7 @@
 				INFOPLIST_FILE = "ETOS Agent Watch Widgets/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "ETOS Agent Watch Widgets";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = "";
+				IPHONEOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1320,7 +1320,7 @@
 				INFOPLIST_FILE = "ETOS Agent Watch Widgets/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "ETOS Agent Watch Widgets";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = "";
+				IPHONEOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

@@ -8,6 +8,7 @@
 // ============================================================================
 
 import Foundation
+import ETOSCore
 
 extension ChatViewModel {
     enum ImageGenerationFeedbackPhase {

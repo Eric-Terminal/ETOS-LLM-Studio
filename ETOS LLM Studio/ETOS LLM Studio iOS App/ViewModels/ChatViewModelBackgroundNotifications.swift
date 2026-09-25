@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import Combine
 import ETOSCore
 #if canImport(UIKit)
 import UIKit
@@ -57,7 +58,7 @@ extension ChatViewModel {
         defer { refreshBackgroundGenerationState() }
         guard let context = pendingReplyNotificationContextBySessionID.removeValue(forKey: sessionID) else { return }
 #if canImport(UserNotifications)
-        let action = BackgroundReplyNotificationPolicy.action(for: applicationVisibility)
+        let action = replyNotificationAction(for: sessionID)
         guard action != .suppress else { return }
         pendingReplyNotificationDeliveryCount += 1
         let backgroundTaskLease = ApplicationBackgroundTaskLease(name: "chat.reply.notification")
@@ -71,7 +72,7 @@ extension ChatViewModel {
             if action == .resolveTransition {
                 try? await Task.sleep(for: .milliseconds(350))
             }
-            guard BackgroundReplyNotificationPolicy.action(for: applicationVisibility) == .deliver else {
+            guard replyNotificationAction(for: sessionID) == .deliver else {
                 return
             }
 
@@ -79,7 +80,7 @@ extension ChatViewModel {
             let (baseline, latestMarker) = await Task.detached(priority: .utility) {
                 (Self.latestAssistantReplyMarker(from: baselineMessages), Self.latestAssistantReplyMarker(from: messages))
             }.value
-            guard BackgroundReplyNotificationPolicy.action(for: applicationVisibility) == .deliver else {
+            guard replyNotificationAction(for: sessionID) == .deliver else {
                 return
             }
             guard let latestMarker else { return }
@@ -146,6 +147,14 @@ extension ChatViewModel {
 #else
         return .active
 #endif
+    }
+
+    private func replyNotificationAction(for sessionID: UUID) -> BackgroundReplyNotificationPolicy.Action {
+        // 会话切换也在异步发布，使用服务的当前会话，避免拿滞后的界面状态抑制通知。
+        BackgroundReplyNotificationPolicy.action(
+            for: applicationVisibility,
+            isCurrentSession: chatService.currentSessionSubject.value?.id == sessionID
+        )
     }
 
     nonisolated static func latestAssistantReplyMarker(from messages: [ChatMessage]) -> AssistantReplyMarker? {

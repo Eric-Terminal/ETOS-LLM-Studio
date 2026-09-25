@@ -103,10 +103,10 @@ public enum BackgroundReplyNotificationPolicy {
         case deliver
     }
 
-    public static func action(for visibility: ApplicationVisibility) -> Action {
+    public static func action(for visibility: ApplicationVisibility, isCurrentSession: Bool) -> Action {
         switch visibility {
-        case .active: return .suppress
-        case .inactive: return .resolveTransition
+        case .active: return isCurrentSession ? .suppress : .deliver
+        case .inactive: return isCurrentSession ? .resolveTransition : .deliver
         case .background: return .deliver
         }
     }

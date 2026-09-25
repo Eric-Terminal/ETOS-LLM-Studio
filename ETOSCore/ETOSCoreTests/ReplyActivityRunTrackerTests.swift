@@ -151,11 +151,20 @@ struct ReplyActivityRunTrackerTests {
         #expect(tracker.snapshotsBySessionID[sessionID]?.updatedAt == restoredAt)
     }
 
-    @Test("只有确实处于后台时才投递回复完成通知")
-    func resolvesApplicationVisibilityBeforeDelivery() {
-        #expect(BackgroundReplyNotificationPolicy.action(for: .active) == .suppress)
-        #expect(BackgroundReplyNotificationPolicy.action(for: .inactive) == .resolveTransition)
-        #expect(BackgroundReplyNotificationPolicy.action(for: .background) == .deliver)
+    @Test("前台仅抑制正在查看的会话，其他会话完成仍投递通知")
+    func foregroundDeliveryDependsOnCurrentSession() {
+        #expect(BackgroundReplyNotificationPolicy.action(for: .active, isCurrentSession: true) == .suppress)
+        #expect(BackgroundReplyNotificationPolicy.action(for: .active, isCurrentSession: false) == .deliver)
+    }
+
+    @Test("后台完成均投递通知，仅当前会话的前后台切换需要等待确认", arguments: [true, false])
+    func resolvesApplicationVisibilityBeforeDelivery(isCurrentSession: Bool) {
+        #expect(BackgroundReplyNotificationPolicy.action(
+            for: .inactive, isCurrentSession: isCurrentSession
+        ) == (isCurrentSession ? .resolveTransition : .deliver))
+        #expect(BackgroundReplyNotificationPolicy.action(
+            for: .background, isCurrentSession: isCurrentSession
+        ) == .deliver)
     }
 
     @Test("回复实时活动终态只保留短暂反馈")
