@@ -813,6 +813,7 @@ extension PersistenceAuxiliaryGRDBStore {
 
     func saveLocalLinuxMount(_ mount: LocalLinuxMountRecord) throws {
         try dbPool.write { db in
+            // 已有记录的租约计数只由租约增减与运行时重置维护，配置快照不能覆盖它。
             try db.execute(
                 sql: """
                 INSERT INTO local_linux_mounts (
@@ -825,7 +826,6 @@ extension PersistenceAuxiliaryGRDBStore {
                     access = excluded.access,
                     guest_path = excluded.guest_path,
                     authorization_state = excluded.authorization_state,
-                    active_lease_count = excluded.active_lease_count,
                     is_enabled = excluded.is_enabled,
                     updated_at = excluded.updated_at
                 """,
@@ -848,6 +848,17 @@ extension PersistenceAuxiliaryGRDBStore {
     func deleteLocalLinuxMount(id: UUID) throws {
         try dbPool.write { db in
             try db.execute(sql: "DELETE FROM local_linux_mounts WHERE id = ?", arguments: [id.uuidString])
+        }
+    }
+
+    func updateLocalLinuxMountAuthorizationState(id: UUID, state: LocalLinuxMountAuthorizationState) throws {
+        try dbPool.write { db in
+            // 只更新授权状态，避免旧快照覆盖书签、权限、启停状态或并发变化的租约计数。
+            // 使用 UPDATE 也保证已被移除的记录不会因迟到的准备结果重新出现。
+            try db.execute(
+                sql: "UPDATE local_linux_mounts SET authorization_state = ?, updated_at = ? WHERE id = ?",
+                arguments: [state.rawValue, Date().timeIntervalSince1970, id.uuidString]
+            )
         }
     }
 

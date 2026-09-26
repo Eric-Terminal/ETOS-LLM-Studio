@@ -303,6 +303,18 @@ public extension Persistence {
     }
 
     @discardableResult
+    static func updateLocalLinuxMountAuthorizationState(id: UUID, state: LocalLinuxMountAuthorizationState) -> Bool {
+        do {
+            guard let store = activeAuxiliaryStore(kind: .config) else { return false }
+            try store.updateLocalLinuxMountAuthorizationState(id: id, state: state)
+            return true
+        } catch {
+            logger.error("更新 Linux 挂载授权状态失败：\(error.localizedDescription)")
+            return false
+        }
+    }
+
+    @discardableResult
     static func updateLocalLinuxMountLeaseCount(id: UUID, delta: Int64) -> Bool {
         do {
             guard let store = activeAuxiliaryStore(kind: .config) else { return false }
