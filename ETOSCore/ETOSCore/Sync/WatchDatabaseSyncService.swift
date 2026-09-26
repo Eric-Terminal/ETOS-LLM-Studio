@@ -551,6 +551,16 @@ extension Persistence {
         databaseReplacementLock.lock()
         defer { databaseReplacementLock.unlock() }
 
+        if let incomingConfig = sources[.config] {
+            let localMounts = try activeAuxiliaryStore(kind: .config)?.loadLocalLinuxMounts() ?? []
+            // 发送端按设计剥离书签。覆盖前保留接收设备自己的授权，避免一次配置往返
+            // 就把原本可用的目录全部变为“需要重新授权”；处理发生在加密转换之前。
+            try WatchSyncMountAuthorization.preserveLocalAuthorizations(
+                in: incomingConfig,
+                localMounts: localMounts
+            )
+        }
+
         let fileManager = FileManager.default
         let targets = snapshotRestoreTargetURLs()
         let shouldPreserveDatabaseEncryption = databaseEncryptionHasStoredPassphrase()
