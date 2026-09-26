@@ -63,15 +63,17 @@ public final class LocalLinuxMountLease: @unchecked Sendable {
 
 public final class LocalLinuxDirectoryAccess: @unchecked Sendable {
     public let url: URL
+    private let securityScopedURL: URL
     private let shouldStop: Bool
 
-    fileprivate init(url: URL, shouldStop: Bool) {
+    fileprivate init(url: URL, securityScopedURL: URL, shouldStop: Bool) {
         self.url = url
+        self.securityScopedURL = securityScopedURL
         self.shouldStop = shouldStop
     }
 
     deinit {
-        if shouldStop { url.stopAccessingSecurityScopedResource() }
+        if shouldStop { securityScopedURL.stopAccessingSecurityScopedResource() }
     }
 }
 
@@ -140,11 +142,7 @@ public actor LocalLinuxMountManager {
         displayName: String,
         access: LocalLinuxMountAccess
     ) async throws -> LocalLinuxMountRecord {
-        let bookmark = try url.bookmarkData(
-            options: .minimalBookmark,
-            includingResourceValuesForKeys: [.isDirectoryKey, .isUbiquitousItemKey],
-            relativeTo: nil
-        )
+        let bookmark = try LocalLinuxExternalDirectory.createBookmark(for: url)
         let id = UUID()
         let record = LocalLinuxMountRecord(
             id: id,
@@ -187,11 +185,7 @@ public actor LocalLinuxMountManager {
             throw LocalLinuxRuntimeError.invalidPath(id.uuidString)
         }
         let wasMounted = scopedResources[id] != nil
-        record.bookmark = try url.bookmarkData(
-            options: .minimalBookmark,
-            includingResourceValuesForKeys: [.isDirectoryKey, .isUbiquitousItemKey],
-            relativeTo: nil
-        )
+        record.bookmark = try LocalLinuxExternalDirectory.createBookmark(for: url)
         record.displayName = url.lastPathComponent
         record.access = access
         record.authorizationState = .available
@@ -561,6 +555,7 @@ public actor LocalLinuxMountManager {
         } catch {
             // 重装后的书签可能直接抛错，而不是返回 stale；同样不能沿用快照中的 available。
             persistAuthorizationState(record, state: .needsReauthorization)
+            LocalLinuxExternalDirectory.recordFailure("恢复目录授权", error: error)
             throw error
         }
         guard !stale else {
@@ -570,12 +565,19 @@ public actor LocalLinuxMountManager {
             )
         }
         let shouldStop = url.startAccessingSecurityScopedResource()
-        let resource = LocalLinuxDirectoryAccess(url: url, shouldStop: shouldStop)
         persistAuthorizationState(record, state: .materializing)
         do {
-            try materializeDirectory(url)
+            let directoryURL = try LocalLinuxExternalDirectory.coordinateRead(at: url) { $0 }
+            // 文件提供者可能在协调期间更新目录位置；使用新 URL，释放时仍配对原授权 URL。
+            return LocalLinuxDirectoryAccess(
+                url: directoryURL,
+                securityScopedURL: url,
+                shouldStop: shouldStop
+            )
         } catch {
+            if shouldStop { url.stopAccessingSecurityScopedResource() }
             persistAuthorizationState(record, state: .unavailable)
+            LocalLinuxExternalDirectory.recordFailure("准备目录", error: error, didStartAccess: shouldStop)
             throw LocalLinuxRuntimeError.runtimeUnavailable(
                 NSLocalizedString(
                     "外部目录尚未在本机准备好。请先在“文件”App 中打开该目录，等待 iCloud 或文件提供者下载完成后重试。",
@@ -583,42 +585,6 @@ public actor LocalLinuxMountManager {
                 )
             )
         }
-        return resource
-    }
-
-    private func materializeDirectory(_ url: URL) throws {
-        let keys: Set<URLResourceKey> = [
-            .isDirectoryKey,
-            .isUbiquitousItemKey,
-            .ubiquitousItemDownloadingStatusKey
-        ]
-        let initialValues = try url.resourceValues(forKeys: keys)
-        if initialValues.isUbiquitousItem == true,
-           initialValues.ubiquitousItemDownloadingStatus != .current {
-            try FileManager.default.startDownloadingUbiquitousItem(at: url)
-        }
-        var coordinationError: NSError?
-        var readError: Error?
-        NSFileCoordinator().coordinate(
-            readingItemAt: url,
-            options: .withoutChanges,
-            error: &coordinationError
-        ) { coordinatedURL in
-            do {
-                let values = try coordinatedURL.resourceValues(forKeys: keys)
-                guard values.isDirectory == true else {
-                    throw LocalLinuxRuntimeError.invalidPath(coordinatedURL.path)
-                }
-                if values.isUbiquitousItem == true,
-                   values.ubiquitousItemDownloadingStatus != .current {
-                    throw LocalLinuxRuntimeError.runtimeUnavailable("file-provider-materializing")
-                }
-            } catch {
-                readError = error
-            }
-        }
-        if let coordinationError { throw coordinationError }
-        if let readError { throw readError }
     }
 
     private func persistAuthorizationState(
