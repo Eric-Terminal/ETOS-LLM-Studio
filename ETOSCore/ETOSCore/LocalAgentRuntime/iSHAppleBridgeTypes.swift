@@ -215,6 +215,7 @@ struct LocalLinuxBridgeUUIDParts: Equatable, Sendable {
 }
 
 enum LocalLinuxBridgeConstants {
+    static let linuxENOENT: Int32 = -2
     static let linuxEAGAIN: Int32 = -11
     static let linuxESHUTDOWN: Int32 = -108
     static let linuxESTALE: Int32 = -116

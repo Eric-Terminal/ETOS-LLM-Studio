@@ -119,10 +119,11 @@ public extension iSHAppleBridgeAdapter {
     func removeMount(id: UUID, force: Bool) throws {
         try requireAvailability()
         let id = LocalLinuxBridgeUUIDParts(id)
-        try requireSuccess(
-            etosISHMountRemove(id.high, id.low, force ? 1 : 0),
-            operation: "移除 Linux 挂载"
-        )
+        let status = etosISHMountRemove(id.high, id.low, force ? 1 : 0)
+        // 授权失效的记录会被启动挂载跳过。内核已无此挂载时仍应允许上层
+        // 停用、删除或重新授权；只接受 ENOENT，不能吞掉 EBUSY 等真实卸载失败。
+        guard status != LocalLinuxBridgeConstants.linuxENOENT else { return }
+        try requireSuccess(status, operation: "移除 Linux 挂载")
     }
 
     func mounts() throws -> [LocalLinuxBridgeMountInfo] {
