@@ -326,7 +326,7 @@ struct ModelAdvancedSettingsView: View {
                     isOn: $appConfig.modelPickerPromptShortcutEnabled
                 )
             } footer: {
-                Text(NSLocalizedString("开启后，可从模型选择器快速编辑系统、话题与增强提示词。", comment: "Prompt shortcut setting description"))
+                Text(NSLocalizedString("开启后，可从模型选择器快速编辑系统、话题与增强提示词。", value: "When enabled, you can switch saved global prompts and edit system, topic, and enhanced prompts from the model picker.", comment: "模型选择器提示词快捷入口说明"))
             }
 
             Section {
@@ -1144,7 +1144,8 @@ private struct SettingsKeyboardDismissTapView: UIViewRepresentable {
     }
 }
 
-private struct GlobalSystemPromptPickerView: View {
+// 设置页与模型选择器共用同一列表，保持切换、编辑和创建副本的行为一致。
+struct GlobalSystemPromptPickerView: View {
     let entries: [GlobalSystemPromptEntry]
     let selectedEntryID: UUID?
     let addGlobalSystemPromptEntry: () -> Void
