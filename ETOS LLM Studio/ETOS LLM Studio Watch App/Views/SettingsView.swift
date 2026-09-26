@@ -828,19 +828,13 @@ private struct ModelSelectionView: View {
     private var quickWorldbookSection: some View {
         Section {
             NavigationLink {
-                WatchWorldbookSessionBindingView(
-                    session: Binding(
-                        get: { viewModel.currentSession },
-                        set: { viewModel.currentSession = $0 }
-                    )
-                )
+                WatchWorldbookSessionBindingView(viewModel: viewModel)
             } label: {
                 Label(
                     NSLocalizedString("世界书", comment: "模型选择器快速世界书入口"),
                     systemImage: "books.vertical"
                 )
             }
-            .disabled(viewModel.currentSession == nil)
         }
     }
 

@@ -1,117 +1,15 @@
-// ============================================================================
-// WorldbookSessionBindingView.swift
-// ============================================================================
-// ETOS LLM Studio
-//
-// 负责 iOS 当前会话与世界书的绑定设置。
-// ============================================================================
-
 import SwiftUI
-import Foundation
 import ETOSCore
 
 struct WorldbookSessionBindingView: View {
-    private enum InjectionBindingTab: String, CaseIterable, Identifiable {
-        case mode
-        case lorebooks
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .mode:
-                return NSLocalizedString("Mode Injections", comment: "Mode injection tab")
-            case .lorebooks:
-                return NSLocalizedString("Lorebooks", comment: "Lorebooks tab")
-            }
-        }
-    }
-
-    @Binding var currentSession: ChatSession?
-
-    @State private var worldbooks: [Worldbook] = []
-    @State private var selected = Set<UUID>()
-    @State private var selectedTab: InjectionBindingTab = .lorebooks
+    @ObservedObject var viewModel: ChatViewModel
 
     var body: some View {
-        List {
-            Section {
-                Picker(NSLocalizedString("注入类型", comment: "Injection type"), selection: $selectedTab) {
-                    ForEach(InjectionBindingTab.allCases) { tab in
-                        Text(tab.title).tag(tab)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .tint(.blue)
-            }
-
-            Section {
-                Text(NSLocalizedString("点击条目即可绑定或取消绑定。", comment: "Binding hint tap row"))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            if selectedTab == .mode {
-                Text(NSLocalizedString("Mode Injection 绑定功能将与助手注入页对齐，当前版本先保留 Lorebook 绑定。", comment: "Mode injection placeholder"))
-                    .foregroundStyle(.secondary)
-            } else {
-                if worldbooks.isEmpty {
-                    Text(NSLocalizedString("暂无可绑定的世界书。", comment: "No bindable worldbook"))
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(worldbooks) { book in
-                        Button {
-                            toggle(book.id)
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(book.name)
-                                    Text(String(format: NSLocalizedString("%d 条", comment: "Entry count short"), book.entries.count))
-                                        .etFont(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: selected.contains(book.id) ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(
-                                        selected.contains(book.id)
-                                        ? AnyShapeStyle(.tint)
-                                        : AnyShapeStyle(.tertiary)
-                                    )
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
+        WorldbookSessionBindingContent(session: $viewModel.currentSession) { id in
+            WorldbookDetailView(worldbookID: id)
+        } management: {
+            WorldbookSettingsView(showsSessionBinding: false)
+                .environmentObject(viewModel)
         }
-        .navigationTitle(NSLocalizedString("会话绑定世界书", comment: "Session binding title"))
-        .onAppear(perform: load)
-    }
-
-    private func load() {
-        worldbooks = ChatService.shared.loadWorldbooks().sorted { $0.updatedAt > $1.updatedAt }
-        selected = Set(currentSession?.lorebookIDs ?? [])
-    }
-
-    private func toggle(_ id: UUID) {
-        guard var session = currentSession else { return }
-        if selected.contains(id) {
-            selected.remove(id)
-        } else {
-            selected.insert(id)
-        }
-        session.lorebookIDs = selected.sorted(by: { $0.uuidString < $1.uuidString })
-        persistSessionSettings(session)
-    }
-
-    private func persistSessionSettings(_ session: ChatSession) {
-        currentSession = session
-        ChatService.shared.updateWorldbookSessionSettings(
-            sessionID: session.id,
-            worldbookIDs: session.lorebookIDs,
-            memoryContextIsolationEnabled: session.memoryContextIsolationEnabled,
-            toolContextIsolationEnabled: session.toolContextIsolationEnabled,
-            globalSystemPromptIsolationEnabled: session.globalSystemPromptIsolationEnabled
-        )
     }
 }

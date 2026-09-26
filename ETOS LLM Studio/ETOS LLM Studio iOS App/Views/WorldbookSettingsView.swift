@@ -14,6 +14,7 @@ import ETOSCore
 struct WorldbookSettingsView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @ObservedObject private var appConfig = AppConfigStore.shared
+    var showsSessionBinding = true
 
     @State private var worldbooks: [Worldbook] = []
     @State private var isImporting = false
@@ -50,15 +51,10 @@ struct WorldbookSettingsView: View {
                 Text(NSLocalizedString("开启后，可从模型选择器快速绑定当前对话使用的世界书。", comment: "Worldbook shortcut setting description"))
             }
 
-            if let session = viewModel.currentSession {
+            if showsSessionBinding, let session = viewModel.currentSession {
                 Section(NSLocalizedString("当前会话", comment: "Current session section")) {
                     NavigationLink {
-                        WorldbookSessionBindingView(
-                            currentSession: Binding(
-                                get: { viewModel.currentSession },
-                                set: { viewModel.currentSession = $0 }
-                            )
-                        )
+                        WorldbookSessionBindingView(viewModel: viewModel)
                     } label: {
                         HStack {
                             Label(NSLocalizedString("绑定世界书", comment: "Bind worldbooks"), systemImage: "link.badge.plus")
@@ -299,7 +295,7 @@ struct WorldbookSettingsView: View {
             }
         )
         .guideSettingsPageContext(
-            id: "settings-worldbooks",
+            id: GuidePageID(rawValue: showsSessionBinding ? "settings-worldbooks-\(viewModel.currentSession?.id.uuidString ?? "none")" : "settings-worldbooks-library"),
             title: NSLocalizedString("世界书", comment: "世界书向导标题"),
             documents: [GuideDocumentReference(id: "worldbooks", title: "Worldbooks")],
             settings: guideSettings
@@ -327,7 +323,7 @@ struct WorldbookSettingsView: View {
                 })
             })
         ]
-        if viewModel.currentSession != nil {
+        if showsSessionBinding, viewModel.currentSession != nil {
             settings.append(boundWorldbooksSetting)
         }
         return settings
@@ -422,6 +418,12 @@ struct WorldbookSettingsView: View {
                 }
                 .navigationTitle(title)
                 .navigationBarTitleDisplayMode(.inline)
+                .guideSettingsPageContext(
+                    id: "worldbooks-introduction",
+                    title: title,
+                    documents: [GuideDocumentReference(id: "worldbooks", title: "Worldbooks")],
+                    settings: [.readOnly("introduction", label: title, value: { .string(details) })]
+                )
             }
         }
     }

@@ -47,6 +47,7 @@ public struct WorldbookImportDiagnostics: Hashable, Sendable {
 
 public final class WorldbookStore {
     public static let shared = WorldbookStore()
+    public static let didChangeNotification = Notification.Name("com.ETOS.worldbookStore.didChange")
 
     struct StandaloneLoadResult {
         var worldbooks: [Worldbook]
@@ -131,6 +132,7 @@ public final class WorldbookStore {
             saveWorldbooksUnlocked(worldbooks)
         }
         WatchDatabaseSyncService.markDatabaseChanged(.config)
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: nil)
         NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
     }
 
@@ -140,6 +142,7 @@ public final class WorldbookStore {
             cacheByID = [:]
             cacheNormalizedContents = []
         }
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: nil)
     }
 
     public func upsertWorldbook(_ worldbook: Worldbook) {
@@ -153,6 +156,7 @@ public final class WorldbookStore {
             saveWorldbooksUnlocked(all)
         }
         WatchDatabaseSyncService.markDatabaseChanged(.config)
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: nil)
         NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
     }
 
@@ -163,6 +167,7 @@ public final class WorldbookStore {
             saveWorldbooksUnlocked(all)
         }
         WatchDatabaseSyncService.markDatabaseChanged(.config)
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: nil)
         NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
     }
 
@@ -258,6 +263,7 @@ public final class WorldbookStore {
             )
         }
         if report.importedBookID != nil {
+            NotificationCenter.default.post(name: Self.didChangeNotification, object: nil)
             NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
         }
         return report

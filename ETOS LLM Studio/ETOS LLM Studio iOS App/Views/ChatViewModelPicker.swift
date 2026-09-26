@@ -24,12 +24,7 @@ extension ChatView {
                 ChatQuickPromptEditorView(viewModel: viewModel)
             }
             .navigationDestination(isPresented: $isQuickWorldbookBindingPresented) {
-                WorldbookSessionBindingView(
-                    currentSession: Binding(
-                        get: { viewModel.currentSession },
-                        set: { viewModel.currentSession = $0 }
-                    )
-                )
+                WorldbookSessionBindingView(viewModel: viewModel)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -268,7 +263,6 @@ extension ChatView {
                     systemImage: "books.vertical"
                 )
             }
-            .disabled(viewModel.currentSession == nil)
         }
     }
 

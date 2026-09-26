@@ -338,103 +338,14 @@ struct WatchWorldbookDetailView: View {
 }
 
 struct WatchWorldbookSessionBindingView: View {
-    private enum InjectionBindingTab: String, CaseIterable, Identifiable {
-        case mode
-        case lorebooks
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .mode:
-                return NSLocalizedString("Mode Injections", comment: "Mode injection tab")
-            case .lorebooks:
-                return NSLocalizedString("Lorebooks", comment: "Lorebooks tab")
-            }
-        }
-    }
-
-    @Binding var session: ChatSession?
-    @State private var worldbooks: [Worldbook] = []
-    @State private var selected = Set<UUID>()
-    @State private var selectedTab: InjectionBindingTab = .lorebooks
+    @ObservedObject var viewModel: ChatViewModel
 
     var body: some View {
-        List {
-            Section {
-                Picker(NSLocalizedString("注入类型", comment: "Injection type"), selection: $selectedTab) {
-                    ForEach(InjectionBindingTab.allCases) { tab in
-                        Text(tab.title).tag(tab)
-                    }
-                }
-            }
-
-            Section {
-                Text(NSLocalizedString("点击条目即可绑定或取消绑定。", comment: "Binding hint tap row"))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            if selectedTab == .mode {
-                Text(NSLocalizedString("Mode Injection 绑定功能将与助手注入页对齐，当前版本先保留 Lorebook 绑定。", comment: "Mode injection placeholder"))
-                    .foregroundStyle(.secondary)
-            } else if worldbooks.isEmpty {
-                Text(NSLocalizedString("暂无可绑定世界书", comment: "No bindable worldbook on watch"))
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(worldbooks) { book in
-                    Button {
-                        toggle(book.id)
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(book.name)
-                                    .etFont(.footnote)
-                                Text(String(format: NSLocalizedString("%d 条", comment: "Entry count short"), book.entries.count))
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: selected.contains(book.id) ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(
-                                    selected.contains(book.id)
-                                    ? AnyShapeStyle(.tint)
-                                    : AnyShapeStyle(.tertiary)
-                                )
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
+        WorldbookSessionBindingContent(session: $viewModel.currentSession) { id in
+            WatchWorldbookDetailView(worldbookID: id)
+        } management: {
+            WorldbookSettingsView(viewModel: viewModel, showsSessionBinding: false)
         }
-        .navigationTitle(NSLocalizedString("会话绑定", comment: "Session binding title"))
-        .onAppear(perform: load)
-    }
-
-    private func load() {
-        worldbooks = ChatService.shared.loadWorldbooks().sorted { $0.updatedAt > $1.updatedAt }
-        selected = Set(session?.lorebookIDs ?? [])
-    }
-
-    private func toggle(_ id: UUID) {
-        guard var current = session else { return }
-        if selected.contains(id) {
-            selected.remove(id)
-        } else {
-            selected.insert(id)
-        }
-        current.lorebookIDs = selected.sorted(by: { $0.uuidString < $1.uuidString })
-        persistSessionSettings(current)
-    }
-
-    private func persistSessionSettings(_ current: ChatSession) {
-        session = current
-        ChatService.shared.updateWorldbookSessionSettings(
-            sessionID: current.id,
-            worldbookIDs: current.lorebookIDs,
-            memoryContextIsolationEnabled: current.memoryContextIsolationEnabled,
-            toolContextIsolationEnabled: current.toolContextIsolationEnabled,
-            globalSystemPromptIsolationEnabled: current.globalSystemPromptIsolationEnabled
-        )
+        .watchGuideEntry()
     }
 }

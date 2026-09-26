@@ -13,6 +13,7 @@ import ETOSCore
 struct WorldbookSettingsView: View {
     @ObservedObject var viewModel: ChatViewModel
     @ObservedObject private var appConfig = AppConfigStore.shared
+    var showsSessionBinding = true
 
     @State private var worldbooks: [Worldbook] = []
     @State private var selected = Set<UUID>()
@@ -44,15 +45,10 @@ struct WorldbookSettingsView: View {
                 Text(NSLocalizedString("开启后，可从模型选择器快速绑定当前对话使用的世界书。", comment: "Worldbook shortcut setting description"))
             }
 
-            if let session = viewModel.currentSession {
+            if showsSessionBinding, let session = viewModel.currentSession {
                 Section(NSLocalizedString("当前会话", comment: "Current session section")) {
                     NavigationLink {
-                        WatchWorldbookSessionBindingView(
-                            session: Binding(
-                                get: { viewModel.currentSession },
-                                set: { viewModel.currentSession = $0 }
-                            )
-                        )
+                        WatchWorldbookSessionBindingView(viewModel: viewModel)
                     } label: {
                         HStack {
                             Text(NSLocalizedString("绑定世界书", comment: "Bind worldbooks"))
@@ -191,7 +187,7 @@ struct WorldbookSettingsView: View {
             }
         }
         .guideSettingsPageContext(
-            id: "watch-settings-worldbooks",
+            id: GuidePageID(rawValue: showsSessionBinding ? "watch-settings-worldbooks-\(viewModel.currentSession?.id.uuidString ?? "none")" : "watch-settings-worldbooks-library"),
             title: NSLocalizedString("世界书", comment: "世界书向导标题"),
             documents: [GuideDocumentReference(id: "worldbooks", title: "Worldbooks")],
             settings: guideSettings
@@ -215,7 +211,7 @@ struct WorldbookSettingsView: View {
                 })
             })
         ]
-        if viewModel.currentSession != nil {
+        if showsSessionBinding, viewModel.currentSession != nil {
             settings.append(boundWorldbooksSetting)
         }
         return settings
@@ -302,12 +298,22 @@ struct WorldbookSettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 2)
         .sheet(isPresented: isExpanded) {
-            ScrollView {
-                Text(NSLocalizedString(details, comment: "世界书介绍卡片详情"))
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
+            NavigationStack {
+                ScrollView {
+                    Text(NSLocalizedString(details, comment: "世界书介绍卡片详情"))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(title)
+                .guideSettingsPageContext(
+                    id: "worldbooks-introduction",
+                    title: title,
+                    documents: [GuideDocumentReference(id: "worldbooks", title: "Worldbooks")],
+                    settings: [.readOnly("introduction", label: title, value: { .string(details) })]
+                )
+                .watchGuideEntry()
             }
         }
     }

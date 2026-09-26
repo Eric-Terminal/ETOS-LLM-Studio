@@ -1743,7 +1743,6 @@
 "Git 提交" = "Git Commit";
 "JSON 有误，无法预览" = "Invalid JSON. Preview unavailable.";
 "JSON 预览" = "JSON Preview";
-"Mode Injection 绑定功能将与助手注入页对齐，当前版本先保留 Lorebook 绑定。" = "Mode Injection binding will align with the assistant injection page. This version keeps Lorebook binding for now.";
 "PKCE Code Verifier (可选)" = "PKCE Code Verifier (optional)";
 "Pulse 任务" = "Pulse Tasks";
 "Pulse 任务会跨天保留，并在下一次每日脉冲生成时作为“还需要推进的事情”参与策展。" = "Unfinished tasks carry over to later days and inform new cards to help you follow up.";
@@ -3396,7 +3395,6 @@
 "MCP 配置监听失败，将保留当前状态：%@" = "MCP configuration observation failed. The current state will be kept: %@";
 "MCP 配置监听未启用：将仅在应用内触发保存时刷新。" = "MCP configuration observation is unavailable; refreshes will only happen after saves inside the app.";
 "Message" = "Message";
-"Mode Injections" = "Mode Injections";
 "Outlet" = "Outlet";
 "Responses API 响应不是有效的 JSON 对象" = "The Responses API response is not a valid JSON object";
 "Result" = "Result";
@@ -4580,7 +4578,7 @@
 "API 分析" = "API Analysis";
 "Agent Skills 管理说明正文" = "A skill is a reusable set of instructions, such as editing guidelines, research steps or specialist reference material. The AI sees its description first, then uses use_skill to read the full instructions and files when needed.\n\nPaste SKILL.md or import from GitHub, a link or a local skill package. Enable the skill and the chat switch, then describe your task. A description that says when to use the skill and what it does helps the model choose it.\n\nThe SKILL.md header can contain name, description and when_to_use; put steps and examples in the body. Scripts require Agent mode with Local Linux enabled and follow script authorization settings before execution. Importing a skill does not run its scripts.";
 "MCP 工具箱说明正文" = "MCP services give the AI functions such as search and file operations. Add a server address and any required credentials, connect, inspect its tools, then enable the chat tool switch and the individual tools you want.\n\nRemote services use HTTP or SSE. Local stdio services require Local Linux and the commands or software they depend on. Importing a configuration does not install those dependencies.\n\nEach tool can ask every time, always allow or always deny. An automatic approval countdown continues execution when it expires, so set it to suit how you work.\n\nIf connection fails, check the address and credentials. If connected tools are unavailable, check their switches, approval rules and whether this conversation blocks tools. Call records show the details of failures.";
-"世界书说明正文" = "A worldbook holds story background, character relationships, places or terminology. For example, add a description triggered by “harbor” so the AI receives it when that place comes up, without you pasting it each time.\n\nImport JSON, PNG or a URL, bind the worldbook to this conversation, then check enabled entries and keywords. Only entries whose rules match are added when you send a message. The enabled count is not the number sent on every request.\n\nWorldbooks use reference material you maintain; they do not automatically become long-term memories. More material can lengthen requests, so keep entries relevant to the current story or task.";
+"世界书说明正文" = "A worldbook holds story background, character relationships, places or terminology. For example, add a description triggered by “harbor” so the AI receives it when that place comes up, without you pasting it each time.\n\nImport JSON, PNG or a URL, bind the worldbook to this conversation, then check enabled entries and keywords. Only entries whose rules match are added when you send a message. The enabled count is not the number sent on every request.\n\nWorldbooks use reference material you maintain; they do not automatically become long-term memories. More material can lengthen requests, so keep entries relevant to the current story or task.\n\nEnable the worldbook shortcut in the model picker to select multiple books for the current conversation. Swipe a row to edit it. Tapping changes only the manual binding; books supplied by a role show their source and remain available after you uncheck them. Manage Worldbooks lets you add, import, or delete books, including when the list is empty. Editing a book affects every conversation using it. Guide changes on the binding page require confirmation and can be undone after saving. Proposals from a previous conversation become invalid when you switch conversations.";
 "为模型提供自定义技能文件，通过 use_skill 工具在聊天中按需调用。" = "Save writing guidelines, procedures or reference material as skills the AI can consult when needed.";
 "图片相册说明正文" = "The album collects images the AI returned in this conversation. Open one for a larger view and its prompt context when available. Use the action menu to save or share it.\n\nTo generate or edit another image, return to chat and describe what you want. Switch conversations first to find images from a different chat.\n\nDeleting removes the local image reference from that message, so the image no longer appears in the album.";
 "在手表端查看服务器状态、工具能力和治理日志。" = "Connect an MCP service so the AI can use its search, file or other tools during a chat.";
@@ -7349,3 +7347,16 @@
 "选择向导模型" = "Choose Guide Model";
 "watch.guide.entry.footer" = "Tap the guide button at the top of a supported settings page to ask a question in a separate window.";
 "watch.guide.usage.details" = "Open a settings page and tap the question-mark bubble at the top. Enter your question at the top of the guide window, then tap Send.\n\nTap the current answer model to choose another one. The model picker follows your main model picker’s provider grouping and folders. The built-in guide remains available at the top. Choosing a model returns to the conversation.\n\nThe guide keeps the original settings page as its context while you choose a model, edit a message or review a proposed change. Close the guide to return to that page.";
+
+/* 世界书快捷绑定与管理 */
+"worldbook.binding.manage" = "Manage Worldbooks";
+"worldbook.binding.manage_hint" = "Add, import, or delete worldbooks. Edits apply to every conversation using the same book.";
+"worldbook.binding.empty" = "No worldbooks yet. Open Manage Worldbooks to add or import one.";
+"worldbook.binding.entries" = "%d of %d entries enabled";
+"worldbook.binding.disabled" = "Book disabled; it will not be injected";
+"worldbook.binding.role_source" = "Also provided by: %@";
+"worldbook.binding.unbound" = "Not manually bound";
+"worldbook.binding.no_session" = "Open a conversation to choose its worldbooks.";
+"worldbook.binding.select_hint" = "Tap to bind or unbind for this conversation. Swipe a book to edit it. Changes are saved immediately.";
+"worldbook.binding.role_hint" = "Unchecking a book removes only its manual binding. Books provided by a role remain available through Roleplay settings.";
+"worldbook.binding.role_additional" = "Roleplay settings";
