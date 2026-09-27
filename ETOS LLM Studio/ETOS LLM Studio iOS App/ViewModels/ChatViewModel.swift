@@ -620,7 +620,8 @@ final class ChatViewModel: ObservableObject {
         if let currentSessionID = currentSession?.id {
             runningSessionIDs.remove(currentSessionID)
         }
-        isSendingMessage = false
+        // 先接续最后的流式快照，避免 Core 取消回执到达前退回旧的静态正文与行高。
+        refreshCurrentSessionSendingState()
         updateAutoReasoningPreviewState()
 
         Task {
