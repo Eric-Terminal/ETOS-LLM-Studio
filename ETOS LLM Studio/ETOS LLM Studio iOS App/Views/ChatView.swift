@@ -160,8 +160,7 @@ struct ChatView: View {
     let sessionPickerInfiniteScrollTriggerRemainingCount = 5
     var tabBarCompensation: CGFloat {
         guard !isKeyboardVisible else { return 0 }
-        let measuredTabBarHeight = UITabBarController().tabBar.frame.height
-        let tabBarHeight = measuredTabBarHeight > 0 ? measuredTabBarHeight : 49
+        let tabBarHeight = scrollCoordinator.tabBarBaselineHeight
         guard bottomSafeAreaInset > tabBarHeight + 8, bottomSafeAreaInset < 160 else {
             return 0
         }

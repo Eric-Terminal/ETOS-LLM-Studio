@@ -8,6 +8,7 @@
 import Combine
 import Foundation
 import SwiftUI
+import UIKit
 
 @MainActor
 final class ChatScrollCoordinator: ObservableObject {
@@ -49,11 +50,15 @@ final class ChatScrollCoordinator: ObservableObject {
     let chatScrollPositionController = ChatScrollPositionController()
     let chatHistoryViewportAnchorController = ChatHistoryViewportAnchorController()
     let chatLayoutIntegrityMonitor = ChatLayoutIntegrityMonitor()
+    let tabBarBaselineHeight: CGFloat
 
     private var childSubscriptions: Set<AnyCancellable> = []
     private var awaitsKeyboardLayoutCompletion = false
 
     init() {
+        // 这里只缓存原有默认基准，不能在每次聊天 body 求值时重建 UIKit 控制器。
+        let measuredTabBarHeight = UITabBarController().tabBar.frame.height
+        tabBarBaselineHeight = measuredTabBarHeight > 0 ? measuredTabBarHeight : 49
         chatScrollPositionController.objectWillChange
             .merge(
                 with: chatHistoryViewportAnchorController.objectWillChange,
