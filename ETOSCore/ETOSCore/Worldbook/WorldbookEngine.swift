@@ -332,6 +332,8 @@ public struct WorldbookEngine {
 
             for item in entries {
                 let entry = item.entry
+                // 外层只决定最多需要几轮，每本书仍必须遵守自己的递归上限。
+                guard recursionLevel <= item.book.settings.maxRecursionDepth else { continue }
 
                 let entryKey = WorldbookEntryRuntimeKey(worldbookID: item.book.id, entryID: entry.id)
                 if triggeredIDs.contains(entryKey) { continue }
@@ -477,7 +479,11 @@ public struct WorldbookEngine {
             })
             newlyTriggeredContents = levelAccepted.compactMap { injection in
                 let key = WorldbookEntryRuntimeKey(worldbookID: injection.worldbookID, entryID: injection.entryID)
-                return entryByKey[key]?.preventRecursion == true ? nil : injection.content
+                guard let book = activeBooks.first(where: { $0.id == injection.worldbookID }),
+                      recursionLevel < book.settings.maxRecursionDepth,
+                      entryByKey[key]?.preventRecursion != true else { return nil }
+                // 已关闭或已到上限的书不再向其他书传播关键词。
+                return injection.content
             }
             activatedGroupNames.formUnion(groupNames(for: levelAccepted, books: activeBooks))
 

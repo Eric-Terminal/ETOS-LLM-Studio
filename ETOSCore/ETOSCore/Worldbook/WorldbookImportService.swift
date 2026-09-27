@@ -192,12 +192,10 @@ public struct WorldbookImportService {
             }
         }
 
-        var normalizedRoot = root
+        // 扫描和递归配置属于内嵌世界书；不能用角色卡外层字段替代或丢弃它们。
+        var normalizedRoot = characterBook
         if normalizedRoot["name"] == nil {
-            normalizedRoot["name"] = stringValue(characterBook["name"]) ?? stringValue(root["name"])
-        }
-        if normalizedRoot["entries"] == nil {
-            normalizedRoot["entries"] = entries
+            normalizedRoot["name"] = stringValue(root["name"])
         }
 
         return buildParsedBook(
@@ -388,6 +386,10 @@ public struct WorldbookImportService {
         let name = stringValue(root["name"]) ?? stringValue(root["title"]) ?? (defaultName.isEmpty ? NSLocalizedString("导入世界书", comment: "Imported worldbook fallback name") : defaultName)
         let description = stringValue(root["description"]) ?? stringValue(root["desc"]) ?? ""
         let nestedSettings = root["settings"] as? [String: Any]
+        let recursiveScanning = boolValue(root["recursive_scanning"]) ??
+            boolValue(root["recursiveScanning"]) ??
+            boolValue(nestedSettings?["recursive_scanning"]) ??
+            boolValue(nestedSettings?["recursiveScanning"])
 
         let settings = WorldbookSettings(
             scanDepth: intValue(root["scanDepth"]) ??
@@ -399,7 +401,7 @@ public struct WorldbookImportService {
                 intValue(root["max_recursion_depth"]) ??
                 intValue(nestedSettings?["maxRecursionDepth"]) ??
                 intValue(nestedSettings?["max_recursion_depth"]) ??
-                2,
+                (recursiveScanning == false ? 0 : 2),
             maxInjectedEntries: intValue(root["maxEntries"]) ??
                 intValue(root["max_entries"]) ??
                 intValue(root["maxInjectedEntries"]) ??
