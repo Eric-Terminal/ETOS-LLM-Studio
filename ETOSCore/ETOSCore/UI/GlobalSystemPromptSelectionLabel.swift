@@ -19,6 +19,8 @@ public struct GlobalSystemPromptSelectionLabel: View {
             isSelected: isSelected,
             selectedColor: .blue
         )
+        // 跑马灯本身不参与命中检测，普通样式按钮仍需要一个覆盖文字与留白的点击区域。
+        .contentShape(Rectangle())
         .task(id: entry) {
             let entry = entry
             let prepared = await Task.detached(priority: .userInitiated) {
