@@ -513,6 +513,11 @@ extension Persistence {
         activeGRDBStore()?.loadUsageDailyModelTotals(fromDayKey: fromDayKey, toDayKey: toDayKey) ?? []
     }
 
+    /// 只读取指定会话的请求事件，不从消息或分支历史推算用量。
+    public static func loadSessionUsageAnalyticsEvents(sessionID: UUID) -> [UsageAnalyticsEvent] {
+        activeGRDBStore()?.loadSessionUsageAnalyticsEvents(sessionID: sessionID) ?? []
+    }
+
     /// 读取用于同步的按天事件包。
     public static func loadUsageStatsDayBundles(dayKeys: [String]? = nil) -> [UsageStatsDayBundle] {
         activeGRDBStore()?.loadUsageStatsDayBundles(dayKeys: dayKeys) ?? []

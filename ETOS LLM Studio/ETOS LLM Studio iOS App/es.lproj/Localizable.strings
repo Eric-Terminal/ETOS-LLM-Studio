@@ -7661,3 +7661,13 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "worldbook.binding.select_hint" = "Toca para vincular o desvincular este libro de la conversación. Desliza para editarlo. Los cambios se guardan al instante.";
 "worldbook.binding.role_hint" = "Desmarcar un libro solo elimina el vínculo manual. Los libros de un rol siguen disponibles; cambia su origen en los ajustes de juego de rol.";
 "worldbook.binding.role_additional" = "Ajustes de juego de rol";
+/* 会话分析统计 */
+"session_usage.title" = "Estadísticas de la conversación";
+"session_usage.empty" = "Esta conversación aún no tiene solicitudes registradas.";
+"session_usage.unavailable" = "No disponible";
+"session_usage.missing_cost" = "No se pudo estimar el coste de %d solicitudes.";
+"session_usage.cost_note" = "Estimación basada en los precios actuales del modelo y la hora de cada solicitud. Se excluyen los datos de uso o precios que falten. Los importes usan la unidad configurada en los precios del modelo y no equivalen a la factura del proveedor.";
+"session_usage.missing_usage" = "%d solicitudes no informaron del uso de tokens.";
+"session_usage.token_note" = "Los detalles de razonamiento y caché pueden estar incluidos en los tokens de entrada o salida y no se suman de nuevo al total.";
+"session_usage.request_count" = "Solicitudes";
+"session_usage.intro" = "Cuenta las solicitudes registradas de esta conversación, incluidos los reintentos y tareas relacionadas, como la generación de títulos. Copiar el historial no duplica el coste; eliminar mensajes no borra el uso registrado. No se pueden recuperar solicitudes anteriores al registro de uso.";

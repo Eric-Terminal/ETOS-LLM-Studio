@@ -7576,3 +7576,13 @@
 "worldbook.binding.select_hint" = "點按可綁定或取消綁定目前對話，滑動可編輯。修改後自動儲存。";
 "worldbook.binding.role_hint" = "取消勾選只移除手動綁定。角色附帶的世界書仍會參與，請到角色扮演設定調整來源。";
 "worldbook.binding.role_additional" = "角色扮演設定";
+/* 会话分析统计 */
+"session_usage.title" = "分析統計";
+"session_usage.empty" = "此對話暫無已記錄的請求。";
+"session_usage.unavailable" = "無法估算";
+"session_usage.missing_cost" = "%d 次請求無法估算費用。";
+"session_usage.cost_note" = "按目前模型價格及各請求的發生時間估算，缺少用量或價格的部分不計入。金額沿用模型價格的單位，不代表服務商帳單。";
+"session_usage.missing_usage" = "%d 次請求未回傳 Token 用量。";
+"session_usage.token_note" = "思考及快取明細可能已包含在輸入或輸出 Token 中，不會再次計入總量。";
+"session_usage.request_count" = "請求次數";
+"session_usage.intro" = "統計此對話已記錄的請求，包括重試、標題生成等相關任務。複製歷史不會重複計費，刪除訊息不會清除已產生的用量。開始記錄用量之前的請求無法補算。";

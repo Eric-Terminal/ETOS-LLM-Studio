@@ -620,6 +620,10 @@ final class PersistenceGRDBStore {
             }
         }
 
+        migrator.registerMigration("v19_session_usage_analytics_index") { db in
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_usage_request_events_session_requested ON usage_request_events(session_id, requested_at, event_id)")
+        }
+
         try migrator.migrate(dbPool)
         try repairCoreSchemaIfNeeded()
     }

@@ -4,6 +4,32 @@ import Foundation
 
 @Suite("用量统计同步测试", .serialized)
 struct UsageAnalyticsSyncTests {
+    @Test("会话查询隔离其他会话，重复导入同一请求不重复累计")
+    func sessionUsageQueryIsScopedAndDeduplicated() {
+        let originalBundles = Persistence.loadUsageStatsDayBundles()
+        defer {
+            Persistence.clearUsageAnalyticsData()
+            _ = Persistence.mergeUsageStatsDayBundles(originalBundles)
+        }
+        let sessionID = UUID()
+        let usage = MessageTokenUsage(promptTokens: 100, completionTokens: 20, totalTokens: 120)
+        let ownEvent = makeEvent(
+            eventID: UUID(), requestSource: .chat, sessionID: sessionID, providerID: nil,
+            providerName: "测试", modelID: "test", requestedAt: Date(), status: .success, tokenUsage: usage
+        )
+        let otherEvent = makeEvent(
+            eventID: UUID(), requestSource: .chat, sessionID: UUID(), providerID: nil,
+            providerName: "测试", modelID: "test", requestedAt: Date(), status: .success, tokenUsage: usage
+        )
+        let bundle = UsageStatsDayBundle(dayKey: ownEvent.dayKey, events: [ownEvent, otherEvent])
+        _ = Persistence.mergeUsageStatsDayBundles([bundle])
+        _ = Persistence.mergeUsageStatsDayBundles([bundle])
+        let events = Persistence.loadSessionUsageAnalyticsEvents(sessionID: sessionID)
+        #expect(events == [ownEvent])
+        #expect(Persistence.loadSessionUsageAnalyticsEvents(sessionID: UUID()).isEmpty)
+        #expect(SessionUsageAnalyticsSummary.aggregate(sessionID: sessionID, events: events, providers: []).totalTokens == 120)
+    }
+
     @MainActor
     @Test("缓存时长在日包同步和日汇总中保留并用于费用估算")
     func cacheDurationUsageSurvivesPersistenceAndSync() async throws {

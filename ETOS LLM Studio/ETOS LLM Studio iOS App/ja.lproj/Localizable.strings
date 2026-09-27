@@ -7577,3 +7577,13 @@
 "worldbook.binding.select_hint" = "タップでこの会話への連携を切り替え、スワイプで編集できます。変更は自動保存されます。";
 "worldbook.binding.role_hint" = "チェックを外すと手動の連携だけが解除されます。ロール付属のワールドブックは引き続き使われるため、ロールプレイ設定で変更してください。";
 "worldbook.binding.role_additional" = "ロールプレイ設定";
+/* 会话分析统计 */
+"session_usage.title" = "会話の利用統計";
+"session_usage.empty" = "この会話には記録済みのリクエストがありません。";
+"session_usage.unavailable" = "推定不可";
+"session_usage.missing_cost" = "%d 件のリクエストは料金を推定できません。";
+"session_usage.cost_note" = "現在のモデル料金と各リクエストの時刻に基づく推定です。使用量や料金が不明な部分は含みません。金額の単位はモデル料金設定に従い、プロバイダーの請求額とは異なります。";
+"session_usage.missing_usage" = "%d 件のリクエストでトークン使用量が報告されていません。";
+"session_usage.token_note" = "思考とキャッシュの内訳は入力・出力トークンに含まれる場合があるため、合計には再加算しません。";
+"session_usage.request_count" = "リクエスト数";
+"session_usage.intro" = "再試行やタイトル生成など、この会話に関連する記録済みリクエストを集計します。履歴のコピーで二重計上されることはなく、メッセージを削除しても使用量は残ります。記録開始前の使用量は復元できません。";

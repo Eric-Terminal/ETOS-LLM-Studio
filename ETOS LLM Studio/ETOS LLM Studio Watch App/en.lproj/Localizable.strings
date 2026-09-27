@@ -7360,3 +7360,13 @@
 "worldbook.binding.select_hint" = "Tap to bind or unbind for this conversation. Swipe a book to edit it. Changes are saved immediately.";
 "worldbook.binding.role_hint" = "Unchecking a book removes only its manual binding. Books provided by a role remain available through Roleplay settings.";
 "worldbook.binding.role_additional" = "Roleplay settings";
+/* 会话分析统计 */
+"session_usage.title" = "Conversation Analytics";
+"session_usage.empty" = "No recorded requests for this conversation yet.";
+"session_usage.unavailable" = "Unavailable";
+"session_usage.missing_cost" = "%d requests could not be priced.";
+"session_usage.cost_note" = "Estimates use current model prices and each request's time. Missing usage or prices are excluded. Amounts use the unit configured in model pricing and are not a provider bill.";
+"session_usage.missing_usage" = "%d requests did not report token usage.";
+"session_usage.token_note" = "Thinking and cache details may already be included in input or output tokens and are not added to the total again.";
+"session_usage.request_count" = "Requests";
+"session_usage.intro" = "Counts recorded requests for this conversation, including retries and related tasks such as title generation. Copied history is not charged again; deleting messages does not erase recorded usage. Requests predating usage tracking are unavailable.";

@@ -109,6 +109,13 @@ struct SessionActionsView: View {
                 }
 
                 NavigationLink {
+                    SessionUsageAnalyticsView(sessionID: session.id, sessionName: session.name)
+                        .watchGuideEntry()
+                } label: {
+                    Label(NSLocalizedString("session_usage.title", value: "Conversation Analytics", comment: "会话分析统计入口"), systemImage: "chart.bar.xaxis")
+                }
+
+                NavigationLink {
                     WatchSessionTagAssignmentView(
                         session: session,
                         tags: tags,
@@ -277,6 +284,17 @@ struct SessionActionsView: View {
         }
         .navigationTitle(session.name)
         .navigationBarTitleDisplayMode(.inline)
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "session-actions.\(session.id.uuidString)"),
+            title: NSLocalizedString("会话管理", comment: ""),
+            documents: [GuideDocumentReference(id: "usage-analytics", title: NSLocalizedString("用量统计", comment: ""))],
+            settings: [
+                .readOnly("session", label: NSLocalizedString("会话信息", comment: ""), value: {
+                    .dictionary(["id": .string(session.id.uuidString), "name": .string(session.name)])
+                })
+            ]
+        )
+        .watchGuideEntry()
         .task(id: session.id) {
             await reloadRelationshipDetails()
         }

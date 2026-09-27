@@ -7346,3 +7346,13 @@
 "worldbook.binding.select_hint" = "点按可绑定或取消绑定当前对话，滑动可编辑。修改后自动保存。";
 "worldbook.binding.role_hint" = "取消勾选只移除手动绑定。角色附带的世界书仍会参与，请到角色扮演设置调整来源。";
 "worldbook.binding.role_additional" = "角色扮演设置";
+/* 会话分析统计 */
+"session_usage.title" = "分析统计";
+"session_usage.empty" = "此会话暂无已记录的请求。";
+"session_usage.unavailable" = "无法估算";
+"session_usage.missing_cost" = "%d 次请求无法估算费用。";
+"session_usage.cost_note" = "按当前模型价格及各请求的发生时间估算，缺少用量或价格的部分不计入。金额沿用模型价格的单位，不代表服务商账单。";
+"session_usage.missing_usage" = "%d 次请求未返回 Token 用量。";
+"session_usage.token_note" = "思考和缓存明细可能已包含在输入或输出 Token 中，不会再次计入总量。";
+"session_usage.request_count" = "请求次数";
+"session_usage.intro" = "统计此会话已记录的请求，包括重试、标题生成等关联任务。复制历史不会重复计费，删除消息不会清除已发生的用量。开始记录用量之前的请求无法补算。";

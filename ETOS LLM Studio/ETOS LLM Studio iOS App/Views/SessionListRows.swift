@@ -201,6 +201,7 @@ struct SessionRow: View {
     let onContinueRuntime: () -> Void
 
     @FocusState private var focused: Bool
+    @State private var showsUsageAnalytics = false
 
     var body: some View {
         SessionRowCard(isCurrent: isCurrent) {
@@ -212,6 +213,11 @@ struct SessionRow: View {
         }
         .contextMenu {
             contextMenuContent
+        }
+        .sheet(isPresented: $showsUsageAnalytics) {
+            NavigationStack {
+                SessionUsageAnalyticsView(sessionID: session.id, sessionName: session.name)
+            }
         }
     }
 
@@ -255,6 +261,12 @@ struct SessionRow: View {
 
     @ViewBuilder
     private var contextMenuContent: some View {
+        Button {
+            showsUsageAnalytics = true
+        } label: {
+            Label(NSLocalizedString("session_usage.title", value: "Conversation Analytics", comment: "会话分析统计入口"), systemImage: "chart.bar.xaxis")
+        }
+
         Button {
             onSelect()
         } label: {

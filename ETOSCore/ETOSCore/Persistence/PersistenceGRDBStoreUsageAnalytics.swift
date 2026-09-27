@@ -11,6 +11,21 @@ import GRDB
 import os.log
 
 extension PersistenceGRDBStore {
+    func loadSessionUsageAnalyticsEvents(sessionID: UUID) -> [UsageAnalyticsEvent] {
+        do {
+            return try dbPool.read { db in
+                try Row.fetchAll(
+                    db,
+                    sql: "SELECT * FROM usage_request_events WHERE session_id = ? ORDER BY requested_at, event_id",
+                    arguments: [sessionID.uuidString]
+                ).map(makeUsageAnalyticsEvent)
+            }
+        } catch {
+            logger.error("读取会话用量事件失败: \(error.localizedDescription)")
+            return []
+        }
+    }
+
     func appendUsageAnalyticsEvent(_ event: UsageAnalyticsEvent) {
         do {
             var didInsert = false
