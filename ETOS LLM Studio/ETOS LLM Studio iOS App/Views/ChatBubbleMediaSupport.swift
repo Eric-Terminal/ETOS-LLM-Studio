@@ -18,6 +18,40 @@ struct ImagePreviewPayload: Identifiable {
     var fileName: String? = nil
 }
 
+struct ChatAttachmentImageSourceModifier: ViewModifier {
+    let sourceID: String
+    let namespace: Namespace.ID
+    let cornerRadius: CGFloat
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *), !reduceMotion {
+            content.matchedTransitionSource(id: sourceID, in: namespace) { configuration in
+                configuration.clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            }
+        } else {
+            content
+        }
+    }
+}
+
+struct ChatAttachmentImagePreviewTransition: ViewModifier {
+    let sourceID: String?
+    let namespace: Namespace.ID
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *), !reduceMotion, let sourceID {
+            // 系统在返回时重新定位来源，滚动、旋转或交互式取消都无需保存过期的屏幕矩形。
+            content.navigationTransition(.zoom(sourceID: sourceID, in: namespace))
+        } else {
+            content
+        }
+    }
+}
+
 struct ChatAttachmentImagePreview: View {
     let payload: ImagePreviewPayload
 
@@ -265,6 +299,9 @@ struct ChatBubbleOpenMoreGestureModifier: ViewModifier {
     let onToggleSelection: () -> Void
     let onOpenMore: (() -> Void)?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @GestureState private var isPressing = false
+
     func body(content: Content) -> some View {
         if isSelectionMode {
             content
@@ -278,9 +315,17 @@ struct ChatBubbleOpenMoreGestureModifier: ViewModifier {
         } else if let onOpenMore {
             content
                 .contentShape(Rectangle())
+                .scaleEffect(isPressing && !reduceMotion ? 0.985 : 1)
+                .opacity(isPressing ? 0.88 : 1)
+                .animation(.easeOut(duration: 0.12), value: isPressing)
                 .highPriorityGesture(
-                    LongPressGesture(minimumDuration: 0.45)
+                    LongPressGesture(minimumDuration: 0.45, maximumDistance: 10)
+                        .updating($isPressing) { pressing, state, _ in
+                            // 沿用同一个识别器，滚动取消或松手时由 GestureState 自动复原。
+                            state = pressing
+                        }
                         .onEnded { _ in
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
                             onOpenMore()
                         }
                 )

@@ -66,6 +66,7 @@ struct ChatBubble: View {
     
     @StateObject var audioPlayer = AudioPlayerManager()
     @State var imagePreview: ImagePreviewPayload?
+    @Namespace var imagePreviewNamespace
     @State var filePreview: FileAttachmentPreviewPayload?
     @State var selectedToolCallDetailSheetItem: ToolCallDetailSheetItem?
     @State var showRawToolResultInDetailSheet: Bool = false
@@ -318,6 +319,10 @@ struct ChatBubble: View {
             refreshChatBubbleLocalPresentationBlocker()
         }) { payload in
             ChatAttachmentImagePreview(payload: payload)
+                .modifier(ChatAttachmentImagePreviewTransition(
+                    sourceID: payload.fileName,
+                    namespace: imagePreviewNamespace
+                ))
         }
         .sheet(item: $filePreview, onDismiss: {
             refreshChatBubbleLocalPresentationBlocker()

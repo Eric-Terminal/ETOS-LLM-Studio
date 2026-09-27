@@ -40,6 +40,11 @@ extension ChatBubble {
                     } onDelete: {
                         onDeleteImageAttachment?(fileName)
                     }
+                    .modifier(ChatAttachmentImageSourceModifier(
+                        sourceID: fileName,
+                        namespace: imagePreviewNamespace,
+                        cornerRadius: 16
+                    ))
                 }
             }
             .frame(maxWidth: attachmentMaxWidth, alignment: isOutgoing ? .trailing : .leading)
