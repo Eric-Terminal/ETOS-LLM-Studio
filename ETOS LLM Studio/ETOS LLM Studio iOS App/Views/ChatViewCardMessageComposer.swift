@@ -74,14 +74,7 @@ extension TelegramMessageComposer {
         .padding(.top, 14)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(
-            GeometryReader { proxy in
-                Color.clear.preference(
-                    key: InputBarRectKey.self,
-                    value: proxy.frame(in: .named(ChatView.flightCoordinateSpace))
-                )
-            }
-        )
+        .background(ChatSendSourceAnchor(id: .text))
     }
 
     private var cardToolbar: some View {

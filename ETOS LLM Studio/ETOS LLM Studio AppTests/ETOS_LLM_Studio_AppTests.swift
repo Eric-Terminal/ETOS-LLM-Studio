@@ -165,30 +165,12 @@ struct ETOS_LLM_Studio_AppTests {
             responseGroupID: previousUserID
         )
 
-        #expect(ChatView.shouldDeferReplyDuringSendFlight(
-            currentAssistant,
-            targetMessageID: nil,
-            baselineUserMessageID: previousUserID,
-            flightStartedAt: startedAt
-        ))
-        #expect(ChatView.shouldDeferReplyDuringSendFlight(
-            currentAssistant,
-            targetMessageID: currentUserID,
-            baselineUserMessageID: previousUserID,
-            flightStartedAt: startedAt
-        ))
-        #expect(!ChatView.shouldDeferReplyDuringSendFlight(
-            previousAssistant,
-            targetMessageID: nil,
-            baselineUserMessageID: previousUserID,
-            flightStartedAt: startedAt
-        ))
-        #expect(!ChatView.shouldDeferReplyDuringSendFlight(
-            previousAssistant,
-            targetMessageID: currentUserID,
-            baselineUserMessageID: previousUserID,
-            flightStartedAt: startedAt
-        ))
+        var state = SendFlightState(id: UUID(), sessionID: UUID())
+        // 服务尚未给出精确身份时不能按时间猜测，避免隐藏并发的其他回复。
+        #expect(!state.hidesDuringFlight(currentAssistant))
+        state.responseGroupID = currentUserID
+        #expect(state.hidesDuringFlight(currentAssistant))
+        #expect(!state.hidesDuringFlight(previousAssistant))
 
         let currentUser = ChatMessage(
             id: currentUserID,
@@ -196,12 +178,9 @@ struct ETOS_LLM_Studio_AppTests {
             content: "问题",
             requestedAt: startedAt
         )
-        #expect(!ChatView.shouldDeferReplyDuringSendFlight(
-            currentUser,
-            targetMessageID: currentUserID,
-            baselineUserMessageID: previousUserID,
-            flightStartedAt: startedAt
-        ))
+        #expect(!state.hidesDuringFlight(currentUser))
+        state.sourcesByMessageID[currentUserID] = .text
+        #expect(state.hidesDuringFlight(currentUser))
     }
 
     @Test("自动朗读触发条件判断")

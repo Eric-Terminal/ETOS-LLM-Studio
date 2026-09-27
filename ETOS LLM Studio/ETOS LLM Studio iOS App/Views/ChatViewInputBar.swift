@@ -91,6 +91,7 @@ extension ChatView {
                     draftText = ""
                 },
                 stopAction: {
+                    cancelSendFlight()
                     viewModel.cancelSending()
                 },
                 slashCommandAction: performSlashCommand,

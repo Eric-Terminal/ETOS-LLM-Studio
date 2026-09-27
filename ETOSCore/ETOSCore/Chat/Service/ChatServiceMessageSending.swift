@@ -38,7 +38,8 @@ extension ChatService {
         conversationEventID: UUID? = nil,
         conversationRun: ConversationRun? = nil,
         existingInputMessageID: UUID? = nil,
-        requestedLocalAgentMode: LocalAgentMode? = nil
+        requestedLocalAgentMode: LocalAgentMode? = nil,
+        onMessagesPrepared: ChatSendPresentationHandler? = nil
     ) async {
         await waitForInitialPersistenceStateIfNeeded()
 
@@ -104,13 +105,13 @@ extension ChatService {
            shouldRouteMessageToImageGeneration(using: selectedModel) {
             if audioAttachment != nil {
                 let reason = NSLocalizedString("生图模式不支持语音附件。", comment: "Image mode does not support audio attachments")
-                addErrorMessage(reason)
+                addErrorMessage(reason, sessionID: currentSession.id)
                 requestStatusSubject.send(.error)
                 return
             }
             if !fileAttachments.isEmpty {
                 let reason = NSLocalizedString("生图模式仅支持文本提示词和图片参考图。", comment: "Image mode only supports text prompt and reference images")
-                addErrorMessage(reason)
+                addErrorMessage(reason, sessionID: currentSession.id)
                 requestStatusSubject.send(.error)
                 return
             }
@@ -118,7 +119,9 @@ extension ChatService {
             await generateImageAndProcessMessage(
                 prompt: content,
                 imageAttachments: imageAttachments,
-                runnableModel: selectedModel
+                runnableModel: selectedModel,
+                targetSessionID: currentSession.id,
+                onMessagesPrepared: onMessagesPrepared
             )
             return
         }
@@ -140,10 +143,12 @@ extension ChatService {
             )
         var savedAudioFileName: String? = nil
         var savedImageFileNames: [String] = []
-        var savedFiles: [(fileName: String, isVideo: Bool)] = []
+        var savedFiles: [(fileName: String, isVideo: Bool, source: ChatSendPresentationSource)] = []
+        var savedImageSources: [ChatSendPresentationSource] = []
         let requestTimestamp = Date()
         var userMessages: [ChatMessage] = []
         var primaryUserMessage: ChatMessage?
+        var messageIDsBySource: [ChatSendPresentationSource: UUID] = [:]
 
         if let audioAttachment {
             // 保存音频文件到持久化目录，使用时间戳命名
@@ -166,6 +171,7 @@ extension ChatService {
             let imageFileName = imageAttachment.fileName
             if Persistence.saveImage(imageAttachment.data, fileName: imageFileName) != nil {
                 savedImageFileNames.append(imageFileName)
+                savedImageSources.append(.image(imageAttachment.id))
                 logger.info("图片文件已保存: \(imageFileName)")
             }
         }
@@ -180,18 +186,15 @@ extension ChatService {
             if let targetName {
                 savedFiles.append((
                     fileName: targetName,
-                    isVideo: VideoAttachmentSupport.isVideo(fileAttachment)
+                    isVideo: VideoAttachmentSupport.isVideo(fileAttachment),
+                    source: .file(fileAttachment.id)
                 ))
                 logger.info("文件附件已保存或复用: \(targetName)")
             }
         }
 
-        let savedVideoFileNames = savedFiles
-            .filter { $0.isVideo }
-            .map { $0.fileName }
-
         if let savedAudioFileName {
-            userMessages.append(ChatMessage(
+            let message = ChatMessage(
                 role: .user,
                 content: audioPlaceholder,
                 requestedAt: requestTimestamp,
@@ -200,11 +203,13 @@ extension ChatService {
                 sourceSessionID: sourceSessionID,
                 sourceMessageID: sourceMessageID,
                 conversationEventID: conversationEventID
-            ))
+            )
+            userMessages.append(message)
+            if let audioAttachment { messageIDsBySource[.audio(audioAttachment.id)] = message.id }
         }
 
-        for imageFileName in savedImageFileNames {
-            userMessages.append(ChatMessage(
+        for (imageFileName, source) in zip(savedImageFileNames, savedImageSources) {
+            let message = ChatMessage(
                 role: .user,
                 content: imagePlaceholder,
                 requestedAt: requestTimestamp,
@@ -213,24 +218,28 @@ extension ChatService {
                 sourceSessionID: sourceSessionID,
                 sourceMessageID: sourceMessageID,
                 conversationEventID: conversationEventID
-            ))
+            )
+            userMessages.append(message)
+            messageIDsBySource[source] = message.id
         }
 
-        for savedVideoFileName in savedVideoFileNames {
-            userMessages.append(ChatMessage(
+        for savedFile in savedFiles where savedFile.isVideo {
+            let message = ChatMessage(
                 role: .user,
                 content: videoPlaceholder,
                 requestedAt: requestTimestamp,
-                fileFileNames: [savedVideoFileName],
+                fileFileNames: [savedFile.fileName],
                 authorKind: messageAuthorKind,
                 sourceSessionID: sourceSessionID,
                 sourceMessageID: sourceMessageID,
                 conversationEventID: conversationEventID
-            ))
+            )
+            userMessages.append(message)
+            messageIDsBySource[savedFile.source] = message.id
         }
 
         for savedFile in savedFiles where !savedFile.isVideo {
-            userMessages.append(ChatMessage(
+            let message = ChatMessage(
                 role: .user,
                 content: filePlaceholder,
                 requestedAt: requestTimestamp,
@@ -239,7 +248,9 @@ extension ChatService {
                 sourceSessionID: sourceSessionID,
                 sourceMessageID: sourceMessageID,
                 conversationEventID: conversationEventID
-            ))
+            )
+            userMessages.append(message)
+            messageIDsBySource[savedFile.source] = message.id
         }
 
         if !messageContent.isEmpty {
@@ -254,6 +265,7 @@ extension ChatService {
             )
             userMessages.append(textMessage)
             primaryUserMessage = textMessage
+            messageIDsBySource[.text] = textMessage.id
         }
 
         if let existingInputMessageID {
@@ -293,6 +305,16 @@ extension ChatService {
         // 用于命名会话/记忆检索的代表消息：优先用户正文，其次第一条附件消息。
         if primaryUserMessage == nil {
             primaryUserMessage = userMessages.first
+        }
+
+        if let onMessagesPrepared, existingInputMessageID == nil,
+           let responseMessage = userMessages.last {
+            // 发布第一条附件之前就交出整组身份，UI 不必靠正文、时间或追加顺序猜测。
+            await onMessagesPrepared(ChatSendPresentation(
+                sessionID: currentSession.id,
+                messageIDsBySource: messageIDsBySource,
+                responseGroupID: responseMessage.id
+            ))
         }
 
         if messageAuthorKind == .user,

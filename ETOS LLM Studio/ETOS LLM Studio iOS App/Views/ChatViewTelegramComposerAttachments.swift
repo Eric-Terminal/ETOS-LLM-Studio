@@ -23,11 +23,14 @@ extension TelegramMessageComposer {
                         ForEach(viewModel.pendingImageAttachments) { attachment in
                             ZStack(alignment: .topTrailing) {
                                 if let thumbnail = attachment.thumbnailImage {
-                                    Image(uiImage: thumbnail)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: 72, height: 72)
-                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                    ChatSendContentSource(id: .image(attachment.id)) {
+                                        Image(uiImage: thumbnail)
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                            .frame(width: 72, height: 72)
+                                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                    }
+                                    .frame(width: 72, height: 72)
                                 } else {
                                     ZStack {
                                         Color(uiColor: .secondarySystemBackground)
@@ -64,24 +67,9 @@ extension TelegramMessageComposer {
             ForEach(viewModel.pendingFileAttachments) { attachment in
                 let isVideo = VideoAttachmentSupport.isVideo(attachment)
                 ZStack(alignment: .topTrailing) {
-                    HStack(spacing: 8) {
-                        Image(systemName: isVideo ? "video" : "doc")
-                            .etFont(.system(size: 18))
-                            .foregroundColor(TelegramColors.attachButtonColor)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(NSLocalizedString(isVideo ? "视频" : "文件", comment: ""))
-                                .etFont(.system(size: 13, weight: .medium))
-                            Text(attachment.fileName)
-                                .etFont(.system(size: 11))
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                        }
-
-                        Spacer(minLength: 0)
+                    ChatSendContentSource(id: .file(attachment.id)) {
+                        PendingFileAttachmentLabel(fileName: attachment.fileName, isVideo: isVideo)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
                     .padding(.trailing, 26)
 
                     Button {
@@ -181,5 +169,30 @@ extension TelegramMessageComposer {
     func audioFormat(for url: URL) -> String {
         let ext = url.pathExtension.lowercased()
         return ext.isEmpty ? AudioRecordingFormat.aac.fileExtension : ext
+    }
+}
+
+/// 草稿和发送快照使用同一份内容标签，编辑按钮留在输入区。
+private struct PendingFileAttachmentLabel: View {
+    let fileName: String
+    let isVideo: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: isVideo ? "video" : "doc")
+                .etFont(.system(size: 18))
+                .foregroundColor(TelegramColors.attachButtonColor)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(NSLocalizedString(isVideo ? "视频" : "文件", comment: ""))
+                    .etFont(.system(size: 13, weight: .medium))
+                Text(fileName)
+                    .etFont(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
     }
 }

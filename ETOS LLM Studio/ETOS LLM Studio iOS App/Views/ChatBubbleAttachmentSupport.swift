@@ -45,6 +45,7 @@ extension ChatBubble {
                         namespace: imagePreviewNamespace,
                         cornerRadius: 16
                     ))
+                    .background(sendFlightTargetReporter)
                 }
             }
             .frame(maxWidth: attachmentMaxWidth, alignment: isOutgoing ? .trailing : .leading)
@@ -115,6 +116,7 @@ extension ChatBubble {
                 }
             }
             .frame(maxWidth: attachmentMaxWidth, alignment: isOutgoing ? .trailing : .leading)
+            .background(sendFlightTargetReporter)
 
             if !isOutgoing {
                 Spacer(minLength: 0)

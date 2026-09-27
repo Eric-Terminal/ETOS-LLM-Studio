@@ -106,17 +106,11 @@ struct ChatView: View {
     @State var localTerminalInitialJobID: UUID?
     @State var currentLocalAgentMode = LocalAgentMode.chat
     @State var localAgentModeSelectionRevision: UInt = 0
-    // 发送飞行动画：状态、输入文字区域与分轴呈现几何。
+    // 快照和逐帧几何留在原生控制器，只把消息身份和交接状态交给 SwiftUI。
     @State var flightState: SendFlightState?
-    @State var inputBarRect: CGRect = .zero
-    @State var pendingFlightCleanupTask: Task<Void, Never>?
-    @State var flightPresentationX: CGFloat = 0
-    @State var flightPresentationY: CGFloat = 0
-    @State var flightPresentationWidth: CGFloat = 0
-    @State var flightPresentationHeight: CGFloat = 0
-    @State var flightVisualProgress: CGFloat = 0
+    @State var sendFlightSources = ChatSendFlightSources()
+    @State var sendFlightController = ChatSendFlightController()
     @State var flightHandoffProgress: CGFloat = 0
-    @State var flightReplyRevealProgress: CGFloat = 0
     @FocusState var composerFocused: Bool
     @FocusState var sessionPickerSearchFocused: Bool
     @ScaledMetric(relativeTo: .body) var modelPickerProviderIconSize: CGFloat = 40

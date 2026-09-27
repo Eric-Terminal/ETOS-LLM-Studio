@@ -400,14 +400,14 @@ struct ChatBubble: View {
         }
     }
 
-    /// 只在本次发送目标的正文气泡上测量真实落点，避免用整行宽度反推尺寸。
+    /// 测量内容自身，不能把列的最大宽度、操作栏或两侧占位算进落点。
     @ViewBuilder
-    private var sendFlightTargetReporter: some View {
+    var sendFlightTargetReporter: some View {
         if reportsSendFlightTarget {
             GeometryReader { proxy in
                 Color.clear.preference(
                     key: FlightTargetRectKey.self,
-                    value: proxy.frame(in: .named(ChatView.flightCoordinateSpace))
+                    value: [message.id: proxy.frame(in: .named(ChatView.flightCoordinateSpace))]
                 )
             }
         }

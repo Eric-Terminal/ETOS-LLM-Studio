@@ -612,7 +612,8 @@ class ChatViewModel: ObservableObject {
                 enableResponseSpeedMetrics: payload.enableResponseSpeedMetrics,
                 audioAttachment: payload.audioAttachment,
                 imageAttachments: payload.imageAttachments,
-                fileAttachments: payload.fileAttachments
+                fileAttachments: payload.fileAttachments,
+                targetSessionID: payload.sessionID
             )
             if let sessionID = payload.sessionID {
                 pendingSendSubmissionSessionIDs.remove(sessionID)

@@ -107,6 +107,7 @@ extension ChatView {
                                 scrollCoordinator.completeViewportPageRequest(id: requestID)
                             },
                             onUserPanBegan: {
+                                cancelSendFlight()
                                 handleChatScrollPanBegan()
                             },
                             isViewportActive: isChatVisible && scenePhase == .active,
@@ -557,6 +558,7 @@ extension ChatView {
                     cancelAutomaticHistoryNavigation()
                 }
                 .onChange(of: viewModel.currentSession?.id) { _, _ in
+                    cancelSendFlight()
                     cancelPendingScrollTargetCommand()
                     scrollCoordinator.resetForSessionChange()
                     shouldRestorePendingJumpOnAppear = false
@@ -768,15 +770,15 @@ extension ChatView {
                 )
             }
             .coordinateSpace(.named(ChatView.flightCoordinateSpace))
-            .onPreferenceChange(InputBarRectKey.self) { rect in
-                handleInputBarRect(rect)
+            .environment(\.chatSendFlightSources, sendFlightSources)
+            .onChange(of: scenePhase) { _, phase in
+                if phase != .active { cancelSendFlight() }
+            }
+            .onChange(of: accessibilityReduceMotion) { _, isEnabled in
+                if isEnabled { cancelSendFlight() }
             }
             .onPreferenceChange(FlightTargetRectKey.self) { rect in
                 handleFlightTargetRect(rect)
-            }
-            .onChange(of: viewModel.displayMessageIdentityVersion) { _, _ in
-                // 自动历史窗口可能保持消息数量不变，只替换可见消息身份；用身份版本避免漏锁飞行目标。
-                lockFlightTargetIfNeeded()
             }
             .background(
                 GeometryReader { proxy in
@@ -830,19 +832,10 @@ extension ChatView {
                     isMessageJumpInFlight = false
                 }
                 cancelPendingScrollTargetCommand(preservingMessageJump: true)
-                pendingFlightCleanupTask?.cancel()
-                pendingFlightCleanupTask = nil
+                cancelSendFlight()
                 chatTransientNoticeDismissTask?.cancel()
                 chatTransientNoticeDismissTask = nil
                 chatTransientNotice = nil
-                flightState = nil
-                flightPresentationX = 0
-                flightPresentationY = 0
-                flightPresentationWidth = 0
-                flightPresentationHeight = 0
-                flightVisualProgress = 0
-                flightHandoffProgress = 0
-                flightReplyRevealProgress = 0
             }
             .toolbar(.hidden, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)
