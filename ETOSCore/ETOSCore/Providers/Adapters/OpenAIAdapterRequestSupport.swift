@@ -52,6 +52,7 @@ extension OpenAIAdapter {
         fileAttachments: [UUID: [FileAttachment]]
     ) -> URLRequest? {
         let reasoningContentEchoMode = Self.reasoningContentEchoMode(from: commonPayload)
+        let assistantPrefillMessageID = commonPayload[Self.assistantPrefillMessageIDControlKey] as? String
         let suppressesRequestLog = boolValue(from: commonPayload[requestLogSuppressionControlKey]) ?? false
         guard let baseURL = URL(string: model.provider.baseURL) else {
             logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
@@ -136,10 +137,12 @@ extension OpenAIAdapter {
                 dict["content"] = msg.content
             }
 
+            // 续写前缀属于当前未完成的回答，必须携带原推理；其他历史消息仍遵循用户设置。
             if msg.role == .assistant,
                let reasoningContent = msg.reasoningContent,
                !reasoningContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               Self.shouldEchoReasoningContent(for: msg, mode: reasoningContentEchoMode) {
+               (msg.id.uuidString == assistantPrefillMessageID
+                || Self.shouldEchoReasoningContent(for: msg, mode: reasoningContentEchoMode)) {
                 dict["reasoning_content"] = reasoningContent
             }
 
@@ -179,6 +182,8 @@ extension OpenAIAdapter {
         var finalPayload = mergedRequestPayload(commonPayload, with: overrides)
         finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
         finalPayload.removeValue(forKey: Self.reasoningContentEchoModeControlKey)
+        finalPayload.removeValue(forKey: Self.assistantPrefillMessageIDControlKey)
+        finalPayload.removeValue(forKey: Self.responsesForceFullInputControlKey)
         finalPayload.removeValue(forKey: requestLogSuppressionControlKey)
         finalPayload["model"] = resolvedRequestModelName(for: model, overrides: overrides)
         finalPayload["messages"] = apiMessages
@@ -280,6 +285,7 @@ extension OpenAIAdapter {
         finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
         finalPayload.removeValue(forKey: Self.reasoningContentEchoModeControlKey)
         finalPayload.removeValue(forKey: Self.responsesForceFullInputControlKey)
+        finalPayload.removeValue(forKey: Self.assistantPrefillMessageIDControlKey)
         finalPayload.removeValue(forKey: requestLogSuppressionControlKey)
         finalPayload["model"] = resolvedRequestModelName(for: model, overrides: overrides)
         finalPayload["input"] = inputAssembly.items

@@ -42,6 +42,7 @@ extension ChatServiceTests {
         let sent = try #require(streaming ? streamAdapter.receivedMessages : mockAdapter.receivedMessages)
         #expect(sent.last?.role == .assistant)
         #expect(sent.last?.content == "  原文 ")
+        #expect(sent.last?.reasoningContent == "旧推理")
         #expect(sent.filter { $0.content == "  原文 " }.count == 1)
         #expect(!sent.contains { $0.id == nextUser.id })
         let stored = service.messagesForSessionSubject.value

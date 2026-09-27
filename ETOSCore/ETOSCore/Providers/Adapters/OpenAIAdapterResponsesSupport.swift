@@ -298,6 +298,7 @@ extension OpenAIAdapter {
         signaturePayload.removeValue(forKey: "input")
         signaturePayload.removeValue(forKey: "previous_response_id")
         signaturePayload.removeValue(forKey: Self.responsesForceFullInputControlKey)
+        signaturePayload.removeValue(forKey: Self.assistantPrefillMessageIDControlKey)
         return jsonValue(fromJSONObject: signaturePayload)
     }
 

@@ -575,7 +575,10 @@ extension ChatService {
 
         // 预填充必须位于所有尾部提示之后，且保留原文边界，不经过宏或正则再次改写。
         if let assistantPrefill {
-            messagesToSend.append(ChatMessage(role: .assistant, content: assistantPrefill.content))
+            messagesToSend.append(ChatMessage(
+                id: assistantPrefill.id, role: .assistant, content: assistantPrefill.content,
+                reasoningContent: assistantPrefill.reasoningContent
+            ))
         }
 
         if LocalModelProviderBridge.isLocalRunnableModel(runnableModel) {
@@ -680,8 +683,9 @@ extension ChatService {
         let temperatureEnabled = await MainActor.run { AppConfigStore.shared.aiTemperatureEnabled }
         let topPEnabled = await MainActor.run { AppConfigStore.shared.aiTopPEnabled }
         var commonPayload: [String: Any] = ["stream": effectiveStreaming]
-        if assistantPrefill != nil {
+        if let assistantPrefill {
             commonPayload[OpenAIAdapter.responsesForceFullInputControlKey] = true
+            commonPayload[OpenAIAdapter.assistantPrefillMessageIDControlKey] = assistantPrefill.id.uuidString
         }
         if temperatureEnabled { commonPayload["temperature"] = aiTemperature }
         if topPEnabled { commonPayload["top_p"] = aiTopP }
@@ -782,9 +786,13 @@ extension ChatService {
             rebuildRequest: { prefix in
                 var recoveryPayload = commonPayload
                 recoveryPayload[OpenAIAdapter.responsesForceFullInputControlKey] = true
+                recoveryPayload[OpenAIAdapter.assistantPrefillMessageIDControlKey] = prefix.id.uuidString
                 return adapter.buildChatRequest(
                     for: runnableModel, commonPayload: recoveryPayload,
-                    messages: messagesBeforePrefill + [ChatMessage(role: .assistant, content: prefix.content)],
+                    messages: messagesBeforePrefill + [ChatMessage(
+                        id: prefix.id, role: .assistant, content: prefix.content,
+                        reasoningContent: prefix.reasoningContent
+                    )],
                     tools: effectiveTools, audioAttachments: audioAttachments,
                     imageAttachments: imageAttachments, fileAttachments: fileAttachments
                 )

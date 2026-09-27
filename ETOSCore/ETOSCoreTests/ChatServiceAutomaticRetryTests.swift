@@ -190,12 +190,17 @@ extension ChatServiceTests {
         await cleanup()
         let config = AppConfigStore.shared
         let previous = config.maximumRequestRetries
+        let previousEchoMode = config.reasoningContentEchoMode
         config.maximumRequestRetries = 1
-        defer { config.maximumRequestRetries = previous }
+        config.reasoningContentEchoMode = ReasoningContentEchoMode.never.rawValue
+        defer {
+            config.maximumRequestRetries = previous
+            config.reasoningContentEchoMode = previousEchoMode
+        }
         let service = automaticRetryService()
         let errorEvent = failure == "sse503" ? "data: {\"error\":{\"code\":503,\"message\":\"service unavailable\"}}\n\n" : ""
         AutomaticRetryURLProtocol.configure([
-            .init(status: 200, body: "data: {\"choices\":[{\"delta\":{\"content\":\"前半段\"}}]}\n\n" + errorEvent, networkError: failure == "disconnect" ? .networkConnectionLost : nil),
+            .init(status: 200, body: "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"原推理\",\"content\":\"前半段\"}}]}\n\n" + errorEvent, networkError: failure == "disconnect" ? .networkConnectionLost : nil),
             .init(status: 200, body: "data: {\"choices\":[{\"delta\":{\"content\":\"后半段\"}}]}\n\ndata: [DONE]\n\n")
         ])
         await sendAutomaticallyRetriedMessage(using: service, streaming: true)
@@ -206,6 +211,7 @@ extension ChatServiceTests {
         let sent = try #require(json["messages"] as? [[String: Any]])
         #expect(sent.last?["role"] as? String == "assistant")
         #expect(sent.last?["content"] as? String == "前半段")
+        #expect(sent.last?["reasoning_content"] as? String == "原推理")
         let stored = service.messagesForSessionSubject.value
         let visible = ChatResponseAttemptSupport.visibleMessages(from: stored)
         #expect(visible.last?.content == "前半段后半段")
