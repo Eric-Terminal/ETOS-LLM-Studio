@@ -13,10 +13,7 @@ import ETOSCore
 extension ContentView {
     func chatList(proxy: ScrollViewProxy) -> some View {
         let displayedMessages = viewModel.displayMessages
-        let retryableMessageIDs = MessageActionBarAvailability.retryableMessageIDs(
-            in: viewModel.allMessagesForSession,
-            isSending: viewModel.isSendingMessage
-        )
+        let retryableMessageIDs = viewModel.retryableMessageIDs
         return List {
             if viewModel.messages.isEmpty && continuationContext == nil {
                 Spacer().frame(height: emptyStateSpacerHeight).listRowInsets(EdgeInsets()).listRowBackground(Color.clear)

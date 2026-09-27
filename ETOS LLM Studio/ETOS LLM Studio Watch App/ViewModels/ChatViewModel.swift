@@ -92,11 +92,9 @@ class ChatViewModel: ObservableObject {
     var responseAttemptIndexPublishedRevision = -1
     @Published var isHistoryFullyLoaded: Bool = false
     @Published var isLaterHistoryFullyLoaded: Bool = true
-    @Published var userInput: String = AppConfigStore.shared.chatComposerDraft {
-        didSet {
-            guard userInput != AppConfigStore.shared.chatComposerDraft else { return }
-            AppConfigStore.shared.chatComposerDraft = userInput
-        }
+    var userInput: String {
+        get { AppConfigStore.shared.chatComposerDraft }
+        set { AppConfigStore.shared.chatComposerDraft = newValue }
     }
     @Published var messageToEdit: ChatMessage?
     @Published var messageRewriteErrorMessage: String?

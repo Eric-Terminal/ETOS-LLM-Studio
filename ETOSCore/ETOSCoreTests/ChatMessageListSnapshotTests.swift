@@ -60,6 +60,44 @@ struct ChatMessageListSnapshotTests {
             #expect(updated.versionRevision == initial.versionRevision)
             #expect(updated.historyIndex.positions == initial.historyIndex.positions)
             #expect(updated.visibleMessages.last?.content == messages[999].content)
+            #expect(updated.idleRetryableMessageIDs == initial.idleRetryableMessageIDs)
+            #expect(updated.sendingRetryableMessageIDs == [messages[998].id, messages[999].id])
+        }.value
+    }
+
+    @Test("后台重试索引保留完整会话规则并跟随角色、尾部和会话变化")
+    func retryAvailabilityTracksMessageTopology() async {
+        await Task.detached {
+            let sessionID = UUID()
+            let system = ChatMessage(role: .system, content: "系统消息")
+            let firstUser = ChatMessage(role: .user, content: "历史问题")
+            let assistant = ChatMessage(role: .assistant, content: "历史回复")
+            let lastUser = ChatMessage(role: .user, content: "新问题")
+            let tool = ChatMessage(role: .tool, content: "工具结果")
+            let error = ChatMessage(role: .error, content: "失败")
+            let initial = ChatMessageListSnapshot(
+                messages: [system, firstUser, assistant, lastUser, tool, error], sessionID: sessionID
+            )
+            #expect(initial.idleRetryableMessageIDs == [firstUser.id, assistant.id, lastUser.id, tool.id, error.id])
+            #expect(initial.sendingRetryableMessageIDs == [lastUser.id, error.id])
+
+            let reclassified = ChatMessage(id: lastUser.id, role: .system, content: "系统消息")
+            let updated = ChatMessageListSnapshot(
+                messages: [system, firstUser, assistant, reclassified], sessionID: sessionID, previous: initial
+            )
+            #expect(updated.idleRetryableMessageIDs == [firstUser.id, assistant.id])
+            #expect(updated.sendingRetryableMessageIDs == [firstUser.id, reclassified.id])
+            // 即使消息身份未变，角色变更也必须使重试索引失效。
+            let sameIdentity = ChatMessageListSnapshot(
+                messages: [system, firstUser, assistant, lastUser], sessionID: sessionID, previous: updated
+            )
+            #expect(sameIdentity.hasSameMessageIdentity)
+            #expect(sameIdentity.idleRetryableMessageIDs == [firstUser.id, assistant.id, lastUser.id])
+            #expect(sameIdentity.sendingRetryableMessageIDs == [lastUser.id])
+
+            let switched = ChatMessageListSnapshot(messages: [], sessionID: UUID(), previous: sameIdentity)
+            #expect(switched.idleRetryableMessageIDs.isEmpty)
+            #expect(switched.sendingRetryableMessageIDs.isEmpty)
         }.value
     }
 

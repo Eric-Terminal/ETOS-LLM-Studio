@@ -498,7 +498,15 @@ public final class AppConfigStore: ObservableObject {
     @Published public var iOSHardwareKeyboardReturnSendsMessage: Bool {
         didSet { write(.iOSHardwareKeyboardReturnSendsMessage, iOSHardwareKeyboardReturnSendsMessage) }
     }
-    @Published public var chatComposerDraft: String { didSet { write(.chatComposerDraft, chatComposerDraft) } }
+    public let composerDraftState: ChatComposerDraftState
+    public var chatComposerDraft: String {
+        didSet {
+            guard oldValue != chatComposerDraft else { return }
+            // 保留配置快照与写库入口，但输入变化只发布到输入组件自己的状态。
+            composerDraftState.update(text: chatComposerDraft)
+            write(.chatComposerDraft, chatComposerDraft)
+        }
+    }
     @Published public var restoreLastSessionOnLaunch: Bool { didSet { write(.restoreLastSessionOnLaunch, restoreLastSessionOnLaunch) } }
     @Published public var restoreLastSessionOnlyIfRecent: Bool { didSet { write(.restoreLastSessionOnlyIfRecent, restoreLastSessionOnlyIfRecent) } }
     @Published public var restoreLastSessionWithinMinutes: Int {
@@ -785,6 +793,7 @@ public final class AppConfigStore: ObservableObject {
             userDefaults: userDefaults
         )
         let initialChatComposerDraft = Self.textValue(.chatComposerDraft, userDefaults: userDefaults)
+        composerDraftState = ChatComposerDraftState(text: initialChatComposerDraft)
         chatComposerDraft = initialChatComposerDraft
         persistedChatComposerDraftValue = Self.normalizedAppConfigValue(.text(initialChatComposerDraft), for: .chatComposerDraft)
         restoreLastSessionOnLaunch = Self.boolValue(.restoreLastSessionOnLaunch, userDefaults: userDefaults)

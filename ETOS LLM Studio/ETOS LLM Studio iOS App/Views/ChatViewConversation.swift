@@ -68,10 +68,7 @@ extension ChatView {
     ) -> some View {
         let displayedMessages = viewModel.displayMessages
         let sessionMessages = viewModel.allMessagesForSession
-        let retryableMessageIDs = MessageActionBarAvailability.retryableMessageIDs(
-            in: sessionMessages,
-            isSending: viewModel.isSendingMessage
-        )
+        let retryableMessageIDs = viewModel.retryableMessageIDs
         let messageLayoutWidth = max(1, chatViewportWidth - 16)
         let reasoningPreviewMaxHeight = responsiveReasoningPreviewMaxHeight(for: chatViewportSize.height)
         ZStack {

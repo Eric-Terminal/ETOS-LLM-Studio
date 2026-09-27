@@ -79,7 +79,10 @@ final class ChatViewModel: ObservableObject {
     var responseAttemptIndexPublishedRevision = -1
     @Published var isHistoryFullyLoaded: Bool = false
     @Published var isLaterHistoryFullyLoaded: Bool = true
-    @Published var userInput: String = ""
+    var userInput: String {
+        get { AppConfigStore.shared.chatComposerDraft }
+        set { AppConfigStore.shared.chatComposerDraft = newValue }
+    }
     @Published var messageToEdit: ChatMessage?
     @Published var messageRewritePayload: MessageRewritePayload?
     @Published var messageRewriteErrorMessage: String?
@@ -616,7 +619,7 @@ final class ChatViewModel: ObservableObject {
     
     /// 是否可以发送消息（有文字或附件）
     var canSendMessage: Bool {
-        let hasText = !userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasText = AppConfigStore.shared.composerDraftState.hasSendableText
         let hasAttachments = pendingAudioAttachment != nil || !pendingImageAttachments.isEmpty || !pendingFileAttachments.isEmpty
         return (hasText || hasAttachments) && !isSendDelayPending && !isSendSubmissionPending
     }

@@ -12,6 +12,7 @@ import ETOSCore
 
 struct WatchInputBubbleView: View {
     @ObservedObject var viewModel: ChatViewModel
+    @ObservedObject private var composerDraftState = AppConfigStore.shared.composerDraftState
     @ObservedObject private var resourceUsageMonitor = LocalResourceUsageMonitor.shared
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
 
@@ -149,8 +150,7 @@ struct WatchInputBubbleView: View {
     }
 
     var body: some View {
-        let hasTrimmedText = !viewModel.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let canSend = hasTrimmedText || hasPendingAttachments
+        let canSend = composerDraftState.hasSendableText || hasPendingAttachments
         let inputActionState = WatchChatInputActionState.resolve(
             isSending: viewModel.isSendingMessage
                 || viewModel.isSendDelayPending

@@ -1,4 +1,5 @@
 import ETOSCore
+import Combine
 import Foundation
 import Testing
 @testable import ETOS_LLM_Studio_Watch_App
@@ -6,6 +7,60 @@ import Testing
 @MainActor
 @Suite("watchOS 消息预处理与缓存", .serialized)
 struct ChatMessagePreparationTests {
+    @Test("草稿编辑和外部恢复只通知输入叶子，不使聊天视图模型整体失效")
+    func draftChangesDoNotPublishConversationChanges() {
+        let config = AppConfigStore.shared
+        let previousDraft = config.chatComposerDraft
+        defer { config.chatComposerDraft = previousDraft }
+        let viewModel = ChatViewModel(chatService: ChatService(adapters: [:]))
+        viewModel.cancellables.removeAll()
+        var changes = 0
+        let subscription = viewModel.objectWillChange.sink { changes += 1 }
+        defer { subscription.cancel() }
+
+        let typedDraft = "输入草稿 \(UUID().uuidString)"
+        viewModel.userInput = typedDraft
+        #expect(config.composerDraftState.text == typedDraft)
+        config.chatComposerDraft = "外部替换"
+        #expect(viewModel.userInput == "外部替换")
+        viewModel.userInput = ""
+        #expect(config.composerDraftState.text.isEmpty)
+        #expect(changes == 0)
+    }
+
+    @Test("分页外的消息仍可重试，发送状态切换和会话清空不沿用旧索引")
+    func retryAvailabilityUsesPreparedWholeSession() {
+        let config = AppConfigStore.shared
+        let previousAutomatic = config.automaticHistoryLoadingEnabled
+        let previousLimit = config.lazyLoadMessageCount
+        defer {
+            config.automaticHistoryLoadingEnabled = previousAutomatic
+            config.lazyLoadMessageCount = previousLimit
+        }
+        let viewModel = ChatViewModel(chatService: ChatService(adapters: [:]))
+        viewModel.cancellables.removeAll()
+        viewModel.currentSession = nil
+        viewModel.automaticHistoryLoadingEnabled = false
+        viewModel.lazyLoadMessageCount = 2
+        let earlierUser = ChatMessage(role: .user, content: "历史问题")
+        let earlierAssistant = ChatMessage(role: .assistant, content: "历史回复")
+        let latestUser = ChatMessage(role: .user, content: "当前问题")
+        let latestAssistant = ChatMessage(role: .assistant, content: "当前回复")
+        viewModel.applyMessagesUpdate(ChatMessageListSnapshot(
+            messages: [earlierUser, earlierAssistant, latestUser, latestAssistant], sessionID: nil
+        ))
+        #expect(!viewModel.messages.contains { $0.id == earlierAssistant.id })
+
+        viewModel.isSendingMessage = false
+        #expect(viewModel.retryableMessageIDs == [earlierUser.id, earlierAssistant.id, latestUser.id, latestAssistant.id])
+        viewModel.isSendingMessage = true
+        #expect(viewModel.retryableMessageIDs == [latestUser.id, latestAssistant.id])
+        viewModel.isSendingMessage = false
+        #expect(viewModel.retryableMessageIDs.contains(earlierAssistant.id))
+        viewModel.beginHistorySession(UUID())
+        #expect(viewModel.retryableMessageIDs.isEmpty)
+    }
+
     @Test("长助手回复保留全文并识别公式，修改为代码示例后移除公式标记")
     func assistantMathPreviewKeepsFullContentAndTracksEdits() async throws {
         let viewModel = ChatViewModel(chatService: ChatService(adapters: [:]))

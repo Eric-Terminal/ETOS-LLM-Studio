@@ -20,6 +20,7 @@ struct TelegramMessageComposer: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) var accessibilityReduceMotion
     @ObservedObject var appConfig = AppConfigStore.shared
+    @ObservedObject private var composerDraftState = AppConfigStore.shared.composerDraftState
     @ObservedObject private var customSlashCommandStore = CustomChatSlashCommandStore.shared
     @Binding var text: String
     @Binding var isRequestControlsExpanded: Bool

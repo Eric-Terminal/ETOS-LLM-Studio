@@ -58,7 +58,6 @@ extension ChatView {
                     get: { draftText },
                     set: { newValue in
                         draftText = newValue
-                        viewModel.userInput = newValue
                     }
                 ),
                 isRequestControlsExpanded: $isComposerRequestControlsExpanded,
@@ -97,17 +96,6 @@ extension ChatView {
                 slashCommandAction: performSlashCommand,
                 focus: $composerFocused
             )
-            .onReceive(viewModel.$userInput) { newValue in
-                guard draftText != newValue else { return }
-                draftText = newValue
-            }
-            .onAppear {
-                if viewModel.userInput.isEmpty {
-                    viewModel.userInput = draftText
-                } else if draftText != viewModel.userInput {
-                    draftText = viewModel.userInput
-                }
-            }
             .padding(.bottom, -tabBarCompensation)
         }
     }
