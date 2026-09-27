@@ -25,19 +25,11 @@ public struct MarqueeText: View {
     @State private var containerWidth: CGFloat = 0
     @State private var textWidth: CGFloat = 0
     @State private var textHeight: CGFloat = 0
-    @State private var isAnimating = false
+    @State private var isVisible = false
     @Environment(\.font) private var environmentFont
-    
-    private var isScrollNeeded: Bool {
-        textWidth > containerWidth
-    }
-    
-    private var animation: Animation {
-        let duration = (textWidth + spacing) / speed
-        return Animation.linear(duration: duration)
-            .delay(delay)
-            .repeatForever(autoreverses: false)
-    }
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     
     // MARK: - 初始化
     
@@ -54,43 +46,72 @@ public struct MarqueeText: View {
     
     public var body: some View {
         GeometryReader { geometry in
-            // 使用一个不可见的视图来测量容器宽度
-            Color.clear
-                .onAppear {
-                    containerWidth = geometry.size.width
+            ZStack(alignment: .leading) {
+                if canAnimate {
+                    MarqueeScrollingText(
+                        content: content,
+                        font: resolvedFont,
+                        textWidth: textWidth,
+                        spacing: spacing,
+                        speed: speed,
+                        delay: delay
+                    )
+                    // 新内容与新几何需要从开头重新阅读；移除旧子树也会终止旧的循环动画。
+                    .id(animationIdentity)
+                } else {
+                    Text(content)
+                        .font(resolvedFont)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .onChange(of: geometry.size.width) { _, newWidth in
-                    containerWidth = newWidth
-                }
-            
-            // 如果需要滚动，则创建滚动视图
-            if isScrollNeeded {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: spacing) {
-                        textToScroll
-                        // 复制一份文本以实现无缝滚动
-                        textToScroll
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
+            .clipped()
+            .background(alignment: .leading) {
+                // 始终测量同一份完整文字，避免静态截断宽度反过来关闭跑马灯。
+                Text(content)
+                    .font(resolvedFont)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .hidden()
+                    .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                        textWidth = size.width
+                        textHeight = size.height
                     }
-                    .offset(x: isAnimating ? -(textWidth + spacing) : 0)
-                }
-                .disabled(true) // 禁用用户手动滚动
-                .onAppear {
-                    // 延迟后启动动画
-                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                        withAnimation(animation) {
-                            isAnimating = true
-                        }
-                    }
-                }
-            } else {
-                // 如果不需要滚动，则显示静态文本
-                textToScroll
+                    .accessibilityHidden(true)
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+                containerWidth = width
             }
         }
         .frame(height: max(uiFont.lineHeight, textHeight))
+        // 两份视觉副本只代表一段内容；静态截断也不能截断 VoiceOver 的朗读。
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: content))
+        .onAppear {
+            isVisible = true
+        }
+        .onDisappear {
+            isVisible = false
+        }
     }
-    
-    // MARK: - 辅助视图
+
+    private var canAnimate: Bool {
+        isVisible && scenePhase == .active && !reduceMotion && !voiceOverEnabled
+            && containerWidth > 0 && textWidth > containerWidth && speed > 0
+    }
+
+    private var animationIdentity: MarqueeAnimationIdentity {
+        MarqueeAnimationIdentity(
+            content: content,
+            textWidth: textWidth,
+            textHeight: textHeight,
+            containerWidth: containerWidth,
+            spacing: spacing,
+            speed: speed,
+            delay: delay
+        )
+    }
 
     private var resolvedFont: Font {
         if let customFont {
@@ -101,29 +122,46 @@ public struct MarqueeText: View {
         }
         return Font(uiFont)
     }
-    
-    private var textToScroll: some View {
-        Text(content)
-            .font(resolvedFont)
-            .fixedSize(horizontal: true, vertical: false)
-            .background(
-                // 使用一个不可见的视图来测量文本宽度
-                GeometryReader { geometry in
-                    Color.clear
-                        .onAppear {
-                            textWidth = geometry.size.width
-                            textHeight = geometry.size.height
-                        }
-                        .onChange(of: geometry.size) { _, newSize in
-                            textWidth = newSize.width
-                            textHeight = newSize.height
-                        }
-                        .onChange(of: content) { _, _ in
-                            // 当文本内容变化时重新测量
-                            textWidth = geometry.size.width
-                            textHeight = geometry.size.height
-                        }
-                }
-            )
+}
+
+private struct MarqueeAnimationIdentity: Hashable {
+    let content: String
+    let textWidth: CGFloat
+    let textHeight: CGFloat
+    let containerWidth: CGFloat
+    let spacing: CGFloat
+    let speed: Double
+    let delay: TimeInterval
+}
+
+private struct MarqueeScrollingText: View {
+    let content: String
+    let font: Font
+    let textWidth: CGFloat
+    let spacing: CGFloat
+    let speed: Double
+    let delay: TimeInterval
+
+    @State private var isAnimating = false
+
+    var body: some View {
+        HStack(spacing: spacing) {
+            Text(content).font(font)
+            Text(content).font(font)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .offset(x: isAnimating ? -(textWidth + spacing) : 0)
+        .task {
+            // 让初始位置先进入视图事务；任务随子树销毁取消，不遗留延迟回调。
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            withAnimation(
+                .linear(duration: (textWidth + spacing) / speed)
+                    .delay(delay)
+                    .repeatForever(autoreverses: false)
+            ) {
+                isAnimating = true
+            }
+        }
     }
 }
