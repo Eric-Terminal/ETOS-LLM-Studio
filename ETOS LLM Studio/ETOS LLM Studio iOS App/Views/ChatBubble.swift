@@ -312,7 +312,8 @@ struct ChatBubble: View {
             ChatBubbleOpenMoreGestureModifier(
                 isSelectionMode: isSelectionMode,
                 onToggleSelection: onToggleSelection,
-                onOpenMore: hasOnlyImages || hasOnlyFiles ? openMoreAction : nil
+                // 含图片的混合行也由图片原生菜单接管长按，避免与预览按钮竞争。
+                onOpenMore: hasOnlyFiles && (message.imageFileNames?.isEmpty ?? true) ? openMoreAction : nil
             )
         )
         .fullScreenCover(item: $imagePreview, onDismiss: {

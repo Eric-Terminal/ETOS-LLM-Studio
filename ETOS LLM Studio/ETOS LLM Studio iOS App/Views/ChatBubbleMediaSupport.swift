@@ -341,6 +341,7 @@ struct AttachmentImageView: View {
     let maxWidth: CGFloat
     let height: CGFloat
     let cornerRadius: CGFloat
+    let onOpenMessageActions: (() -> Void)?
     let onPreview: (UIImage) -> Void
     let onDownload: (() -> Void)?
     let onDelete: (() -> Void)?
@@ -351,6 +352,7 @@ struct AttachmentImageView: View {
         maxWidth: CGFloat,
         height: CGFloat,
         cornerRadius: CGFloat,
+        onOpenMessageActions: (() -> Void)? = nil,
         onPreview: @escaping (UIImage) -> Void,
         onDownload: (() -> Void)? = nil,
         onDelete: (() -> Void)? = nil
@@ -360,6 +362,7 @@ struct AttachmentImageView: View {
         self.maxWidth = maxWidth
         self.height = height
         self.cornerRadius = cornerRadius
+        self.onOpenMessageActions = onOpenMessageActions
         self.onPreview = onPreview
         self.onDownload = onDownload
         self.onDelete = onDelete
@@ -395,6 +398,7 @@ struct AttachmentImageView: View {
                         .shadow(color: Color.black.opacity(0.12), radius: 4, y: 2)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(NSLocalizedString("图片预览", comment: ""))
             } else {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(Color.secondary.opacity(0.15))
@@ -419,6 +423,11 @@ struct AttachmentImageView: View {
             await loadImage()
         }
         .contextMenu {
+            if let onOpenMessageActions {
+                Button(action: onOpenMessageActions) {
+                    Label(NSLocalizedString("消息操作", comment: ""), systemImage: "ellipsis")
+                }
+            }
             if let onDownload {
                 Button(action: onDownload) {
                     Label(

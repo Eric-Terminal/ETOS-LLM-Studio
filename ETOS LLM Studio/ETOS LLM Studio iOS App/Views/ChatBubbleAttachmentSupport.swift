@@ -32,7 +32,8 @@ extension ChatBubble {
                         minWidth: minWidth,
                         maxWidth: maxWidth,
                         height: itemHeight,
-                        cornerRadius: 16
+                        cornerRadius: 16,
+                        onOpenMessageActions: isSelectionMode ? nil : openMoreAction
                     ) { image in
                         imagePreview = ImagePreviewPayload(image: image, fileName: fileName)
                     } onDownload: {
