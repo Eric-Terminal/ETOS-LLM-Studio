@@ -127,6 +127,8 @@ struct ChatLongConversationRuntimeTests {
         fixture.coordinator.updateInteractionState(false)
         await settleLayout(fixture.host.view, duration: 0.25)
 
+        let monitor = fixture.coordinator.chatLayoutIntegrityMonitor
+        let initialProbeRevision = monitor.layoutProbeRevision
         var coordinatorChangeCount = 0
         let changeSubscription = fixture.coordinator.objectWillChange.sink {
             coordinatorChangeCount += 1
@@ -144,6 +146,14 @@ struct ChatLongConversationRuntimeTests {
         }
         await settleLayout(fixture.host.view, duration: 0.25)
         let settledOffset = scrollView.contentOffset.y
+        // 微滚动会触发一次必要的布局审计；新测量完成后才开始检查稳态反馈。
+        let auditDeadline = ContinuousClock.now + .seconds(3)
+        while ContinuousClock.now < auditDeadline,
+              monitor.layoutProbeRevision <= initialProbeRevision || monitor.isContentFrameProbeActive {
+            await settleMainQueue(duration: 0.02)
+        }
+        try #require(monitor.layoutProbeRevision > initialProbeRevision, "本次滚动必须完成新一轮布局测量")
+        try #require(!monitor.isContentFrameProbeActive, "布局测量必须在有界等待内结束")
         let settledChangeCount = coordinatorChangeCount
         await settleLayout(fixture.host.view, duration: 0.5)
 
@@ -297,6 +307,8 @@ struct ChatLongConversationRuntimeTests {
             NavigationStack {
                 ChatView(scrollCoordinator: coordinator)
                     .environmentObject(viewModel)
+                    // 这些用例模拟前台阅读，独立宿主必须显式提供活跃场景环境。
+                    .environment(\.scenePhase, .active)
             }
         )
         let host = UIHostingController(rootView: rootView)

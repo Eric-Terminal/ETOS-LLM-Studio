@@ -42,9 +42,16 @@ struct ChatSendFlightSourceTests {
         let originalOffset = editor.contentOffset
         let originalFont = editor.font
         let originalSelection = editor.selectedRange
+        let originalBackgroundColor = editor.backgroundColor
+        let originalTintColor = editor.tintColor
+        let originalIsOpaque = editor.isOpaque
         let sources = ChatSendFlightSources()
         sources.register(anchor, id: .text)
-        let capture = try #require(sources.capture(in: surface, ids: [.text]).first)
+        let captures = sources.capture(in: surface, ids: [.text])
+        #expect(editor.backgroundColor == originalBackgroundColor)
+        #expect(editor.tintColor == originalTintColor)
+        #expect(editor.isOpaque == originalIsOpaque)
+        let capture = try #require(captures.first)
         let editorFrame = editor.convert(editor.bounds, to: surface)
         #expect(capture.frame.minY >= editorFrame.minY - 1)
         #expect(capture.frame.maxY <= editorFrame.maxY + 1)
@@ -52,7 +59,6 @@ struct ChatSendFlightSourceTests {
         #expect(editor.contentOffset == originalOffset)
         #expect(editor.font == originalFont)
         #expect(editor.selectedRange == originalSelection)
-        #expect(editor.backgroundColor == .white)
         if longDraft {
             #expect(capture.contentVerticalPosition > 0.95)
         } else {
@@ -83,7 +89,8 @@ struct ChatSendFlightSourceTests {
         window.makeKeyAndVisible()
         let surface = UIView(frame: window.bounds)
         surface.isUserInteractionEnabled = false
-        host.view.addSubview(surface)
+        // 让捕获层与宿主视图同级，避免直接修改 SwiftUI 管理的子视图树。
+        window.addSubview(surface)
         defer {
             window.isHidden = true
             window.rootViewController = nil
