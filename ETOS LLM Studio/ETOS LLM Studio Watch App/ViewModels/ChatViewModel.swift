@@ -526,6 +526,8 @@ class ChatViewModel: ObservableObject {
     private func capturePendingSendPayload() -> PendingChatSendPayload? {
         let userMessageContent = userInput.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasAudio = pendingAudioAttachment != nil
+        let hasImages = !pendingImageAttachments.isEmpty
+        let hasFiles = !pendingFileAttachments.isEmpty
         
         // 必须有文字或附件才能发送
         guard Self.hasSendableContent(
@@ -561,9 +563,10 @@ class ChatViewModel: ObservableObject {
             fileAttachments: filesToSend
         )
         userInput = ""
-        pendingAudioAttachment = nil
-        pendingImageAttachments = []
-        pendingFileAttachments = []
+        // @Published 对相同空值也会通知；纯文本发送不应重建附件与会话视图。
+        if hasAudio { pendingAudioAttachment = nil }
+        if hasImages { pendingImageAttachments = [] }
+        if hasFiles { pendingFileAttachments = [] }
 
         return payload
     }
