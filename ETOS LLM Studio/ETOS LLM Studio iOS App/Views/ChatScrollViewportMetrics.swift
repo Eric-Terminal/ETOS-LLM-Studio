@@ -6,6 +6,72 @@
 
 import SwiftUI
 
+struct ChatScrollAnchorAdjustment: Equatable, Identifiable, Sendable {
+    let id: UUID
+    let deltaY: CGFloat
+    let allowsTemporaryOverflow: Bool
+    let allowsDuringProgrammaticScroll: Bool
+    let referenceDistanceToTop: CGFloat?
+
+    nonisolated init(
+        id: UUID = UUID(),
+        deltaY: CGFloat,
+        allowsTemporaryOverflow: Bool = false,
+        allowsDuringProgrammaticScroll: Bool = false,
+        referenceDistanceToTop: CGFloat? = nil
+    ) {
+        self.id = id
+        self.deltaY = deltaY
+        self.allowsTemporaryOverflow = allowsTemporaryOverflow
+        self.allowsDuringProgrammaticScroll = allowsDuringProgrammaticScroll
+        self.referenceDistanceToTop = referenceDistanceToTop
+    }
+}
+
+enum ChatViewportPageDirection: Equatable, Sendable {
+    case upward
+    case downward
+
+    nonisolated var offsetMultiplier: CGFloat {
+        switch self {
+        case .upward: return -1
+        case .downward: return 1
+        }
+    }
+}
+
+struct ChatViewportPageRequest: Equatable, Identifiable, Sendable {
+    let id: UUID
+    let direction: ChatViewportPageDirection
+    let viewportFraction: CGFloat
+
+    nonisolated init(
+        id: UUID = UUID(),
+        direction: ChatViewportPageDirection,
+        viewportFraction: CGFloat = 0.8
+    ) {
+        self.id = id
+        self.direction = direction
+        self.viewportFraction = viewportFraction
+    }
+}
+
+struct ChatScrollMetricThresholds: Equatable, Sendable {
+    let arrival: CGFloat
+    let bottomPinned: CGFloat
+    let bottomButton: CGFloat
+    let historyLoading: CGFloat
+}
+
+struct ChatScrollMetricRegion: Equatable, Sendable {
+    let isAtTop: Bool
+    let isNearTopHistoryBoundary: Bool
+    let isAtBottom: Bool
+    let isBottomPinned: Bool
+    let isPastBottomButtonThreshold: Bool
+    let isNearBottomHistoryBoundary: Bool
+}
+
 extension ChatScrollMetricsObserver {
     /// iOS 18 起静态尺寸变化使用原生锚点；流式期间暂时交由 UIKit 单独接管偏移。
     nonisolated static var usesNativeSizeChangeAnchor: Bool {
@@ -156,17 +222,6 @@ extension ChatScrollMetricsObserver {
     /// MarkdownUI 的大幅中间高度通常会在随后几轮布局中回落，不能立即作为滚动终点。
     nonisolated static func requiresStreamingLayoutSettle(heightDelta: CGFloat) -> Bool {
         abs(heightDelta) > 160
-    }
-
-    /// 连续输出不能让屏幕位置长期落后于真实底部，否则气泡会钻入输入栏后方。
-    nonisolated static func streamingFollowStartOffset(
-        visibleOffsetY: CGFloat,
-        targetOffsetY: CGFloat,
-        minimumOffsetY: CGFloat,
-        maximumLag: CGFloat = 12
-    ) -> CGFloat {
-        let clampedVisible = min(max(visibleOffsetY, minimumOffsetY), targetOffsetY)
-        return max(clampedVisible, targetOffsetY - max(maximumLag, 0))
     }
 
     /// 一次性滚动命令需要收到真实几何回执，即使当前位置没有产生任何偏移变化。

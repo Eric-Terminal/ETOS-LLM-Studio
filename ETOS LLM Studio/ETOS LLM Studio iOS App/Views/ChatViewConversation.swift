@@ -6,6 +6,7 @@
 
 import SwiftUI
 import Foundation
+import Combine
 import MarkdownUI
 import ETOSCore
 import UIKit
@@ -110,6 +111,16 @@ extension ChatView {
                             },
                             onUserPanBegan: {
                                 handleChatScrollPanBegan()
+                            },
+                            isViewportActive: isChatVisible && scenePhase == .active,
+                            layoutTransitionRevision: scrollCoordinator.layoutTransitionRevision,
+                            onViewportLayoutSettled: { revision in
+                                scrollCoordinator.completeLayoutTransition(revision: revision)
+                            },
+                            onStreamingFollowActivityChange: { isActive in
+                                if scrollCoordinator.isStreamingViewportFollowing != isActive {
+                                    scrollCoordinator.isStreamingViewportFollowing = isActive
+                                }
                             }
                         ) { distanceToBottom, distanceToTop, isUserInteracting in
                             handleChatScrollMetrics(
@@ -372,9 +383,10 @@ extension ChatView {
                                         response: appConfig.chatScrollAnimationSpringResponse,
                                         dampingFraction: appConfig.chatScrollAnimationSpringDamping
                                     ))
-                                ) { [scrollAnimEnabled = appConfig.chatScrollAnimationEnabled,
+                                ) { [scrollAnimEnabled = appConfig.chatScrollAnimationEnabled && !accessibilityReduceMotion,
                                      scrollAnimOffset = appConfig.chatScrollAnimationOffset,
                                      layoutSettling = scrollCoordinator.isChatLayoutSettling,
+                                     streamingFollowActive = scrollCoordinator.isStreamingViewportFollowing,
                                      keepsBottomPinned = scrollCoordinator.shouldKeepBottomPinned,
                                      scrollUserInteracting = scrollCoordinator.isChatScrollUserInteracting,
                                      timelineNavigationActive = appConfig.chatTimelineNavigationEnabled
@@ -394,7 +406,10 @@ extension ChatView {
                                                         keepsBottomPinned: keepsBottomPinned,
                                                         isUserInteracting: scrollUserInteracting
                                                     ),
-                                                isTimelineNavigationActive: timelineNavigationActive
+                                                isTimelineNavigationActive: timelineNavigationActive,
+                                                isAutomaticViewportMotionActive: streamingFollowActive
+                                                    && keepsBottomPinned && !scrollUserInteracting,
+                                                isSendFlightTarget: reportsSendFlightTarget
                                             )
                                         )
                                 }
@@ -481,7 +496,8 @@ extension ChatView {
                         keepsBottomPinned: scrollCoordinator.shouldKeepBottomPinned
                             && !isMessageJumpInFlight
                             && !scrollCoordinator.hasRetainedTimelineNavigationTarget,
-                        isStreaming: viewModel.isSendingMessage
+                        isStreaming: viewModel.isSendingMessage,
+                        isStreamingViewportFollowing: scrollCoordinator.isStreamingViewportFollowing
                     )
                 )
                 .onGeometryChange(for: CGSize.self) { proxy in
@@ -776,7 +792,8 @@ extension ChatView {
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                 beginChatLayoutSettling(
-                    keepBottomPinned: resolvedBottomPinIntentForViewportChange()
+                    keepBottomPinned: resolvedBottomPinIntentForViewportChange(),
+                    awaitsKeyboardCompletion: true
                 )
                 if !isKeyboardVisible {
                     isKeyboardVisible = true
@@ -784,11 +801,25 @@ extension ChatView {
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
                 beginChatLayoutSettling(
-                    keepBottomPinned: resolvedBottomPinIntentForViewportChange()
+                    keepBottomPinned: resolvedBottomPinIntentForViewportChange(),
+                    awaitsKeyboardCompletion: true
                 )
                 if isKeyboardVisible {
                     isKeyboardVisible = false
                 }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { _ in
+                beginChatLayoutSettling(
+                    keepBottomPinned: resolvedBottomPinIntentForViewportChange(),
+                    awaitsKeyboardCompletion: true
+                )
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(for: UIResponder.keyboardDidChangeFrameNotification)
+                    .merge(with: NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification))
+                    .merge(with: NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification))
+            ) { _ in
+                scrollCoordinator.keyboardLayoutTransitionDidEnd()
             }
             .onDisappear {
                 scrollCoordinator.prepareForDisappearance()

@@ -1112,17 +1112,6 @@ struct ChatScrollCoordinatorTests {
         #expect(ChatScrollMetricsObserver.requiresStreamingLayoutSettle(heightDelta: -458))
         #expect(!ChatScrollMetricsObserver.requiresStreamingLayoutSettle(heightDelta: 48))
 
-        #expect(ChatScrollMetricsObserver.streamingFollowStartOffset(
-            visibleOffsetY: 52,
-            targetOffsetY: 76,
-            minimumOffsetY: 0
-        ) == 64)
-        #expect(ChatScrollMetricsObserver.streamingFollowStartOffset(
-            visibleOffsetY: 72,
-            targetOffsetY: 76,
-            minimumOffsetY: 0
-        ) == 72)
-
         #expect(ChatScrollMetricsObserver.viewportFollowTargetOffsetY(
             requestedContentHeight: 1_000,
             actualContentHeight: 1_000,
