@@ -503,7 +503,7 @@ extension ChatService {
             }
         } else if !currentSession.isTemporary {
             // 老会话重新收到消息时，将其排到列表顶部
-            promoteSessionToTopIfNeeded(sessionID: currentSession.id)
+            await promoteSessionToTopIfNeeded(sessionID: currentSession.id)
         } else if let sessionTitleSource = primaryUserMessage,
                   currentSession.name == NSLocalizedString("新的对话", comment: "Default new chat session name") {
             currentSession.name = String(sessionTitleSource.content.prefix(20))

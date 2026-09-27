@@ -208,14 +208,29 @@ extension ChatService {
         }
     }
 
-    func promoteSessionToTopIfNeeded(sessionID: UUID) {
+    @MainActor
+    func promoteSessionToTopIfNeeded(sessionID: UUID) async {
+        guard let index = chatSessionsSubject.value.firstIndex(where: { $0.id == sessionID }), index > 0 else { return }
+        let database = await Persistence.resolveSessionOrderingDatabase()
+        // 解析存储期间可能切会话、编辑或删除；只重排当前列表，不回放 await 前的快照。
         var sessions = chatSessionsSubject.value
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }), index > 0 else { return }
         let session = sessions.remove(at: index)
         sessions.insert(session, at: 0)
-        chatSessionsSubject.send(sessions)
-        Persistence.saveChatSessions(sessions)
-        logger.info("已将会话移动到列表顶部: \(session.name)")
+        guard let database else {
+            // 发送已完成 GRDB 追加；解析间锁库或替换时仍更新内存，不改写另一份 JSON 存储。
+            chatSessionsSubject.send(sessions)
+            logger.error("会话排序未保存：聊天数据库不可用。")
+            return
+        }
+        await withCheckedContinuation { continuation in
+            Persistence.enqueueChatSessionPromotion(sessionID, database: database) {
+                continuation.resume()
+            }
+            // 登记写入后才发布，后续管理操作看到的列表与 writer 中的先后次序一致。
+            chatSessionsSubject.send(sessions)
+        }
+        logger.info("已将会话移动到列表顶部。")
     }
 
     private func collectSessionFolderDescendantIDs(rootID: UUID, folders: [SessionFolder]) -> Set<UUID> {
