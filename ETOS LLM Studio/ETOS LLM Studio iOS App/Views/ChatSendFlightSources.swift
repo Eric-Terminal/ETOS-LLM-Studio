@@ -55,25 +55,34 @@ final class ChatSendFlightSources {
             .insetBy(dx: -1, dy: -1).intersection(viewport)
         guard textRect.width > 1, textRect.height > 1 else { return nil }
 
-        // 系统编辑装饰不随文字发送。修改只跨越一次同步快照，不改变焦点、选区或键盘。
-        let interactions = selectionInteractions(in: editor)
-        let activeStates = interactions.map(\.isActivated)
-        let tintColor = editor.tintColor
-        let backgroundColor = editor.backgroundColor
-        let wasOpaque = editor.isOpaque
-        interactions.forEach { $0.isActivated = false }
-        editor.tintColor = .clear
-        editor.backgroundColor = .clear
-        editor.isOpaque = false
-        defer {
-            for (interaction, active) in zip(interactions, activeStates) { interaction.isActivated = active }
-            editor.tintColor = tintColor
-            editor.backgroundColor = backgroundColor
-            editor.isOpaque = wasOpaque
+        // 只绘制已排版的可见文本层。afterScreenUpdates 会同步提交整个窗口的
+        // SwiftUI 更新；改变 tintColor 还会使链接文字重新布局，均不能放在发送触摸中。
+        let selectionLayers = selectionInteractions(in: editor).flatMap { interaction in
+            [interaction.cursorView.layer, interaction.highlightView.layer]
+                + interaction.handleViews.map(\.layer)
         }
-        guard let snapshot = editor.resizableSnapshotView(
-            from: inputView.convert(textRect, to: editor), afterScreenUpdates: true, withCapInsets: .zero
-        ) else { return nil }
+        let hiddenStates = selectionLayers.map(\.isHidden)
+        let backgroundColor = editor.layer.backgroundColor
+        let wasOpaque = editor.layer.isOpaque
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        selectionLayers.forEach { $0.isHidden = true }
+        editor.layer.backgroundColor = nil
+        editor.layer.isOpaque = false
+        defer {
+            for (layer, hidden) in zip(selectionLayers, hiddenStates) { layer.isHidden = hidden }
+            editor.layer.backgroundColor = backgroundColor
+            editor.layer.isOpaque = wasOpaque
+            CATransaction.commit()
+        }
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = false
+        format.scale = editor.traitCollection.displayScale
+        let renderer = UIGraphicsImageRenderer(bounds: inputView.convert(textRect, to: editor), format: format)
+        let image = renderer.image { context in
+            editor.layer.render(in: context.cgContext)
+        }
+        let snapshot = UIImageView(image: image)
         let verticalPosition: CGFloat
         if let scrollView = editor as? UIScrollView {
             let scrollableHeight = scrollView.contentSize.height - scrollView.bounds.height
