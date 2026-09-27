@@ -45,8 +45,9 @@ extension TelegramMessageComposer {
     var adaptiveControlSize: CGFloat { 44 }
 
     var adaptiveComposerAnimation: Animation? {
+        // 输入框高度和相邻控件位置共用此事务；减少动态效果时不能只换成更短的位移动画。
         accessibilityReduceMotion
-            ? .easeOut(duration: 0.16)
+            ? nil
             : .spring(response: 0.34, dampingFraction: 0.94)
     }
 
@@ -94,7 +95,7 @@ extension TelegramMessageComposer {
             if adaptiveShowsAttachmentButton {
                 attachmentMenuButton(size: adaptiveControlSize)
                     .transition(
-                        .scale(scale: 0.82, anchor: .trailing)
+                        accessibilityReduceMotion ? .opacity : .scale(scale: 0.82, anchor: .trailing)
                             .combined(with: .opacity)
                     )
             }
@@ -107,7 +108,7 @@ extension TelegramMessageComposer {
                     participatesInGlassContainer: false
                 )
                     .transition(
-                        .scale(scale: 0.82, anchor: .leading)
+                        accessibilityReduceMotion ? .opacity : .scale(scale: 0.82, anchor: .leading)
                             .combined(with: .opacity)
                     )
             }
@@ -120,7 +121,7 @@ extension TelegramMessageComposer {
                 )
                     .padding(.trailing, 8)
                     .padding(.bottom, 8)
-                    .transition(.scale(scale: 0.82).combined(with: .opacity))
+                    .transition(accessibilityReduceMotion ? .opacity : .scale(scale: 0.82).combined(with: .opacity))
             }
         }
     }
@@ -135,7 +136,7 @@ extension TelegramMessageComposer {
                 )
                     .glassEffectID("adaptive-attachment", in: adaptiveGlassNamespace)
                     .transition(
-                        .scale(scale: 0.82, anchor: .trailing)
+                        accessibilityReduceMotion ? .opacity : .scale(scale: 0.82, anchor: .trailing)
                             .combined(with: .opacity)
                     )
             }
@@ -150,7 +151,7 @@ extension TelegramMessageComposer {
                 )
                     .glassEffectID("adaptive-action", in: adaptiveGlassNamespace)
                     .transition(
-                        .scale(scale: 0.82, anchor: .leading)
+                        accessibilityReduceMotion ? .opacity : .scale(scale: 0.82, anchor: .leading)
                             .combined(with: .opacity)
                     )
             }
@@ -164,7 +165,7 @@ extension TelegramMessageComposer {
                     .glassEffectID("adaptive-action", in: adaptiveGlassNamespace)
                     .padding(.trailing, 8)
                     .padding(.bottom, 8)
-                    .transition(.scale(scale: 0.82).combined(with: .opacity))
+                    .transition(accessibilityReduceMotion ? .opacity : .scale(scale: 0.82).combined(with: .opacity))
             }
         }
     }
@@ -216,7 +217,7 @@ extension TelegramMessageComposer {
         VStack(spacing: 0) {
             if adaptivePresentation == .requestControls {
                 adaptiveRequestControlsPanel
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(accessibilityReduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
 
                 Divider()
                     .padding(.horizontal)
@@ -225,7 +226,7 @@ extension TelegramMessageComposer {
 
             if adaptivePresentation == .speech {
                 adaptiveSpeechContent
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .transition(accessibilityReduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96)))
             } else {
                 adaptiveInputStrip
                     .transition(.opacity)
@@ -308,14 +309,14 @@ extension TelegramMessageComposer {
             HStack(spacing: 0) {
                 if adaptiveShowsRequestControlsButton {
                     adaptiveRequestControlsButton
-                        .transition(.scale(scale: 0.8).combined(with: .opacity))
+                        .transition(accessibilityReduceMotion ? .opacity : .scale(scale: 0.8).combined(with: .opacity))
                 }
 
                 Spacer(minLength: 0)
 
                 if adaptiveShowsSpeechButton {
                     adaptiveSpeechButton
-                        .transition(.scale(scale: 0.8).combined(with: .opacity))
+                        .transition(accessibilityReduceMotion ? .opacity : .scale(scale: 0.8).combined(with: .opacity))
                 }
             }
             .frame(height: adaptiveControlSize, alignment: .top)

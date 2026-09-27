@@ -94,7 +94,7 @@ struct TelegramMessageComposer: View {
                 )
                 .padding(.horizontal, 16)
                 .transition(
-                    .scale(scale: 0.98, anchor: .bottom)
+                    accessibilityReduceMotion ? .opacity : .scale(scale: 0.98, anchor: .bottom)
                         .combined(with: .opacity)
                 )
             }
@@ -114,7 +114,7 @@ struct TelegramMessageComposer: View {
         .padding(.bottom, 6)
         .animation(
             accessibilityReduceMotion
-                ? .easeOut(duration: 0.16)
+                ? nil
                 : .spring(response: 0.3, dampingFraction: 1),
             value: slashCommandSuggestions
         )
@@ -183,7 +183,7 @@ struct TelegramMessageComposer: View {
                 }
                 handleAutoExpand(for: text)
             } else if isExpandedComposer {
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                withAnimation(adaptiveComposerAnimation) {
                     isExpandedComposer = false
                 }
             }
@@ -270,8 +270,8 @@ struct TelegramMessageComposer: View {
             .padding(.vertical, 8)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .bottom)
-            .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isExpandedComposer)
-            .animation(.spring(response: 0.3, dampingFraction: 0.86), value: inlineSpeechRecorder.phase)
+            .animation(adaptiveComposerAnimation, value: isExpandedComposer)
+            .animation(adaptiveComposerAnimation, value: inlineSpeechRecorder.phase)
             .animation(adaptiveComposerAnimation, value: isRequestControlsExpanded)
     }
 
@@ -526,7 +526,7 @@ struct TelegramMessageComposer: View {
         }
         if trimmed.isEmpty {
             if isExpandedComposer {
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                withAnimation(adaptiveComposerAnimation) {
                     isExpandedComposer = false
                 }
             }
@@ -553,14 +553,14 @@ struct TelegramMessageComposer: View {
         if shouldExpand {
             let wasFocused = focus.wrappedValue
             guard !isExpandedComposer else { return }
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+            withAnimation(adaptiveComposerAnimation) {
                 isExpandedComposer = true
             }
             if wasFocused {
                 focus.wrappedValue = true
             }
         } else if isExpandedComposer {
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+            withAnimation(adaptiveComposerAnimation) {
                 isExpandedComposer = false
             }
         }

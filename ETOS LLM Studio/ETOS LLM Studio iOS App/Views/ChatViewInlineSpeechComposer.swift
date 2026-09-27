@@ -9,6 +9,7 @@
 import AVFoundation
 import Combine
 import SwiftUI
+import UIKit
 import ETOSCore
 
 @MainActor
@@ -270,10 +271,14 @@ final class InlineSpeechRecorderController: ObservableObject {
     }
 
     private static let placeholderSamples: [CGFloat] = Array(repeating: 0.08, count: 56)
-    private static let phaseAnimation = Animation.spring(response: 0.3, dampingFraction: 0.86)
+    private static var phaseAnimation: Animation? {
+        UIAccessibility.isReduceMotionEnabled ? nil : .spring(response: 0.3, dampingFraction: 0.86)
+    }
 }
 
 struct InlineVoiceWaveformView: View {
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     let samples: [CGFloat]
     let tint: Color
     let minimumBarOpacity: Double
@@ -296,7 +301,7 @@ struct InlineVoiceWaveformView: View {
                 )
                 .opacity(isProcessing ? 0.62 : 1)
 
-                if isProcessing {
+                if isProcessing && !accessibilityReduceMotion && scenePhase == .active {
                     processingSweep(containerWidth: proxy.size.width)
                         .mask(
                             waveformBars(

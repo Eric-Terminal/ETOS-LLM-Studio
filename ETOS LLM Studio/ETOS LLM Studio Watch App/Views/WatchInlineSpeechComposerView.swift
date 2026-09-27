@@ -10,6 +10,7 @@ import SwiftUI
 import ETOSCore
 
 struct WatchInlineSpeechComposerView: View {
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @ObservedObject var viewModel: ChatViewModel
     let inputControlHeight: CGFloat
     let inputFillColor: Color
@@ -27,9 +28,18 @@ struct WatchInlineSpeechComposerView: View {
             }
         }
         .frame(height: inputControlHeight)
-        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: viewModel.isSpeechRecordingPreparing)
-        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: viewModel.isRecordingSpeech)
-        .animation(.easeOut(duration: 0.16), value: viewModel.speechTranscriptionInProgress)
+        .animation(
+            accessibilityReduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.86),
+            value: viewModel.isSpeechRecordingPreparing
+        )
+        .animation(
+            accessibilityReduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.86),
+            value: viewModel.isRecordingSpeech
+        )
+        .animation(
+            accessibilityReduceMotion ? nil : .easeOut(duration: 0.16),
+            value: viewModel.speechTranscriptionInProgress
+        )
         .task {
             await viewModel.startSpeechRecording()
         }
@@ -159,6 +169,8 @@ struct WatchInlineSpeechComposerView: View {
 }
 
 private struct WatchInlineVoiceWaveformView: View {
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     let samples: [CGFloat]
     let tint: Color
     let minimumBarOpacity: Double
@@ -181,7 +193,7 @@ private struct WatchInlineVoiceWaveformView: View {
                 )
                 .opacity(isProcessing ? 0.62 : 1)
 
-                if isProcessing {
+                if isProcessing && !accessibilityReduceMotion && scenePhase == .active {
                     processingSweep(containerWidth: proxy.size.width)
                         .mask(
                             bars(

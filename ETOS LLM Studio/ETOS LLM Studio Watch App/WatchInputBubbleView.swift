@@ -11,6 +11,7 @@ import SwiftUI
 import ETOSCore
 
 struct WatchInputBubbleView: View {
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @ObservedObject var viewModel: ChatViewModel
     @ObservedObject private var composerDraftState = AppConfigStore.shared.composerDraftState
     @ObservedObject private var resourceUsageMonitor = LocalResourceUsageMonitor.shared
@@ -265,8 +266,11 @@ struct WatchInputBubbleView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, inputBubbleVerticalPadding)
-        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isInlineSpeechComposerPresented)
-        .animation(.easeOut(duration: 0.16), value: slashCommandSuggestions)
+        .animation(
+            accessibilityReduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.86),
+            value: isInlineSpeechComposerPresented
+        )
+        .animation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.16), value: slashCommandSuggestions)
 
         return coreBubble
             .onLongPressGesture(minimumDuration: 0.5) {
@@ -757,7 +761,7 @@ struct WatchInputBubbleView: View {
             onStop: stopInlineSpeechRecording,
             onConfirm: confirmInlineSpeechRecording
         )
-        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .transition(accessibilityReduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
     }
 
     private func stopInlineSpeechRecording() {

@@ -29,7 +29,7 @@ extension TelegramMessageComposer {
         return VStack(spacing: 0) {
             if adaptivePresentation == .requestControls {
                 adaptiveRequestControlsPanel
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(accessibilityReduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
 
                 Divider()
                     .padding(.horizontal)
@@ -40,7 +40,7 @@ extension TelegramMessageComposer {
                 adaptiveSpeechContent
                     .padding(.horizontal, 6)
                     .padding(.top, 6)
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .transition(accessibilityReduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.98)))
             } else {
                 cardTextEditor
                     .transition(.opacity)
@@ -94,7 +94,7 @@ extension TelegramMessageComposer {
 
                 if adaptiveShowsRequestControlsButton {
                     cardRequestControlsButton
-                        .transition(.scale(scale: 0.82).combined(with: .opacity))
+                        .transition(accessibilityReduceMotion ? .opacity : .scale(scale: 0.82).combined(with: .opacity))
                 }
             }
 
@@ -102,7 +102,7 @@ extension TelegramMessageComposer {
 
             if adaptivePresentation != .speech, viewModel.enableSpeechInput {
                 cardSpeechButton
-                    .transition(.scale(scale: 0.82).combined(with: .opacity))
+                    .transition(accessibilityReduceMotion ? .opacity : .scale(scale: 0.82).combined(with: .opacity))
             }
 
             adaptiveActionButton(
