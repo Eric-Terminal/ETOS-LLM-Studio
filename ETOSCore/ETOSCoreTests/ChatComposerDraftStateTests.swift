@@ -23,16 +23,11 @@ extension PersistenceTests {
         let config = AppConfigStore.shared
         await config.waitForPersistentStoreLoaded()
         let previousDraft = config.chatComposerDraft
-        defer { config.chatComposerDraft = previousDraft }
 
         var configChanges = 0
         var receivedDrafts: [String] = []
         let configSubscription = config.objectWillChange.sink { configChanges += 1 }
         let draftSubscription = config.composerDraftState.$text.dropFirst().sink { receivedDrafts.append($0) }
-        defer {
-            configSubscription.cancel()
-            draftSubscription.cancel()
-        }
 
         let typedDraft = "输入中的草稿 \(UUID().uuidString)"
         config.chatComposerDraft = typedDraft
@@ -55,5 +50,11 @@ extension PersistenceTests {
         #expect(config.composerDraftState.text == replacement)
         #expect(receivedDrafts == [typedDraft, replacement])
         #expect(configChanges == 0)
+
+        configSubscription.cancel()
+        draftSubscription.cancel()
+        // 恢复旧草稿也会安排防抖写入，必须完成落库后再让下一个用例使用共享配置。
+        config.chatComposerDraft = previousDraft
+        await config.flushPendingWrites()
     }
 }
