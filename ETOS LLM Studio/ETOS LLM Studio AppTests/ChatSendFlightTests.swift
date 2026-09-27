@@ -161,9 +161,18 @@ struct ChatSendFlightTests {
                 controller.advance(at: started + currentElapsed)
                 if !controller.isActive { break }
             }
-            #expect(try #require(handoffElapsed) < 1.6)
-            #expect(try #require(handoffError) < 0.75)
-            #expect(completionCount == 1)
+            #expect(try #require(
+                handoffElapsed,
+                "回执帧间隔=\(scenario.pattern)，错相=\(scenario.phaseOffset)，重复回执=\(scenario.hasRepeatedReports)，结束时刻=\(currentElapsed)，仍活动=\(controller.isActive)"
+            ) < 1.6)
+            #expect(
+                try #require(handoffError) < 0.75,
+                "回执帧间隔=\(scenario.pattern)，错相=\(scenario.phaseOffset)，重复回执=\(scenario.hasRepeatedReports)"
+            )
+            #expect(
+                completionCount == 1,
+                "回执帧间隔=\(scenario.pattern)，错相=\(scenario.phaseOffset)，重复回执=\(scenario.hasRepeatedReports)"
+            )
         }
     }
 
@@ -248,6 +257,84 @@ struct ChatSendFlightTests {
         }
         #expect(try #require(handoffError) < 0.5)
         #expect(!controller.isActive)
+    }
+
+    @Test("不均匀错相回执停止后，同值布局通知不延长外推，内容在真实终点交接")
+    func irregularLandingStopsDespiteRepeatedReports() throws {
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 900)
+        let surface = UIView(frame: window.bounds)
+        window.addSubview(surface)
+        let controller = ChatSendFlightController()
+        controller.surface = surface
+        defer { controller.cancel() }
+        let pattern = [3, 5, 2, 6]
+        let phaseOffset = 0.008
+        let velocity: CGFloat = -200
+        let target = CGRect(x: 200, y: 400, width: 120, height: 60)
+        // 第 32 帧刚收到跨 6 帧的回执，确保停止前已记录 50ms 的较慢采样间隔。
+        let stopFrame = 32
+        let lastReportedElapsed = Double(stopFrame) / 120 - phaseOffset + 0.003
+        let stoppedTarget = target.offsetBy(dx: 0, dy: velocity * CGFloat(lastReportedElapsed))
+        var currentElapsed: Double = 0
+        var handoffElapsed: Double?
+        var handoffError: CGFloat?
+        var handoffCount = 0
+        var completionCount = 0
+        controller.begin(
+            id: UUID(),
+            captures: [.init(source: .text, content: UIView(), frame: CGRect(x: 30, y: 780, width: 80, height: 30))],
+            response: 0.6, damping: 0.9, colors: [],
+            onMessagesPrepared: { _ in }, onSourcesRetired: { _ in },
+            onHandoff: {
+                handoffCount += 1
+                handoffElapsed = currentElapsed
+                handoffError = surface.subviews.first.map { abs($0.center.y - stoppedTarget.midY) }
+            },
+            onCompletion: { completionCount += 1 }
+        )
+        let started = CACurrentMediaTime()
+        var nextSampleFrame = 0
+        var sampleIndex = 0
+        for frame in 0...stopFrame {
+            currentElapsed = Double(frame) / 120
+            if frame == nextSampleFrame {
+                let sampledElapsed = max(0, currentElapsed - phaseOffset)
+                let sampledTarget = target.offsetBy(dx: 0, dy: velocity * CGFloat(sampledElapsed))
+                controller.retarget([.text: sampledTarget], at: started + sampledElapsed)
+                if frame > 0 {
+                    controller.retarget([.text: sampledTarget], at: started + sampledElapsed + 0.001)
+                    controller.retarget(
+                        [.text: target.offsetBy(dx: 0, dy: velocity * CGFloat(sampledElapsed + 0.002) + 0.2)],
+                        at: started + sampledElapsed + 0.002
+                    )
+                    controller.retarget(
+                        [.text: target.offsetBy(dx: 0, dy: velocity * CGFloat(sampledElapsed + 0.003))],
+                        at: started + sampledElapsed + 0.003
+                    )
+                }
+                nextSampleFrame += pattern[sampleIndex % pattern.count]
+                sampleIndex += 1
+            }
+            controller.advance(at: started + currentElapsed)
+        }
+        #expect(handoffCount == 0)
+        #expect(controller.isActive)
+
+        for frame in (stopFrame + 1)...300 {
+            currentElapsed = Double(frame) / 120
+            if frame % 4 == 0 {
+                controller.retarget([.text: stoppedTarget], at: started + currentElapsed)
+            }
+            controller.advance(at: started + currentElapsed)
+            if !controller.isActive { break }
+        }
+        #expect(try #require(handoffElapsed) < 1.6)
+        #expect(try #require(handoffError) < 0.5)
+        #expect(handoffCount == 1)
+        #expect(completionCount == 1)
+        #expect(surface.subviews.isEmpty)
     }
 
     @Test("单个来源离屏立即报告退役，其他来源继续且最后退出只完成一次")

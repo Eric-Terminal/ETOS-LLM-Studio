@@ -40,7 +40,7 @@ final class ChatSendFlightController {
         private var reportedAt: CFTimeInterval?
         private var sampledTarget: CGFloat
         private var sampledAt: CFTimeInterval?
-        private var sampleInterval: CFTimeInterval = 1.0 / 60
+        private var maximumSampleInterval: CFTimeInterval = 1.0 / 60
         private var previousSampleVelocity: CGFloat?
         private var targetVelocity: CGFloat = 0
         private var alignmentVelocity: CGFloat = 0
@@ -73,10 +73,12 @@ final class ChatSendFlightController {
                     targetVelocity = 0
                 }
                 previousSampleVelocity = candidate
-                sampleInterval = interval
+                // 短回执不能收窄同一连续段已观察到的慢回执窗口，否则不均匀采样会反复假停。
+                maximumSampleInterval = max(maximumSampleInterval, interval)
             } else if sampledAt == nil || now - (sampledAt ?? now) > 0.12 {
                 previousSampleVelocity = nil
                 targetVelocity = 0
+                maximumSampleInterval = 1.0 / 60
             } else {
                 // 同一布局批次可能给出多个中间值；保留上一份有效速度采样，不制造零速边沿。
                 self.target = target
@@ -91,7 +93,7 @@ final class ChatSendFlightController {
 
         mutating func advance(by delta: TimeInterval, at now: CFTimeInterval) {
             let age = max(0, now - (reportedAt ?? now))
-            let isFresh = age <= max(1.0 / 30, sampleInterval * 2)
+            let isFresh = age <= max(1.0 / 30, maximumSampleInterval * 2)
             let movingVelocity = isFresh ? targetVelocity : 0
             let projectedTarget = target + movingVelocity * CGFloat(isFresh ? age : 0)
             let targetAtPreviousFrame = projectedTarget - movingVelocity * CGFloat(delta)
