@@ -299,9 +299,6 @@ struct ChatBubbleOpenMoreGestureModifier: ViewModifier {
     let onToggleSelection: () -> Void
     let onOpenMore: (() -> Void)?
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @GestureState private var isPressing = false
-
     func body(content: Content) -> some View {
         if isSelectionMode {
             content
@@ -315,17 +312,9 @@ struct ChatBubbleOpenMoreGestureModifier: ViewModifier {
         } else if let onOpenMore {
             content
                 .contentShape(Rectangle())
-                .scaleEffect(isPressing && !reduceMotion ? 0.985 : 1)
-                .opacity(isPressing ? 0.88 : 1)
-                .animation(.easeOut(duration: 0.12), value: isPressing)
                 .highPriorityGesture(
-                    LongPressGesture(minimumDuration: 0.45, maximumDistance: 10)
-                        .updating($isPressing) { pressing, state, _ in
-                            // 沿用同一个识别器，滚动取消或松手时由 GestureState 自动复原。
-                            state = pressing
-                        }
+                    LongPressGesture(minimumDuration: 0.45)
                         .onEnded { _ in
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
                             onOpenMore()
                         }
                 )
