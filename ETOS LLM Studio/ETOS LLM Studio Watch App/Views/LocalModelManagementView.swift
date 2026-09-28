@@ -417,7 +417,9 @@ private struct LocalModelDetailView: View {
             documents: [GuideDocumentReference(id: "local-models", title: "Local Models")],
             settings: guideSettings
         )
-        .watchGuideEntry()
+        .watchGuideEntry(actions: [
+            WatchPageAction(title: NSLocalizedString("保存", comment: "Save"), systemImage: "checkmark", isEnabled: hasUnsavedChanges, perform: saveAndDismiss)
+        ])
         .navigationDestination(isPresented: $showCLIImport) {
             LocalModelCLIStyleImportView(record: draft) { result in
                 draft = result.updatedRecord
@@ -437,12 +439,6 @@ private struct LocalModelDetailView: View {
                 }
             }
 
-            ToolbarItem(placement: .confirmationAction) {
-                Button(NSLocalizedString("保存", comment: "Save")) {
-                    saveAndDismiss()
-                }
-                .disabled(!hasUnsavedChanges)
-            }
         }
         .alert(NSLocalizedString("删除本地模型", comment: "Delete local model alert"), isPresented: $showDeleteAlert) {
             Button(NSLocalizedString("取消", comment: "Cancel"), role: .cancel) {}

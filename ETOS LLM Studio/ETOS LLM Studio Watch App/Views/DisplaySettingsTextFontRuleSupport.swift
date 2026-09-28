@@ -93,16 +93,12 @@ struct WatchChatTextFontRuleEditorView: View {
             documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
             settings: fontRuleGuideSettings
         )
-        .watchGuideEntry()
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button(NSLocalizedString("保存", comment: "")) {
-                    onSave(rule)
-                    dismiss()
-                }
-                .disabled(!canSave)
+        .watchGuideEntry(actions: [
+            WatchPageAction(title: NSLocalizedString("保存", comment: ""), systemImage: "checkmark", isEnabled: canSave) {
+                onSave(rule)
+                dismiss()
             }
-        }
+        ])
         .task(id: regularExpressionValidationPattern) {
             guard let pattern = regularExpressionValidationPattern else {
                 isRegularExpressionValid = true

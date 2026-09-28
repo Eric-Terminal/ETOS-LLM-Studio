@@ -429,19 +429,17 @@ private struct WatchTTSServiceEditorView: View {
             documents: [GuideDocumentReference(id: "tts", title: "Text to Speech")],
             settings: guideSettings
         )
-        .watchGuideEntry()
+        .watchGuideEntry(actions: [
+            WatchPageAction(title: NSLocalizedString("保存", comment: ""), systemImage: "checkmark", isEnabled: draft.isReady) {
+                serviceStore.upsert(draft, selectAfterSaving: selectsAfterSaving)
+                dismiss()
+            }
+        ])
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button(NSLocalizedString("取消", comment: "")) {
                     dismiss()
                 }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button(NSLocalizedString("保存", comment: "")) {
-                    serviceStore.upsert(draft, selectAfterSaving: selectsAfterSaving)
-                    dismiss()
-                }
-                .disabled(!draft.isReady)
             }
         }
     }

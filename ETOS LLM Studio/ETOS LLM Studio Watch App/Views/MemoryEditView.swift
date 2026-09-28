@@ -169,7 +169,9 @@ public struct MemoryEditView: View {
                 .readOnly("requires_save", label: NSLocalizedString("应用方式", comment: "向导设置字段"), value: { .string(NSLocalizedString("修改后需要保存", comment: "向导草稿应用方式")) })
             ]
         )
-        .watchGuideEntry()
+        .watchGuideEntry(actions: [
+            WatchPageAction(title: NSLocalizedString("保存", comment: "Save"), systemImage: "checkmark", isEnabled: canSaveChanges, perform: saveMemory)
+        ])
         .alert(item: $reembedAlert) { alert in
             Alert(
                 title: Text(alert.title),
@@ -189,12 +191,6 @@ public struct MemoryEditView: View {
                 }
             }
 
-            ToolbarItem(placement: .confirmationAction) {
-                Button(NSLocalizedString("保存", comment: "Save")) {
-                    saveMemory()
-                }
-                .disabled(!canSaveChanges)
-            }
         }
         .alert(NSLocalizedString("未保存更改", comment: "Unsaved changes alert title"), isPresented: $showUnsavedChangesAlert) {
             if canSaveChanges {

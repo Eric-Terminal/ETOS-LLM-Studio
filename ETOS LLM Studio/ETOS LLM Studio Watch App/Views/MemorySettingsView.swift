@@ -42,14 +42,11 @@ public struct MemorySettingsView: View {
                 documents: [GuideDocumentReference(id: "settings-memory", title: "Memory System")],
                 settings: guideSettings
             )
-            .watchGuideEntry()
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: { isAddingMemory = true }) {
-                        Image(systemName: "plus")
-                    }
+            .watchGuideEntry(actions: [
+                WatchPageAction(title: NSLocalizedString("添加记忆", comment: ""), systemImage: "plus") {
+                    isAddingMemory = true
                 }
-            }
+            ])
             .navigationDestination(isPresented: $isAddingMemory) {
                 AddMemorySheet()
                     .environmentObject(viewModel)

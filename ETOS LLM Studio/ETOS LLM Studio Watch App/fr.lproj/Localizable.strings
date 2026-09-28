@@ -6793,7 +6793,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "自定义提供商" = "Custom Provider";
 "自定义请求体" = "Custom Request Body";
 "自定义请求体编辑方式" = "Custom Request Body Editing Mode";
-"询问当前页面" = "Ask About This Page";
+"询问当前页面" = "Poser une question sur cette page";
 "询问这个页面…" = "Ask about this page…";
 "询问页面向导" = "Ask Page Guide";
 "豆包官方应用" = "Official Doubao App";
@@ -7422,8 +7422,8 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 
 /* 手表页面向导入口与操作教程 */
 "选择向导模型" = "Choisir le modèle du guide";
-"watch.guide.entry.footer" = "Touchez le bouton du guide en haut d’une page de réglages compatible pour poser une question dans une fenêtre distincte.";
-"watch.guide.usage.details" = "Ouvrez la page de réglages concernée et touchez la bulle avec un point d’interrogation en haut. Saisissez votre question en haut de la fenêtre du guide, puis touchez Envoyer.\n\nTouchez le modèle de réponse actuel pour en choisir un autre. Le sélecteur reprend les groupes de fournisseurs et les dossiers du sélecteur principal. Le guide gratuit intégré reste disponible en haut. Choisir un modèle vous ramène à la conversation.\n\nLe guide conserve la page de réglages d’origine comme contexte pendant le choix du modèle, la modification d’un message ou l’examen d’une proposition de changement. Fermez le guide pour revenir à cette page.";
+"watch.guide.entry.footer" = "Touchez les points de suspension en haut d’une page de réglages compatible, puis choisissez de poser une question sur cette page.";
+"watch.guide.usage.details" = "Ouvrez la page de réglages concernée, touchez les points de suspension en haut, puis choisissez de poser une question sur cette page. Le même menu contient les actions de la page, comme Enregistrer et Ajouter, qui restent disponibles lorsque le guide est désactivé. Saisissez votre question en haut de la fenêtre du guide, puis touchez Envoyer.\n\nTouchez le modèle de réponse actuel pour en choisir un autre. Le sélecteur reprend les groupes de fournisseurs et les dossiers du sélecteur principal. Le guide gratuit intégré reste disponible en haut. Choisir un modèle vous ramène à la conversation.\n\nLe guide conserve la page de réglages d’origine comme contexte pendant le choix du modèle, la modification d’un message ou l’examen d’une proposition de changement. Fermez le guide pour revenir à cette page.";
 
 /* 世界书快捷绑定与管理 */
 "worldbook.binding.manage" = "Gérer les livres de monde";
@@ -7457,3 +7457,6 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "上传期间可切换到其他页面，完成或失败后会发送通知。" = "Vous pouvez changer de page pendant le téléversement. Une notification indiquera sa réussite ou son échec.";
 "开始上传后可在 App 内切换页面，返回此页可查看进度和结果。完成或失败后会使用与聊天回复相同的通知渠道，请允许 App 发送通知。关闭 App 不保证上传继续。" = "Après le démarrage du téléversement, vous pouvez consulter d’autres pages de l’app. Revenez ici pour voir la progression et le résultat. Les alertes de réussite ou d’échec utilisent les mêmes notifications que les réponses du chat ; autorisez les notifications de l’app. La poursuite du téléversement n’est pas garantie après la fermeture de l’app.";
 "对象存储 Endpoint" = "Point de terminaison du stockage objet";
+
+/* 手表统一页面操作菜单 */
+"watch.page.actions.title" = "Autres actions";

@@ -318,12 +318,6 @@ struct MCPServerEditor: View {
                 }
                 .accessibilityLabel(NSLocalizedString("返回", comment: ""))
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(NSLocalizedString("保存", comment: "")) {
-                    saveServer()
-                }
-                .disabled(isSaveDisabled)
-            }
         }
         .alert(NSLocalizedString("未保存更改", comment: "Unsaved changes alert title"), isPresented: $showUnsavedChangesAlert) {
             if !isSaveDisabled {
@@ -344,7 +338,9 @@ struct MCPServerEditor: View {
             documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
             settings: guideSettings
         )
-        .watchGuideEntry()
+        .watchGuideEntry(actions: [
+            WatchPageAction(title: NSLocalizedString("保存", comment: ""), systemImage: "checkmark", isEnabled: !isSaveDisabled, perform: saveServer)
+        ])
     }
 
     private var guidePageID: GuidePageID {

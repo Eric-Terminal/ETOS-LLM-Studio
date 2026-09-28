@@ -227,12 +227,6 @@ struct WatchWorldbookEntryEditView: View {
                     requestDismiss()
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(NSLocalizedString("保存", comment: "Save")) {
-                    saveAndDismiss()
-                }
-                .disabled(!canSave)
-            }
         }
         .alert(NSLocalizedString("未保存更改", comment: "Unsaved changes alert title"), isPresented: $showUnsavedChangesAlert) {
             if canSave {
@@ -253,7 +247,9 @@ struct WatchWorldbookEntryEditView: View {
             documents: [GuideDocumentReference(id: "worldbooks", title: "Worldbooks")],
             settings: editorGuideSettings
         )
-        .watchGuideEntry()
+        .watchGuideEntry(actions: [
+            WatchPageAction(title: NSLocalizedString("保存", comment: "Save"), systemImage: "checkmark", isEnabled: canSave, perform: saveAndDismiss)
+        ])
     }
 
     private var editorGuideSettings: [GuidePageSetting] {

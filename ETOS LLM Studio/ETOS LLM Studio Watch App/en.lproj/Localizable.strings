@@ -7345,8 +7345,8 @@
 
 /* 手表页面向导入口与操作教程 */
 "选择向导模型" = "Choose Guide Model";
-"watch.guide.entry.footer" = "Tap the guide button at the top of a supported settings page to ask a question in a separate window.";
-"watch.guide.usage.details" = "Open a settings page and tap the question-mark bubble at the top. Enter your question at the top of the guide window, then tap Send.\n\nTap the current answer model to choose another one. The model picker follows your main model picker’s provider grouping and folders. The built-in guide remains available at the top. Choosing a model returns to the conversation.\n\nThe guide keeps the original settings page as its context while you choose a model, edit a message or review a proposed change. Close the guide to return to that page.";
+"watch.guide.entry.footer" = "Tap the ellipsis at the top of a supported settings page, then choose Ask About This Page.";
+"watch.guide.usage.details" = "Open a settings page, tap the ellipsis at the top, then choose Ask About This Page. The same menu contains page actions such as Save and Add; these remain available when the guide is turned off. Enter your question at the top of the guide window, then tap Send.\n\nTap the current answer model to choose another one. The model picker follows your main model picker’s provider grouping and folders. The built-in guide remains available at the top. Choosing a model returns to the conversation.\n\nThe guide keeps the original settings page as its context while you choose a model, edit a message or review a proposed change. Close the guide to return to that page.";
 
 /* 世界书快捷绑定与管理 */
 "worldbook.binding.manage" = "Manage Worldbooks";
@@ -7380,3 +7380,6 @@
 "上传期间可切换到其他页面，完成或失败后会发送通知。" = "You can visit other pages during upload. You’ll be notified when it finishes or fails.";
 "开始上传后可在 App 内切换页面，返回此页可查看进度和结果。完成或失败后会使用与聊天回复相同的通知渠道，请允许 App 发送通知。关闭 App 不保证上传继续。" = "After starting an upload, you can visit other pages in the app. Return here to check progress and results. Completion and failure alerts use the same notifications as chat replies; allow notifications for the app. Uploads are not guaranteed to continue after closing the app.";
 "对象存储 Endpoint" = "Object storage endpoint";
+
+/* 手表统一页面操作菜单 */
+"watch.page.actions.title" = "More Actions";

@@ -201,10 +201,6 @@ struct ProviderEditView: View {
                 }
             }
 
-            ToolbarItem(placement: .confirmationAction) {
-                Button(NSLocalizedString("保存", comment: ""), action: saveProvider)
-                    .disabled(isSaveDisabled)
-            }
         }
         .alert(NSLocalizedString("未保存更改", comment: "Unsaved changes alert title"), isPresented: $showUnsavedChangesAlert) {
             if !isSaveDisabled {
@@ -230,7 +226,9 @@ struct ProviderEditView: View {
             buildProposal: buildProviderGuideProposal,
             execute: executeProviderGuideProposal
         )
-        .watchGuideEntry()
+        .watchGuideEntry(actions: [
+            WatchPageAction(title: NSLocalizedString("保存", comment: ""), systemImage: "checkmark", isEnabled: !isSaveDisabled, perform: saveProvider)
+        ])
     }
 
     private var providerGuidePageID: GuidePageID {

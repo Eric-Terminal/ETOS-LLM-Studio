@@ -34,7 +34,7 @@ struct WatchGuideSettingsView: View {
                     isOn: $appConfig.guideOverlayEnabled
                 )
             } footer: {
-                Text(NSLocalizedString("watch.guide.entry.footer", value: "Tap the guide button at the top of a supported settings page to ask a question in a separate window.", comment: "手表向导入口说明"))
+                Text(NSLocalizedString("watch.guide.entry.footer", value: "Tap the ellipsis at the top of a supported settings page, then choose Ask About This Page.", comment: "手表向导入口说明"))
             }
         }
         .navigationTitle(NSLocalizedString("页面向导", comment: "向导设置标题"))
@@ -62,7 +62,7 @@ private struct WatchGuidePrivacyView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading) {
-                Text(NSLocalizedString("watch.guide.usage.details", value: "Open a settings page and tap the question-mark bubble at the top. Enter your question at the top of the guide window, then tap Send.\n\nTap the current answer model to choose another one. The model picker follows your main model picker’s provider grouping and folders. The built-in guide remains available at the top. Choosing a model returns to the conversation.\n\nThe guide keeps the original settings page as its context while you choose a model, edit a message or review a proposed change. Close the guide to return to that page.", comment: "手表向导操作教程"))
+                Text(NSLocalizedString("watch.guide.usage.details", value: "Open a settings page, tap the ellipsis at the top, then choose Ask About This Page. The same menu contains page actions such as Save and Add; these remain available when the guide is turned off. Enter your question at the top of the guide window, then tap Send.\n\nTap the current answer model to choose another one. The model picker follows your main model picker’s provider grouping and folders. The built-in guide remains available at the top. Choosing a model returns to the conversation.\n\nThe guide keeps the original settings page as its context while you choose a model, edit a message or review a proposed change. Close the guide to return to that page.", comment: "手表向导操作教程"))
                 Text(NSLocalizedString("guide.privacy.details", value: "Open the guide on a settings page to ask what an option does or describe the setup you want. It uses information and documentation provided by the page, and can consult the public source code for your app version when needed.\n\nSupported changes are previewed and applied only after you confirm. Editor drafts still need to be saved as indicated on the page. Existing keys, passwords and tokens are not sent to the guide model; enter new secrets in the app’s secure input fields.\n\nPage help and first-model setup each keep their last conversation on this device so you can continue after reopening the app. Clearing context also deletes the saved conversation. These records are not added to your main chats or device sync. Tool records keep only names and statuses. Pending changes, undo records and secret drafts are not restored after a restart.", comment: "向导隐私详情"))
             }
             .font(.footnote)

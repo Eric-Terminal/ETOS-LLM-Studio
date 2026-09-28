@@ -167,14 +167,6 @@ struct ProviderDetailView: View {
             await fetchAndMergeModels(showsProgress: false)
         }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                if allowsManualModelAdd {
-                    Button(action: { isAddingModel = true }) {
-                        Image(systemName: "plus")
-                    }
-                }
-            }
-
             ToolbarItem(placement: .bottomBar) {
                 HStack {
                     if allowsRemoteModelFetch {
@@ -219,7 +211,11 @@ struct ProviderDetailView: View {
             buildProposal: buildProviderModelsGuideProposal,
             execute: executeProviderModelsGuideProposal
         )
-        .watchGuideEntry()
+        .watchGuideEntry(actions: allowsManualModelAdd ? [
+            WatchPageAction(title: NSLocalizedString("添加模型", comment: ""), systemImage: "plus") {
+                isAddingModel = true
+            }
+        ] : [])
     }
 
     private var providerModelsGuidePageID: GuidePageID {

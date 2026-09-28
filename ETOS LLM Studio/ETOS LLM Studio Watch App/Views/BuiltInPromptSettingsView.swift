@@ -228,20 +228,11 @@ private struct BuiltInPromptEditorView: View {
             documents: [GuideDocumentReference(id: "built-in-prompts", title: "Built-in Prompts")],
             settings: editorGuideSettings
         )
-        .watchGuideEntry()
+        .watchGuideEntry(actions: [
+            WatchPageAction(title: NSLocalizedString("保存", comment: "Built-in prompt save button"), systemImage: "square.and.arrow.down", isEnabled: !isSaving && snapshot != nil, perform: save)
+        ])
         .task {
             await reload()
-        }
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button {
-                    save()
-                } label: {
-                    Image(systemName: "square.and.arrow.down")
-                }
-                .disabled(isSaving || snapshot == nil)
-                .accessibilityLabel(NSLocalizedString("保存", comment: "Built-in prompt save button"))
-            }
         }
     }
 

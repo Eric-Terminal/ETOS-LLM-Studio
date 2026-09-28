@@ -102,13 +102,6 @@ private struct WatchProviderManagementContentView: View {
             }
         }
         .navigationTitle(NSLocalizedString("提供商管理", comment: ""))
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(action: { isAddingProvider = true }) {
-                    Image(systemName: "plus")
-                }
-            }
-        }
         .sheet(isPresented: $isAddingProvider) {
             NavigationStack {
                 ProviderEditView(
@@ -124,7 +117,11 @@ private struct WatchProviderManagementContentView: View {
             documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
             settings: providerListGuideSettings
         )
-        .watchGuideEntry()
+        .watchGuideEntry(actions: [
+            WatchPageAction(title: NSLocalizedString("添加提供商", comment: ""), systemImage: "plus") {
+                isAddingProvider = true
+            }
+        ])
     }
 
     private var providerListGuideSettings: [GuidePageSetting] {
@@ -353,17 +350,6 @@ private struct WatchProviderModelOrderDetailView: View {
             }
         }
         .navigationTitle(provider.name)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    let current = editingOrganization ?? organization
-                    newFolderName = suggestedFolderName(organization: current)
-                    isCreatingFolder = true
-                } label: {
-                    Label(NSLocalizedString("新建文件夹", comment: ""), systemImage: "folder.badge.plus")
-                }
-            }
-        }
         .alert(NSLocalizedString("新建文件夹", comment: ""), isPresented: $isCreatingFolder) {
             TextField(NSLocalizedString("文件夹名称", comment: ""), text: $newFolderName)
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
@@ -384,7 +370,13 @@ private struct WatchProviderModelOrderDetailView: View {
             documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
             settings: providerModelOrderGuideSettings
         )
-        .watchGuideEntry()
+        .watchGuideEntry(actions: [
+            WatchPageAction(title: NSLocalizedString("新建文件夹", comment: ""), systemImage: "folder.badge.plus") {
+                let current = editingOrganization ?? organization
+                newFolderName = suggestedFolderName(organization: current)
+                isCreatingFolder = true
+            }
+        ])
     }
 
     private var providerModelOrderGuideSettings: [GuidePageSetting] {

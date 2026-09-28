@@ -6793,7 +6793,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "自定义提供商" = "Custom Provider";
 "自定义请求体" = "Custom Request Body";
 "自定义请求体编辑方式" = "Custom Request Body Editing Mode";
-"询问当前页面" = "Ask About This Page";
+"询问当前页面" = "Preguntar sobre esta página";
 "询问这个页面…" = "Ask about this page…";
 "询问页面向导" = "Ask Page Guide";
 "豆包官方应用" = "Official Doubao App";
@@ -7422,8 +7422,8 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 
 /* 手表页面向导入口与操作教程 */
 "选择向导模型" = "Elegir modelo de la guía";
-"watch.guide.entry.footer" = "Toca el botón de la guía en la parte superior de una página de ajustes compatible para preguntar en una ventana independiente.";
-"watch.guide.usage.details" = "Abre la página de ajustes en la que necesitas ayuda y toca la burbuja con un signo de interrogación en la parte superior. Escribe tu pregunta arriba en la ventana de la guía y toca Enviar.\n\nToca el modelo de respuesta actual para elegir otro. El selector utiliza los mismos grupos de proveedores y carpetas que el selector principal. La guía gratuita integrada siempre está disponible arriba. Al elegir un modelo vuelves a la conversación.\n\nLa guía conserva la página de ajustes original como contexto mientras eliges un modelo, editas un mensaje o revisas una propuesta de cambio. Cierra la guía para volver a esa página.";
+"watch.guide.entry.footer" = "Toca los puntos suspensivos en la parte superior de una página de ajustes compatible y elige preguntar sobre esa página.";
+"watch.guide.usage.details" = "Abre la página de ajustes en la que necesitas ayuda, toca los puntos suspensivos en la parte superior y elige preguntar sobre esa página. El mismo menú incluye acciones como Guardar y Añadir, que siguen disponibles cuando la guía está desactivada. Escribe tu pregunta arriba en la ventana de la guía y toca Enviar.\n\nToca el modelo de respuesta actual para elegir otro. El selector utiliza los mismos grupos de proveedores y carpetas que el selector principal. La guía gratuita integrada siempre está disponible arriba. Al elegir un modelo vuelves a la conversación.\n\nLa guía conserva la página de ajustes original como contexto mientras eliges un modelo, editas un mensaje o revisas una propuesta de cambio. Cierra la guía para volver a esa página.";
 
 /* 世界书快捷绑定与管理 */
 "worldbook.binding.manage" = "Gestionar libros de mundo";
@@ -7457,3 +7457,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "上传期间可切换到其他页面，完成或失败后会发送通知。" = "Puedes cambiar de página durante la subida. Recibirás una notificación si se completa o falla.";
 "开始上传后可在 App 内切换页面，返回此页可查看进度和结果。完成或失败后会使用与聊天回复相同的通知渠道，请允许 App 发送通知。关闭 App 不保证上传继续。" = "Tras iniciar la subida, puedes visitar otras páginas de la app. Vuelve aquí para consultar el progreso y el resultado. Los avisos de éxito o error usan las mismas notificaciones que las respuestas del chat; permite las notificaciones de la app. No se garantiza que la subida continúe tras cerrar la app.";
 "对象存储 Endpoint" = "Endpoint del almacenamiento de objetos";
+
+/* 手表统一页面操作菜单 */
+"watch.page.actions.title" = "Más acciones";

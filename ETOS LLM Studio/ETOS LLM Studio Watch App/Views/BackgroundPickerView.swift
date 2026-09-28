@@ -97,18 +97,13 @@ struct BackgroundPickerView: View {
             documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
             settings: backgroundGuideSettings
         )
-        .watchGuideEntry()
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    deleteCandidate = selectedBackground
-                    isShowingDeleteConfirmation = true
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .disabled(selectedBackground.isEmpty)
+        .watchGuideEntry(actions: [
+            WatchPageAction(title: NSLocalizedString("删除背景", comment: ""), systemImage: "trash", isEnabled: !selectedBackground.isEmpty, role: .destructive) {
+                deleteCandidate = selectedBackground
+                isShowingDeleteConfirmation = true
             }
-
+        ])
+        .toolbar {
             ToolbarItem(placement: .bottomBar) {
                 HStack {
                     Button {

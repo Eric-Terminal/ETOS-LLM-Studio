@@ -120,47 +120,7 @@ private struct WatchGuideMessageContent: View, Equatable {
     }
 }
 
-private struct WatchGuideEntryModifier: ViewModifier {
-    @EnvironmentObject private var controller: GuideConversationController
-    @ObservedObject private var appConfig = AppConfigStore.shared
-    @State private var isPresented = false
-
-    func body(content: Content) -> some View {
-        content
-            .toolbar {
-                if appConfig.guideOverlayEnabled {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            GuideContextCoordinator.shared.pinActivePage()
-                            isPresented = true
-                        } label: {
-                            Image(systemName: "questionmark.bubble")
-                        }
-                        .accessibilityLabel(NSLocalizedString("询问当前页面", comment: "手表当前页面向导入口"))
-                        .accessibilityIdentifier("watchGuideEntry")
-                    }
-                }
-            }
-            // 配置页可能自带导航栈；模态窗口不依赖入口修饰符所在的栈层级。
-            // 固定上下文的生命周期覆盖整个窗口，查看确认页或编辑消息时不能提前解除。
-            .sheet(isPresented: $isPresented, onDismiss: {
-                GuideContextCoordinator.shared.unpinActivePage()
-            }) {
-                NavigationStack {
-                    WatchGuideConversationView(controller: controller)
-                }
-            }
-    }
-}
-
-extension View {
-    func watchGuideEntry() -> some View {
-        modifier(WatchGuideEntryModifier())
-    }
-}
-
 struct WatchGuideConversationView: View {
-    @Environment(\.dismiss) private var dismiss
     @ObservedObject var controller: GuideConversationController
     @ObservedObject private var router: GuideModelRouter
     @ObservedObject private var coordinator = GuideContextCoordinator.shared
@@ -168,9 +128,11 @@ struct WatchGuideConversationView: View {
 
     @State private var input = ""
     @State private var editingMessage: GuideConversationMessage?
+    private let close: () -> Void
 
-    init(controller: GuideConversationController) {
+    init(controller: GuideConversationController, close: @escaping () -> Void) {
         self.controller = controller
+        self.close = close
         _router = ObservedObject(wrappedValue: controller.router)
     }
 
@@ -277,10 +239,11 @@ struct WatchGuideConversationView: View {
             }
         }
         .navigationTitle(NSLocalizedString("页面向导", comment: "手表向导标题"))
+        .navigationBarBackButtonHidden()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button {
-                    dismiss()
+                    close()
                 } label: {
                     Image(systemName: "xmark")
                 }

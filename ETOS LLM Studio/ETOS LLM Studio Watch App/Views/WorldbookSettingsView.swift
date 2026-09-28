@@ -148,15 +148,6 @@ struct WorldbookSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("世界书", comment: "Worldbook nav title"))
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    createEmptyWorldbook()
-                } label: {
-                    Label(NSLocalizedString("新增", comment: "Add worldbook"), systemImage: "plus")
-                }
-            }
-        }
         .onAppear(perform: load)
         .confirmationDialog(
             NSLocalizedString("确认删除世界书", comment: "Confirm deleting worldbook title"),
@@ -192,7 +183,9 @@ struct WorldbookSettingsView: View {
             documents: [GuideDocumentReference(id: "worldbooks", title: "Worldbooks")],
             settings: guideSettings
         )
-        .watchGuideEntry()
+        .watchGuideEntry(actions: [
+            WatchPageAction(title: NSLocalizedString("新增", comment: "Add worldbook"), systemImage: "plus", perform: createEmptyWorldbook)
+        ])
     }
 
     private var guideSettings: [GuidePageSetting] {
