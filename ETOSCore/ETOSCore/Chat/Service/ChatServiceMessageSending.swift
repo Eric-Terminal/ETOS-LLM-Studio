@@ -310,11 +310,15 @@ extension ChatService {
 
         do {
             if existingInputMessageID == nil {
-                for message in userMessages {
-                    _ = try await appendConversationMessage(message, to: currentSession.id)
-                }
+                let submissionMessages = userMessages + [loadingMessage]
+                let submissionSessionID = currentSession.id
+                // 先整组提交，再由下方的数据库快照一次发布；不让附件逐条推动显示窗口。
+                _ = try await Task.detached(priority: .userInitiated) {
+                    try Persistence.appendConversationMessages(submissionMessages, to: submissionSessionID)
+                }.value
+            } else {
+                _ = try await appendConversationMessage(loadingMessage, to: currentSession.id)
             }
-            _ = try await appendConversationMessage(loadingMessage, to: currentSession.id)
         } catch {
             addErrorMessage(
                 NSLocalizedString("错误: 无法保存会话消息。", comment: "Unable to persist conversation messages"),

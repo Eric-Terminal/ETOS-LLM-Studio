@@ -5,6 +5,79 @@ import Testing
 
 extension ChatServiceTests {
     @MainActor
+    @Test("普通提交先交身份，第一份消息结构一次包含全部来源与回复占位")
+    func sendPublishesCompleteMessageBatchAfterPresentation() async throws {
+        enum SubmissionEvent: Sendable {
+            case prepared(ChatSendPresentation)
+            case published([ChatMessage])
+        }
+        await cleanup()
+        let session = createPermanentTestSession(name: "整组发布")
+        let service = try #require(chatService)
+        defer { service.deleteSessions([session]) }
+        setupMockResponsesForChatAndTitle()
+        let files = (0..<2).map { index in
+            FileAttachment(
+                data: Data("附件 \(index)".utf8), mimeType: "text/plain",
+                fileName: "batch-source-\(UUID().uuidString).txt"
+            )
+        }
+        let events = AsyncStream<SubmissionEvent>.makeStream()
+        let subscription = service.messagesForSessionSubject.sink {
+            events.continuation.yield(.published($0))
+        }
+        defer { subscription.cancel() }
+        await service.sendAndProcessMessage(
+            content: "同次提交的正文", aiTemperature: 0, aiTopP: 1,
+            systemPrompt: "", maxChatHistory: 5, enableStreaming: false,
+            enhancedPrompt: nil, enableMemory: false, enableMemoryWrite: false,
+            includeSystemTime: false, fileAttachments: files, targetSessionID: session.id,
+            requestedLocalAgentMode: .chat,
+            onMessagesPrepared: { events.continuation.yield(.prepared($0)) }
+        )
+        subscription.cancel()
+        events.continuation.finish()
+
+        var presentation: ChatSendPresentation?
+        var firstPublishedMessages: [ChatMessage]?
+        var lastPublishedMessages: [ChatMessage]?
+        var publishedBeforeIdentity = false
+        var structures: [[UUID]] = []
+        for await event in events.stream {
+            switch event {
+            case .prepared(let value):
+                presentation = value
+            case .published(let messages):
+                guard !messages.isEmpty else { continue }
+                if presentation == nil { publishedBeforeIdentity = true }
+                if firstPublishedMessages == nil { firstPublishedMessages = messages }
+                lastPublishedMessages = messages
+                // 内容与指标仍可正常发布；这里只记录消息身份结构的变化。
+                let ids = messages.map(\.id)
+                if structures.last != ids { structures.append(ids) }
+            }
+        }
+        let prepared = try #require(presentation)
+        let firstMessages = try #require(firstPublishedMessages)
+        #expect(!publishedBeforeIdentity)
+        #expect(prepared.sessionID == session.id)
+        #expect(prepared.messageIDsBySource.count == 3)
+        #expect(firstMessages.map(\.role) == [.user, .user, .user, .assistant])
+        #expect(firstMessages.filter { $0.role == .user }.map(\.id) == [
+            prepared.messageIDsBySource[.file(files[0].id)],
+            prepared.messageIDsBySource[.file(files[1].id)],
+            prepared.messageIDsBySource[.text]
+        ].compactMap { $0 })
+        #expect(firstMessages.last?.content == "")
+        #expect(firstMessages.last?.responseGroupID == prepared.responseGroupID)
+        #expect(lastPublishedMessages?.last?.id == firstMessages.last?.id)
+        #expect(lastPublishedMessages?.last?.content == "聊天回复")
+        #expect(structures == [firstMessages.map(\.id)])
+        #expect(Persistence.loadMessages(for: session.id).map(\.id) == firstMessages.map(\.id))
+        #expect(mockAdapter.receivedMessages != nil)
+    }
+
+    @MainActor
     @Test("发送来源在附件拆分、同名文件复用和正文正则改写后仍对应准确消息", arguments: [false, true])
     func sendPresentationPreservesSourceIdentity(includesText: Bool) async throws {
         await cleanup()
