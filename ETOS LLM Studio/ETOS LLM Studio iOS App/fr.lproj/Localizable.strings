@@ -7671,3 +7671,13 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "session_usage.token_note" = "Les détails de réflexion et de cache peuvent déjà être inclus dans les tokens d'entrée ou de sortie et ne sont pas ajoutés à nouveau au total.";
 "session_usage.request_count" = "Requêtes";
 "session_usage.intro" = "Compte les requêtes enregistrées pour cette conversation, y compris les tentatives répétées et les tâches associées comme la génération de titres. Copier l'historique ne double pas le coût ; supprimer des messages n'efface pas l'usage enregistré. Les requêtes antérieures au suivi ne sont pas disponibles.";
+
+/* 云备份跨页面上传与结果通知 */
+"正在准备上传快照…" = "Préparation de l’instantané à téléverser…";
+"云备份已完成" = "Sauvegarde cloud terminée";
+"云备份失败" = "Échec de la sauvegarde cloud";
+"快照已上传到 S3/R2。" = "L’instantané a été téléversé vers S3/R2.";
+"快照未能上传。请返回快照备份页面查看详情并重试。" = "L’instantané n’a pas pu être téléversé. Revenez à la sauvegarde par instantané pour consulter les détails et réessayer.";
+"上传期间可切换到其他页面，完成或失败后会发送通知。" = "Vous pouvez changer de page pendant le téléversement. Une notification indiquera sa réussite ou son échec.";
+"开始上传后可在 App 内切换页面，返回此页可查看进度和结果。完成或失败后会使用与聊天回复相同的通知渠道，请允许 App 发送通知。关闭 App 不保证上传继续。" = "Après le démarrage du téléversement, vous pouvez consulter d’autres pages de l’app. Revenez ici pour voir la progression et le résultat. Les alertes de réussite ou d’échec utilisent les mêmes notifications que les réponses du chat ; autorisez les notifications de l’app. La poursuite du téléversement n’est pas garantie après la fermeture de l’app.";
+"对象存储 Endpoint" = "Point de terminaison du stockage objet";

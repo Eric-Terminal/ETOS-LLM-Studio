@@ -12,12 +12,11 @@ import ETOSCore
 
 struct WatchBackupRestoreView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
+    @ObservedObject private var uploadManager = SnapshotUploadManager.shared
     @State private var snapshotFileURL: URL?
     @State private var snapshotStatusMessage: String?
     @State private var snapshotErrorMessage: String?
     @State private var isCreatingSnapshot = false
-    @State private var isUploadingSnapshot = false
-    @State private var uploadProgress: SyncPackageUploadProgress?
     @State private var selectedSnapshotKind: SnapshotBuilder.BackupKind = .database
     @State private var encryptSnapshot = false
     @State private var useStrongSnapshotPasswordDerivation = false
@@ -31,6 +30,8 @@ struct WatchBackupRestoreView: View {
     @State private var pendingSnapshotInspection: SnapshotRestoreService.InspectionResult?
     @State private var isSnapshotIntroPresented = false
     @State private var isSnapshotDestinationDialogPresented = false
+
+    private var isUploadingSnapshot: Bool { uploadManager.isUploading }
 
     var body: some View {
         List {
@@ -51,6 +52,22 @@ struct WatchBackupRestoreView: View {
             errorSection
         }
         .navigationTitle(NSLocalizedString("快照备份", comment: ""))
+        .guideSettingsPageContext(
+            id: "snapshot-backup",
+            title: NSLocalizedString("快照备份", comment: ""),
+            documents: SnapshotBackupGuideSupport.documents,
+            settings: SnapshotBackupGuideSupport.draftSettings(
+                kind: $selectedSnapshotKind,
+                encrypted: $encryptSnapshot,
+                strongDerivation: $useStrongSnapshotPasswordDerivation,
+                password: $snapshotPassword,
+                confirmation: $snapshotPasswordConfirmation
+            ) + [
+                .writeOnlyString("restore_url", label: NSLocalizedString("从 URL 下载并恢复", comment: ""), isConfigured: { !snapshotRestoreDownloadURL.isEmpty }, set: { snapshotRestoreDownloadURL = $0 }),
+                .writeOnlyString("restore_password", label: NSLocalizedString("密码", comment: ""), isConfigured: { !restorePassword.isEmpty }, set: { restorePassword = $0 })
+            ]
+        )
+        .watchGuideEntry()
         .confirmationDialog(
             NSLocalizedString("选择快照保存位置", comment: ""),
             isPresented: $isSnapshotDestinationDialogPresented,
@@ -126,8 +143,20 @@ struct WatchBackupRestoreView: View {
             }
             .disabled(isSnapshotBusy)
 
-            if let uploadProgress {
+            if let uploadProgress = uploadManager.progress {
                 WatchSnapshotUploadProgressView(progress: uploadProgress)
+            }
+
+            if let message = uploadManager.statusMessage {
+                Text(message)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let message = uploadManager.errorMessage {
+                Text(message)
+                    .etFont(.caption2)
+                    .foregroundStyle(.red)
             }
 
             if let snapshotFileURL {
@@ -148,7 +177,7 @@ struct WatchBackupRestoreView: View {
         } header: {
             Text(NSLocalizedString("保存", comment: ""))
         } footer: {
-            Text(NSLocalizedString("选择保存位置后再创建快照。", comment: ""))
+            Text(NSLocalizedString("上传期间可切换到其他页面，完成或失败后会发送通知。", comment: "云备份页脚"))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -289,6 +318,7 @@ struct WatchBackupRestoreView: View {
             snapshotKindFooter,
             NSLocalizedString("快照已生成，可通过分享发送到其他设备。", comment: ""),
             NSLocalizedString("会先生成 .elsbackup，再使用 AWS Signature V4 上传到 S3/R2；R2 的 Region 通常填写 auto。", comment: ""),
+            NSLocalizedString("开始上传后可在 App 内切换页面，返回此页可查看进度和结果。完成或失败后会使用与聊天回复相同的通知渠道，请允许 App 发送通知。关闭 App 不保证上传继续。", comment: "云备份使用说明"),
             NSLocalizedString("恢复会替换当前聊天、配置与记忆数据库；完整快照还会恢复壁纸、附件、字体与记忆向量索引文件。请选择可信的 .elsbackup 文件。", comment: "")
         ].joined(separator: "\n\n")
     }
@@ -317,18 +347,28 @@ struct WatchBackupRestoreView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 2)
         .sheet(isPresented: isExpanded) {
-            ScrollView {
-                Text(details)
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
+            NavigationStack {
+                ScrollView {
+                    Text(details)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .guideSettingsPageContext(
+                    id: "snapshot-backup-intro",
+                    title: NSLocalizedString("快照备份", comment: ""),
+                    documents: SnapshotBackupGuideSupport.documents,
+                    settings: []
+                )
+                .watchGuideEntry()
             }
         }
     }
 
     private func createSnapshotFile() {
         guard validateSnapshotPasswordIfNeeded() else { return }
+        uploadManager.clearResult()
 
         isCreatingSnapshot = true
         snapshotErrorMessage = nil
@@ -383,69 +423,16 @@ struct WatchBackupRestoreView: View {
         guard validateSnapshotPasswordIfNeeded() else { return }
         guard let uploadConfiguration = s3UploadConfiguration() else { return }
 
-        isUploadingSnapshot = true
         snapshotErrorMessage = nil
         snapshotStatusMessage = nil
-        uploadProgress = nil
-        let password = encryptSnapshot ? snapshotPassword : nil
-        let useStrongDerivation = useStrongSnapshotPasswordDerivation
-        let snapshotKind = selectedSnapshotKind
-
-        Task.detached(priority: .userInitiated) {
-            let diagnostics = SnapshotDiagnostics()
-            diagnostics.record("operation.begin", details: ["kind": snapshotKind.rawValue, "destination": "s3", "encrypted": String(password != nil)])
-            do {
-                diagnostics.record("writes.flush.begin")
-                await AppConfigStore.shared.flushPendingWrites()
-                await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
-                MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
-
-                let fileURL = try SnapshotBuilder.buildSnapshot(kind: snapshotKind, diagnostics: diagnostics)
-                defer { try? FileManager.default.removeItem(at: fileURL) }
-                if let password {
-                    diagnostics.record("encryption.begin", fileURL: fileURL)
-                    try WatchSnapshotFileWriter.encryptSnapshotInPlace(
-                        fileURL,
-                        password: password,
-                        useStrongDerivation: useStrongDerivation
-                    )
-                    diagnostics.record("encryption.completed", fileURL: fileURL)
-                }
-
-                let result = try await SyncPackageUploadService.uploadSnapshot(
-                    fileURL: fileURL,
-                    s3: uploadConfiguration,
-                    progress: { progress in
-                        Task { @MainActor in
-                            uploadProgress = progress
-                        }
-                    },
-                    diagnostics: diagnostics
-                )
-                diagnostics.record("operation.completed")
-                await MainActor.run {
-                    if password != nil {
-                        snapshotPassword = ""
-                        snapshotPasswordConfirmation = ""
-                    }
-                    isUploadingSnapshot = false
-                    snapshotStatusMessage = String(format: NSLocalizedString("快照已上传（HTTP %d）。", comment: ""), result.statusCode)
-                    if let preview = result.responseBodyPreview, !preview.isEmpty {
-                        snapshotStatusMessage = String(
-                            format: NSLocalizedString("快照已上传（HTTP %d）：%@", comment: ""),
-                            result.statusCode,
-                            preview
-                        )
-                    }
-                }
-            } catch {
-                diagnostics.recordFailure(error)
-                await MainActor.run {
-                    isUploadingSnapshot = false
-                    uploadProgress = nil
-                    snapshotErrorMessage = error.localizedDescription
-                }
-            }
+        if uploadManager.start(
+            kind: selectedSnapshotKind,
+            password: encryptSnapshot ? snapshotPassword : nil,
+            useStrongDerivation: useStrongSnapshotPasswordDerivation,
+            configuration: uploadConfiguration
+        ) {
+            snapshotPassword = ""
+            snapshotPasswordConfirmation = ""
         }
     }
 
@@ -473,6 +460,7 @@ struct WatchBackupRestoreView: View {
     }
 
     private func downloadSnapshotForRestore() {
+        uploadManager.clearResult()
         let trimmed = snapshotRestoreDownloadURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: trimmed),
               let scheme = url.scheme?.lowercased(),
@@ -730,6 +718,13 @@ private struct WatchS3CompatibleSnapshotStorageSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("S3 兼容对象存储", comment: ""))
+        .guideSettingsPageContext(
+            id: "snapshot-backup-storage",
+            title: NSLocalizedString("S3 兼容对象存储", comment: ""),
+            documents: SnapshotBackupGuideSupport.documents,
+            settings: SnapshotBackupGuideSupport.storageSettings
+        )
+        .watchGuideEntry()
     }
 
     private var isS3ConfigurationComplete: Bool {
@@ -828,6 +823,16 @@ private struct WatchRemoteSnapshotBrowserView: View {
             }
         }
         .navigationTitle(NSLocalizedString("历史归档", comment: ""))
+        .guideSettingsPageContext(
+            id: "snapshot-backup-archives",
+            title: NSLocalizedString("远端快照", comment: ""),
+            documents: SnapshotBackupGuideSupport.documents,
+            settings: [
+                .readOnly("loading", label: NSLocalizedString("正在读取远端快照…", comment: ""), value: { .bool(isLoading) }),
+                .readOnly("count", label: NSLocalizedString("远端快照", comment: ""), value: { .int(snapshots.count) })
+            ]
+        )
+        .watchGuideEntry()
         .task {
             guard snapshots.isEmpty else { return }
             await loadSnapshots()
@@ -949,6 +954,18 @@ private struct WatchRemoteSnapshotDetailView: View {
             }
         }
         .navigationTitle(snapshot.fileName)
+        .guideSettingsPageContext(
+            id: "snapshot-backup-archive-detail",
+            title: NSLocalizedString("远端快照", comment: ""),
+            documents: SnapshotBackupGuideSupport.documents,
+            settings: [
+                .readOnly("file_name", label: NSLocalizedString("文件名", comment: ""), value: { .string(snapshot.fileName) }),
+                .readOnly("downloading", label: NSLocalizedString("正在下载快照…", comment: ""), value: { .bool(isDownloading) }),
+                .readOnly("restoring", label: NSLocalizedString("正在恢复…", comment: ""), value: { .bool(isRestoring) }),
+                .writeOnlyString("restore_password", label: NSLocalizedString("密码", comment: ""), isConfigured: { !restorePassword.isEmpty }, set: { restorePassword = $0 })
+            ]
+        )
+        .watchGuideEntry()
         .onDisappear {
             clearPendingEncryptedSnapshot()
         }

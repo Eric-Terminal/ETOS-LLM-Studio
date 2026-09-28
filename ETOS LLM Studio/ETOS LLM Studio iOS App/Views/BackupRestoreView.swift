@@ -13,13 +13,12 @@ import UniformTypeIdentifiers
 
 struct BackupRestoreView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
+    @ObservedObject private var uploadManager = SnapshotUploadManager.shared
     @State private var isCreatingSnapshot = false
     @State private var isImportingSnapshot = false
     @State private var isRestoringSnapshot = false
-    @State private var isUploadingSnapshot = false
     @State private var statusMessage: String?
     @State private var errorMessage: String?
-    @State private var uploadProgress: SyncPackageUploadProgress?
     @State private var selectedSnapshotKind: SnapshotBuilder.BackupKind = .database
     @State private var encryptExport = false
     @State private var useStrongPasswordDerivation = false
@@ -32,6 +31,8 @@ struct BackupRestoreView: View {
     @State private var isSnapshotIntroPresented = false
     @State private var isSnapshotDestinationDialogPresented = false
     @State private var snapshotSharePayload: SnapshotSharePayload?
+
+    private var isUploadingSnapshot: Bool { uploadManager.isUploading }
 
     private let snapshotContentTypes: [UTType] = {
         var types: [UTType] = [.data]
@@ -98,8 +99,20 @@ struct BackupRestoreView: View {
                 }
                 .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
 
-                if let uploadProgress {
+                if let uploadProgress = uploadManager.progress {
                     SnapshotUploadProgressView(progress: uploadProgress)
+                }
+
+                if let message = uploadManager.statusMessage {
+                    Text(message)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let message = uploadManager.errorMessage {
+                    Text(message)
+                        .etFont(.footnote)
+                        .foregroundStyle(.red)
                 }
 
                 if let statusMessage, !statusMessage.isEmpty {
@@ -110,7 +123,7 @@ struct BackupRestoreView: View {
             } header: {
                 Text(NSLocalizedString("保存", comment: ""))
             } footer: {
-                Text(NSLocalizedString("选择保存位置后再创建快照。", comment: ""))
+                Text(NSLocalizedString("上传期间可切换到其他页面，完成或失败后会发送通知。", comment: "云备份页脚"))
             }
 
             Section {
@@ -122,7 +135,7 @@ struct BackupRestoreView: View {
                     NavigationLink {
                         S3CompatibleSnapshotStorageSettingsView(
                             isCreatingSnapshot: $isCreatingSnapshot,
-                            isUploadingSnapshot: $isUploadingSnapshot,
+                            isUploadingSnapshot: isUploadingSnapshot,
                             isRestoringSnapshot: $isRestoringSnapshot,
                             isS3ConfigurationComplete: {
                                 isS3ConfigurationComplete
@@ -167,6 +180,18 @@ struct BackupRestoreView: View {
             }
         }
         .navigationTitle(NSLocalizedString("快照备份", comment: ""))
+        .guideSettingsPageContext(
+            id: "snapshot-backup",
+            title: NSLocalizedString("快照备份", comment: ""),
+            documents: SnapshotBackupGuideSupport.documents,
+            settings: SnapshotBackupGuideSupport.draftSettings(
+                kind: $selectedSnapshotKind,
+                encrypted: $encryptExport,
+                strongDerivation: $useStrongPasswordDerivation,
+                password: $exportPassword,
+                confirmation: $exportPasswordConfirmation
+            )
+        )
         .fileImporter(
             isPresented: $isImportingSnapshot,
             allowedContentTypes: snapshotContentTypes,
@@ -248,6 +273,7 @@ struct BackupRestoreView: View {
             snapshotKindFooter,
             NSLocalizedString("快照会写入 iCloud Drive 的“ETOS LLM Studio Backups”文件夹；若未开启 iCloud Documents 能力，系统会改写入本机 Documents 同名文件夹。高强度派生会使用 PBKDF2-HMAC-SHA512 迭代 256000 次。", comment: ""),
             NSLocalizedString("会使用 AWS Signature V4 生成签名请求，将 .elsbackup 以 PUT 上传到 bucket/prefix/文件名。R2 的 Region 通常填写 auto，AWS S3 请填写实际区域。", comment: ""),
+            NSLocalizedString("开始上传后可在 App 内切换页面，返回此页可查看进度和结果。完成或失败后会使用与聊天回复相同的通知渠道，请允许 App 发送通知。关闭 App 不保证上传继续。", comment: "云备份使用说明"),
             NSLocalizedString("恢复会替换当前聊天、配置与记忆数据库；完整快照还会恢复壁纸、附件、字体与记忆向量索引文件。请选择可信的 .elsbackup 文件。", comment: "")
         ].joined(separator: "\n\n")
     }
@@ -286,12 +312,19 @@ struct BackupRestoreView: View {
                 }
                 .navigationTitle(NSLocalizedString(title, comment: "快照备份介绍卡片详情标题"))
                 .navigationBarTitleDisplayMode(.inline)
+                .guideSettingsPageContext(
+                    id: "snapshot-backup-intro",
+                    title: NSLocalizedString("快照备份", comment: ""),
+                    documents: SnapshotBackupGuideSupport.documents,
+                    settings: []
+                )
             }
         }
     }
 
     private func createManualSnapshot() {
         guard validateExportPasswordIfNeeded() else { return }
+        uploadManager.clearResult()
         isCreatingSnapshot = true
         statusMessage = nil
         errorMessage = nil
@@ -344,6 +377,7 @@ struct BackupRestoreView: View {
 
     private func createSnapshotForSharing() {
         guard validateExportPasswordIfNeeded() else { return }
+        uploadManager.clearResult()
         isCreatingSnapshot = true
         statusMessage = nil
         errorMessage = nil
@@ -461,72 +495,16 @@ struct BackupRestoreView: View {
         guard validateExportPasswordIfNeeded(),
               let uploadConfiguration = s3UploadConfiguration() else { return }
 
-        isUploadingSnapshot = true
         statusMessage = nil
         errorMessage = nil
-        uploadProgress = nil
-        let password = encryptExport ? exportPassword : nil
-        let useStrongPasswordDerivation = useStrongPasswordDerivation
-        let snapshotKind = selectedSnapshotKind
-
-        Task.detached(priority: .userInitiated) {
-            let diagnostics = SnapshotDiagnostics()
-            diagnostics.record("operation.begin", details: ["kind": snapshotKind.rawValue, "destination": "s3", "encrypted": String(password != nil)])
-            do {
-                diagnostics.record("writes.flush.begin")
-                await AppConfigStore.shared.flushPendingWrites()
-                await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
-                MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
-
-                let snapshotURL = try SnapshotBuilder.buildSnapshot(kind: snapshotKind, diagnostics: diagnostics)
-                defer { try? FileManager.default.removeItem(at: snapshotURL) }
-                if let password {
-                    diagnostics.record("encryption.begin", fileURL: snapshotURL)
-                    try BackupRestoreFileWriter.encryptSnapshotInPlace(
-                        snapshotURL,
-                        password: password,
-                        useStrongDerivation: useStrongPasswordDerivation
-                    )
-                    diagnostics.record("encryption.completed", fileURL: snapshotURL)
-                }
-
-                let result = try await SyncPackageUploadService.uploadSnapshot(
-                    fileURL: snapshotURL,
-                    s3: uploadConfiguration,
-                    progress: { progress in
-                        Task { @MainActor in
-                            uploadProgress = progress
-                        }
-                    },
-                    diagnostics: diagnostics
-                )
-                diagnostics.record("operation.completed")
-                await MainActor.run {
-                    if password != nil {
-                        exportPassword = ""
-                        exportPasswordConfirmation = ""
-                    }
-                    isUploadingSnapshot = false
-                    statusMessage = String(
-                        format: NSLocalizedString("快照已上传（HTTP %d）。", comment: ""),
-                        result.statusCode
-                    )
-                    if let preview = result.responseBodyPreview, !preview.isEmpty {
-                        statusMessage = String(
-                            format: NSLocalizedString("快照已上传（HTTP %d）：%@", comment: ""),
-                            result.statusCode,
-                            preview
-                        )
-                    }
-                }
-            } catch {
-                diagnostics.recordFailure(error)
-                await MainActor.run {
-                    isUploadingSnapshot = false
-                    uploadProgress = nil
-                    errorMessage = error.localizedDescription
-                }
-            }
+        if uploadManager.start(
+            kind: selectedSnapshotKind,
+            password: encryptExport ? exportPassword : nil,
+            useStrongDerivation: useStrongPasswordDerivation,
+            configuration: uploadConfiguration
+        ) {
+            exportPassword = ""
+            exportPasswordConfirmation = ""
         }
     }
 
@@ -541,6 +519,7 @@ struct BackupRestoreView: View {
     }
 
     private func handleSelectedSnapshot(_ fileURL: URL) {
+        uploadManager.clearResult()
         isRestoringSnapshot = true
         statusMessage = NSLocalizedString("正在检查快照…", comment: "")
         errorMessage = nil
@@ -614,7 +593,7 @@ private struct S3CompatibleSnapshotStorageSettingsView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
 
     @Binding var isCreatingSnapshot: Bool
-    @Binding var isUploadingSnapshot: Bool
+    let isUploadingSnapshot: Bool
     @Binding var isRestoringSnapshot: Bool
     let isS3ConfigurationComplete: () -> Bool
     let remoteSnapshotConfiguration: () -> S3CompatibleUploadConfiguration?
@@ -674,6 +653,12 @@ private struct S3CompatibleSnapshotStorageSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("S3 兼容对象存储", comment: ""))
+        .guideSettingsPageContext(
+            id: "snapshot-backup-storage",
+            title: NSLocalizedString("S3 兼容对象存储", comment: ""),
+            documents: SnapshotBackupGuideSupport.documents,
+            settings: SnapshotBackupGuideSupport.storageSettings
+        )
     }
 }
 

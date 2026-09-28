@@ -58,6 +58,15 @@ struct RemoteSnapshotBrowserView: View {
             }
         }
         .navigationTitle(NSLocalizedString("远端快照", comment: ""))
+        .guideSettingsPageContext(
+            id: "snapshot-backup-archives",
+            title: NSLocalizedString("远端快照", comment: ""),
+            documents: SnapshotBackupGuideSupport.documents,
+            settings: [
+                .readOnly("loading", label: NSLocalizedString("正在读取远端快照…", comment: ""), value: { .bool(isLoading) }),
+                .readOnly("count", label: NSLocalizedString("远端快照", comment: ""), value: { .int(snapshots.count) })
+            ]
+        )
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -175,6 +184,15 @@ private struct RemoteSnapshotDetailView: View {
             }
         }
         .navigationTitle(snapshot.fileName)
+        .guideSettingsPageContext(
+            id: "snapshot-backup-archive-detail",
+            title: NSLocalizedString("远端快照", comment: ""),
+            documents: SnapshotBackupGuideSupport.documents,
+            settings: [
+                .readOnly("file_name", label: NSLocalizedString("文件名", comment: ""), value: { .string(snapshot.fileName) }),
+                .readOnly("downloading", label: NSLocalizedString("正在下载快照…", comment: ""), value: { .bool(isDownloading) })
+            ]
+        )
         .alert(NSLocalizedString("快照操作失败", comment: ""), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -189,6 +207,14 @@ private struct RemoteSnapshotDetailView: View {
                     try? FileManager.default.removeItem(at: payload.fileURL)
                     restorePayload = nil
                 }
+                .guideSettingsPageContext(
+                    id: "snapshot-backup-restore",
+                    title: NSLocalizedString("从快照恢复", comment: ""),
+                    documents: SnapshotBackupGuideSupport.documents,
+                    settings: [
+                        .readOnly("file_name", label: NSLocalizedString("文件名", comment: ""), value: { .string(payload.fileURL.lastPathComponent) })
+                    ]
+                )
             }
         }
     }

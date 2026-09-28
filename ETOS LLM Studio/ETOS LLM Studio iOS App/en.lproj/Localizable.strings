@@ -7594,3 +7594,13 @@
 "session_usage.token_note" = "Thinking and cache details may already be included in input or output tokens and are not added to the total again.";
 "session_usage.request_count" = "Requests";
 "session_usage.intro" = "Counts recorded requests for this conversation, including retries and related tasks such as title generation. Copied history is not charged again; deleting messages does not erase recorded usage. Requests predating usage tracking are unavailable.";
+
+/* 云备份跨页面上传与结果通知 */
+"正在准备上传快照…" = "Preparing snapshot for upload…";
+"云备份已完成" = "Cloud backup completed";
+"云备份失败" = "Cloud backup failed";
+"快照已上传到 S3/R2。" = "The snapshot has been uploaded to S3/R2.";
+"快照未能上传。请返回快照备份页面查看详情并重试。" = "The snapshot could not be uploaded. Return to Snapshot Backup for details and try again.";
+"上传期间可切换到其他页面，完成或失败后会发送通知。" = "You can visit other pages during upload. You’ll be notified when it finishes or fails.";
+"开始上传后可在 App 内切换页面，返回此页可查看进度和结果。完成或失败后会使用与聊天回复相同的通知渠道，请允许 App 发送通知。关闭 App 不保证上传继续。" = "After starting an upload, you can visit other pages in the app. Return here to check progress and results. Completion and failure alerts use the same notifications as chat replies; allow notifications for the app. Uploads are not guaranteed to continue after closing the app.";
+"对象存储 Endpoint" = "Object storage endpoint";

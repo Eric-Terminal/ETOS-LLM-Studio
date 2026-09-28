@@ -288,6 +288,26 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         )
     }
 
+    /// 与聊天回复共用通知权限和前台横幅；通知正文不包含服务端响应或存储凭据。
+    @discardableResult
+    public func postSnapshotUploadFinishedNotification(operationID: UUID, succeeded: Bool) async -> Bool {
+        guard await requestAuthorizationIfNeeded() else { return false }
+        let content = UNMutableNotificationContent()
+        content.title = succeeded
+            ? NSLocalizedString("云备份已完成", comment: "云备份成功通知标题")
+            : NSLocalizedString("云备份失败", comment: "云备份失败通知标题")
+        content.body = succeeded
+            ? NSLocalizedString("快照已上传到 S3/R2。", comment: "云备份成功通知正文")
+            : NSLocalizedString("快照未能上传。请返回快照备份页面查看详情并重试。", comment: "云备份失败通知正文")
+        content.sound = .default
+        content.threadIdentifier = "com.ETOS.snapshot.upload"
+        return await addNotificationRequest(UNNotificationRequest(
+            identifier: "com.ETOS.snapshot.upload.\(operationID.uuidString)",
+            content: content,
+            trigger: nil
+        ))
+    }
+
     public func removePendingRequests(withIdentifiers identifiers: [String]) {
         guard !Self.isRunningUnitTests, !identifiers.isEmpty else { return }
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)

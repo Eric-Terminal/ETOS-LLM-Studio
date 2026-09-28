@@ -7671,3 +7671,13 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "session_usage.token_note" = "Los detalles de razonamiento y caché pueden estar incluidos en los tokens de entrada o salida y no se suman de nuevo al total.";
 "session_usage.request_count" = "Solicitudes";
 "session_usage.intro" = "Cuenta las solicitudes registradas de esta conversación, incluidos los reintentos y tareas relacionadas, como la generación de títulos. Copiar el historial no duplica el coste; eliminar mensajes no borra el uso registrado. No se pueden recuperar solicitudes anteriores al registro de uso.";
+
+/* 云备份跨页面上传与结果通知 */
+"正在准备上传快照…" = "Preparando la instantánea para subirla…";
+"云备份已完成" = "Copia en la nube completada";
+"云备份失败" = "Error en la copia en la nube";
+"快照已上传到 S3/R2。" = "La instantánea se ha subido a S3/R2.";
+"快照未能上传。请返回快照备份页面查看详情并重试。" = "No se pudo subir la instantánea. Vuelve a Copias de instantáneas para consultar los detalles e intentarlo de nuevo.";
+"上传期间可切换到其他页面，完成或失败后会发送通知。" = "Puedes cambiar de página durante la subida. Recibirás una notificación si se completa o falla.";
+"开始上传后可在 App 内切换页面，返回此页可查看进度和结果。完成或失败后会使用与聊天回复相同的通知渠道，请允许 App 发送通知。关闭 App 不保证上传继续。" = "Tras iniciar la subida, puedes visitar otras páginas de la app. Vuelve aquí para consultar el progreso y el resultado. Los avisos de éxito o error usan las mismas notificaciones que las respuestas del chat; permite las notificaciones de la app. No se garantiza que la subida continúe tras cerrar la app.";
+"对象存储 Endpoint" = "Endpoint del almacenamiento de objetos";
