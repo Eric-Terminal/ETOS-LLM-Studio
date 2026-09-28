@@ -119,6 +119,15 @@ extension ChatView {
                                 if scrollCoordinator.isStreamingViewportFollowing != isActive {
                                     scrollCoordinator.isStreamingViewportFollowing = isActive
                                 }
+                            },
+                            timelineEdgeNavigationEnabled: appConfig.chatTimelineNavigationEnabled,
+                            onTimelineEdgeReveal: {
+                                guard !scrollCoordinator.showScrollNavigationPanel else { return }
+                                revealScrollNavigationPanel()
+                            },
+                            onTimelineEdgeGestureEnded: {
+                                guard scrollCoordinator.showScrollNavigationPanel else { return }
+                                scheduleScrollNavigationPanelHide()
                             }
                         ) { distanceToBottom, distanceToTop, isUserInteracting in
                             handleChatScrollMetrics(
@@ -513,7 +522,6 @@ extension ChatView {
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .scrollIndicators(.hidden)
-                .simultaneousGesture(scrollNavigationEdgeRevealGesture)
                 .accessibilityActions {
                     if appConfig.chatTimelineNavigationEnabled {
                         if canNavigateToTimelineTop {

@@ -47,7 +47,7 @@ extension ChatView {
         startLocationX: CGFloat,
         viewportWidth: CGFloat,
         translation: CGSize,
-        edgeActivationWidth: CGFloat = 56,
+        edgeActivationWidth: CGFloat = ChatTimelineEdgePanController.activationWidth,
         minimumHorizontalDistance: CGFloat = 14
     ) -> Bool {
         guard viewportWidth > 0,
@@ -415,24 +415,6 @@ extension ChatView {
         withAnimation(accessibilityReduceMotion ? nil : .easeIn(duration: 0.16)) {
             scrollCoordinator.showScrollNavigationPanel = false
         }
-    }
-
-    var scrollNavigationEdgeRevealGesture: some Gesture {
-        DragGesture(minimumDistance: 10, coordinateSpace: .local)
-            .onChanged { value in
-                guard appConfig.chatTimelineNavigationEnabled,
-                      !scrollCoordinator.showScrollNavigationPanel,
-                      Self.shouldRevealScrollNavigationForEdgeSwipe(
-                        startLocationX: value.startLocation.x,
-                        viewportWidth: scrollCoordinator.chatScrollViewportWidth,
-                        translation: value.translation
-                      ) else { return }
-                revealScrollNavigationPanel()
-            }
-            .onEnded { _ in
-                guard scrollCoordinator.showScrollNavigationPanel else { return }
-                scheduleScrollNavigationPanelHide()
-            }
     }
 
     func handleChatScrollPanBegan() {

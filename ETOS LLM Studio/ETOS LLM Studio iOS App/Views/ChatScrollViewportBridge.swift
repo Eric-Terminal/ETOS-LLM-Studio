@@ -27,6 +27,9 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
     var layoutTransitionRevision: UInt = 0
     var onViewportLayoutSettled: (UInt) -> Void = { _ in }
     var onStreamingFollowActivityChange: (Bool) -> Void = { _ in }
+    var timelineEdgeNavigationEnabled = false
+    var onTimelineEdgeReveal: () -> Void = {}
+    var onTimelineEdgeGestureEnded: () -> Void = {}
     let onMetricsChange: (CGFloat, CGFloat, Bool) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -76,6 +79,11 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         coordinator.onUserPanBegan = onUserPanBegan
         coordinator.onViewportLayoutSettled = onViewportLayoutSettled
         coordinator.onStreamingFollowActivityChange = onStreamingFollowActivityChange
+        coordinator.updateTimelineEdgeGesture(
+            isEnabled: timelineEdgeNavigationEnabled,
+            onReveal: onTimelineEdgeReveal,
+            onEnded: onTimelineEdgeGestureEnded
+        )
         coordinator.updateScrollOwnership(
             isStreaming: isStreaming,
             isViewportTransitioning: isViewportTransitioning,
@@ -135,6 +143,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         private var pendingDistanceNotification: DispatchWorkItem?
         private let streamingFollowAnimator = ChatViewportMotionDriver()
         private let layoutSettlementObserver = ChatViewportLayoutSettlementObserver()
+        private let timelineEdgePanController = ChatTimelineEdgePanController()
         private var layoutTransitionRevision: UInt
         private var observedLayoutTransitionRevision: UInt?
         private var viewportPageAnimator: UIViewPropertyAnimator?
@@ -198,6 +207,14 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
                 && !streamingFollowAnimator.isActive && !awaitsStreamingEndHandoff
         }
 
+        func updateTimelineEdgeGesture(
+            isEnabled: Bool,
+            onReveal: @escaping () -> Void,
+            onEnded: @escaping () -> Void
+        ) {
+            timelineEdgePanController.update(isEnabled: isEnabled, onReveal: onReveal, onEnded: onEnded)
+        }
+
         func updateLayoutTransition(revision: UInt) {
             layoutTransitionRevision = revision
             guard isViewportActive, isViewportTransitioning else {
@@ -254,6 +271,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             lastAppliedAnchorAdjustmentID = nil
             lastAppliedViewportPageRequestID = nil
             self.scrollView = scrollView
+            timelineEdgePanController.attach(to: scrollView)
             scrollView.panGestureRecognizer.addTarget(
                 self,
                 action: #selector(handlePanGesture(_:))
@@ -280,6 +298,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         }
 
         func detach() {
+            timelineEdgePanController.detach()
             layoutSettlementObserver.stop()
             observedLayoutTransitionRevision = nil
             scrollView?.panGestureRecognizer.removeTarget(
