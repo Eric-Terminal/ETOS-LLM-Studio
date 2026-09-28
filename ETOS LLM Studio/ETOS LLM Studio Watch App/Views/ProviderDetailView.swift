@@ -22,6 +22,7 @@ struct ProviderDetailView: View {
     let allowsManualModelAdd: Bool
     @State private var isApplyingProviderUpdateFromParent = false
     @State private var isAddingModel = false
+    @State private var isShowingModelTest = false
     @State private var isFetchingModels = false
     @State private var isShowingFetchProgress = false
     @State private var fetchError: String?
@@ -102,23 +103,6 @@ struct ProviderDetailView: View {
                 }
             }
 
-            if allowsModelTesting {
-                Section {
-                    NavigationLink {
-                        ModelConnectivityTestView(provider: provider)
-                    } label: {
-                        Label(
-                            NSLocalizedString("模型测试", comment: "Model connectivity test entry"),
-                            systemImage: "checkmark.seal"
-                        )
-                    }
-                } footer: {
-                    Text(NSLocalizedString("模型测试会按用途向每个已添加模型发送真实请求，用于确认 API Key、地址、模型 ID 和响应格式是否可用。", comment: "Watch model test explanation"))
-                        .etFont(.footnote)
-                        .foregroundColor(.secondary)
-                }
-            }
-
             if groupByFamilySection {
                 let activeSections = sections(forActive: true)
                 let inactiveSections = sections(forActive: false)
@@ -166,25 +150,11 @@ struct ProviderDetailView: View {
             hasAutoFetchedModels = true
             await fetchAndMergeModels(showsProgress: false)
         }
-        .toolbar {
-            ToolbarItem(placement: .bottomBar) {
-                HStack {
-                    if allowsRemoteModelFetch {
-                        Button(action: { Task { await fetchAndMergeModels(showsProgress: true) } }) {
-                            Image(systemName: "icloud.and.arrow.down")
-                        }
-                        .disabled(isFetchingModels)
-                    }
-                    Spacer()
-                    Button(action: { toggleSearch() }) {
-                        Image(systemName: isSearchPresented ? "xmark" : "magnifyingglass")
-                    }
-                    .accessibilityLabel(isSearchPresented ? NSLocalizedString("取消搜索", comment: "") : NSLocalizedString("搜索模型", comment: ""))
-                }
-            }
-        }
         .sheet(isPresented: $isAddingModel) {
             ModelAddView(provider: $provider)
+        }
+        .navigationDestination(isPresented: $isShowingModelTest) {
+            ModelConnectivityTestView(provider: provider)
         }
         .onChange(of: provider) {
             guard !isApplyingProviderUpdateFromParent else { return }
@@ -211,11 +181,42 @@ struct ProviderDetailView: View {
             buildProposal: buildProviderModelsGuideProposal,
             execute: executeProviderModelsGuideProposal
         )
-        .watchGuideEntry(actions: allowsManualModelAdd ? [
-            WatchPageAction(title: NSLocalizedString("添加模型", comment: ""), systemImage: "plus") {
+        .watchGuideEntry(actions: pageActions)
+    }
+
+    private var pageActions: [WatchPageAction] {
+        var actions: [WatchPageAction] = []
+        if allowsManualModelAdd {
+            actions.append(WatchPageAction(title: NSLocalizedString("添加模型", value: "Add Model", comment: "手表模型列表添加操作"), systemImage: "plus") {
                 isAddingModel = true
-            }
-        ] : [])
+            })
+        }
+        if allowsRemoteModelFetch {
+            actions.append(WatchPageAction(
+                title: NSLocalizedString("在线获取模型列表", value: "Fetch Models Online", comment: "手表模型列表获取操作"),
+                systemImage: "icloud.and.arrow.down",
+                isEnabled: !isFetchingModels
+            ) {
+                Task { await fetchAndMergeModels(showsProgress: true) }
+            })
+        }
+        actions.append(WatchPageAction(
+            title: isSearchPresented
+                ? NSLocalizedString("取消搜索", value: "Cancel Search", comment: "手表模型列表取消搜索")
+                : NSLocalizedString("搜索模型", value: "Search Models", comment: "手表模型列表搜索操作"),
+            systemImage: isSearchPresented ? "xmark" : "magnifyingglass",
+            perform: toggleSearch
+        ))
+        if allowsModelTesting {
+            actions.append(WatchPageAction(
+                title: NSLocalizedString("模型测试", value: "Model Test", comment: "提供商模型批量测试入口"),
+                systemImage: "checkmark.seal"
+            ) {
+                // 共用菜单会先关闭再执行导航，测试请求仍由测试页的开始按钮触发。
+                isShowingModelTest = true
+            })
+        }
+        return actions
     }
 
     private var providerModelsGuidePageID: GuidePageID {

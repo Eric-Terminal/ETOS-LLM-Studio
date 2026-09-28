@@ -1628,7 +1628,7 @@
 "反馈历史" = "Feedback History";
 "反馈历史会作为长期偏好信号保留；进入完整历史页后，你可以逐条删除或整体清空。" = "Feedback history is kept as a long-term preference signal. In the full history page, you can delete items one by one or clear everything.";
 "发送到 iPhone" = "Send to iPhone";
-"取消搜索" = "Cancel Search";
+"取消搜索" = "Отменить поиск";
 "可视化 Widget" = "Visual Widget";
 "可视化 Widget · %@" = "Visual Widget · %@";
 "同步" = "Sync";
@@ -1830,7 +1830,7 @@
 "插入" = "Insert";
 "搜索会话" = "Search Sessions";
 "搜索会话标题或消息" = "Search session titles or messages";
-"搜索模型" = "Search Models";
+"搜索模型" = "Поиск моделей";
 "摘要专用模型" = "Summary Dedicated Model";
 "摘要最小间隔(分钟)" = "Summary Minimum Interval (minutes)";
 "摘要触发轮次阈值" = "Summary Trigger Round Threshold";
@@ -2841,7 +2841,7 @@
 "在沙盒内创建目录结构。" = "Create a directory structure inside the sandbox.";
 "在沙盒内复制文件或目录。" = "Copy files or directories inside the sandbox.";
 "在沙盒内移动或重命名文件与目录。" = "Move or rename files and directories inside the sandbox.";
-"在线获取模型列表" = "Fetch Models Online";
+"在线获取模型列表" = "Получить список моделей онлайн";
 "在聊天中启用该技能" = "Enable this skill in chat";
 "在聊天中渲染可视化网页卡片（Widget）。" = "Render a visual web card (Widget) in chat.";
 "基础行为" = "Basic Behavior";
@@ -3457,7 +3457,7 @@
 "%d 行" = "%d строк";
 
 /* Model connectivity test */
-"模型测试" = "Model Test";
+"模型测试" = "Проверка моделей";
 "测试结果" = "Test Results";
 "模型测试会向每个已添加的聊天模型发送一条轻量请求，用于确认 API Key、地址和模型 ID 是否可用。" = "Model Test sends a lightweight request to each added chat model to verify that the API key, endpoint, and model ID work.";
 "模型测试会向每个已添加的聊天模型发送一条轻量请求，用于确认 API Key、地址和模型 ID 是否可用。并发数量会自动保存。" = "Model Test sends a lightweight request to each added chat model to verify that the API key, endpoint, and model ID work. The concurrency setting is saved automatically.";
