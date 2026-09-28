@@ -20,16 +20,20 @@ struct TelegramMessageComposer: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) var accessibilityReduceMotion
     @ObservedObject var appConfig = AppConfigStore.shared
+    @ObservedObject private var composerDraftState = AppConfigStore.shared.composerDraftState
     @ObservedObject private var customSlashCommandStore = CustomChatSlashCommandStore.shared
+    @ObservedObject var submissionState: ChatSendSubmissionState
+    let sendFlightController: ChatSendFlightController
     @Binding var text: String
     @Binding var isRequestControlsExpanded: Bool
     @Binding var localAgentMode: LocalAgentMode
-    let isSending: Bool
-    let isSendActionPending: Bool
-    let sendAction: () -> Void
+    var isSendActionPending: Bool { submissionState.isPending(for: viewModel.currentSession?.id) }
+    var isSending: Bool { viewModel.isSendingMessage || viewModel.isSendDelayPending || isSendActionPending }
+    let sendAction: () -> Bool
     let stopAction: () -> Void
     let slashCommandAction: (ChatSlashCommand) -> Void
     let focus: FocusState<Bool>.Binding
+    var availableHeight: CGFloat = .infinity
 
     @State private var showImagePicker = false
     @State private var showCamera = false
@@ -39,6 +43,8 @@ struct TelegramMessageComposer: View {
     @State private var showAudioImporter = false
     @State private var showFileImporter = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
+    @State private var photoImportTask: Task<Void, Never>?
+    @State private var cameraImagePreparationTask: Task<Void, Never>?
     @State var isExpandedComposer = false
     @State var adaptiveRequestControls: [ModelRequestBodyControl] = []
     @State var adaptiveHasSendableText = false
@@ -62,6 +68,11 @@ struct TelegramMessageComposer: View {
     private var composerReservedHeight: CGFloat {
         adaptiveControlSize + 16
     }
+    var hasUpperComposerContent: Bool {
+        !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil
+            || !viewModel.pendingFileAttachments.isEmpty
+            || (!slashCommandSuggestions.isEmpty && !isRequestControlsExpanded)
+    }
     private var estimatedCompactInputWidth: CGFloat {
         max(0, UIScreen.main.bounds.width - 16 * 2 - adaptiveControlSize * 2 - 10 * 2)
     }
@@ -78,42 +89,45 @@ struct TelegramMessageComposer: View {
         UIImagePickerController.isSourceTypeAvailable(.camera)
     }
     var body: some View {
-        VStack(spacing: 8) {
-            if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil || !viewModel.pendingFileAttachments.isEmpty {
-                telegramAttachmentPreview
+        ChatComposerHeightLimit(maximumHeight: availableHeight) {
+            VStack(spacing: 8) {
+                if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil || !viewModel.pendingFileAttachments.isEmpty {
+                    telegramAttachmentPreview
+                        .padding(.horizontal, 16)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
+                }
+
+                if !slashCommandSuggestions.isEmpty && !isRequestControlsExpanded {
+                    ChatSlashCommandSuggestionPanel(
+                        commands: slashCommandSuggestions,
+                        usesLiquidGlass: viewModel.enableLiquidGlass,
+                        glassTintOpacity: appConfig.liquidGlassTintOpacity,
+                        onSelect: performSuggestedSlashCommand
+                    )
                     .padding(.horizontal, 16)
-            }
+                    .layoutPriority(1)
+                    .transition(
+                        accessibilityReduceMotion ? .opacity : .scale(scale: 0.98, anchor: .bottom)
+                            .combined(with: .opacity)
+                    )
+                }
 
-            if !slashCommandSuggestions.isEmpty && !isRequestControlsExpanded {
-                ChatSlashCommandSuggestionPanel(
-                    commands: slashCommandSuggestions,
-                    usesLiquidGlass: viewModel.enableLiquidGlass,
-                    glassTintOpacity: appConfig.liquidGlassTintOpacity,
-                    onSelect: performSuggestedSlashCommand
-                )
-                .padding(.horizontal, 16)
-                .transition(
-                    .scale(scale: 0.98, anchor: .bottom)
-                        .combined(with: .opacity)
-                )
+                if usesCardComposer {
+                    cardComposerLayout
+                        .zIndex(1)
+                } else {
+                    // 上方存在附件或建议时必须报告真实高度，不能从固定占位向上盖住兄弟控件。
+                    composerOverlayContent
+                        .frame(height: hasUpperComposerContent ? nil : composerReservedHeight, alignment: .bottom)
+                        .zIndex(1)
+                }
             }
-
-            if usesCardComposer {
-                cardComposerLayout
-                    .zIndex(1)
-            } else {
-                Color.clear
-                    .frame(height: composerReservedHeight)
-                    .overlay(alignment: .bottom) {
-                        composerOverlayContent
-                    }
-                    .zIndex(1)
-            }
+            .padding(.bottom, 6)
         }
-        .padding(.bottom, 6)
         .animation(
             accessibilityReduceMotion
-                ? .easeOut(duration: 0.16)
+                ? nil
                 : .spring(response: 0.3, dampingFraction: 1),
             value: slashCommandSuggestions
         )
@@ -123,8 +137,19 @@ struct TelegramMessageComposer: View {
             matching: .any(of: [.images, .videos])
         )
         .onChange(of: selectedPhotos) { _, newItems in
-            Task {
+            photoImportTask?.cancel()
+            guard !newItems.isEmpty else {
+                photoImportTask = nil
+                return
+            }
+            let sessionID = viewModel.currentSession?.id
+            photoImportTask = Task {
+                defer {
+                    // A→B→A 的旧 A 即使值相同，也不能清掉新选择。
+                    if !Task.isCancelled, selectedPhotos == newItems { selectedPhotos = [] }
+                }
                 for item in newItems {
+                    guard !Task.isCancelled, viewModel.currentSession?.id == sessionID else { return }
                     let videoType = item.supportedContentTypes.first { $0.conforms(to: .movie) }
                     if let videoType {
                         guard let video = try? await item.loadTransferable(
@@ -135,21 +160,16 @@ struct TelegramMessageComposer: View {
                         let fileExtension = video.fileExtension
                         let mimeType = videoType.preferredMIMEType ?? video.mimeType
                         let fileName = "video_\(UUID().uuidString).\(fileExtension)"
-                        await MainActor.run {
-                            viewModel.addFileAttachment(FileAttachment(
-                                data: video.data,
-                                mimeType: mimeType,
-                                fileName: fileName
-                            ))
-                        }
-                    } else if let data = try? await item.loadTransferable(type: Data.self),
-                              let image = UIImage(data: data) {
-                        await MainActor.run {
-                            viewModel.addImageAttachment(image)
-                        }
+                        guard !Task.isCancelled, viewModel.currentSession?.id == sessionID else { return }
+                        viewModel.addFileAttachment(FileAttachment(
+                            data: video.data,
+                            mimeType: mimeType,
+                            fileName: fileName
+                        ))
+                    } else if let data = try? await item.loadTransferable(type: Data.self) {
+                        await viewModel.addImageAttachment(data: data, forSessionID: sessionID)
                     }
                 }
-                selectedPhotos = []
             }
         }
         .onChange(of: text) { _, newValue in
@@ -182,7 +202,7 @@ struct TelegramMessageComposer: View {
                 }
                 handleAutoExpand(for: text)
             } else if isExpandedComposer {
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                withAnimation(adaptiveComposerAnimation) {
                     isExpandedComposer = false
                 }
             }
@@ -193,6 +213,10 @@ struct TelegramMessageComposer: View {
             Text(inlineSpeechErrorMessage ?? NSLocalizedString("发生未知错误，请稍后重试。", comment: ""))
         }
         .onDisappear {
+            photoImportTask?.cancel()
+            photoImportTask = nil
+            cameraImagePreparationTask?.cancel()
+            cameraImagePreparationTask = nil
             isRequestControlsExpanded = false
             inlineSpeechFinalizeTask?.cancel()
             inlineSpeechFinalizeTask = nil
@@ -209,8 +233,14 @@ struct TelegramMessageComposer: View {
                     .ignoresSafeArea()
 
                 CameraImagePicker(isPresented: $showCamera) { image in
+                    cameraImagePreparationTask?.cancel()
                     if let image {
-                        viewModel.addImageAttachment(image)
+                        let sessionID = viewModel.currentSession?.id
+                        cameraImagePreparationTask = Task {
+                            await viewModel.addImageAttachment(image, forSessionID: sessionID)
+                        }
+                    } else {
+                        cameraImagePreparationTask = nil
                     }
                 }
                 .ignoresSafeArea()
@@ -263,14 +293,16 @@ struct TelegramMessageComposer: View {
     }
 
     private var composerOverlayContent: some View {
-        // 固定占位交给外层 Color.clear，真实输入框在 overlay 中按自身高度展开。
+        // 无附件时保留向上展开；有兄弟时接受键盘上方的有限高度，让正文在编辑器内滚动。
         adaptiveComposerContent
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .fixedSize(horizontal: false, vertical: true)
+            .fixedSize(horizontal: false, vertical: !hasUpperComposerContent)
             .frame(maxWidth: .infinity, alignment: .bottom)
-            .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isExpandedComposer)
-            .animation(.spring(response: 0.3, dampingFraction: 0.86), value: inlineSpeechRecorder.phase)
+            // 测真实展开内容，不能把外层 60pt 占位当成输入框顶部。
+            .background(ChatSendFlightLayoutAnchor(controller: sendFlightController, region: .composerContent))
+            .animation(adaptiveComposerAnimation, value: isExpandedComposer)
+            .animation(adaptiveComposerAnimation, value: inlineSpeechRecorder.phase)
             .animation(adaptiveComposerAnimation, value: isRequestControlsExpanded)
     }
 
@@ -525,7 +557,7 @@ struct TelegramMessageComposer: View {
         }
         if trimmed.isEmpty {
             if isExpandedComposer {
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                withAnimation(adaptiveComposerAnimation) {
                     isExpandedComposer = false
                 }
             }
@@ -552,14 +584,14 @@ struct TelegramMessageComposer: View {
         if shouldExpand {
             let wasFocused = focus.wrappedValue
             guard !isExpandedComposer else { return }
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+            withAnimation(adaptiveComposerAnimation) {
                 isExpandedComposer = true
             }
             if wasFocused {
                 focus.wrappedValue = true
             }
         } else if isExpandedComposer {
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+            withAnimation(adaptiveComposerAnimation) {
                 isExpandedComposer = false
             }
         }

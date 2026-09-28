@@ -27,51 +27,83 @@ extension PersistenceGRDBStore {
         flushPendingMessageWrites()
         return try dbPool.write { db in
             try ensureSessionExists(db, sessionID: sessionID)
-            let existingMetadata = try Row.fetchOne(
-                db,
-                sql: "SELECT position, created_at FROM messages WHERE id = ? AND session_id = ?",
-                arguments: [message.id.uuidString, sessionID.uuidString]
+            let storedMessage = try upsertConversationMessage(
+                message, in: db, sessionID: sessionID, afterMessageID: afterMessageID
             )
-            let existingPosition: Int? = existingMetadata?["position"]
-            let existingCreatedAt: Double? = existingMetadata?["created_at"]
-            let position: Int
-            if let existingPosition {
-                position = existingPosition
-            } else if let afterMessageID,
-                      let anchorPosition = try Int.fetchOne(
-                          db,
-                          sql: "SELECT position FROM messages WHERE id = ? AND session_id = ?",
-                          arguments: [afterMessageID.uuidString, sessionID.uuidString]
-                      ) {
-                try db.execute(
-                    sql: "UPDATE messages SET position = position + 1 WHERE session_id = ? AND position > ?",
-                    arguments: [sessionID.uuidString, anchorPosition]
-                )
-                position = anchorPosition + 1
-            } else {
-                position = (try Int.fetchOne(
-                    db,
-                    sql: "SELECT MAX(position) FROM messages WHERE session_id = ?",
-                    arguments: [sessionID.uuidString]
-                ) ?? -1) + 1
-            }
-            let record = try makePersistedMessageRecord(
-                db,
-                message: message,
-                sessionID: sessionID,
-                position: position,
-                fallbackTimestamp: Date(),
-                existingCreatedAt: existingCreatedAt
-            )
-            try upsertMessageRecord(db, record: record)
             try db.execute(
                 sql: "UPDATE sessions SET updated_at = ? WHERE id = ?",
                 arguments: [Date().timeIntervalSince1970, sessionID.uuidString]
             )
-            var storedMessage = message
-            storedMessage.id = UUID(uuidString: record.id) ?? message.id
             return storedMessage
         }
+    }
+
+    func appendConversationMessagesAtomically(
+        _ messages: [ChatMessage],
+        to sessionID: UUID
+    ) throws -> [ChatMessage] {
+        flushPendingMessageWrites()
+        return try dbPool.write { db in
+            try ensureSessionExists(db, sessionID: sessionID)
+            // 同一提交的来源和回复占位一起成功或回滚，其他入口不能插入组内。
+            let storedMessages = try messages.map {
+                try upsertConversationMessage($0, in: db, sessionID: sessionID)
+            }
+            try db.execute(
+                sql: "UPDATE sessions SET updated_at = ? WHERE id = ?",
+                arguments: [Date().timeIntervalSince1970, sessionID.uuidString]
+            )
+            return storedMessages
+        }
+    }
+
+    /// 只操作调用方已经持有的事务，不刷新写队列，也不再次开启数据库写入。
+    private func upsertConversationMessage(
+        _ message: ChatMessage,
+        in db: Database,
+        sessionID: UUID,
+        afterMessageID: UUID? = nil
+    ) throws -> ChatMessage {
+        let existingMetadata = try Row.fetchOne(
+            db,
+            sql: "SELECT position, created_at FROM messages WHERE id = ? AND session_id = ?",
+            arguments: [message.id.uuidString, sessionID.uuidString]
+        )
+        let existingPosition: Int? = existingMetadata?["position"]
+        let existingCreatedAt: Double? = existingMetadata?["created_at"]
+        let position: Int
+        if let existingPosition {
+            position = existingPosition
+        } else if let afterMessageID,
+                  let anchorPosition = try Int.fetchOne(
+                      db,
+                      sql: "SELECT position FROM messages WHERE id = ? AND session_id = ?",
+                      arguments: [afterMessageID.uuidString, sessionID.uuidString]
+                  ) {
+            try db.execute(
+                sql: "UPDATE messages SET position = position + 1 WHERE session_id = ? AND position > ?",
+                arguments: [sessionID.uuidString, anchorPosition]
+            )
+            position = anchorPosition + 1
+        } else {
+            position = (try Int.fetchOne(
+                db,
+                sql: "SELECT MAX(position) FROM messages WHERE session_id = ?",
+                arguments: [sessionID.uuidString]
+            ) ?? -1) + 1
+        }
+        let record = try makePersistedMessageRecord(
+            db,
+            message: message,
+            sessionID: sessionID,
+            position: position,
+            fallbackTimestamp: Date(),
+            existingCreatedAt: existingCreatedAt
+        )
+        try upsertMessageRecord(db, record: record)
+        var storedMessage = message
+        storedMessage.id = UUID(uuidString: record.id) ?? message.id
+        return storedMessage
     }
 
     func deleteConversationMessageAtomically(

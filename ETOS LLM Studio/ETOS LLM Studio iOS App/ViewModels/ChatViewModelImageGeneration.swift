@@ -36,12 +36,15 @@ extension ChatViewModel {
         runtimeOverrideParameters: [String: JSONValue] = [:]
     ) {
         guard !isSendingMessage else { return }
-        Task {
+        let targetSessionID = currentSession?.id
+        Task { [weak self] in
+            guard let self else { return }
             await chatService.generateImageAndProcessMessage(
                 prompt: prompt,
                 imageAttachments: referenceImages,
                 runnableModel: model,
-                runtimeOverrideParameters: runtimeOverrideParameters
+                runtimeOverrideParameters: runtimeOverrideParameters,
+                targetSessionID: targetSessionID
             )
         }
     }

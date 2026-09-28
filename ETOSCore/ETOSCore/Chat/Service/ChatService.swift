@@ -387,7 +387,7 @@ public class ChatService {
             for: sessionID,
             keepingSpeedSamplesFor: preferredMessageID
         )
-        promoteSessionToTopIfNeeded(sessionID: sessionID)
+        await promoteSessionToTopIfNeeded(sessionID: sessionID)
         return storedMessage
     }
 

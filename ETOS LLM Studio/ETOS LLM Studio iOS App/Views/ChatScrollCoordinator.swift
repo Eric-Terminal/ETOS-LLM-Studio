@@ -8,6 +8,7 @@
 import Combine
 import Foundation
 import SwiftUI
+import UIKit
 
 @MainActor
 final class ChatScrollCoordinator: ObservableObject {
@@ -31,9 +32,10 @@ final class ChatScrollCoordinator: ObservableObject {
     @Published var bottomScrollCommandGeneration: UInt = 0
     @Published var isChatLayoutSettling = false
     @Published var isChatScrollUserInteracting = false
+    @Published private(set) var layoutTransitionRevision: UInt = 0
+    @Published var isStreamingViewportFollowing = false
 
     var scrollNavigationHideTask: Task<Void, Never>?
-    var chatLayoutSettleTask: Task<Void, Never>?
     var scrollTargetGeneration: UInt = 0
     var pendingAutomaticHistoryLoadRequest: ChatAutomaticHistoryLoadRequest?
     var lastAutomaticHistoryLoadAnchorID: UUID?
@@ -48,10 +50,15 @@ final class ChatScrollCoordinator: ObservableObject {
     let chatScrollPositionController = ChatScrollPositionController()
     let chatHistoryViewportAnchorController = ChatHistoryViewportAnchorController()
     let chatLayoutIntegrityMonitor = ChatLayoutIntegrityMonitor()
+    let tabBarBaselineHeight: CGFloat
 
     private var childSubscriptions: Set<AnyCancellable> = []
+    private var awaitsKeyboardLayoutCompletion = false
 
     init() {
+        // 这里只缓存原有默认基准，不能在每次聊天 body 求值时重建 UIKit 控制器。
+        let measuredTabBarHeight = UITabBarController().tabBar.frame.height
+        tabBarBaselineHeight = measuredTabBarHeight > 0 ? measuredTabBarHeight : 49
         chatScrollPositionController.objectWillChange
             .merge(
                 with: chatHistoryViewportAnchorController.objectWillChange,
@@ -90,6 +97,25 @@ final class ChatScrollCoordinator: ObservableObject {
         hasDirectPanOwnership: Bool
     ) -> Bool {
         reportedByScrollView && hasDirectPanOwnership
+    }
+
+    func beginLayoutTransition(keepBottomPinned: Bool, awaitsKeyboardCompletion: Bool = false) {
+        shouldKeepBottomPinned = keepBottomPinned
+        awaitsKeyboardLayoutCompletion = awaitsKeyboardLayoutCompletion || awaitsKeyboardCompletion
+        layoutTransitionRevision &+= 1
+        isChatLayoutSettling = true
+    }
+
+    /// 键盘 did 回执后再观察一轮几何，覆盖交互取消与最终安全区更新。
+    func keyboardLayoutTransitionDidEnd() {
+        guard awaitsKeyboardLayoutCompletion else { return }
+        awaitsKeyboardLayoutCompletion = false
+        layoutTransitionRevision &+= 1
+    }
+
+    func completeLayoutTransition(revision: UInt) {
+        guard revision == layoutTransitionRevision, !awaitsKeyboardLayoutCompletion else { return }
+        isChatLayoutSettling = false
     }
 
     func beginAutomaticHistoryMutation(
@@ -229,9 +255,9 @@ final class ChatScrollCoordinator: ObservableObject {
         pendingHistoryResetWorkItem = nil
         pendingBottomSnapTask?.cancel()
         pendingBottomSnapTask = nil
-        chatLayoutSettleTask?.cancel()
-        chatLayoutSettleTask = nil
+        awaitsKeyboardLayoutCompletion = false
         isChatLayoutSettling = false
+        isStreamingViewportFollowing = false
         chatLayoutIntegrityMonitor.stop()
         cancelAutomaticHistoryNavigation()
         awaitsFreshBottomNavigationSnapshot = false
@@ -266,8 +292,7 @@ final class ChatScrollCoordinator: ObservableObject {
         pendingBottomSnapTask = nil
         bottomScrollCommandReleaseTask?.cancel()
         bottomScrollCommandReleaseTask = nil
-        chatLayoutSettleTask?.cancel()
-        chatLayoutSettleTask = nil
+        awaitsKeyboardLayoutCompletion = false
         scrollNavigationHideTask?.cancel()
         scrollNavigationHideTask = nil
         awaitsFreshBottomNavigationSnapshot = false
@@ -285,6 +310,7 @@ final class ChatScrollCoordinator: ObservableObject {
         previousMessageNavigationTargetID = nil
         nextMessageNavigationTargetID = nil
         isChatLayoutSettling = false
+        isStreamingViewportFollowing = false
         isChatScrollUserInteracting = false
         scrollDistanceToBottom = 0
         scrollDistanceToTop = 0

@@ -29,6 +29,18 @@ extension Persistence {
         return storedMessage
     }
 
+    public static func appendConversationMessages(
+        _ messages: [ChatMessage],
+        to sessionID: UUID
+    ) throws -> [ChatMessage] {
+        guard let store = activeGRDBStore() else {
+            throw ConversationRuntimeError.persistenceUnavailable
+        }
+        let storedMessages = try store.appendConversationMessagesAtomically(messages, to: sessionID)
+        markConversationRuntimeChanged()
+        return storedMessages
+    }
+
     public static func upsertConversationMessage(
         _ message: ChatMessage,
         to sessionID: UUID,

@@ -8,6 +8,68 @@ import UniformTypeIdentifiers
 
 @Suite("显示图片后台解码", .serialized)
 struct DisplayImageLoaderTests {
+    @Test("待发送图片从原始数据保持方向和比例，忽略缺失或已经拉伸的缩略图", arguments: [false, true])
+    func pendingAttachmentUsesOriginalData(hasDistortedThumbnail: Bool) async throws {
+        let originalURL = try makeImage(width: 800, height: 400, orientation: 6)
+        let thumbnailURL = try makeImage(width: 100, height: 100)
+        defer {
+            try? FileManager.default.removeItem(at: originalURL)
+            try? FileManager.default.removeItem(at: thumbnailURL)
+        }
+        let originalData = try Data(contentsOf: originalURL)
+        let attachment = ImageAttachment(
+            data: originalData, mimeType: "image/jpeg", fileName: "pending.jpg",
+            thumbnailData: hasDistortedThumbnail ? try Data(contentsOf: thumbnailURL) : nil
+        )
+        let prepared = try #require(await DisplayImageLoader().pendingAttachment(
+            attachment, target: DisplayImageTarget(size: CGSize(width: 100, height: 100), scale: 1)
+        ))
+        #expect(prepared.image.size == CGSize(width: 100, height: 200))
+        #expect(prepared.image.imageOrientation == .up)
+        #expect(prepared.sourcePixelScale == 0.25)
+        #expect(attachment.data == originalData)
+    }
+
+    @Test("待发送图片按附件身份与尺寸共享后台准备结果，尺寸变化仍保留原比例")
+    func pendingAttachmentSharesPreparedImage() async throws {
+        let url = try makeImage(width: 1_200, height: 800)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let attachment = ImageAttachment(data: try Data(contentsOf: url), mimeType: "image/jpeg", fileName: "pending.jpg")
+        let loader = DisplayImageLoader()
+        let target = DisplayImageTarget(size: CGSize(width: 220, height: 180), scale: 2)
+        let results = await withTaskGroup(of: PreparedDisplayImage?.self) { group in
+            for _ in 0..<10 {
+                group.addTask { await loader.pendingAttachment(attachment, target: target) }
+            }
+            var values: [PreparedDisplayImage] = []
+            for await value in group { if let value { values.append(value) } }
+            return values
+        }
+        #expect(results.count == 10)
+        let first = try #require(results.first)
+        #expect(results.allSatisfy { $0.image === first.image })
+        #expect(first.image.size == CGSize(width: 540, height: 360))
+        let smaller = try #require(await loader.pendingAttachment(
+            attachment, target: DisplayImageTarget(size: CGSize(width: 72, height: 72), scale: 2)
+        ))
+        #expect(smaller.image !== first.image)
+        #expect(smaller.image.size == CGSize(width: 216, height: 144))
+    }
+
+    @Test("相机附件编码保留原比例，不再生成不可还原的方形缩略图")
+    func encodedAttachmentKeepsOriginalAspect() async throws {
+        let url = try makeImage(width: 240, height: 160)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let image = try #require(UIImage(contentsOfFile: url.path))
+        let attachment = try #require(ImageAttachment.from(image: image))
+        #expect(attachment.thumbnailData == nil)
+        #expect(attachment.mimeType == "image/jpeg")
+        let prepared = try #require(await DisplayImageLoader().pendingAttachment(
+            attachment, target: DisplayImageTarget(size: CGSize(width: 220, height: 180), scale: 3)
+        ))
+        #expect(prepared.image.size == CGSize(width: 240, height: 160))
+    }
+
     @Test("大图按气泡像素解码，预览保留原尺寸且不修改附件")
     func thumbnailPreservesOriginal() async throws {
         let url = try makeImage(width: 4_000, height: 3_000)

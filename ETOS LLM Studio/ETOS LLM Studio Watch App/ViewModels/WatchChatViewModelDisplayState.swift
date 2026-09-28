@@ -11,6 +11,13 @@ import Foundation
 import ETOSCore
 
 extension ChatViewModel {
+    var retryableMessageIDs: Set<UUID> {
+        guard let preparedMessageSnapshot else { return [] }
+        return isSendingMessage
+            ? preparedMessageSnapshot.sendingRetryableMessageIDs
+            : preparedMessageSnapshot.idleRetryableMessageIDs
+    }
+
     var usesAutomaticHistoryWindow: Bool {
         automaticHistoryLoadingEnabled
     }

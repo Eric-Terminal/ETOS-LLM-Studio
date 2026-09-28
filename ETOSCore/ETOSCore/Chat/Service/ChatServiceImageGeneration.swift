@@ -15,15 +15,22 @@ extension ChatService {
         prompt: String,
         imageAttachments: [ImageAttachment] = [],
         runnableModel: RunnableModel? = nil,
-        runtimeOverrideParameters: [String: JSONValue] = [:]
+        runtimeOverrideParameters: [String: JSONValue] = [:],
+        targetSessionID: UUID? = nil,
+        onMessagesPrepared: ChatSendPresentationHandler? = nil
     ) async {
-        guard var currentSession = currentSessionSubject.value else {
+        let currentSessionSnapshot = currentSessionSubject.value
+        let resolvedSessionID = targetSessionID ?? currentSessionSnapshot?.id
+        guard let resolvedSessionID,
+              var currentSession = currentSessionSnapshot?.id == resolvedSessionID
+                ? currentSessionSnapshot
+                : conversationSession(withID: resolvedSessionID) else {
             let reason = NSLocalizedString("错误: 没有当前会话。", comment: "No current session error")
-            addErrorMessage(reason)
+            addErrorMessage(reason, sessionID: resolvedSessionID)
             requestStatusSubject.send(.error)
             imageGenerationStatusSubject.send(
                 .failed(
-                    sessionID: nil,
+                    sessionID: resolvedSessionID,
                     loadingMessageID: nil,
                     prompt: prompt.trimmingCharacters(in: .whitespacesAndNewlines),
                     reason: reason,
@@ -114,7 +121,7 @@ extension ChatService {
             "开始生图流程: session=\(currentSession.id.uuidString), provider=\(runnableModel.provider.name), model=\(runnableModel.model.displayName), promptLength=\(trimmedPrompt.count), explicitReferenceCount=\(imageAttachments.count), effectiveReferenceCount=\(effectiveReferenceImages.count), reusedAssistantImage=\(reusedAssistantImage), runtimeOverrideCount=\(runtimeOverrideParameters.count)"
         )
 
-        var savedImageFileNames: [String] = []
+        var savedImages: [(fileName: String, source: ChatSendPresentationSource)] = []
         for imageAttachment in imageAttachments {
             var targetName = imageAttachment.fileName
             if targetName.isEmpty {
@@ -127,7 +134,7 @@ extension ChatService {
                 targetName = ext.isEmpty ? "\(stem)_\(suffix)" : "\(stem)_\(suffix).\(ext)"
             }
             if Persistence.saveImage(imageAttachment.data, fileName: targetName) != nil {
-                savedImageFileNames.append(targetName)
+                savedImages.append((fileName: targetName, source: .image(imageAttachment.id)))
                 logger.info("生图参考图已保存: \(targetName)")
             } else {
                 logger.error("生图参考图保存失败: \(targetName)")
@@ -135,12 +142,12 @@ extension ChatService {
         }
 
         let requestedAt = Date()
-        var userMessages = savedImageFileNames.map { fileName in
+        var userMessages = savedImages.map { savedImage in
             ChatMessage(
                 role: .user,
                 content: NSLocalizedString("[图片]", comment: "Image message placeholder"),
                 requestedAt: requestedAt,
-                imageFileNames: [fileName]
+                imageFileNames: [savedImage.fileName]
             )
         }
         var userMessage = ChatMessage(
@@ -155,6 +162,17 @@ extension ChatService {
         )
         userMessage.selectedResponseAttemptID = responseAttempt.attemptID
         userMessages.append(userMessage)
+        if let onMessagesPrepared {
+            var messageIDsBySource: [ChatSendPresentationSource: UUID] = [.text: userMessage.id]
+            for (savedImage, message) in zip(savedImages, userMessages) {
+                messageIDsBySource[savedImage.source] = message.id
+            }
+            await onMessagesPrepared(ChatSendPresentation(
+                sessionID: currentSession.id,
+                messageIDsBySource: messageIDsBySource,
+                responseGroupID: userMessage.id
+            ))
+        }
         let loadingMessage = ChatMessage(
             role: .assistant,
             content: "",
@@ -190,7 +208,9 @@ extension ChatService {
         if currentSession.isTemporary && !isTemporaryChatEnabled(for: currentSession.id) {
             currentSession.name = String(trimmedPrompt.prefix(20))
             currentSession.isTemporary = false
-            currentSessionSubject.send(currentSession)
+            if currentSessionSubject.value?.id == currentSession.id {
+                currentSessionSubject.send(currentSession)
+            }
             var updatedSessions = chatSessionsSubject.value
             if let index = updatedSessions.firstIndex(where: { $0.id == currentSession.id }) {
                 updatedSessions[index] = currentSession
@@ -199,10 +219,12 @@ extension ChatService {
             Persistence.saveChatSessions(updatedSessions)
             logger.info("生图请求已跳过自动标题生成: session=\(currentSession.id.uuidString)")
         } else if !currentSession.isTemporary {
-            promoteSessionToTopIfNeeded(sessionID: currentSession.id)
+            await promoteSessionToTopIfNeeded(sessionID: currentSession.id)
         } else if currentSession.name == NSLocalizedString("新的对话", comment: "Default new chat session name") {
             currentSession.name = String(trimmedPrompt.prefix(20))
-            currentSessionSubject.send(currentSession)
+            if currentSessionSubject.value?.id == currentSession.id {
+                currentSessionSubject.send(currentSession)
+            }
             var updatedSessions = chatSessionsSubject.value
             if let index = updatedSessions.firstIndex(where: { $0.id == currentSession.id }) {
                 updatedSessions[index] = currentSession

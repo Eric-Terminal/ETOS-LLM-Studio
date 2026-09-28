@@ -26,7 +26,7 @@ extension ChatViewModel {
         }
         isSendingMessage = runningSessionIDs.contains(currentSessionID)
         if isSendingMessage {
-            pendingSendSubmissionSessionIDs.remove(currentSessionID)
+            sendSubmissionState.requestDidStart(for: currentSessionID)
         }
         if wasSendingMessage, !isSendingMessage {
             finalizeStreamingMarkdownIfNeeded()

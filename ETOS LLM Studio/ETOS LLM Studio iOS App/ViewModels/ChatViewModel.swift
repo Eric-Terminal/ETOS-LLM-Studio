@@ -50,6 +50,7 @@ private struct PendingChatSendPayload: Sendable {
     let audioAttachment: AudioAttachment?
     let imageAttachments: [ImageAttachment]
     let fileAttachments: [FileAttachment]
+    let onMessagesPrepared: ChatSendPresentationHandler?
 }
 
 @MainActor
@@ -79,7 +80,10 @@ final class ChatViewModel: ObservableObject {
     var responseAttemptIndexPublishedRevision = -1
     @Published var isHistoryFullyLoaded: Bool = false
     @Published var isLaterHistoryFullyLoaded: Bool = true
-    @Published var userInput: String = ""
+    var userInput: String {
+        get { AppConfigStore.shared.chatComposerDraft }
+        set { AppConfigStore.shared.chatComposerDraft = newValue }
+    }
     @Published var messageToEdit: ChatMessage?
     @Published var messageRewritePayload: MessageRewritePayload?
     @Published var messageRewriteErrorMessage: String?
@@ -114,7 +118,7 @@ final class ChatViewModel: ObservableObject {
     @Published var autoOpenedPendingToolCallIDs: Set<String> = []
     @Published var isSendingMessage: Bool = false
     @Published var isSendDelayPending: Bool = false
-    @Published var pendingSendSubmissionSessionIDs: Set<UUID> = []
+    let sendSubmissionState = ChatSendSubmissionState()
     @Published var globalSystemPromptEntries: [GlobalSystemPromptEntry] = []
     @Published var selectedGlobalSystemPromptEntryID: UUID?
     @Published var speechModels: [RunnableModel] = []
@@ -456,18 +460,28 @@ final class ChatViewModel: ObservableObject {
     
     // MARK: - Messaging
     
-    func sendMessage(localAgentMode: LocalAgentMode? = nil) {
-        guard let payload = capturePendingSendPayload(localAgentMode: localAgentMode) else { return }
+    /// 仅确认草稿已被捕获；网络请求和延迟发送的结果不改变本次输入消费回执。
+    @discardableResult
+    func sendMessage(
+        localAgentMode: LocalAgentMode? = nil,
+        onMessagesPrepared: ChatSendPresentationHandler? = nil
+    ) -> Bool {
+        guard let payload = capturePendingSendPayload(
+            localAgentMode: localAgentMode,
+            onMessagesPrepared: onMessagesPrepared
+        ) else { return false }
         let delay = AppConfigStore.shared.chatSendDelaySeconds
         guard delay > 0 else {
             sendCapturedMessage(payload)
-            return
+            return true
         }
         scheduleDelayedSend(payload, delay: delay)
+        return true
     }
 
     private func capturePendingSendPayload(
-        localAgentMode: LocalAgentMode?
+        localAgentMode: LocalAgentMode?,
+        onMessagesPrepared: ChatSendPresentationHandler?
     ) -> PendingChatSendPayload? {
         let userMessageContent = userInput.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasText = !userMessageContent.isEmpty
@@ -503,12 +517,14 @@ final class ChatViewModel: ObservableObject {
             enableResponseSpeedMetrics: enableResponseSpeedMetrics,
             audioAttachment: audioToSend,
             imageAttachments: imagesToSend,
-            fileAttachments: filesToSend
+            fileAttachments: filesToSend,
+            onMessagesPrepared: onMessagesPrepared
         )
         userInput = ""
-        pendingAudioAttachment = nil
-        pendingImageAttachments = []
-        pendingFileAttachments = []
+        // @Published 对相同空值也会通知；纯文本发送不应重建附件与会话视图。
+        if hasAudio { pendingAudioAttachment = nil }
+        if hasImages { pendingImageAttachments = [] }
+        if hasFiles { pendingFileAttachments = [] }
 
         return payload
     }
@@ -533,11 +549,20 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func sendCapturedMessage(_ payload: PendingChatSendPayload) {
+        let submissionToken: UUID?
         if let sessionID = payload.sessionID,
            !runningSessionIDs.contains(sessionID) {
-            pendingSendSubmissionSessionIDs.insert(sessionID)
+            submissionToken = sendSubmissionState.begin(for: sessionID)
+        } else {
+            submissionToken = nil
         }
-        Task { [weak self] in
+        Task { [weak self, submissionState = sendSubmissionState] in
+            defer {
+                if let sessionID = payload.sessionID, let submissionToken {
+                    submissionState.finish(for: sessionID, token: submissionToken)
+                }
+                self?.flushPendingToolSupplementMessagesIfPossible()
+            }
             guard let self else { return }
             await chatService.sendAndProcessMessage(
                 content: payload.content,
@@ -558,12 +583,10 @@ final class ChatViewModel: ObservableObject {
                 audioAttachment: payload.audioAttachment,
                 imageAttachments: payload.imageAttachments,
                 fileAttachments: payload.fileAttachments,
-                requestedLocalAgentMode: payload.localAgentMode
+                targetSessionID: payload.sessionID,
+                requestedLocalAgentMode: payload.localAgentMode,
+                onMessagesPrepared: payload.onMessagesPrepared
             )
-            if let sessionID = payload.sessionID {
-                pendingSendSubmissionSessionIDs.remove(sessionID)
-            }
-            flushPendingToolSupplementMessagesIfPossible()
         }
     }
 
@@ -606,7 +629,8 @@ final class ChatViewModel: ObservableObject {
         if let currentSessionID = currentSession?.id {
             runningSessionIDs.remove(currentSessionID)
         }
-        isSendingMessage = false
+        // 先接续最后的流式快照，避免 Core 取消回执到达前退回旧的静态正文与行高。
+        refreshCurrentSessionSendingState()
         updateAutoReasoningPreviewState()
 
         Task {
@@ -616,7 +640,7 @@ final class ChatViewModel: ObservableObject {
     
     /// 是否可以发送消息（有文字或附件）
     var canSendMessage: Bool {
-        let hasText = !userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasText = AppConfigStore.shared.composerDraftState.hasSendableText
         let hasAttachments = pendingAudioAttachment != nil || !pendingImageAttachments.isEmpty || !pendingFileAttachments.isEmpty
         return (hasText || hasAttachments) && !isSendDelayPending && !isSendSubmissionPending
     }
@@ -627,8 +651,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     var isSendSubmissionPending: Bool {
-        guard let currentSessionID = currentSession?.id else { return false }
-        return pendingSendSubmissionSessionIDs.contains(currentSessionID)
+        sendSubmissionState.isPending(for: currentSession?.id)
     }
 
     func quickRetryLatestMessage() {
@@ -661,13 +684,6 @@ final class ChatViewModel: ObservableObject {
         pendingFileAttachments = []
     }
     
-    /// 添加图片附件
-    func addImageAttachment(_ image: UIImage) {
-        if let attachment = ImageAttachment.from(image: image) {
-            pendingImageAttachments.append(attachment)
-        }
-    }
-
     /// 添加文件附件
     func addFileAttachment(_ attachment: FileAttachment) {
         pendingFileAttachments.append(attachment)

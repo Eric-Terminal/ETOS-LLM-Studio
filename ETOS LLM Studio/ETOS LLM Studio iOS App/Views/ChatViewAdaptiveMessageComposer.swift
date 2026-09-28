@@ -45,8 +45,9 @@ extension TelegramMessageComposer {
     var adaptiveControlSize: CGFloat { 44 }
 
     var adaptiveComposerAnimation: Animation? {
+        // 输入框高度和相邻控件位置共用此事务；减少动态效果时不能只换成更短的位移动画。
         accessibilityReduceMotion
-            ? .easeOut(duration: 0.16)
+            ? nil
             : .spring(response: 0.34, dampingFraction: 0.94)
     }
 
@@ -94,7 +95,7 @@ extension TelegramMessageComposer {
             if adaptiveShowsAttachmentButton {
                 attachmentMenuButton(size: adaptiveControlSize)
                     .transition(
-                        .scale(scale: 0.82, anchor: .trailing)
+                        accessibilityReduceMotion ? .opacity : .scale(scale: 0.82, anchor: .trailing)
                             .combined(with: .opacity)
                     )
             }
@@ -107,7 +108,7 @@ extension TelegramMessageComposer {
                     participatesInGlassContainer: false
                 )
                     .transition(
-                        .scale(scale: 0.82, anchor: .leading)
+                        accessibilityReduceMotion ? .opacity : .scale(scale: 0.82, anchor: .leading)
                             .combined(with: .opacity)
                     )
             }
@@ -120,7 +121,7 @@ extension TelegramMessageComposer {
                 )
                     .padding(.trailing, 8)
                     .padding(.bottom, 8)
-                    .transition(.scale(scale: 0.82).combined(with: .opacity))
+                    .transition(accessibilityReduceMotion ? .opacity : .scale(scale: 0.82).combined(with: .opacity))
             }
         }
     }
@@ -135,7 +136,7 @@ extension TelegramMessageComposer {
                 )
                     .glassEffectID("adaptive-attachment", in: adaptiveGlassNamespace)
                     .transition(
-                        .scale(scale: 0.82, anchor: .trailing)
+                        accessibilityReduceMotion ? .opacity : .scale(scale: 0.82, anchor: .trailing)
                             .combined(with: .opacity)
                     )
             }
@@ -150,7 +151,7 @@ extension TelegramMessageComposer {
                 )
                     .glassEffectID("adaptive-action", in: adaptiveGlassNamespace)
                     .transition(
-                        .scale(scale: 0.82, anchor: .leading)
+                        accessibilityReduceMotion ? .opacity : .scale(scale: 0.82, anchor: .leading)
                             .combined(with: .opacity)
                     )
             }
@@ -164,7 +165,7 @@ extension TelegramMessageComposer {
                     .glassEffectID("adaptive-action", in: adaptiveGlassNamespace)
                     .padding(.trailing, 8)
                     .padding(.bottom, 8)
-                    .transition(.scale(scale: 0.82).combined(with: .opacity))
+                    .transition(accessibilityReduceMotion ? .opacity : .scale(scale: 0.82).combined(with: .opacity))
             }
         }
     }
@@ -216,7 +217,7 @@ extension TelegramMessageComposer {
         VStack(spacing: 0) {
             if adaptivePresentation == .requestControls {
                 adaptiveRequestControlsPanel
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(accessibilityReduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
 
                 Divider()
                     .padding(.horizontal)
@@ -225,7 +226,7 @@ extension TelegramMessageComposer {
 
             if adaptivePresentation == .speech {
                 adaptiveSpeechContent
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .transition(accessibilityReduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96)))
             } else {
                 adaptiveInputStrip
                     .transition(.opacity)
@@ -308,19 +309,19 @@ extension TelegramMessageComposer {
             HStack(spacing: 0) {
                 if adaptiveShowsRequestControlsButton {
                     adaptiveRequestControlsButton
-                        .transition(.scale(scale: 0.8).combined(with: .opacity))
+                        .transition(accessibilityReduceMotion ? .opacity : .scale(scale: 0.8).combined(with: .opacity))
                 }
 
                 Spacer(minLength: 0)
 
                 if adaptiveShowsSpeechButton {
                     adaptiveSpeechButton
-                        .transition(.scale(scale: 0.8).combined(with: .opacity))
+                        .transition(accessibilityReduceMotion ? .opacity : .scale(scale: 0.8).combined(with: .opacity))
                 }
             }
             .frame(height: adaptiveControlSize, alignment: .top)
         }
-        .frame(minHeight: targetHeight, maxHeight: targetHeight)
+        .frame(minHeight: adaptiveControlSize, idealHeight: targetHeight, maxHeight: targetHeight)
         .animation(adaptiveComposerAnimation, value: adaptiveShowsRequestControlsButton)
         .animation(adaptiveComposerAnimation, value: viewModel.enableSpeechInput)
     }
@@ -337,15 +338,7 @@ extension TelegramMessageComposer {
                 )
                 .scrollContentBackground(.hidden)
                 .scrollDisabled(adaptivePresentation != .expandedText)
-                // 让飞行文字从按钮之间的真实编辑视口出发，而不是整个玻璃胶囊。
-                .background(
-                    GeometryReader { proxy in
-                        Color.clear.preference(
-                            key: InputBarRectKey.self,
-                            value: proxy.frame(in: .named(ChatView.flightCoordinateSpace))
-                        )
-                    }
-                )
+                .background(ChatSendSourceAnchor(id: .text))
                 // 折叠态补足垂直留白，让单行文字在 44pt 胶囊内保持视觉居中。
                 .padding(.vertical, adaptivePresentation == .expandedText ? 8 : 4)
                 .padding(.leading, adaptiveTextLeadingInset)
@@ -760,11 +753,14 @@ extension TelegramMessageComposer {
 
     private func adaptiveSubmitContent() {
         guard adaptiveRecognizedSlashCommand != nil || viewModel.canSendMessage else { return }
-        adaptiveCloseRequestControls()
         if let command = adaptiveRecognizedSlashCommand {
+            adaptiveCloseRequestControls()
             performSelectedSlashCommand(command)
-        } else {
-            sendAction()
+        } else if sendAction() {
+            adaptiveCloseRequestControls()
+            // 捕获已消费草稿，在同一发送事件交接输入状态，不等后续 onChange 再收起空框。
+            isExpandedComposer = false
+            adaptiveHasSendableText = false
         }
     }
 

@@ -18,8 +18,9 @@ extension TelegramMessageComposer {
         cardComposerContent
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .fixedSize(horizontal: false, vertical: true)
+            .fixedSize(horizontal: false, vertical: !hasUpperComposerContent)
             .frame(maxWidth: .infinity, alignment: .bottom)
+            .background(ChatSendFlightLayoutAnchor(controller: sendFlightController, region: .composerContent))
             .animation(adaptiveComposerAnimation, value: adaptivePresentation)
     }
 
@@ -29,7 +30,7 @@ extension TelegramMessageComposer {
         return VStack(spacing: 0) {
             if adaptivePresentation == .requestControls {
                 adaptiveRequestControlsPanel
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(accessibilityReduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
 
                 Divider()
                     .padding(.horizontal)
@@ -40,7 +41,7 @@ extension TelegramMessageComposer {
                 adaptiveSpeechContent
                     .padding(.horizontal, 6)
                     .padding(.top, 6)
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .transition(accessibilityReduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.98)))
             } else {
                 cardTextEditor
                     .transition(.opacity)
@@ -74,14 +75,7 @@ extension TelegramMessageComposer {
         .padding(.top, 14)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(
-            GeometryReader { proxy in
-                Color.clear.preference(
-                    key: InputBarRectKey.self,
-                    value: proxy.frame(in: .named(ChatView.flightCoordinateSpace))
-                )
-            }
-        )
+        .background(ChatSendSourceAnchor(id: .text))
     }
 
     private var cardToolbar: some View {
@@ -94,7 +88,7 @@ extension TelegramMessageComposer {
 
                 if adaptiveShowsRequestControlsButton {
                     cardRequestControlsButton
-                        .transition(.scale(scale: 0.82).combined(with: .opacity))
+                        .transition(accessibilityReduceMotion ? .opacity : .scale(scale: 0.82).combined(with: .opacity))
                 }
             }
 
@@ -102,7 +96,7 @@ extension TelegramMessageComposer {
 
             if adaptivePresentation != .speech, viewModel.enableSpeechInput {
                 cardSpeechButton
-                    .transition(.scale(scale: 0.82).combined(with: .opacity))
+                    .transition(accessibilityReduceMotion ? .opacity : .scale(scale: 0.82).combined(with: .opacity))
             }
 
             adaptiveActionButton(

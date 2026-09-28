@@ -11,7 +11,10 @@ import SwiftUI
 import ETOSCore
 
 struct WatchInputBubbleView: View {
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @ObservedObject var viewModel: ChatViewModel
+    @ObservedObject var submissionState: ChatSendSubmissionState
+    @ObservedObject private var composerDraftState = AppConfigStore.shared.composerDraftState
     @ObservedObject private var resourceUsageMonitor = LocalResourceUsageMonitor.shared
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
 
@@ -149,12 +152,11 @@ struct WatchInputBubbleView: View {
     }
 
     var body: some View {
-        let hasTrimmedText = !viewModel.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let canSend = hasTrimmedText || hasPendingAttachments
+        let canSend = composerDraftState.hasSendableText || hasPendingAttachments
         let inputActionState = WatchChatInputActionState.resolve(
             isSending: viewModel.isSendingMessage
                 || viewModel.isSendDelayPending
-                || viewModel.isSendSubmissionPending,
+                || submissionState.isPending(for: viewModel.currentSession?.id),
             hasSendableContent: canSend,
             canQuickRetry: viewModel.canQuickRetryLatestMessage,
             isSpeechInputEnabled: viewModel.enableSpeechInput
@@ -190,7 +192,7 @@ struct WatchInputBubbleView: View {
                             .disabled(
                                 inputActionState.isDisabled
                                     || viewModel.attachmentImportInProgress
-                                    || viewModel.isSendSubmissionPending
+                                    || submissionState.isPending(for: viewModel.currentSession?.id)
                             )
                         } else {
                             ZStack {
@@ -218,7 +220,7 @@ struct WatchInputBubbleView: View {
                             .disabled(
                                 inputActionState.isDisabled
                                     || viewModel.attachmentImportInProgress
-                                    || viewModel.isSendSubmissionPending
+                                    || submissionState.isPending(for: viewModel.currentSession?.id)
                             )
                         }
                     }
@@ -253,7 +255,7 @@ struct WatchInputBubbleView: View {
                         .disabled(
                             inputActionState.isDisabled
                                 || viewModel.attachmentImportInProgress
-                                || viewModel.isSendSubmissionPending
+                                || submissionState.isPending(for: viewModel.currentSession?.id)
                         )
                     }
                     .frame(height: inputControlHeight)
@@ -265,8 +267,11 @@ struct WatchInputBubbleView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, inputBubbleVerticalPadding)
-        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isInlineSpeechComposerPresented)
-        .animation(.easeOut(duration: 0.16), value: slashCommandSuggestions)
+        .animation(
+            accessibilityReduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.86),
+            value: isInlineSpeechComposerPresented
+        )
+        .animation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.16), value: slashCommandSuggestions)
 
         return coreBubble
             .onLongPressGesture(minimumDuration: 0.5) {
@@ -757,7 +762,7 @@ struct WatchInputBubbleView: View {
             onStop: stopInlineSpeechRecording,
             onConfirm: confirmInlineSpeechRecording
         )
-        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .transition(accessibilityReduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
     }
 
     private func stopInlineSpeechRecording() {

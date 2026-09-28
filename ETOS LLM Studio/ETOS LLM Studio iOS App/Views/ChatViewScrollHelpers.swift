@@ -53,9 +53,10 @@ extension ChatView {
     /// 非流式尺寸变化交给 SwiftUI；流式期间由 UIKit 单独动画真实滚动偏移，避免双重吸底。
     nonisolated static func chatSizeChangeScrollAnchor(
         keepsBottomPinned: Bool,
-        isStreaming: Bool
+        isStreaming: Bool,
+        isStreamingViewportFollowing: Bool = false
     ) -> UnitPoint? {
-        keepsBottomPinned && !isStreaming ? .bottom : nil
+        keepsBottomPinned && !isStreaming && !isStreamingViewportFollowing ? .bottom : nil
     }
 
     /// 用户手势与离底导航永远优先于自动吸底；静止时只有真正回到底部才重新接管。
@@ -84,13 +85,19 @@ extension ChatView {
         isConnectedToAdjacentBubble: Bool,
         isBottomPinnedStreamingBubble: Bool = false,
         isViewportTransitioning: Bool = false,
-        isTimelineNavigationActive: Bool = false
+        isTimelineNavigationActive: Bool = false,
+        keepsBottomPinned: Bool = false,
+        isUserInteracting: Bool = false,
+        isSendFlightTarget: Bool = false
     ) -> CGFloat {
+        // 静止贴底也由视口掌管位置，发送收尾不能重新引入尚未归零的波浪相位。
         guard isEnabled,
               !isConnectedToAdjacentBubble,
               !isBottomPinnedStreamingBubble,
               !isViewportTransitioning,
-              !isTimelineNavigationActive else {
+              !isTimelineNavigationActive,
+              (!keepsBottomPinned || isUserInteracting),
+              !isSendFlightTarget else {
             return 0
         }
         return phaseValue * CGFloat(configuredOffset)
@@ -273,6 +280,7 @@ extension ChatView {
 
     func handleDisplayedMessageIdentityChange() {
         let visibleMessageIDs = Set(viewModel.displayMessages.map(\.id))
+        confirmSendFlightDisplayedSources(in: visibleMessageIDs)
         if let activeTarget = scrollCoordinator.chatScrollPositionController.activeCommandTarget,
            !Self.isChatScrollTargetAvailable(activeTarget, visibleMessageIDs: visibleMessageIDs) {
             cancelPendingScrollTargetCommand()
@@ -556,17 +564,11 @@ extension ChatView {
         )
     }
 
-    func beginChatLayoutSettling(keepBottomPinned: Bool) {
-        scrollCoordinator.chatLayoutSettleTask?.cancel()
-        scrollCoordinator.isChatLayoutSettling = true
-        scrollCoordinator.shouldKeepBottomPinned = keepBottomPinned
-
-        scrollCoordinator.chatLayoutSettleTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 450_000_000)
-            guard !Task.isCancelled else { return }
-            scrollCoordinator.isChatLayoutSettling = false
-            scrollCoordinator.chatLayoutSettleTask = nil
-        }
+    func beginChatLayoutSettling(keepBottomPinned: Bool, awaitsKeyboardCompletion: Bool = false) {
+        scrollCoordinator.beginLayoutTransition(
+            keepBottomPinned: keepBottomPinned,
+            awaitsKeyboardCompletion: awaitsKeyboardCompletion
+        )
     }
 
     func cancelPendingScrollTargetCommand(preservingMessageJump: Bool = false) {

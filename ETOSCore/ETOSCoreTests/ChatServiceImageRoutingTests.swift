@@ -15,8 +15,8 @@ import Combine
 struct ChatServiceImageRoutingTests {
 
     @MainActor
-    @Test("选中带生图能力模型时主聊天自动走生图请求通道")
-    func testSendAndProcessMessageRoutesToImageGenerationChannel() async {
+    @Test("选中带生图能力模型时主聊天自动走生图请求通道", .serialized, arguments: [false, true])
+    func testSendAndProcessMessageRoutesToImageGenerationChannel(savedTarget: Bool) async throws {
         let originalProviders = ConfigLoader.loadProviders()
         defer {
             replaceProviders(with: originalProviders)
@@ -48,8 +48,24 @@ struct ChatServiceImageRoutingTests {
             urlSession: session
         )
 
+        await service.waitForInitialPersistenceStateIfNeeded()
+        if savedTarget {
+            _ = service.createSavedSession(name: "生图排序目标")
+        } else {
+            service.createNewSession()
+        }
+        let targetSession = try #require(service.currentSessionSubject.value)
+        let browsingSession = service.createSavedSession(name: "生图期间继续浏览")
+        service.setCurrentSession(browsingSession)
+        try #require(targetSession.id != browsingSession.id)
+        defer { service.deleteSessions([targetSession, browsingSession]) }
         let selectedModel = service.activatedRunnableModels.first
         service.setSelectedModel(selectedModel)
+        var prepared: ChatSendPresentation?
+        let sourceImage = ImageAttachment(
+            data: Data([0x89, 0x50, 0x4E, 0x47]), mimeType: "image/png",
+            fileName: "image-source-\(UUID().uuidString).png"
+        )
 
         await service.sendAndProcessMessage(
             content: "画一只会发光的猫",
@@ -61,12 +77,23 @@ struct ChatServiceImageRoutingTests {
             enhancedPrompt: nil,
             enableMemory: false,
             enableMemoryWrite: false,
-            includeSystemTime: false
+            includeSystemTime: false,
+            imageAttachments: [sourceImage],
+            targetSessionID: targetSession.id,
+            onMessagesPrepared: { prepared = $0 }
         )
 
         #expect(adapter.chatRequestCount == 0)
         #expect(adapter.imageRequestCount == 1)
         #expect(adapter.lastPrompt == "画一只会发光的猫")
+        #expect(prepared?.messageIDsBySource[.text] == prepared?.responseGroupID)
+        #expect(prepared?.messageIDsBySource[.image(sourceImage.id)] != nil)
+        #expect(prepared?.messageIDsBySource.count == 2)
+        #expect(prepared?.sessionID == targetSession.id)
+        #expect(service.currentSessionSubject.value?.id == browsingSession.id)
+        #expect(Persistence.loadMessages(for: browsingSession.id).isEmpty)
+        #expect(service.chatSessionsSubject.value.first?.id == targetSession.id)
+        #expect(Persistence.loadChatSessions().first?.id == targetSession.id)
     }
 
     @MainActor

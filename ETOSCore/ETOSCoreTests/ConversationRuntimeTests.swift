@@ -8,6 +8,7 @@
 // ============================================================================
 
 import Foundation
+import GRDB
 import Testing
 @testable import ETOSCore
 
@@ -781,6 +782,79 @@ struct ConversationRuntimeTests {
         #expect(merged.map(\.id) == [loading.id, steering.id])
         #expect(merged.first?.content == "生成完成")
         #expect(merged.last?.content == "用户追加方向")
+    }
+
+    @Test("同次提交中间写入失败时整组回滚，保留原消息和会话时间")
+    func messageBatchRollsBackWhenMiddleInsertFails() throws {
+        try withStore { store in
+            let session = ChatSession(id: UUID(), name: "整组回滚", isTemporary: false)
+            store.saveChatSessions([session])
+            let previous = ChatMessage(role: .user, content: "既有消息")
+            _ = try store.appendConversationMessageAtomically(previous, to: session.id)
+            let first = ChatMessage(role: .user, content: "同组附件")
+            let rejected = ChatMessage(role: .user, content: "同组正文")
+            let placeholder = ChatMessage(role: .assistant, content: "", responseGroupID: rejected.id)
+            let previousUpdatedAt = try store.dbPool.read {
+                try Double.fetchOne($0, sql: "SELECT updated_at FROM sessions WHERE id = ?", arguments: [session.id.uuidString])
+            }
+            // 真实 SQLite 约束在第二次 INSERT 拒绝写入；不依赖产品故障开关。
+            try store.dbPool.write { db in
+                try db.execute(sql: """
+                    CREATE TRIGGER reject_message_batch_middle BEFORE INSERT ON messages
+                    WHEN NEW.id = '\(rejected.id.uuidString)'
+                    BEGIN
+                        SELECT RAISE(ABORT, '测试强制拒绝消息组中间写入');
+                    END
+                    """)
+            }
+            var failureDescription = ""
+            do {
+                _ = try store.appendConversationMessagesAtomically([first, rejected, placeholder], to: session.id)
+            } catch {
+                failureDescription = String(describing: error)
+            }
+            #expect(failureDescription.contains("测试强制拒绝消息组中间写入"))
+            let messages = store.loadMessages(for: session.id)
+            #expect(messages.map(\.id) == [previous.id])
+            #expect(messages.first?.content == previous.content)
+            let updatedAt = try store.dbPool.read {
+                try Double.fetchOne($0, sql: "SELECT updated_at FROM sessions WHERE id = ?", arguments: [session.id.uuidString])
+            }
+            #expect(updatedAt == previousUpdatedAt)
+        }
+    }
+
+    @Test("整组追加与另一个单条入口并发写入时双方保留，组内顺序连续")
+    func messageBatchPreservesConcurrentAppend() throws {
+        try withStore { store in
+            let session = ChatSession(id: UUID(), name: "并发整组提交", isTemporary: false)
+            store.saveChatSessions([session])
+            let previous = ChatMessage(role: .assistant, content: "已有回复")
+            _ = try store.appendConversationMessageAtomically(previous, to: session.id)
+            let users = (0..<4).map { ChatMessage(role: .user, content: "来源 \($0)") }
+            let placeholder = ChatMessage(role: .assistant, content: "", responseGroupID: users.last?.id)
+            let batch = users + [placeholder]
+            let incoming = ChatMessage(role: .user, content: "另一入口追加", authorKind: .conversation)
+
+            // 使用同一真实 writer 的两个并发入口，不从旧内存快照替换整份历史。
+            DispatchQueue.concurrentPerform(iterations: 2) { writer in
+                do {
+                    if writer == 0 {
+                        _ = try store.appendConversationMessagesAtomically(batch, to: session.id)
+                    } else {
+                        _ = try store.appendConversationMessageAtomically(incoming, to: session.id)
+                    }
+                } catch { Issue.record(error) }
+            }
+            let messages = store.loadMessages(for: session.id)
+            let ids = messages.map(\.id)
+            #expect(ids.first == previous.id)
+            #expect(ids.count == batch.count + 2)
+            #expect(Set(ids) == Set([previous.id, incoming.id] + batch.map(\.id)))
+            let firstIndex = try #require(ids.firstIndex(of: users[0].id))
+            #expect(Array(ids.dropFirst(firstIndex).prefix(batch.count)) == batch.map(\.id))
+            #expect(messages.first { $0.id == incoming.id }?.content == incoming.content)
+        }
     }
 
     private func withStore(_ body: (PersistenceGRDBStore) throws -> Void) throws {

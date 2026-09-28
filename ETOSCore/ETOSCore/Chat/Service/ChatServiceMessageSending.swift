@@ -38,7 +38,8 @@ extension ChatService {
         conversationEventID: UUID? = nil,
         conversationRun: ConversationRun? = nil,
         existingInputMessageID: UUID? = nil,
-        requestedLocalAgentMode: LocalAgentMode? = nil
+        requestedLocalAgentMode: LocalAgentMode? = nil,
+        onMessagesPrepared: ChatSendPresentationHandler? = nil
     ) async {
         await waitForInitialPersistenceStateIfNeeded()
 
@@ -56,24 +57,32 @@ extension ChatService {
             return
         }
 
-        let effectiveLocalAgentMode: LocalAgentMode
-        if let requestedLocalAgentMode {
-            // 输入栏选择是本次发送的权威快照。启动期写入失败或旧异步读取都不能让
-            // 已明确选择的 Agent 在构造工具列表时退回 Chat。
-            guard Persistence.saveLocalAgentMode(
-                requestedLocalAgentMode,
-                sessionID: currentSession.id
-            ) else {
-                addErrorMessage(
-                    NSLocalizedString("错误: 无法保存会话模式。", comment: "Unable to persist requested session mode"),
-                    sessionID: currentSession.id
-                )
-                requestStatusSubject.send(.error)
-                return
+        // 新增后台等待前固定目标与模型；输入准备期间切换界面不能改写本轮路由。
+        let runConfiguredModelIdentifier = conversationRun?.requestConfiguration.modelIdentifier
+        let runConfiguredModel = runConfiguredModelIdentifier.flatMap { identifier in
+            activatedConversationModels.first(where: { $0.id == identifier })
+        }
+        let selectedModel = runConfiguredModel ?? currentSession.preferredModelIdentifier.flatMap { identifier in
+            activatedConversationModels.first(where: { $0.id == identifier })
+        } ?? selectedModelSubject.value
+        let preparationSessionID = currentSession.id
+        let preparedMode = await Task.detached(priority: .userInitiated) { () -> LocalAgentMode? in
+            if let requestedLocalAgentMode {
+                // 明确选择仍为本次发送的权威值；未指定时在后台读取持久化模式。
+                guard Persistence.saveLocalAgentMode(requestedLocalAgentMode, sessionID: preparationSessionID) else {
+                    return nil
+                }
+                return requestedLocalAgentMode
             }
-            effectiveLocalAgentMode = requestedLocalAgentMode
-        } else {
-            effectiveLocalAgentMode = Persistence.localAgentMode(sessionID: currentSession.id)
+            return Persistence.localAgentMode(sessionID: preparationSessionID)
+        }.value
+        guard let effectiveLocalAgentMode = preparedMode else {
+            addErrorMessage(
+                NSLocalizedString("错误: 无法保存会话模式。", comment: "Unable to persist requested session mode"),
+                sessionID: currentSession.id
+            )
+            requestStatusSubject.send(.error)
+            return
         }
 
         if !isRetry {
@@ -82,10 +91,6 @@ extension ChatService {
 
         // 只有图像类型模型进入独立生图通道，聊天模型的图片输出由对话响应处理。
         // 已排队的 Run 必须使用入队时固化的模型；用户后来切换全局模型不能污染它。
-        let runConfiguredModelIdentifier = conversationRun?.requestConfiguration.modelIdentifier
-        let runConfiguredModel = runConfiguredModelIdentifier.flatMap { identifier in
-            activatedConversationModels.first(where: { $0.id == identifier })
-        }
         if let conversationRun, runConfiguredModelIdentifier != nil, runConfiguredModel == nil {
             let reason = NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error")
             addErrorMessage(reason, sessionID: currentSession.id)
@@ -97,20 +102,17 @@ extension ChatService {
             requestStatusSubject.send(.error)
             return
         }
-        let selectedModel = runConfiguredModel ?? currentSession.preferredModelIdentifier.flatMap { identifier in
-            activatedConversationModels.first(where: { $0.id == identifier })
-        } ?? selectedModelSubject.value
         if let selectedModel,
            shouldRouteMessageToImageGeneration(using: selectedModel) {
             if audioAttachment != nil {
                 let reason = NSLocalizedString("生图模式不支持语音附件。", comment: "Image mode does not support audio attachments")
-                addErrorMessage(reason)
+                addErrorMessage(reason, sessionID: currentSession.id)
                 requestStatusSubject.send(.error)
                 return
             }
             if !fileAttachments.isEmpty {
                 let reason = NSLocalizedString("生图模式仅支持文本提示词和图片参考图。", comment: "Image mode only supports text prompt and reference images")
-                addErrorMessage(reason)
+                addErrorMessage(reason, sessionID: currentSession.id)
                 requestStatusSubject.send(.error)
                 return
             }
@@ -118,7 +120,9 @@ extension ChatService {
             await generateImageAndProcessMessage(
                 prompt: content,
                 imageAttachments: imageAttachments,
-                runnableModel: selectedModel
+                runnableModel: selectedModel,
+                targetSessionID: currentSession.id,
+                onMessagesPrepared: onMessagesPrepared
             )
             return
         }
@@ -128,133 +132,23 @@ extension ChatService {
         let imagePlaceholder = NSLocalizedString("[图片]", comment: "Image message placeholder")
         let filePlaceholder = NSLocalizedString("[文件]", comment: "File message placeholder")
         let videoPlaceholder = NSLocalizedString("[视频]", comment: "Video message placeholder")
-        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        let messageRegexRules = MessageRegexRuleStore.currentRules()
-        let messageContent = messageRegexRules.isEmpty
-            ? trimmedContent
-            : applyMessageRegexRules(
-                to: trimmedContent,
-                rules: messageRegexRules,
-                scope: .user,
-                mode: .persist
+        // async 默认可能继承 UI actor，必须显式离开它执行规则和附件 I/O。
+        // 准备期沿用原有不可取消语义，等待全部结果后才提交身份与服务状态。
+        let preparedInput = await Task.detached(priority: .userInitiated) {
+            ChatSendMessagePreparation.prepare(
+                content: content, audioAttachment: audioAttachment,
+                imageAttachments: imageAttachments, fileAttachments: fileAttachments,
+                placeholders: (audioPlaceholder, imagePlaceholder, filePlaceholder, videoPlaceholder),
+                authorKind: messageAuthorKind, sourceSessionID: sourceSessionID,
+                sourceMessageID: sourceMessageID, conversationEventID: conversationEventID
             )
-        var savedAudioFileName: String? = nil
-        var savedImageFileNames: [String] = []
-        var savedFiles: [(fileName: String, isVideo: Bool)] = []
-        let requestTimestamp = Date()
-        var userMessages: [ChatMessage] = []
-        var primaryUserMessage: ChatMessage?
-
-        if let audioAttachment {
-            // 保存音频文件到持久化目录，使用时间戳命名
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
-            let timestamp = dateFormatter.string(from: Date())
-            let audioFileName = String(
-                format: NSLocalizedString("语音_%@.%@", comment: "Generated audio attachment file name"),
-                timestamp,
-                audioAttachment.format
-            )
-            if Persistence.saveAudio(audioAttachment.data, fileName: audioFileName) != nil {
-                savedAudioFileName = audioFileName
-                logger.info("音频文件已保存: \(audioFileName)")
-            }
-        }
-
-        // 保存图片附件
-        for imageAttachment in imageAttachments {
-            let imageFileName = imageAttachment.fileName
-            if Persistence.saveImage(imageAttachment.data, fileName: imageFileName) != nil {
-                savedImageFileNames.append(imageFileName)
-                logger.info("图片文件已保存: \(imageFileName)")
-            }
-        }
-
-        // 保存文件附件
-        for fileAttachment in fileAttachments {
-            let originalName = (fileAttachment.fileName as NSString).lastPathComponent
-            let targetName = Persistence.saveFileDeduplicatingByName(
-                fileAttachment.data,
-                preferredFileName: originalName
-            )
-            if let targetName {
-                savedFiles.append((
-                    fileName: targetName,
-                    isVideo: VideoAttachmentSupport.isVideo(fileAttachment)
-                ))
-                logger.info("文件附件已保存或复用: \(targetName)")
-            }
-        }
-
-        let savedVideoFileNames = savedFiles
-            .filter { $0.isVideo }
-            .map { $0.fileName }
-
-        if let savedAudioFileName {
-            userMessages.append(ChatMessage(
-                role: .user,
-                content: audioPlaceholder,
-                requestedAt: requestTimestamp,
-                audioFileName: savedAudioFileName,
-                authorKind: messageAuthorKind,
-                sourceSessionID: sourceSessionID,
-                sourceMessageID: sourceMessageID,
-                conversationEventID: conversationEventID
-            ))
-        }
-
-        for imageFileName in savedImageFileNames {
-            userMessages.append(ChatMessage(
-                role: .user,
-                content: imagePlaceholder,
-                requestedAt: requestTimestamp,
-                imageFileNames: [imageFileName],
-                authorKind: messageAuthorKind,
-                sourceSessionID: sourceSessionID,
-                sourceMessageID: sourceMessageID,
-                conversationEventID: conversationEventID
-            ))
-        }
-
-        for savedVideoFileName in savedVideoFileNames {
-            userMessages.append(ChatMessage(
-                role: .user,
-                content: videoPlaceholder,
-                requestedAt: requestTimestamp,
-                fileFileNames: [savedVideoFileName],
-                authorKind: messageAuthorKind,
-                sourceSessionID: sourceSessionID,
-                sourceMessageID: sourceMessageID,
-                conversationEventID: conversationEventID
-            ))
-        }
-
-        for savedFile in savedFiles where !savedFile.isVideo {
-            userMessages.append(ChatMessage(
-                role: .user,
-                content: filePlaceholder,
-                requestedAt: requestTimestamp,
-                fileFileNames: [savedFile.fileName],
-                authorKind: messageAuthorKind,
-                sourceSessionID: sourceSessionID,
-                sourceMessageID: sourceMessageID,
-                conversationEventID: conversationEventID
-            ))
-        }
-
-        if !messageContent.isEmpty {
-            let textMessage = ChatMessage(
-                role: .user,
-                content: messageContent,
-                requestedAt: requestTimestamp,
-                authorKind: messageAuthorKind,
-                sourceSessionID: sourceSessionID,
-                sourceMessageID: sourceMessageID,
-                conversationEventID: conversationEventID
-            )
-            userMessages.append(textMessage)
-            primaryUserMessage = textMessage
-        }
+        }.value
+        let messageContent = preparedInput.content
+        let requestTimestamp = preparedInput.requestedAt
+        let savedImageFileNames = preparedInput.imageFileNames
+        let messageIDsBySource = preparedInput.messageIDsBySource
+        var userMessages = preparedInput.messages
+        var primaryUserMessage = preparedInput.primaryMessage
 
         if let existingInputMessageID {
             let existingMessages = messagesSnapshot(for: currentSession.id)
@@ -293,6 +187,16 @@ extension ChatService {
         // 用于命名会话/记忆检索的代表消息：优先用户正文，其次第一条附件消息。
         if primaryUserMessage == nil {
             primaryUserMessage = userMessages.first
+        }
+
+        if let onMessagesPrepared, existingInputMessageID == nil,
+           let responseMessage = userMessages.last {
+            // 发布第一条附件之前就交出整组身份，UI 不必靠正文、时间或追加顺序猜测。
+            await onMessagesPrepared(ChatSendPresentation(
+                sessionID: currentSession.id,
+                messageIDsBySource: messageIDsBySource,
+                responseGroupID: responseMessage.id
+            ))
         }
 
         if messageAuthorKind == .user,
@@ -406,11 +310,15 @@ extension ChatService {
 
         do {
             if existingInputMessageID == nil {
-                for message in userMessages {
-                    _ = try await appendConversationMessage(message, to: currentSession.id)
-                }
+                let submissionMessages = userMessages + [loadingMessage]
+                let submissionSessionID = currentSession.id
+                // 先整组提交，再由下方的数据库快照一次发布；不让附件逐条推动显示窗口。
+                _ = try await Task.detached(priority: .userInitiated) {
+                    try Persistence.appendConversationMessages(submissionMessages, to: submissionSessionID)
+                }.value
+            } else {
+                _ = try await appendConversationMessage(loadingMessage, to: currentSession.id)
             }
-            _ = try await appendConversationMessage(loadingMessage, to: currentSession.id)
         } catch {
             addErrorMessage(
                 NSLocalizedString("错误: 无法保存会话消息。", comment: "Unable to persist conversation messages"),
@@ -481,7 +389,7 @@ extension ChatService {
             }
         } else if !currentSession.isTemporary {
             // 老会话重新收到消息时，将其排到列表顶部
-            promoteSessionToTopIfNeeded(sessionID: currentSession.id)
+            await promoteSessionToTopIfNeeded(sessionID: currentSession.id)
         } else if let sessionTitleSource = primaryUserMessage,
                   currentSession.name == NSLocalizedString("新的对话", comment: "Default new chat session name") {
             currentSession.name = String(sessionTitleSource.content.prefix(20))

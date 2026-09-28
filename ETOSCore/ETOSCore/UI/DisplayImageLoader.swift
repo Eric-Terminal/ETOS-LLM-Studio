@@ -29,7 +29,7 @@ public actor DisplayImageLoader {
     public static let shared = DisplayImageLoader()
 
     private struct Request: Hashable {
-        let url: URL
+        let sourceID: String
         let target: DisplayImageTarget
         let revision: String
     }
@@ -58,14 +58,35 @@ public actor DisplayImageLoader {
         metadataURL.removeAllCachedResourceValues()
         let metadata = try? metadataURL.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
         let revision = "\(metadata?.contentModificationDate?.timeIntervalSince1970 ?? 0)|\(metadata?.fileSize ?? 0)"
-        let request = Request(url: url, target: target, revision: revision)
-        let key = "\(url.absoluteString)|\(target.width)x\(target.height)|\(target.fillsBounds)|\(revision)" as NSString
+        let request = Request(sourceID: "file:\(url.absoluteString)", target: target, revision: revision)
+        return await preparedImage(for: request) {
+            Self.decode(at: url, target: target, sourceRevision: revision)
+        }
+    }
+
+    /// 待发送附件尚未落盘；身份只取不可变附件 ID，不能在视图更新中哈希整份图片数据。
+    public func pendingAttachment(_ attachment: ImageAttachment, target: DisplayImageTarget) async -> PreparedDisplayImage? {
+        guard !target.isEmpty else { return nil }
+        let revision = attachment.id.uuidString
+        let request = Request(sourceID: "pending:\(revision)", target: target, revision: revision)
+        return await preparedImage(for: request) {
+            let options = [kCGImageSourceShouldCache: false] as CFDictionary
+            guard let source = CGImageSourceCreateWithData(attachment.data as CFData, options) else { return nil }
+            // 旧 thumbnailData 可能已经被压成方图；原始 data 才能保留方向与完整裁切范围。
+            return Self.decode(source: source, target: target, sourceRevision: revision)
+        }
+    }
+
+    private func preparedImage(
+        for request: Request,
+        decode: @escaping @Sendable () -> PreparedDisplayImage?
+    ) async -> PreparedDisplayImage? {
+        let target = request.target
+        let key = "\(request.sourceID)|\(target.width)x\(target.height)|\(target.fillsBounds)|\(request.revision)" as NSString
         if let entry = cache.object(forKey: key) { return entry.value }
         if let task = pending[request] { return await task.value }
 
-        let task = Task.detached(priority: .userInitiated) {
-            Self.decode(at: url, target: target, sourceRevision: revision)
-        }
+        let task = Task.detached(priority: .userInitiated, operation: decode)
         pending[request] = task
         let result = await task.value
         pending[request] = nil
@@ -112,8 +133,12 @@ public actor DisplayImageLoader {
 
     nonisolated private static func decode(at url: URL, target: DisplayImageTarget, sourceRevision: String) -> PreparedDisplayImage? {
         let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, sourceOptions),
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, sourceOptions) else { return nil }
+        return decode(source: source, target: target, sourceRevision: sourceRevision)
+    }
+
+    nonisolated private static func decode(source: CGImageSource, target: DisplayImageTarget, sourceRevision: String) -> PreparedDisplayImage? {
+        guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
               let height = properties[kCGImagePropertyPixelHeight] as? NSNumber else { return nil }
         let orientation = (properties[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1

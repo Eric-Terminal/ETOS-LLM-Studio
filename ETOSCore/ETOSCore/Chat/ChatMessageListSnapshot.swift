@@ -44,6 +44,8 @@ public struct ChatMessageListSnapshot: Sendable {
     public let renderConfiguration: ChatMessageRenderConfiguration
     public let forceRendering: Bool
     public let canQuickRetry: Bool
+    public let idleRetryableMessageIDs: Set<UUID>
+    public let sendingRetryableMessageIDs: Set<UUID>
     public let userContentPreviews: [UUID: ChatUserMessagePreview]
     private let previewCharacterLimit: Int
     private let visualRules: [MessageRegexRule]
@@ -96,6 +98,8 @@ public struct ChatMessageListSnapshot: Sendable {
             historyIndex = previous.historyIndex
             versionIndex = previous.versionIndex
             versionRevision = previous.versionRevision
+            idleRetryableMessageIDs = previous.idleRetryableMessageIDs
+            sendingRetryableMessageIDs = previous.sendingRetryableMessageIDs
         } else {
             let visible = ChatResponseAttemptSupport.visibleMessages(from: messages)
             let ids = Set(visible.map(\.id))
@@ -105,6 +109,13 @@ public struct ChatMessageListSnapshot: Sendable {
             historyIndex = ChatHistoryWindowIndex(messages: visible)
             versionIndex = ChatResponseAttemptSupport.versionInfoByMessageID(in: messages)
             versionRevision = (previous?.versionRevision ?? 0) &+ 1
+            // 重试遵循完整会话而非分页窗口；发送状态切换只选择已准备的集合。
+            idleRetryableMessageIDs = MessageActionBarAvailability.retryableMessageIDs(
+                in: messages, isSending: false
+            )
+            sendingRetryableMessageIDs = MessageActionBarAvailability.retryableMessageIDs(
+                in: messages, isSending: true
+            )
         }
         latestAssistantMessage = visibleMessages.last { $0.role == .assistant }
         self.previewCharacterLimit = previewCharacterLimit

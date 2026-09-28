@@ -52,6 +52,7 @@ struct AttachmentImageView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(NSLocalizedString("图片预览", comment: ""))
             } else {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(Color.secondary.opacity(0.15))

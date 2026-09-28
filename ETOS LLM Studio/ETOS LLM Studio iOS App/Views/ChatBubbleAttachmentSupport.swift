@@ -32,7 +32,8 @@ extension ChatBubble {
                         minWidth: minWidth,
                         maxWidth: maxWidth,
                         height: itemHeight,
-                        cornerRadius: 16
+                        cornerRadius: 16,
+                        onOpenMessageActions: isSelectionMode ? nil : openMoreAction
                     ) { image in
                         imagePreview = ImagePreviewPayload(image: image, fileName: fileName)
                     } onDownload: {
@@ -40,6 +41,16 @@ extension ChatBubble {
                     } onDelete: {
                         onDeleteImageAttachment?(fileName)
                     }
+                    .modifier(ChatAttachmentImageSourceModifier(
+                        sourceID: fileName,
+                        namespace: imagePreviewNamespace,
+                        cornerRadius: 16
+                    ))
+                    .modifier(ChatSendFlightContentModifier(
+                        layoutIdentity: bubbleContentLayoutIdentity,
+                        opacity: sendFlightContentOpacity,
+                        target: sendFlightTarget
+                    ))
                 }
             }
             .frame(maxWidth: attachmentMaxWidth, alignment: isOutgoing ? .trailing : .leading)
@@ -76,8 +87,11 @@ extension ChatBubble {
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(fileAttachmentBackgroundColor)
+                            ChatBubbleBackground(
+                                shape: RoundedRectangle(cornerRadius: 12),
+                                fill: AnyShapeStyle(fileAttachmentBackgroundColor),
+                                enableLiquidGlass: false
+                            )
                         )
                     } else {
                         Button {
@@ -100,8 +114,11 @@ extension ChatBubble {
                             .padding(.vertical, 8)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(fileAttachmentBackgroundColor)
+                                ChatBubbleBackground(
+                                    shape: RoundedRectangle(cornerRadius: 12),
+                                    fill: AnyShapeStyle(fileAttachmentBackgroundColor),
+                                    enableLiquidGlass: false
+                                )
                             )
                         }
                         .buttonStyle(.plain)
@@ -110,6 +127,11 @@ extension ChatBubble {
                 }
             }
             .frame(maxWidth: attachmentMaxWidth, alignment: isOutgoing ? .trailing : .leading)
+            .modifier(ChatSendFlightContentModifier(
+                layoutIdentity: bubbleContentLayoutIdentity,
+                opacity: sendFlightContentOpacity,
+                target: sendFlightTarget
+            ))
 
             if !isOutgoing {
                 Spacer(minLength: 0)

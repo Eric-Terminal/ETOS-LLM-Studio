@@ -100,4 +100,56 @@ struct ChatResponseStreamingStateTests {
         #expect(viewModel.streamingMarkdownPrepareTasks.isEmpty)
         #expect(!state.streamingMarkdownState.isAwaitingStaticHandoff(channel: .content))
     }
+
+    @Test("手动停止同步保留最后流式正文，静态准备完成前不退回旧内容")
+    func manualCancellationRetainsLatestStreamingContent() async {
+        let viewModel = ChatViewModel(chatService: ChatService(adapters: [:]))
+        viewModel.cancellables.removeAll()
+        let session = ChatSession(id: UUID(), name: "取消流式交接回归", isTemporary: true)
+        viewModel.currentSession = session
+        viewModel.runningSessionIDs = [session.id]
+        viewModel.isSendingMessage = true
+        var latest = ChatMessage(role: .assistant, content: "旧正文", reasoningContent: "旧推理")
+        latest.isReceivingStream = true
+        let state = ChatMessageRenderState(message: latest)
+        latest.content = "**最后正文**\n\n停止前已经收到的第二段。"
+        latest.reasoningContent = "**最后推理**"
+        state.updateWithoutPublishing(with: latest)
+        for channel in [ETStreamingMarkdownChannel.content, .reasoning] {
+            state.streamingMarkdownState.apply(ETStreamingMarkdownSnapshot(
+                messageID: latest.id, channel: channel,
+                sourceText: channel == .content ? latest.content : latest.reasoningContent ?? "",
+                revision: 1, committedBlocks: [], activeBlock: nil, isFinal: false
+            ))
+        }
+        viewModel.messageStateByID[latest.id] = state
+        viewModel.messages = [state]
+        viewModel.latestAssistantMessageID = latest.id
+        let originalDraft = viewModel.userInput
+        #expect(state.visualMessage.content != latest.content)
+
+        viewModel.cancelSending()
+
+        // 不让出主执行器：覆盖点击停止与 Core 最终消息回执之间的真实时隙。
+        #expect(!viewModel.isSendingMessage)
+        #expect(state.streamingMarkdownState.isAwaitingStaticHandoff(channel: .content))
+        #expect(state.streamingMarkdownState.isAwaitingStaticHandoff(channel: .reasoning))
+        #expect(state.streamingMarkdownState.contentSnapshot?.sourceText == latest.content)
+        #expect(state.streamingMarkdownState.reasoningSnapshot?.sourceText == latest.reasoningContent)
+        #expect(viewModel.messages.map(\.id) == [latest.id])
+        #expect(viewModel.currentSession?.id == session.id)
+        #expect(viewModel.userInput == originalDraft)
+
+        for channel in [ETStreamingMarkdownChannel.content, .reasoning] {
+            await viewModel.streamingMarkdownPrepareTasks[.init(messageID: latest.id, channel: channel)]?.value
+        }
+        await viewModel.visualMessagePrepareTasks[latest.id]?.value
+        await viewModel.markdownPrepareTasks[latest.id]?.value
+        await viewModel.reasoningMarkdownPrepareTasks[latest.id]?.value
+        #expect(state.visualMessage.content == latest.content)
+        #expect(viewModel.preparedMarkdownByMessageID[latest.id]?.sourceText == latest.content)
+        #expect(viewModel.preparedReasoningMarkdownByMessageID[latest.id]?.sourceText == latest.reasoningContent)
+        #expect(!state.streamingMarkdownState.isAwaitingStaticHandoff(channel: .content))
+        #expect(!state.streamingMarkdownState.isAwaitingStaticHandoff(channel: .reasoning))
+    }
 }

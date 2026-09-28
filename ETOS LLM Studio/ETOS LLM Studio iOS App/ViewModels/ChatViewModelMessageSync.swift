@@ -12,6 +12,13 @@ import ETOSCore
 import SwiftUI
 
 extension ChatViewModel {
+    var retryableMessageIDs: Set<UUID> {
+        guard let preparedMessageSnapshot else { return [] }
+        return isSendingMessage
+            ? preparedMessageSnapshot.sendingRetryableMessageIDs
+            : preparedMessageSnapshot.idleRetryableMessageIDs
+    }
+
     func hasAutoOpenedPendingToolCall(_ toolCallID: String) -> Bool {
         autoOpenedPendingToolCallIDs.contains(toolCallID)
     }
@@ -565,7 +572,7 @@ extension ChatViewModel {
         }
         isSendingMessage = runningSessionIDs.contains(currentSessionID)
         if isSendingMessage {
-            pendingSendSubmissionSessionIDs.remove(currentSessionID)
+            sendSubmissionState.requestDidStart(for: currentSessionID)
         }
         if wasSendingMessage, !isSendingMessage {
             finalizeStreamingMarkdownIfNeeded()

@@ -6,6 +6,7 @@
 
 import SwiftUI
 import Foundation
+import Combine
 import MarkdownUI
 import ETOSCore
 import UIKit
@@ -67,10 +68,7 @@ extension ChatView {
     ) -> some View {
         let displayedMessages = viewModel.displayMessages
         let sessionMessages = viewModel.allMessagesForSession
-        let retryableMessageIDs = MessageActionBarAvailability.retryableMessageIDs(
-            in: sessionMessages,
-            isSending: viewModel.isSendingMessage
-        )
+        let retryableMessageIDs = viewModel.retryableMessageIDs
         let messageLayoutWidth = max(1, chatViewportWidth - 16)
         let reasoningPreviewMaxHeight = responsiveReasoningPreviewMaxHeight(for: chatViewportSize.height)
         ZStack {
@@ -109,7 +107,27 @@ extension ChatView {
                                 scrollCoordinator.completeViewportPageRequest(id: requestID)
                             },
                             onUserPanBegan: {
+                                cancelSendFlight()
                                 handleChatScrollPanBegan()
+                            },
+                            isViewportActive: isChatVisible && scenePhase == .active,
+                            layoutTransitionRevision: scrollCoordinator.layoutTransitionRevision,
+                            onViewportLayoutSettled: { revision in
+                                scrollCoordinator.completeLayoutTransition(revision: revision)
+                            },
+                            onStreamingFollowActivityChange: { isActive in
+                                if scrollCoordinator.isStreamingViewportFollowing != isActive {
+                                    scrollCoordinator.isStreamingViewportFollowing = isActive
+                                }
+                            },
+                            timelineEdgeNavigationEnabled: appConfig.chatTimelineNavigationEnabled,
+                            onTimelineEdgeReveal: {
+                                guard !scrollCoordinator.showScrollNavigationPanel else { return }
+                                revealScrollNavigationPanel()
+                            },
+                            onTimelineEdgeGestureEnded: {
+                                guard scrollCoordinator.showScrollNavigationPanel else { return }
+                                scheduleScrollNavigationPanelHide()
                             }
                         ) { distanceToBottom, distanceToTop, isUserInteracting in
                             handleChatScrollMetrics(
@@ -181,7 +199,8 @@ extension ChatView {
                                 let showsStreamingIndicators = viewModel.isActivelyStreaming(message)
                                 // 贴底流式气泡只跟随真实滚动偏移，避免相位弹簧与吸底校正互相拉扯。
                                 let isBottomPinnedStreamingBubble = showsStreamingIndicators && scrollCoordinator.shouldKeepBottomPinned
-                                let reportsSendFlightTarget = isSendFlightTarget(message.id)
+                                let sendFlightTarget = self.sendFlightTarget(for: message.id)
+                                let reportsSendFlightTarget = sendFlightTarget != nil
                                 let sendFlightOpacity = sendFlightMessageOpacity(for: message)
                                 let preparedMarkdownPayload = viewModel.preparedMarkdownByMessageID[message.id]
                                 let preparedReasoningMarkdownPayload = viewModel.preparedReasoningMarkdownByMessageID[message.id]
@@ -327,7 +346,8 @@ extension ChatView {
                                     onOpenConversation: { sessionID in
                                         _ = viewModel.setCurrentSessionIfExists(sessionID: sessionID)
                                     },
-                                    reportsSendFlightTarget: reportsSendFlightTarget,
+                                    sendFlightTarget: sendFlightTarget,
+                                    sendFlightContentOpacity: reportsSendFlightTarget ? sendFlightOpacity : 1,
                                     reportsLayoutIntegrityFrame: scrollCoordinator.chatLayoutIntegrityMonitor
                                         .isContentFrameProbeActive,
                                     layoutRecoveryRevision: scrollCoordinator.chatLayoutIntegrityMonitor.recoveryRevision(
@@ -360,8 +380,8 @@ extension ChatView {
                                         removal: .opacity
                                     )
                                 )
-                                // 用户气泡落位前压住同轮回复，维持“发送完成后才得到响应”的视觉因果。
-                                .opacity(sendFlightOpacity)
+                                // 精确来源在气泡内部仅隐藏实际内容，保持共同 carrier 可见；同轮回复仍整行显隐。
+                                .opacity(reportsSendFlightTarget ? 1 : sendFlightOpacity)
                                 .allowsHitTesting(sendFlightOpacity > 0)
                                 .accessibilityHidden(sendFlightOpacity == 0)
                                 .id(ChatScrollTargetID.message(state.id))
@@ -372,7 +392,7 @@ extension ChatView {
                                         response: appConfig.chatScrollAnimationSpringResponse,
                                         dampingFraction: appConfig.chatScrollAnimationSpringDamping
                                     ))
-                                ) { [scrollAnimEnabled = appConfig.chatScrollAnimationEnabled,
+                                ) { [scrollAnimEnabled = appConfig.chatScrollAnimationEnabled && !accessibilityReduceMotion,
                                      scrollAnimOffset = appConfig.chatScrollAnimationOffset,
                                      layoutSettling = scrollCoordinator.isChatLayoutSettling,
                                      keepsBottomPinned = scrollCoordinator.shouldKeepBottomPinned,
@@ -394,7 +414,10 @@ extension ChatView {
                                                         keepsBottomPinned: keepsBottomPinned,
                                                         isUserInteracting: scrollUserInteracting
                                                     ),
-                                                isTimelineNavigationActive: timelineNavigationActive
+                                                isTimelineNavigationActive: timelineNavigationActive,
+                                                keepsBottomPinned: keepsBottomPinned,
+                                                isUserInteracting: scrollUserInteracting,
+                                                isSendFlightTarget: reportsSendFlightTarget
                                             )
                                         )
                                 }
@@ -424,6 +447,7 @@ extension ChatView {
                     .frame(width: chatViewportWidth, alignment: .top)
                 }
                 .frame(width: chatViewportWidth)
+                .background(ChatSendFlightLayoutAnchor(controller: sendFlightController, region: .viewport))
                 .coordinateSpace(.named(ChatMessageLayoutAudit.coordinateSpaceName))
                 .onPreferenceChange(ChatHistoryAnchorFramePreferenceKey.self) { frames in
                     let controller = scrollCoordinator.chatHistoryViewportAnchorController
@@ -481,7 +505,8 @@ extension ChatView {
                         keepsBottomPinned: scrollCoordinator.shouldKeepBottomPinned
                             && !isMessageJumpInFlight
                             && !scrollCoordinator.hasRetainedTimelineNavigationTarget,
-                        isStreaming: viewModel.isSendingMessage
+                        isStreaming: viewModel.isSendingMessage,
+                        isStreamingViewportFollowing: scrollCoordinator.isStreamingViewportFollowing
                     )
                 )
                 .onGeometryChange(for: CGSize.self) { proxy in
@@ -499,7 +524,6 @@ extension ChatView {
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .scrollIndicators(.hidden)
-                .simultaneousGesture(scrollNavigationEdgeRevealGesture)
                 .accessibilityActions {
                     if appConfig.chatTimelineNavigationEnabled {
                         if canNavigateToTimelineTop {
@@ -544,6 +568,7 @@ extension ChatView {
                     cancelAutomaticHistoryNavigation()
                 }
                 .onChange(of: viewModel.currentSession?.id) { _, _ in
+                    cancelSendFlight()
                     cancelPendingScrollTargetCommand()
                     scrollCoordinator.resetForSessionChange()
                     shouldRestorePendingJumpOnAppear = false
@@ -628,7 +653,9 @@ extension ChatView {
                             .padding(.bottom, 6)
                         }
 
-                        telegramInputBar
+                        telegramInputBar(
+                            availableHeight: max(0, chatViewportSize.height - navBarHeight - 8)
+                        )
                         RoleplayScriptButtonBar(sessionID: viewModel.currentSession?.id)
                     }
                         .animation(
@@ -638,6 +665,7 @@ extension ChatView {
                             value: appConfig.localLinuxChatPreviewPlacement
                         )
                         .frame(width: chatViewportWidth)
+                        .background(ChatSendFlightLayoutAnchor(controller: sendFlightController, region: .composer))
                         .background(
                             GeometryReader { proxy in
                                 Color.clear.preference(
@@ -755,15 +783,16 @@ extension ChatView {
                 )
             }
             .coordinateSpace(.named(ChatView.flightCoordinateSpace))
-            .onPreferenceChange(InputBarRectKey.self) { rect in
-                handleInputBarRect(rect)
+            .environment(\.chatSendFlightSources, sendFlightSources)
+            .environment(\.chatSendFlightController, sendFlightController)
+            .onChange(of: scenePhase) { _, phase in
+                if phase != .active { cancelSendFlight() }
+            }
+            .onChange(of: accessibilityReduceMotion) { _, isEnabled in
+                if isEnabled { cancelSendFlight() }
             }
             .onPreferenceChange(FlightTargetRectKey.self) { rect in
                 handleFlightTargetRect(rect)
-            }
-            .onChange(of: viewModel.displayMessageIdentityVersion) { _, _ in
-                // 自动历史窗口可能保持消息数量不变，只替换可见消息身份；用身份版本避免漏锁飞行目标。
-                lockFlightTargetIfNeeded()
             }
             .background(
                 GeometryReader { proxy in
@@ -776,7 +805,8 @@ extension ChatView {
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                 beginChatLayoutSettling(
-                    keepBottomPinned: resolvedBottomPinIntentForViewportChange()
+                    keepBottomPinned: resolvedBottomPinIntentForViewportChange(),
+                    awaitsKeyboardCompletion: true
                 )
                 if !isKeyboardVisible {
                     isKeyboardVisible = true
@@ -784,11 +814,25 @@ extension ChatView {
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
                 beginChatLayoutSettling(
-                    keepBottomPinned: resolvedBottomPinIntentForViewportChange()
+                    keepBottomPinned: resolvedBottomPinIntentForViewportChange(),
+                    awaitsKeyboardCompletion: true
                 )
                 if isKeyboardVisible {
                     isKeyboardVisible = false
                 }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { _ in
+                beginChatLayoutSettling(
+                    keepBottomPinned: resolvedBottomPinIntentForViewportChange(),
+                    awaitsKeyboardCompletion: true
+                )
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(for: UIResponder.keyboardDidChangeFrameNotification)
+                    .merge(with: NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification))
+                    .merge(with: NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification))
+            ) { _ in
+                scrollCoordinator.keyboardLayoutTransitionDidEnd()
             }
             .onDisappear {
                 scrollCoordinator.prepareForDisappearance()
@@ -802,19 +846,10 @@ extension ChatView {
                     isMessageJumpInFlight = false
                 }
                 cancelPendingScrollTargetCommand(preservingMessageJump: true)
-                pendingFlightCleanupTask?.cancel()
-                pendingFlightCleanupTask = nil
+                cancelSendFlight()
                 chatTransientNoticeDismissTask?.cancel()
                 chatTransientNoticeDismissTask = nil
                 chatTransientNotice = nil
-                flightState = nil
-                flightPresentationX = 0
-                flightPresentationY = 0
-                flightPresentationWidth = 0
-                flightPresentationHeight = 0
-                flightVisualProgress = 0
-                flightHandoffProgress = 0
-                flightReplyRevealProgress = 0
             }
             .toolbar(.hidden, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)

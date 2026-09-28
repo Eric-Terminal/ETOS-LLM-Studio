@@ -313,16 +313,34 @@ extension ChatServiceTests {
         }
         let service = automaticRetryService()
         AutomaticRetryURLProtocol.configure([.init(status: 503, body: "服务繁忙")])
+        let clock = ContinuousClock()
+        typealias CancellationEvent = (startedAt: ContinuousClock.Instant, task: Task<Void, Never>)
+        let cancellationEvents = AsyncStream<CancellationEvent>.makeStream()
         let subscription = service.messagesForSessionSubject
             .filter { $0.contains { $0.requestRetryStatus?.remainingSeconds != nil } }
             .prefix(1)
             .sink { [weak service] _ in
-                Task { await service?.cancelOngoingRequest() }
+                guard let service else { return }
+                // 从用户能够停止的退避状态开始计时，也包含取消任务的调度延迟。
+                let startedAt = clock.now
+                let cancellationTask = Task { await service.cancelOngoingRequest() }
+                cancellationEvents.continuation.yield((startedAt, cancellationTask))
             }
-        defer { subscription.cancel() }
-        let startedAt = Date()
+        defer {
+            subscription.cancel()
+            cancellationEvents.continuation.finish()
+        }
         await sendAutomaticallyRetriedMessage(using: service, streaming: false)
-        #expect(Date().timeIntervalSince(startedAt) < 1)
+        let sendFinishedAt = clock.now
+        cancellationEvents.continuation.finish()
+        var cancellations = cancellationEvents.stream.makeAsyncIterator()
+        let cancellation = await cancellations.next()
+        #expect(cancellation != nil, "必须进入退避状态并发出取消请求")
+        if let cancellation {
+            #expect(cancellation.startedAt.duration(to: sendFinishedAt) < .seconds(1))
+            // 发送任务返回后，取消任务还可能在删除占位消息，清理共享数据前必须收尾。
+            await cancellation.task.value
+        }
         #expect(AutomaticRetryURLProtocol.requests.count == 1)
         #expect(!service.messagesForSessionSubject.value.contains { $0.requestRetryStatus != nil })
         #expect(service.runningSessionIDsSubject.value.isEmpty)

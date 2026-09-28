@@ -29,10 +29,12 @@ struct PendingAudioAttachmentPreview: View {
                     : NSLocalizedString("播放试听", value: "Play Preview", comment: "播放草稿音频"))
 
                 VStack(alignment: .leading) {
-                    Text(attachment.fileName)
-                        .etFont(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    ChatSendContentSource(id: .audio(attachment.id)) {
+                        Text(attachment.fileName)
+                            .etFont(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
 
                     Slider(value: Binding(
                         get: { player.progress },

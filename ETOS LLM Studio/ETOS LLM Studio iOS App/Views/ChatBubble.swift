@@ -59,13 +59,15 @@ struct ChatBubble: View {
     let sourceConversationName: String?
     let onOpenSourceConversation: (() -> Void)?
     let onOpenConversation: ((UUID) -> Void)?
-    let reportsSendFlightTarget: Bool
+    let sendFlightTarget: ChatSendFlightTarget?
+    let sendFlightContentOpacity: Double
     let reportsLayoutIntegrityFrame: Bool
     let layoutRecoveryRevision: UInt
     let providers: [Provider]
     
     @StateObject var audioPlayer = AudioPlayerManager()
     @State var imagePreview: ImagePreviewPayload?
+    @Namespace var imagePreviewNamespace
     @State var filePreview: FileAttachmentPreviewPayload?
     @State var selectedToolCallDetailSheetItem: ToolCallDetailSheetItem?
     @State var showRawToolResultInDetailSheet: Bool = false
@@ -118,7 +120,8 @@ struct ChatBubble: View {
         sourceConversationName: String? = nil,
         onOpenSourceConversation: (() -> Void)? = nil,
         onOpenConversation: ((UUID) -> Void)? = nil,
-        reportsSendFlightTarget: Bool = false,
+        sendFlightTarget: ChatSendFlightTarget? = nil,
+        sendFlightContentOpacity: Double = 1,
         reportsLayoutIntegrityFrame: Bool = false,
         layoutRecoveryRevision: UInt = 0,
         providers: [Provider] = []
@@ -165,7 +168,8 @@ struct ChatBubble: View {
         self.sourceConversationName = sourceConversationName
         self.onOpenSourceConversation = onOpenSourceConversation
         self.onOpenConversation = onOpenConversation
-        self.reportsSendFlightTarget = reportsSendFlightTarget
+        self.sendFlightTarget = sendFlightTarget
+        self.sendFlightContentOpacity = sendFlightContentOpacity
         self.reportsLayoutIntegrityFrame = reportsLayoutIntegrityFrame
         self.layoutRecoveryRevision = layoutRecoveryRevision
         self.providers = providers
@@ -200,6 +204,7 @@ struct ChatBubble: View {
             
             VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
                 sourceConversationLabel
+                    .opacity(sendFlightContentOpacity)
 
                 // 图片附件 - 作为气泡显示
                 if !shouldPlaceImagesAfterText,
@@ -217,6 +222,8 @@ struct ChatBubble: View {
                 if shouldShowTextBubble {
                     if shouldRenderToolCallsAsSeparateBubbles {
                         separatedToolCallBubbleStack
+                            .id(bubbleContentLayoutIdentity)
+                            .opacity(sendFlightContentOpacity)
                             .modifier(
                                 ChatBubbleOpenMoreGestureModifier(
                                     isSelectionMode: false,
@@ -235,7 +242,11 @@ struct ChatBubble: View {
                                 onOpenMore: isSelectionMode ? nil : openMoreAction
                             )
                         )
-                        .background(sendFlightTargetReporter)
+                        .modifier(ChatSendFlightContentModifier(
+                            layoutIdentity: bubbleContentLayoutIdentity,
+                            opacity: sendFlightContentOpacity,
+                            target: sendFlightTarget
+                        ))
                     }
                 }
 
@@ -247,44 +258,11 @@ struct ChatBubble: View {
 
                 if shouldShowMessageActionBar {
                     messageActionBarRow
+                        .opacity(sendFlightContentOpacity)
                 }
             }
             .frame(width: usesNoBubbleStyle ? bubbleMaxWidth : nil, alignment: .leading)
             .frame(maxWidth: usesNoBubbleStyle ? nil : bubbleMaxWidth, alignment: isOutgoing ? .trailing : .leading)
-            // 消息 UUID 保证相邻气泡绝不会共享显式身份；其余字段只重建内容列，
-            // 促使 LazyVStack 重新测量真实高度，同时保留整行手势与预览状态。
-            .id(ChatBubbleLayoutIdentity(
-                messageID: messageState.id,
-                structuralRevision: messageState.layoutRevision,
-                layoutRecoveryRevision: layoutRecoveryRevision,
-                isStreaming: showsStreamingIndicators,
-                isStaticMarkdownHandoffInProgress: isStaticMarkdownHandoffInProgress,
-                hasPreparedMarkdown: preparedMarkdownPayload != nil,
-                hasPreparedReasoningMarkdown: preparedReasoningMarkdownPayload != nil,
-                usesNoBubbleStyle: usesNoBubbleStyle,
-                contentRenderer: ChatBubbleRendererIdentity.resolved(
-                    hasContent: !message.content.isEmpty,
-                    enableMarkdown: enableMarkdown,
-                    isStreaming: showsStreamingIndicators,
-                    isAwaitingStaticHandoff: messageState.streamingMarkdownState
-                        .isAwaitingStaticHandoff(channel: .content),
-                    hasPreparedMarkdown: preparedMarkdownPayload != nil,
-                    usesWebRenderer: enableAdvancedRenderer
-                        && preparedMarkdownPayload?.containsMermaidContent == true,
-                    hasRoleplayHTML: messageState.roleplayHTML?.containsHTML == true
-                ),
-                reasoningRenderer: ChatBubbleRendererIdentity.resolved(
-                    hasContent: !(message.reasoningContent?.isEmpty ?? true),
-                    enableMarkdown: enableMarkdown,
-                    isStreaming: showsStreamingIndicators,
-                    isAwaitingStaticHandoff: messageState.streamingMarkdownState
-                        .isAwaitingStaticHandoff(channel: .reasoning),
-                    hasPreparedMarkdown: preparedReasoningMarkdownPayload != nil,
-                    usesWebRenderer: enableAdvancedRenderer
-                        && preparedReasoningMarkdownPayload?.containsMermaidContent == true
-                ),
-                layoutWidthBucket: ChatBubbleLayoutIdentity.widthBucket(for: layoutWidth)
-            ))
             .background {
                 if reportsLayoutIntegrityFrame {
                     ChatMessageRenderedContentFrameReporter(messageID: messageState.id)
@@ -304,6 +282,7 @@ struct ChatBubble: View {
             if isSelected {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .stroke(Color.red, lineWidth: 2)
+                    .opacity(sendFlightContentOpacity)
                     .allowsHitTesting(false)
             }
         }
@@ -311,13 +290,18 @@ struct ChatBubble: View {
             ChatBubbleOpenMoreGestureModifier(
                 isSelectionMode: isSelectionMode,
                 onToggleSelection: onToggleSelection,
-                onOpenMore: hasOnlyImages || hasOnlyFiles ? openMoreAction : nil
+                // 含图片的混合行也由图片原生菜单接管长按，避免与预览按钮竞争。
+                onOpenMore: hasOnlyFiles && (message.imageFileNames?.isEmpty ?? true) ? openMoreAction : nil
             )
         )
         .fullScreenCover(item: $imagePreview, onDismiss: {
             refreshChatBubbleLocalPresentationBlocker()
         }) { payload in
             ChatAttachmentImagePreview(payload: payload)
+                .modifier(ChatAttachmentImagePreviewTransition(
+                    sourceID: payload.fileName,
+                    namespace: imagePreviewNamespace
+                ))
         }
         .sheet(item: $filePreview, onDismiss: {
             refreshChatBubbleLocalPresentationBlocker()
@@ -395,16 +379,38 @@ struct ChatBubble: View {
         }
     }
 
-    /// 只在本次发送目标的正文气泡上测量真实落点，避免用整行宽度反推尺寸。
-    @ViewBuilder
-    private var sendFlightTargetReporter: some View {
-        if reportsSendFlightTarget {
-            GeometryReader { proxy in
-                Color.clear.preference(
-                    key: FlightTargetRectKey.self,
-                    value: proxy.frame(in: .named(ChatView.flightCoordinateSpace))
-                )
-            }
-        }
+    /// 布局变化只重建渲染内容；发送的开始与结束不能改变内容身份或拆除其外的承载层。
+    var bubbleContentLayoutIdentity: ChatBubbleLayoutIdentity {
+        ChatBubbleLayoutIdentity(
+            messageID: messageState.id,
+            structuralRevision: messageState.layoutRevision,
+            layoutRecoveryRevision: layoutRecoveryRevision,
+            isStreaming: showsStreamingIndicators,
+            isStaticMarkdownHandoffInProgress: isStaticMarkdownHandoffInProgress,
+            hasPreparedMarkdown: preparedMarkdownPayload != nil,
+            hasPreparedReasoningMarkdown: preparedReasoningMarkdownPayload != nil,
+            usesNoBubbleStyle: usesNoBubbleStyle,
+            contentRenderer: ChatBubbleRendererIdentity.resolved(
+                hasContent: !message.content.isEmpty,
+                enableMarkdown: enableMarkdown,
+                isStreaming: showsStreamingIndicators,
+                isAwaitingStaticHandoff: messageState.streamingMarkdownState
+                    .isAwaitingStaticHandoff(channel: .content),
+                hasPreparedMarkdown: preparedMarkdownPayload != nil,
+                usesWebRenderer: enableAdvancedRenderer && preparedMarkdownPayload?.containsMermaidContent == true,
+                hasRoleplayHTML: messageState.roleplayHTML?.containsHTML == true
+            ),
+            reasoningRenderer: ChatBubbleRendererIdentity.resolved(
+                hasContent: !(message.reasoningContent?.isEmpty ?? true),
+                enableMarkdown: enableMarkdown,
+                isStreaming: showsStreamingIndicators,
+                isAwaitingStaticHandoff: messageState.streamingMarkdownState
+                    .isAwaitingStaticHandoff(channel: .reasoning),
+                hasPreparedMarkdown: preparedReasoningMarkdownPayload != nil,
+                usesWebRenderer: enableAdvancedRenderer && preparedReasoningMarkdownPayload?.containsMermaidContent == true
+            ),
+            layoutWidthBucket: ChatBubbleLayoutIdentity.widthBucket(for: layoutWidth)
+        )
     }
+
 }

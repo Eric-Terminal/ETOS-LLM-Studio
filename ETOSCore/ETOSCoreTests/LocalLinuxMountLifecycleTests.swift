@@ -25,8 +25,12 @@ struct LocalLinuxMountLifecycleTests {
     func busyReauthorizationPreservesOriginalRecord() async throws {
         let root = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        let original = try saveRecord(directory: root, access: .readOnly)
-        defer { _ = Persistence.deleteLocalLinuxMount(id: original.id) }
+        let saved = try saveRecord(directory: root, access: .readOnly)
+        defer { _ = Persistence.deleteLocalLinuxMount(id: saved.id) }
+        // 用持久化后的记录作基线，排除 Date 首次转换 Unix 时间戳时的浮点舍入。
+        let original = try #require(Persistence.loadLocalLinuxMounts().first(where: { $0.id == saved.id }))
+        #expect(original.bookmark == saved.bookmark)
+        #expect(original.access == saved.access)
         let replacement = root.appendingPathComponent("另一个目录", isDirectory: true)
         try FileManager.default.createDirectory(at: replacement, withIntermediateDirectories: true)
         let manager = makeManager(root: root, bridge: MountBridgeStub(removeError: -16))

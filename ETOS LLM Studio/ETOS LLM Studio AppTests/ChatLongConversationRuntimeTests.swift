@@ -5,6 +5,7 @@
 // ============================================================================
 
 import Combine
+import Darwin
 import ETOSCore
 import SwiftUI
 import Testing
@@ -13,6 +14,165 @@ import UIKit
 
 @Suite(.serialized, .timeLimit(.minutes(2)))
 struct ChatLongConversationRuntimeTests {
+
+    @MainActor
+    @Test("四条窗口在长草稿收缩和长消息追加后，流式期间及静态末行都真实可见")
+    func testLongSendKeepsRealizedRowsVisibleBeforeStreamingEnds() async throws {
+        // 仅测试宿主启用已有代码预览用例使用的 AX 桥；SwiftUI 环境值不会生成自动化节点。
+        // 保留原状态并在退出时恢复，不让观测初始化改变后续用例或正式 App 的行为。
+        let libraryPath = (ProcessInfo.processInfo.environment["IPHONE_SIMULATOR_ROOT"] ?? "")
+            + "/usr/lib/libAccessibility.dylib"
+        let library = try #require(dlopen(libraryPath, RTLD_LAZY), "无法加载测试用无障碍自动化桥")
+        defer { dlclose(library) }
+        let readAutomation = unsafeBitCast(
+            try #require(dlsym(library, "_AXSAutomationEnabled")),
+            to: (@convention(c) () -> Int32).self
+        )
+        let setAutomation = unsafeBitCast(
+            try #require(dlsym(library, "_AXSSetAutomationEnabled")),
+            to: (@convention(c) (Int32) -> Void).self
+        )
+        let previousAutomation = readAutomation()
+        setAutomation(1)
+        defer { setAutomation(previousAutomation) }
+        let config = AppConfigStore.shared
+        await config.waitForPersistentStoreLoaded()
+        let savedDraft = config.chatComposerDraft
+        let savedComposerStyle = config.chatComposerStyle
+        let savedPreviewLimit = config.userMessagePreviewCharacterLimit
+        config.chatComposerDraft = ""
+        config.chatComposerStyle = ChatComposerStyle.capsule.rawValue
+        config.userMessagePreviewCharacterLimit = 1_000
+        do {
+            defer {
+                config.chatComposerDraft = savedDraft
+                config.chatComposerStyle = savedComposerStyle
+                config.userMessagePreviewCharacterLimit = savedPreviewLimit
+            }
+            let longBody = (1...32).map { "第 \($0) 行：输入收缩后的滚动可见性。" }.joined(separator: "\n")
+            let seed = [
+                ChatMessage(role: .user, content: "较早的短消息"),
+                ChatMessage(role: .assistant, content: "较早的短回复"),
+                ChatMessage(role: .user, content: longBody + "\n旧长消息尾标"),
+                ChatMessage(role: .assistant, content: "种子回复可见尾标")
+            ]
+            let fixture = try await makeFixture(
+                automaticHistoryLoading: false,
+                markdownEnabled: true,
+                advancedRendererEnabled: true,
+                lazyLoadMessageCount: 4,
+                initialMessages: seed,
+                windowSize: CGSize(width: 402, height: 874)
+            )
+            defer {
+                fixture.chatService.runningSessionIDsSubject.send([])
+                fixture.dispose()
+            }
+            let scrollView = try #require(fixture.chatScrollView)
+            let sessionID = try #require(fixture.viewModel.currentSession?.id)
+            try #require(maximumContentOffsetY(of: scrollView) - minimumContentOffsetY(of: scrollView) > 100, "种子长消息必须产生超过 100pt 的真实滚动跨度")
+            try #require(fixture.viewModel.displayMessages.map(\.id) == seed.map(\.id))
+            // 只在发送前确认测试宿主已提供 AX 节点；发送后的缺行不能靠重复查询等到恢复。
+            let initialAXReady = await waitForRuntimeCondition {
+                !tailVisibleAccessibilityFrames(containing: "种子回复可见尾标", in: fixture.host.view, viewportOf: scrollView).isEmpty
+                    && !tailVisibleAccessibilityFrames(containing: "旧长消息尾标", in: fixture.host.view, viewportOf: scrollView).isEmpty
+            }
+            // 先锁定 AX 判断再记录截图，附件采集不能反向改变本次判断。
+            let initialSeedFrames = tailVisibleAccessibilityFrames(containing: "种子回复可见尾标", in: fixture.host.view, viewportOf: scrollView)
+            let initialUserFrames = tailVisibleAccessibilityFrames(containing: "旧长消息尾标", in: fixture.host.view, viewportOf: scrollView)
+            recordVisibilityEvidence(
+                stage: "初始种子", fixture: fixture, scrollView: scrollView,
+                userFrames: initialUserFrames, replyFrames: initialSeedFrames
+            )
+            try #require(initialAXReady, "发送前必须能观测到种子用户消息与回复的 AX 节点")
+            try #require(!initialSeedFrames.isEmpty)
+
+            let userTail = "新长消息可见尾标"
+            let draft = longBody + "\n" + userTail
+            fixture.viewModel.userInput = draft
+            let expanded = await waitForRuntimeCondition {
+                fixture.editableTextView(containing: draft).map { $0.bounds.height > 80 } == true
+            }
+            try #require(expanded, "长草稿必须在真实输入控件中展开，不能跳过输入收缩刺激")
+            let editor = try #require(fixture.editableTextView(containing: draft))
+            let expandedHeight = editor.bounds.height
+            // 初始挂载之后不再强制布局。清空真实草稿，再让原有后台快照和滚动桥消费新行。
+            let user = ChatMessage(role: .user, content: draft)
+            var reply = ChatMessage(role: .assistant, content: "")
+            reply.isReceivingStream = true
+            var published = seed + [user, reply]
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                fixture.viewModel.userInput = ""
+                fixture.chatService.runningSessionIDsSubject.send([sessionID])
+                fixture.chatService.messagesForSessionSubject.send(published)
+            }
+            let expectedIDs = Array(published.suffix(4).map(\.id))
+            let inserted = await waitForRuntimeCondition {
+                fixture.viewModel.isSendingMessage
+                    && fixture.viewModel.displayMessageIDs == expectedIDs
+                    && (editor.window == nil || editor.bounds.height < expandedHeight - 20)
+            }
+            try #require(inserted, "同一宿主必须完成四条窗口替换和输入收缩")
+            try #require(fixture.chatScrollView === scrollView)
+
+            // 故障曾在自然结束前数秒出现，因此先保持 receiving=true 检查，不能只验静态终态。
+            let streamingTail = "流式回复可见尾标"
+            reply.content = streamingTail
+            published[published.count - 1] = reply
+            fixture.chatService.messagesForSessionSubject.send(published)
+            let streamed = await waitForRuntimeCondition {
+                fixture.viewModel.messageStateByID[reply.id]?.message.content == streamingTail
+                    && fixture.viewModel.streamingMarkdownPrepareTasks.isEmpty
+            }
+            try #require(streamed)
+            // 给现有一次性定位与跟随自然收敛，不读取 AX 轮询、加观察器或主动滚动来促成实现。
+            await settleMainQueue(duration: 1.2)
+            let streamingUserFrames = tailVisibleAccessibilityFrames(containing: userTail, in: fixture.host.view, viewportOf: scrollView)
+            let streamingReplyFrames = tailVisibleAccessibilityFrames(containing: streamingTail, in: fixture.host.view, viewportOf: scrollView)
+            recordVisibilityEvidence(
+                stage: "流式中", fixture: fixture, scrollView: scrollView,
+                userFrames: streamingUserFrames, replyFrames: streamingReplyFrames
+            )
+            #expect(fixture.viewModel.isSendingMessage)
+            #expect(fixture.viewModel.messageStateByID[reply.id]?.message.isReceivingStream == true)
+            #expect(!streamingUserFrames.isEmpty)
+            #expect(!streamingReplyFrames.isEmpty)
+
+            reply.content += "，静态完成尾标。"
+            reply.isReceivingStream = false
+            published[published.count - 1] = reply
+            fixture.chatService.messagesForSessionSubject.send(published)
+            fixture.chatService.runningSessionIDsSubject.send([])
+            let finished = await waitForRuntimeCondition {
+                !fixture.viewModel.isSendingMessage
+                    && fixture.viewModel.preparedMarkdownByMessageID[reply.id]?.sourceText == reply.content
+                    && fixture.viewModel.messageStateByID[reply.id]?.streamingMarkdownState.isAwaitingStaticHandoff(channel: .content) == false
+                    && !fixture.coordinator.isStreamingViewportFollowing
+                    && !fixture.coordinator.isChatLayoutSettling
+                    && !fixture.coordinator.chatScrollPositionController.hasActiveCommand
+            }
+            try #require(finished, "正文、静态准备与滚动所有权必须真正结束")
+            await settleMainQueue(duration: 0.15)
+            let finalUserFrames = tailVisibleAccessibilityFrames(containing: userTail, in: fixture.host.view, viewportOf: scrollView)
+            let finalReplyFrames = tailVisibleAccessibilityFrames(containing: "静态完成尾标", in: fixture.host.view, viewportOf: scrollView)
+            recordVisibilityEvidence(
+                stage: "静态完成", fixture: fixture, scrollView: scrollView,
+                userFrames: finalUserFrames, replyFrames: finalReplyFrames
+            )
+            #expect(fixture.viewModel.displayMessageIDs == expectedIDs)
+            #expect(fixture.viewModel.messageStateByID[reply.id]?.visualMessage.content == reply.content)
+            #expect(fixture.chatScrollView === scrollView)
+            #expect(!finalUserFrames.isEmpty)
+            #expect(!finalReplyFrames.isEmpty)
+            #expect(abs(scrollView.contentOffset.y - maximumContentOffsetY(of: scrollView)) < 4)
+        } catch {
+            await config.flushPendingWrites()
+            throw error
+        }
+        await config.flushPendingWrites()
+    }
 
     @MainActor
     @Test("四键跨越历史边界时只换入相邻消息")
@@ -127,6 +287,8 @@ struct ChatLongConversationRuntimeTests {
         fixture.coordinator.updateInteractionState(false)
         await settleLayout(fixture.host.view, duration: 0.25)
 
+        let monitor = fixture.coordinator.chatLayoutIntegrityMonitor
+        let initialProbeRevision = monitor.layoutProbeRevision
         var coordinatorChangeCount = 0
         let changeSubscription = fixture.coordinator.objectWillChange.sink {
             coordinatorChangeCount += 1
@@ -144,6 +306,14 @@ struct ChatLongConversationRuntimeTests {
         }
         await settleLayout(fixture.host.view, duration: 0.25)
         let settledOffset = scrollView.contentOffset.y
+        // 微滚动会触发一次必要的布局审计；新测量完成后才开始检查稳态反馈。
+        let auditDeadline = ContinuousClock.now + .seconds(3)
+        while ContinuousClock.now < auditDeadline,
+              monitor.layoutProbeRevision <= initialProbeRevision || monitor.isContentFrameProbeActive {
+            await settleMainQueue(duration: 0.02)
+        }
+        try #require(monitor.layoutProbeRevision > initialProbeRevision, "本次滚动必须完成新一轮布局测量")
+        try #require(!monitor.isContentFrameProbeActive, "布局测量必须在有界等待内结束")
         let settledChangeCount = coordinatorChangeCount
         await settleLayout(fixture.host.view, duration: 0.5)
 
@@ -237,9 +407,12 @@ struct ChatLongConversationRuntimeTests {
         automaticHistoryLoading: Bool,
         timelineNavigationEnabled: Bool = false,
         markdownEnabled: Bool = false,
+        advancedRendererEnabled: Bool = false,
         lazyLoadMessageCount: Int = 5,
         messageCount: Int = 60,
-        paragraphCount: Int = 8
+        paragraphCount: Int = 8,
+        initialMessages: [ChatMessage]? = nil,
+        windowSize: CGSize = CGSize(width: 390, height: 844)
     ) async throws -> HostedChatFixture {
         let windowScene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let appConfig = AppConfigStore.shared
@@ -253,7 +426,7 @@ struct ChatLongConversationRuntimeTests {
         appConfig.chatTimelineNavigationEnabled = timelineNavigationEnabled
         appConfig.chatScrollAnimationEnabled = false
         appConfig.enableMarkdown = markdownEnabled
-        appConfig.enableAdvancedRenderer = false
+        appConfig.enableAdvancedRenderer = advancedRendererEnabled
         appConfig.enableBackground = false
         appConfig.automaticHistoryLoadingEnabled = automaticHistoryLoading
         appConfig.lazyLoadMessageCount = lazyLoadMessageCount
@@ -266,7 +439,7 @@ struct ChatLongConversationRuntimeTests {
             name: "长会话滚动运行态测试",
             isTemporary: true
         )
-        let messages = makeMessages(
+        let messages = initialMessages ?? makeMessages(
             count: messageCount,
             paragraphCount: paragraphCount
         )
@@ -297,11 +470,13 @@ struct ChatLongConversationRuntimeTests {
             NavigationStack {
                 ChatView(scrollCoordinator: coordinator)
                     .environmentObject(viewModel)
+                    // 这些用例模拟前台阅读，独立宿主必须显式提供活跃场景环境。
+                    .environment(\.scenePhase, .active)
             }
         )
         let host = UIHostingController(rootView: rootView)
         let window = UIWindow(windowScene: windowScene)
-        window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        window.frame = CGRect(origin: .zero, size: windowSize)
         window.rootViewController = host
         window.isHidden = false
         host.view.frame = window.bounds
@@ -311,10 +486,77 @@ struct ChatLongConversationRuntimeTests {
         return HostedChatFixture(
             window: window,
             host: host,
+            chatService: chatService,
             viewModel: viewModel,
             coordinator: coordinator,
             savedConfiguration: savedConfiguration
         )
+    }
+
+    @MainActor
+    private func waitForRuntimeCondition(_ condition: () -> Bool) async -> Bool {
+        let deadline = ContinuousClock.now + .seconds(10)
+        while !condition(), ContinuousClock.now < deadline {
+            await settleMainQueue(duration: 0.02)
+        }
+        return condition()
+    }
+
+    @MainActor
+    private func tailVisibleAccessibilityFrames(
+        containing text: String, in root: UIView, viewportOf scrollView: UIScrollView
+    ) -> [CGRect] {
+        guard let window = scrollView.window else { return [] }
+        let visibleBounds = scrollView.bounds.inset(by: scrollView.adjustedContentInset)
+        let viewport = window.convert(scrollView.convert(visibleBounds, to: window), to: window.screen.coordinateSpace)
+        // AX 树由 SwiftUI 宿主提供，UIKit 滚动子树只用于确定真实可视边界。
+        // 长段上半部相交不能证明末行可见；匹配尾标的元素末端必须仍在视口内。
+        return accessibilityObjects(root).compactMap { object in
+            let label = object.accessibilityLabel ?? ""
+            let value = object.accessibilityValue ?? ""
+            let frame = object.accessibilityFrame
+            guard (label.contains(text) || value.contains(text)),
+                  !frame.isEmpty, !frame.isNull, frame.intersects(viewport),
+                  frame.maxY > viewport.minY, frame.maxY <= viewport.maxY else { return nil }
+            return frame
+        }
+    }
+
+    @MainActor
+    private func accessibilityObjects(_ object: NSObject, depth: Int = 0) -> [NSObject] {
+        guard depth < 30 else { return [] }
+        let children: [NSObject]
+        if let elements = object.accessibilityElements, !elements.isEmpty {
+            children = elements.compactMap { $0 as? NSObject }
+        } else if object.accessibilityElementCount() > 0 && object.accessibilityElementCount() < 1_000 {
+            children = (0..<object.accessibilityElementCount()).compactMap { object.accessibilityElement(at: $0) as? NSObject }
+        } else {
+            children = (object as? UIView)?.subviews ?? []
+        }
+        return [object] + children.flatMap { accessibilityObjects($0, depth: depth + 1) }
+    }
+
+    @MainActor
+    private func recordVisibilityEvidence(
+        stage: String, fixture: HostedChatFixture, scrollView: UIScrollView,
+        userFrames: [CGRect], replyFrames: [CGRect]
+    ) {
+        let frames = measuredMessageFrames(in: fixture.coordinator.chatHistoryViewportAnchorController)
+        let visibleBounds = scrollView.bounds.inset(by: scrollView.adjustedContentInset)
+        let viewport = fixture.window.convert(
+            scrollView.convert(visibleBounds, to: fixture.window),
+            to: fixture.window.screen.coordinateSpace
+        )
+        let details = "阶段=\(stage) display=\(fixture.viewModel.displayMessages.count) historyRows=\(frames.count) "
+            + "size=\(scrollView.contentSize) offset=\(scrollView.contentOffset) insets=\(scrollView.adjustedContentInset) "
+            + "viewport=\(viewport) "
+            + "following=\(fixture.coordinator.isStreamingViewportFollowing) axUser=\(userFrames) axReply=\(replyFrames)"
+        Attachment.record(Data(details.utf8), named: "长消息可见性-\(stage).txt")
+        // 仅记录已经提交的图层，不调用 afterScreenUpdates 或 layoutIfNeeded 补做布局。
+        let png = UIGraphicsImageRenderer(bounds: fixture.window.bounds).pngData { context in
+            fixture.window.layer.render(in: context.cgContext)
+        }
+        Attachment.record(png, named: "长消息可见性-\(stage).png")
     }
 
     @MainActor
@@ -404,6 +646,7 @@ struct ChatLongConversationRuntimeTests {
 private final class HostedChatFixture {
     let window: UIWindow
     let host: UIHostingController<AnyView>
+    let chatService: ChatService
     let viewModel: ChatViewModel
     let coordinator: ChatScrollCoordinator
     let savedConfiguration: SavedChatConfiguration
@@ -411,28 +654,30 @@ private final class HostedChatFixture {
     init(
         window: UIWindow,
         host: UIHostingController<AnyView>,
+        chatService: ChatService,
         viewModel: ChatViewModel,
         coordinator: ChatScrollCoordinator,
         savedConfiguration: SavedChatConfiguration
     ) {
         self.window = window
         self.host = host
+        self.chatService = chatService
         self.viewModel = viewModel
         self.coordinator = coordinator
         self.savedConfiguration = savedConfiguration
     }
 
     var chatScrollView: UIScrollView? {
-        allScrollViews(in: host.view)
-            .filter { scrollView in
-                scrollView.bounds.width > 300
-                    && scrollView.bounds.height > 300
-                    && scrollView.contentSize.height > scrollView.bounds.height + 100
-            }
-            .max { lhs, rhs in
-                lhs.contentSize.height - lhs.bounds.height
-                    < rhs.contentSize.height - rhs.bounds.height
-            }
+        // 输入栏 inset 也会形成滚动跨度；按内容高度筛选既会漏掉聊天区，也可能误选编辑器。
+        scrollMetricsObservers(in: host.view)
+            .compactMap { $0.coordinator?.scrollView }
+            .first { $0.window === window }
+    }
+
+    func editableTextView(containing text: String) -> UITextView? {
+        allScrollViews(in: host.view).compactMap { $0 as? UITextView }.first {
+            $0.isEditable && $0.text == text
+        }
     }
 
     func dispose() {

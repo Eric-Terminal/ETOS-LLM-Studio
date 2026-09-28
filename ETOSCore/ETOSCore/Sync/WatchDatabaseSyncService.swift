@@ -407,18 +407,6 @@ private extension WatchDatabaseSyncService {
         """)
     }
 
-    static func writeSyncMetadata(in db: Database, updatedAt: Date) throws {
-        try ensureMetadataTable(in: db)
-        try db.execute(
-            sql: """
-            INSERT INTO sync_database_metadata (key, updated_at)
-            VALUES (?, ?)
-            ON CONFLICT(key) DO UPDATE SET updated_at = excluded.updated_at
-            """,
-            arguments: [metadataKey, updatedAt.timeIntervalSince1970]
-        )
-    }
-
     static func readSyncMetadataDate(in db: Database) throws -> Date? {
         guard try tableExists("sync_database_metadata", in: db) else { return nil }
         guard let timestamp = try Double.fetchOne(
@@ -512,6 +500,21 @@ private extension WatchDatabaseSyncService {
 
     static func quoted(_ identifier: String) -> String {
         "\"\(identifier.replacingOccurrences(of: "\"", with: "\"\""))\""
+    }
+}
+
+extension WatchDatabaseSyncService {
+    // 已持有写事务的操作复用同一连接，避免完成回调重入 writer 或写入替换后的库。
+    static func writeSyncMetadata(in db: Database, updatedAt: Date) throws {
+        try ensureMetadataTable(in: db)
+        try db.execute(
+            sql: """
+            INSERT INTO sync_database_metadata (key, updated_at)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET updated_at = excluded.updated_at
+            """,
+            arguments: [metadataKey, updatedAt.timeIntervalSince1970]
+        )
     }
 }
 
