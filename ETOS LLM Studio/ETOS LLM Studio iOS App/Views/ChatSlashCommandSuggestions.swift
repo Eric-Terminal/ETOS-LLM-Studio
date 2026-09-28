@@ -87,7 +87,12 @@ struct ChatSlashCommandSuggestionPanel: View {
             }
         }
         .scrollIndicators(.hidden)
-        .frame(height: min(CGFloat(commands.count) * rowHeight, maximumPanelHeight))
+        // 键盘压缩组合输入区时保留至少一行，更多建议由面板自身滚动承载。
+        .frame(
+            minHeight: rowHeight,
+            idealHeight: min(CGFloat(commands.count) * rowHeight, maximumPanelHeight),
+            maxHeight: min(CGFloat(commands.count) * rowHeight, maximumPanelHeight)
+        )
     }
 
     private var glassOverlayColor: Color {

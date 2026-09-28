@@ -460,20 +460,23 @@ final class ChatViewModel: ObservableObject {
     
     // MARK: - Messaging
     
+    /// 仅确认草稿已被捕获；网络请求和延迟发送的结果不改变本次输入消费回执。
+    @discardableResult
     func sendMessage(
         localAgentMode: LocalAgentMode? = nil,
         onMessagesPrepared: ChatSendPresentationHandler? = nil
-    ) {
+    ) -> Bool {
         guard let payload = capturePendingSendPayload(
             localAgentMode: localAgentMode,
             onMessagesPrepared: onMessagesPrepared
-        ) else { return }
+        ) else { return false }
         let delay = AppConfigStore.shared.chatSendDelaySeconds
         guard delay > 0 else {
             sendCapturedMessage(payload)
-            return
+            return true
         }
         scheduleDelayedSend(payload, delay: delay)
+        return true
     }
 
     private func capturePendingSendPayload(

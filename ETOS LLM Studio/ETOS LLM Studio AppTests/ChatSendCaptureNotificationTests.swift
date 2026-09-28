@@ -43,12 +43,14 @@ struct ChatSendCaptureNotificationTests {
             completion.continuation.finish()
         }
 
-        viewModel.sendMessage()
+        let consumedFirstDraft = viewModel.sendMessage()
+        #expect(consumedFirstDraft)
         #expect(viewModel.isSendSubmissionPending && viewModel.userInput.isEmpty)
         #expect(rootChanges == 0)
         #expect(inputChanges == 1)
         viewModel.userInput = "等待期间新输入"
-        viewModel.sendMessage()
+        let consumedRepeatedDraft = viewModel.sendMessage()
+        #expect(!consumedRepeatedDraft)
         #expect(viewModel.userInput == "等待期间新输入")
         #expect(rootChanges == 0)
         #expect(inputChanges == 1)
@@ -109,7 +111,8 @@ struct ChatSendCaptureNotificationTests {
             viewModel.$pendingImageAttachments.dropFirst().sink { _ in imageChanges += 1 },
             viewModel.$pendingFileAttachments.dropFirst().sink { _ in fileChanges += 1 }
         ]
-        viewModel.sendMessage()
+        let consumedDraft = viewModel.sendMessage()
+        #expect(consumedDraft)
         let delayedTask = viewModel.pendingSendDelayTask
         #expect(delayedTask != nil && viewModel.isSendDelayPending)
         #expect(viewModel.userInput.isEmpty)
@@ -133,6 +136,56 @@ struct ChatSendCaptureNotificationTests {
         config.chatSendDelaySeconds = previousDelay
         config.chatComposerDraft = previousDraft
         await delayedTask?.value
+        await config.flushPendingWrites()
+    }
+
+    @Test("消费回执区分空草稿和延迟占位，运行中仍允许捕获补充正文", arguments: [false, true])
+    func consumptionReceiptPreservesRejectedDraft(isRunning: Bool) async {
+        let config = AppConfigStore.shared
+        await config.waitForPersistentStoreLoaded()
+        let previousDelay = config.chatSendDelaySeconds
+        let previousDraft = config.chatComposerDraft
+        let previousBackground = config.currentBackgroundImage
+        let viewModel = ChatViewModel(chatService: ChatService(adapters: [:]))
+        viewModel.cancellables.removeAll()
+        await viewModel.waitForBackgroundImage()
+        await viewModel.globalSystemPromptReloadTask?.value
+        await viewModel.conversationMemoryReloadTask?.value
+        let session = ChatSession(id: UUID(), name: "输入消费边界")
+        viewModel.currentSession = session
+        viewModel.runningSessionIDs = isRunning ? [session.id] : []
+        viewModel.isSendingMessage = isRunning
+        config.chatSendDelaySeconds = 10
+        viewModel.userInput = " \n "
+
+        let consumedEmptyDraft = viewModel.sendMessage()
+        #expect(!consumedEmptyDraft)
+        #expect(viewModel.userInput == " \n ")
+        #expect(!viewModel.isSendDelayPending && viewModel.pendingSendDelayTask == nil)
+
+        viewModel.userInput = "第一行\n补充正文"
+        let consumedDelayedDraft = viewModel.sendMessage()
+        let delayedTask = viewModel.pendingSendDelayTask
+        #expect(consumedDelayedDraft)
+        #expect(viewModel.userInput.isEmpty)
+        #expect(viewModel.isSendDelayPending && delayedTask != nil)
+        #expect(viewModel.isSendingMessage == isRunning)
+
+        viewModel.userInput = "等待期间的新草稿"
+        let consumedWhileDelayed = viewModel.sendMessage()
+        #expect(!consumedWhileDelayed)
+        #expect(viewModel.userInput == "等待期间的新草稿")
+        #expect(viewModel.isSendDelayPending)
+
+        // 只验证输入消费边界；在首个 await 前撤销，避免本用例启动 Core 请求或取消任务。
+        viewModel.isSendingMessage = false
+        viewModel.runningSessionIDs = []
+        viewModel.cancelSending()
+        #expect(viewModel.userInput == "等待期间的新草稿")
+        await delayedTask?.value
+        config.chatSendDelaySeconds = previousDelay
+        config.chatComposerDraft = previousDraft
+        config.currentBackgroundImage = previousBackground
         await config.flushPendingWrites()
     }
 }

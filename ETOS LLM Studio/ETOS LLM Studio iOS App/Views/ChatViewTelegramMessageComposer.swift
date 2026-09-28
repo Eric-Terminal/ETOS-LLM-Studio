@@ -23,15 +23,17 @@ struct TelegramMessageComposer: View {
     @ObservedObject private var composerDraftState = AppConfigStore.shared.composerDraftState
     @ObservedObject private var customSlashCommandStore = CustomChatSlashCommandStore.shared
     @ObservedObject var submissionState: ChatSendSubmissionState
+    let sendFlightController: ChatSendFlightController
     @Binding var text: String
     @Binding var isRequestControlsExpanded: Bool
     @Binding var localAgentMode: LocalAgentMode
     var isSendActionPending: Bool { submissionState.isPending(for: viewModel.currentSession?.id) }
     var isSending: Bool { viewModel.isSendingMessage || viewModel.isSendDelayPending || isSendActionPending }
-    let sendAction: () -> Void
+    let sendAction: () -> Bool
     let stopAction: () -> Void
     let slashCommandAction: (ChatSlashCommand) -> Void
     let focus: FocusState<Bool>.Binding
+    var availableHeight: CGFloat = .infinity
 
     @State private var showImagePicker = false
     @State private var showCamera = false
@@ -64,6 +66,11 @@ struct TelegramMessageComposer: View {
     private var composerReservedHeight: CGFloat {
         adaptiveControlSize + 16
     }
+    var hasUpperComposerContent: Bool {
+        !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil
+            || !viewModel.pendingFileAttachments.isEmpty
+            || (!slashCommandSuggestions.isEmpty && !isRequestControlsExpanded)
+    }
     private var estimatedCompactInputWidth: CGFloat {
         max(0, UIScreen.main.bounds.width - 16 * 2 - adaptiveControlSize * 2 - 10 * 2)
     }
@@ -80,39 +87,42 @@ struct TelegramMessageComposer: View {
         UIImagePickerController.isSourceTypeAvailable(.camera)
     }
     var body: some View {
-        VStack(spacing: 8) {
-            if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil || !viewModel.pendingFileAttachments.isEmpty {
-                telegramAttachmentPreview
+        ChatComposerHeightLimit(maximumHeight: availableHeight) {
+            VStack(spacing: 8) {
+                if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil || !viewModel.pendingFileAttachments.isEmpty {
+                    telegramAttachmentPreview
+                        .padding(.horizontal, 16)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
+                }
+
+                if !slashCommandSuggestions.isEmpty && !isRequestControlsExpanded {
+                    ChatSlashCommandSuggestionPanel(
+                        commands: slashCommandSuggestions,
+                        usesLiquidGlass: viewModel.enableLiquidGlass,
+                        glassTintOpacity: appConfig.liquidGlassTintOpacity,
+                        onSelect: performSuggestedSlashCommand
+                    )
                     .padding(.horizontal, 16)
-            }
+                    .layoutPriority(1)
+                    .transition(
+                        accessibilityReduceMotion ? .opacity : .scale(scale: 0.98, anchor: .bottom)
+                            .combined(with: .opacity)
+                    )
+                }
 
-            if !slashCommandSuggestions.isEmpty && !isRequestControlsExpanded {
-                ChatSlashCommandSuggestionPanel(
-                    commands: slashCommandSuggestions,
-                    usesLiquidGlass: viewModel.enableLiquidGlass,
-                    glassTintOpacity: appConfig.liquidGlassTintOpacity,
-                    onSelect: performSuggestedSlashCommand
-                )
-                .padding(.horizontal, 16)
-                .transition(
-                    accessibilityReduceMotion ? .opacity : .scale(scale: 0.98, anchor: .bottom)
-                        .combined(with: .opacity)
-                )
+                if usesCardComposer {
+                    cardComposerLayout
+                        .zIndex(1)
+                } else {
+                    // 上方存在附件或建议时必须报告真实高度，不能从固定占位向上盖住兄弟控件。
+                    composerOverlayContent
+                        .frame(height: hasUpperComposerContent ? nil : composerReservedHeight, alignment: .bottom)
+                        .zIndex(1)
+                }
             }
-
-            if usesCardComposer {
-                cardComposerLayout
-                    .zIndex(1)
-            } else {
-                Color.clear
-                    .frame(height: composerReservedHeight)
-                    .overlay(alignment: .bottom) {
-                        composerOverlayContent
-                    }
-                    .zIndex(1)
-            }
+            .padding(.bottom, 6)
         }
-        .padding(.bottom, 6)
         .animation(
             accessibilityReduceMotion
                 ? nil
@@ -265,12 +275,14 @@ struct TelegramMessageComposer: View {
     }
 
     private var composerOverlayContent: some View {
-        // 固定占位交给外层 Color.clear，真实输入框在 overlay 中按自身高度展开。
+        // 无附件时保留向上展开；有兄弟时接受键盘上方的有限高度，让正文在编辑器内滚动。
         adaptiveComposerContent
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .fixedSize(horizontal: false, vertical: true)
+            .fixedSize(horizontal: false, vertical: !hasUpperComposerContent)
             .frame(maxWidth: .infinity, alignment: .bottom)
+            // 测真实展开内容，不能把外层 60pt 占位当成输入框顶部。
+            .background(ChatSendFlightLayoutAnchor(controller: sendFlightController, region: .composerContent))
             .animation(adaptiveComposerAnimation, value: isExpandedComposer)
             .animation(adaptiveComposerAnimation, value: inlineSpeechRecorder.phase)
             .animation(adaptiveComposerAnimation, value: isRequestControlsExpanded)

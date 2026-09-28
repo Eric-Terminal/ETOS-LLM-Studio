@@ -29,24 +29,9 @@ struct FlightTargetRectKey: PreferenceKey {
     }
 }
 
-enum ChatFlightBubbleStyle {
-    static func colors(colorScheme: ColorScheme, enableBackground: Bool) -> [CGColor] {
-        let profile = ChatAppearanceProfileManager.shared.activeProfile
-        let fallback = Color(red: 0.24, green: 0.56, blue: 0.95)
-        let start = profile.userBubble.isEnabled
-            ? ChatAppearanceColorCodec.color(from: profile.userBubble.hex, fallback: fallback)
-            : fallback
-        let end = profile.userBubble.isEnabled
-            ? ChatAppearanceColorCodec.darkened(start, factor: 0.86)
-            : Color(red: 0.17, green: 0.45, blue: 0.82)
-        let traits = UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light)
-        let opacity: CGFloat = enableBackground ? 0.85 : 1
-        return [start, end].map { UIColor($0).resolvedColor(with: traits).withAlphaComponent(opacity).cgColor }
-    }
-}
-
 extension ChatView {
-    func beginSendFlight(text: String, localAgentMode: LocalAgentMode) {
+    @discardableResult
+    func beginSendFlight(text: String, localAgentMode: LocalAgentMode) -> Bool {
         cancelSendFlight()
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         var sourceIDs: [ChatSendPresentationSource] = []
@@ -55,68 +40,94 @@ extension ChatView {
         sourceIDs.append(contentsOf: viewModel.pendingFileAttachments.map { .file($0.id) })
         if let audio = viewModel.pendingAudioAttachment { sourceIDs.append(.audio(audio.id)) }
         guard !accessibilityReduceMotion,
-              let surface = sendFlightController.surface else {
-            viewModel.sendMessage(localAgentMode: localAgentMode)
-            return
+              let surface = sendFlightController.surface,
+              let departureBounds = sendFlightController.departureBounds else {
+            return viewModel.sendMessage(localAgentMode: localAgentMode)
         }
         let captures = sendFlightSources.capture(in: surface, ids: sourceIDs)
         guard !captures.isEmpty else {
-            viewModel.sendMessage(localAgentMode: localAgentMode)
-            return
+            return viewModel.sendMessage(localAgentMode: localAgentMode)
         }
 
         let id = UUID()
         let response = min(max(appConfig.chatSendAnimationSpringResponse, 0.2), 0.8)
         let configuredDamping = min(max(appConfig.chatSendAnimationSpringDamping, 0.4), 1)
         let damping = 0.76 + (configuredDamping - 0.4) / 0.6 * 0.18
+        let colors = ChatOutgoingBubbleColors(profile: ChatAppearanceProfileManager.shared.activeProfile)
+        let backgrounds = Dictionary(uniqueKeysWithValues: captures.compactMap { capture in
+            ChatSendFlightBackground.resolved(
+                for: capture.source, colors: colors,
+                enableBackground: viewModel.enableBackground,
+                enableLiquidGlass: isLiquidGlassEnabled
+            ).map { (capture.source, $0) }
+        })
         var transaction = Transaction()
         transaction.disablesAnimations = true
-        withTransaction(transaction) {
+        // 同步清空草稿与附件也属于这次发送，避免紧接着以默认事务再提交一轮页面更新。
+        return withTransaction(transaction) {
             flightHandoffProgress = 0
             flightState = SendFlightState(
                 id: id,
                 sessionID: viewModel.currentSession?.id
             )
-        }
-
-        sendFlightController.begin(
-            id: id,
-            captures: captures,
-            response: response,
-            damping: damping,
-            colors: ChatFlightBubbleStyle.colors(colorScheme: colorScheme, enableBackground: viewModel.enableBackground),
-            onMessagesPrepared: { presentation in
-                guard var state = flightState, state.id == id,
-                      state.sessionID == presentation.sessionID,
-                      viewModel.currentSession?.id == presentation.sessionID else { return }
-                let captured = sendFlightController.capturedSources
-                state.sourcesByMessageID = Dictionary(uniqueKeysWithValues:
-                    presentation.messageIDsBySource.compactMap { source, messageID in
-                        captured.contains(source) ? (messageID, source) : nil
-                    }
-                )
-                state.responseGroupID = presentation.responseGroupID
-                flightState = state
-            },
-            onSourcesRetired: { sources in
-                guard var state = flightState, state.id == id else { return }
-                state.sourcesByMessageID = state.sourcesByMessageID.filter { !sources.contains($0.value) }
-                flightState = state
-            },
-            onHandoff: {
-                guard flightState?.id == id else { return }
-                withAnimation(.easeOut(duration: 0.12)) {
-                    flightHandoffProgress = 1
-                }
-            },
-            onCompletion: {
-                guard flightState?.id == id else { return }
-                cancelSendFlight()
+            // 先完成同步草稿捕获；Core 任务要等当前 MainActor 调用返回后才可能交回身份。
+            // 原生浮层从清空工作结束后开始计时，避免尚未展示就耗尽等待预算。
+            let consumedDraft = viewModel.sendMessage(localAgentMode: localAgentMode) { [weak controller = sendFlightController] presentation in
+                controller?.accept(presentation, for: id)
             }
-        )
-        // 消息插入由列表的几何协调处理，避免一次全局动画让旧气泡也重新弹跳。
-        viewModel.sendMessage(localAgentMode: localAgentMode) { [weak controller = sendFlightController] presentation in
-            controller?.accept(presentation, for: id)
+            guard consumedDraft else {
+                cancelSendFlight()
+                return false
+            }
+            sendFlightController.begin(
+                id: id,
+                sessionID: viewModel.currentSession?.id,
+                captures: captures,
+                response: response,
+                damping: damping,
+                backgrounds: backgrounds,
+                departureBounds: departureBounds,
+                onMessagesPrepared: { presentation in
+                    guard var state = flightState, state.id == id,
+                          state.sessionID == presentation.sessionID,
+                          viewModel.currentSession?.id == presentation.sessionID else { return false }
+                    let captured = sendFlightController.capturedSources
+                    state.sourcesByMessageID = Dictionary(uniqueKeysWithValues:
+                        presentation.messageIDsBySource.compactMap { source, messageID in
+                            captured.contains(source) ? (messageID, source) : nil
+                        }
+                    )
+                    state.responseGroupID = presentation.responseGroupID
+                    flightState = state
+                    // 展示事件可能先于此处的 UI 身份绑定，仅在绑定时补确认一次现成索引。
+                    confirmSendFlightDisplayedSources(in: Set(viewModel.displayMessageIDs))
+                    return true
+                },
+                onSourcesRetired: { sources in
+                    guard var state = flightState, state.id == id else { return }
+                    state.sourcesByMessageID = state.sourcesByMessageID.filter { !sources.contains($0.value) }
+                    flightState = state
+                },
+                onHandoff: { completedID, completedSessionID in
+                    guard completedID == id, flightState?.id == id,
+                          flightState?.sessionID == completedSessionID,
+                          viewModel.currentSession?.id == completedSessionID else { return false }
+                    withAnimation(.easeOut(duration: 0.12), completionCriteria: .removed) {
+                        flightHandoffProgress = 1
+                    } completion: {
+                        guard flightState?.id == id,
+                              flightState?.sessionID == completedSessionID,
+                              viewModel.currentSession?.id == completedSessionID else { return }
+                        sendFlightController.completeHandoff(for: id, sessionID: completedSessionID)
+                    }
+                    return true
+                },
+                onCompletion: {
+                    guard flightState?.id == id else { return }
+                    cancelSendFlight()
+                }
+            )
+            return true
         }
     }
 
@@ -128,8 +139,17 @@ extension ChatView {
         sendFlightController.retarget(targets)
     }
 
-    func isSendFlightTarget(_ messageID: UUID) -> Bool {
-        flightState?.sourcesByMessageID[messageID] != nil
+    func confirmSendFlightDisplayedSources(in messageIDs: Set<UUID>) {
+        guard let state = flightState, state.sessionID == viewModel.currentSession?.id else { return }
+        let sources = Set(state.sourcesByMessageID.compactMap { messageID, source in
+            messageIDs.contains(messageID) ? source : nil
+        })
+        sendFlightController.updateDisplayedSources(sources, for: state.id, sessionID: state.sessionID)
+    }
+
+    func sendFlightTarget(for messageID: UUID) -> ChatSendFlightTarget? {
+        guard let state = flightState, let source = state.sourcesByMessageID[messageID] else { return nil }
+        return ChatSendFlightTarget(flightID: state.id, source: source)
     }
 
     func sendFlightMessageOpacity(for message: ChatMessage) -> Double {

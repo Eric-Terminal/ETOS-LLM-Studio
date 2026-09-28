@@ -18,8 +18,9 @@ extension TelegramMessageComposer {
         cardComposerContent
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .fixedSize(horizontal: false, vertical: true)
+            .fixedSize(horizontal: false, vertical: !hasUpperComposerContent)
             .frame(maxWidth: .infinity, alignment: .bottom)
+            .background(ChatSendFlightLayoutAnchor(controller: sendFlightController, region: .composerContent))
             .animation(adaptiveComposerAnimation, value: adaptivePresentation)
     }
 

@@ -199,7 +199,8 @@ extension ChatView {
                                 let showsStreamingIndicators = viewModel.isActivelyStreaming(message)
                                 // 贴底流式气泡只跟随真实滚动偏移，避免相位弹簧与吸底校正互相拉扯。
                                 let isBottomPinnedStreamingBubble = showsStreamingIndicators && scrollCoordinator.shouldKeepBottomPinned
-                                let reportsSendFlightTarget = isSendFlightTarget(message.id)
+                                let sendFlightTarget = self.sendFlightTarget(for: message.id)
+                                let reportsSendFlightTarget = sendFlightTarget != nil
                                 let sendFlightOpacity = sendFlightMessageOpacity(for: message)
                                 let preparedMarkdownPayload = viewModel.preparedMarkdownByMessageID[message.id]
                                 let preparedReasoningMarkdownPayload = viewModel.preparedReasoningMarkdownByMessageID[message.id]
@@ -345,7 +346,8 @@ extension ChatView {
                                     onOpenConversation: { sessionID in
                                         _ = viewModel.setCurrentSessionIfExists(sessionID: sessionID)
                                     },
-                                    reportsSendFlightTarget: reportsSendFlightTarget,
+                                    sendFlightTarget: sendFlightTarget,
+                                    sendFlightContentOpacity: reportsSendFlightTarget ? sendFlightOpacity : 1,
                                     reportsLayoutIntegrityFrame: scrollCoordinator.chatLayoutIntegrityMonitor
                                         .isContentFrameProbeActive,
                                     layoutRecoveryRevision: scrollCoordinator.chatLayoutIntegrityMonitor.recoveryRevision(
@@ -378,8 +380,8 @@ extension ChatView {
                                         removal: .opacity
                                     )
                                 )
-                                // 用户气泡落位前压住同轮回复，维持“发送完成后才得到响应”的视觉因果。
-                                .opacity(sendFlightOpacity)
+                                // 精确来源在气泡内部仅隐藏实际内容，保持共同 carrier 可见；同轮回复仍整行显隐。
+                                .opacity(reportsSendFlightTarget ? 1 : sendFlightOpacity)
                                 .allowsHitTesting(sendFlightOpacity > 0)
                                 .accessibilityHidden(sendFlightOpacity == 0)
                                 .id(ChatScrollTargetID.message(state.id))
@@ -393,7 +395,6 @@ extension ChatView {
                                 ) { [scrollAnimEnabled = appConfig.chatScrollAnimationEnabled && !accessibilityReduceMotion,
                                      scrollAnimOffset = appConfig.chatScrollAnimationOffset,
                                      layoutSettling = scrollCoordinator.isChatLayoutSettling,
-                                     streamingFollowActive = scrollCoordinator.isStreamingViewportFollowing,
                                      keepsBottomPinned = scrollCoordinator.shouldKeepBottomPinned,
                                      scrollUserInteracting = scrollCoordinator.isChatScrollUserInteracting,
                                      timelineNavigationActive = appConfig.chatTimelineNavigationEnabled
@@ -414,8 +415,8 @@ extension ChatView {
                                                         isUserInteracting: scrollUserInteracting
                                                     ),
                                                 isTimelineNavigationActive: timelineNavigationActive,
-                                                isAutomaticViewportMotionActive: streamingFollowActive
-                                                    && keepsBottomPinned && !scrollUserInteracting,
+                                                keepsBottomPinned: keepsBottomPinned,
+                                                isUserInteracting: scrollUserInteracting,
                                                 isSendFlightTarget: reportsSendFlightTarget
                                             )
                                         )
@@ -446,6 +447,7 @@ extension ChatView {
                     .frame(width: chatViewportWidth, alignment: .top)
                 }
                 .frame(width: chatViewportWidth)
+                .background(ChatSendFlightLayoutAnchor(controller: sendFlightController, region: .viewport))
                 .coordinateSpace(.named(ChatMessageLayoutAudit.coordinateSpaceName))
                 .onPreferenceChange(ChatHistoryAnchorFramePreferenceKey.self) { frames in
                     let controller = scrollCoordinator.chatHistoryViewportAnchorController
@@ -651,7 +653,9 @@ extension ChatView {
                             .padding(.bottom, 6)
                         }
 
-                        telegramInputBar
+                        telegramInputBar(
+                            availableHeight: max(0, chatViewportSize.height - navBarHeight - 8)
+                        )
                         RoleplayScriptButtonBar(sessionID: viewModel.currentSession?.id)
                     }
                         .animation(
@@ -661,6 +665,7 @@ extension ChatView {
                             value: appConfig.localLinuxChatPreviewPlacement
                         )
                         .frame(width: chatViewportWidth)
+                        .background(ChatSendFlightLayoutAnchor(controller: sendFlightController, region: .composer))
                         .background(
                             GeometryReader { proxy in
                                 Color.clear.preference(
@@ -779,6 +784,7 @@ extension ChatView {
             }
             .coordinateSpace(.named(ChatView.flightCoordinateSpace))
             .environment(\.chatSendFlightSources, sendFlightSources)
+            .environment(\.chatSendFlightController, sendFlightController)
             .onChange(of: scenePhase) { _, phase in
                 if phase != .active { cancelSendFlight() }
             }

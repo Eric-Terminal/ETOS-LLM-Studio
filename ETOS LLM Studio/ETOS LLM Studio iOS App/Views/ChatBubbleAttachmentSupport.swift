@@ -46,7 +46,11 @@ extension ChatBubble {
                         namespace: imagePreviewNamespace,
                         cornerRadius: 16
                     ))
-                    .background(sendFlightTargetReporter)
+                    .modifier(ChatSendFlightContentModifier(
+                        layoutIdentity: bubbleContentLayoutIdentity,
+                        opacity: sendFlightContentOpacity,
+                        target: sendFlightTarget
+                    ))
                 }
             }
             .frame(maxWidth: attachmentMaxWidth, alignment: isOutgoing ? .trailing : .leading)
@@ -83,8 +87,11 @@ extension ChatBubble {
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(fileAttachmentBackgroundColor)
+                            ChatBubbleBackground(
+                                shape: RoundedRectangle(cornerRadius: 12),
+                                fill: AnyShapeStyle(fileAttachmentBackgroundColor),
+                                enableLiquidGlass: false
+                            )
                         )
                     } else {
                         Button {
@@ -107,8 +114,11 @@ extension ChatBubble {
                             .padding(.vertical, 8)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(fileAttachmentBackgroundColor)
+                                ChatBubbleBackground(
+                                    shape: RoundedRectangle(cornerRadius: 12),
+                                    fill: AnyShapeStyle(fileAttachmentBackgroundColor),
+                                    enableLiquidGlass: false
+                                )
                             )
                         }
                         .buttonStyle(.plain)
@@ -117,7 +127,11 @@ extension ChatBubble {
                 }
             }
             .frame(maxWidth: attachmentMaxWidth, alignment: isOutgoing ? .trailing : .leading)
-            .background(sendFlightTargetReporter)
+            .modifier(ChatSendFlightContentModifier(
+                layoutIdentity: bubbleContentLayoutIdentity,
+                opacity: sendFlightContentOpacity,
+                target: sendFlightTarget
+            ))
 
             if !isOutgoing {
                 Spacer(minLength: 0)

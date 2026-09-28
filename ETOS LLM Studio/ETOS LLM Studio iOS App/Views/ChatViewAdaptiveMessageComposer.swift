@@ -321,7 +321,7 @@ extension TelegramMessageComposer {
             }
             .frame(height: adaptiveControlSize, alignment: .top)
         }
-        .frame(minHeight: targetHeight, maxHeight: targetHeight)
+        .frame(minHeight: adaptiveControlSize, idealHeight: targetHeight, maxHeight: targetHeight)
         .animation(adaptiveComposerAnimation, value: adaptiveShowsRequestControlsButton)
         .animation(adaptiveComposerAnimation, value: viewModel.enableSpeechInput)
     }
@@ -753,11 +753,14 @@ extension TelegramMessageComposer {
 
     private func adaptiveSubmitContent() {
         guard adaptiveRecognizedSlashCommand != nil || viewModel.canSendMessage else { return }
-        adaptiveCloseRequestControls()
         if let command = adaptiveRecognizedSlashCommand {
+            adaptiveCloseRequestControls()
             performSelectedSlashCommand(command)
-        } else {
-            sendAction()
+        } else if sendAction() {
+            adaptiveCloseRequestControls()
+            // 捕获已消费草稿，在同一发送事件交接输入状态，不等后续 onChange 再收起空框。
+            isExpandedComposer = false
+            adaptiveHasSendableText = false
         }
     }
 

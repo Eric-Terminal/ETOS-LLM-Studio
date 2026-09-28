@@ -12,27 +12,12 @@ import UIKit
 import ETOSCore
 
 extension ChatBubble {
-    var telegramBlue: Color {
-        Color(red: 0.24, green: 0.56, blue: 0.95)
-    }
-
-    var telegramBlueDark: Color {
-        Color(red: 0.17, green: 0.45, blue: 0.82)
-    }
-
     var activeAppearanceProfile: ChatAppearanceProfile {
         appearanceProfileManager.activeProfile
     }
 
-    var resolvedUserBubbleStartColor: Color {
-        let slot = activeAppearanceProfile.userBubble
-        guard slot.isEnabled else { return telegramBlue }
-        return ChatAppearanceColorCodec.color(from: slot.hex, fallback: telegramBlue)
-    }
-
     var resolvedUserBubbleEndColor: Color {
-        guard activeAppearanceProfile.userBubble.isEnabled else { return telegramBlueDark }
-        return ChatAppearanceColorCodec.darkened(resolvedUserBubbleStartColor, factor: 0.86)
+        ChatOutgoingBubbleColors(profile: activeAppearanceProfile).end
     }
 
     var resolvedAssistantBubbleColor: Color? {
@@ -386,7 +371,6 @@ extension ChatBubble {
         if usesNoBubbleStyle {
             return AnyShapeStyle(Color.clear)
         }
-        let userOpacity = enableBackground ? 0.85 : 1.0
         let assistantOpacity = enableBackground ? 0.75 : 1.0
         let errorOpacity = enableBackground ? 0.8 : 1.0
 
@@ -402,14 +386,8 @@ extension ChatBubble {
 
         if isOutgoing {
             return AnyShapeStyle(
-                LinearGradient(
-                    colors: [
-                        resolvedUserBubbleStartColor.opacity(userOpacity),
-                        resolvedUserBubbleEndColor.opacity(userOpacity)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                ChatOutgoingBubbleColors(profile: activeAppearanceProfile)
+                    .gradient(enableBackground: enableBackground)
             )
         }
 
@@ -561,17 +539,12 @@ extension ChatBubble {
     func bubbleBackground(for shape: BubbleCornerShape) -> some View {
         if usesNoBubbleStyle {
             shape.fill(Color.clear)
-        } else if enableLiquidGlass {
-            if #available(iOS 26.0, *) {
-                shape
-                    .fill(bubbleGradient)
-                    .glassEffect(.clear, in: shape)
-                    .clipShape(shape)
-            } else {
-                shape.fill(bubbleGradient)
-            }
         } else {
-            shape.fill(bubbleGradient)
+            ChatBubbleBackground(
+                shape: shape,
+                fill: AnyShapeStyle(bubbleGradient),
+                enableLiquidGlass: enableLiquidGlass
+            )
         }
     }
 

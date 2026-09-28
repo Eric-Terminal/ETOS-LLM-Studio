@@ -35,7 +35,7 @@ extension ChatView {
 
     /// Telegram 风格输入栏
     @ViewBuilder
-    var telegramInputBar: some View {
+    func telegramInputBar(availableHeight: CGFloat) -> some View {
         if let request = viewModel.activeAskUserInputRequest {
             AskUserInputComposerPanel(
                 request: request,
@@ -55,6 +55,7 @@ extension ChatView {
         } else {
             TelegramMessageComposer(
                 submissionState: viewModel.sendSubmissionState,
+                sendFlightController: sendFlightController,
                 text: Binding(
                     get: { draftText },
                     set: { newValue in
@@ -71,28 +72,28 @@ extension ChatView {
                     }
                 ),
                 sendAction: {
-                    guard viewModel.canSendMessage else { return }
+                    guard viewModel.canSendMessage else { return false }
                     scrollCoordinator.shouldKeepBottomPinned = true
                     scrollCoordinator.showScrollToBottom = false
                     let outgoingText = draftText
                     if AppConfigStore.shared.chatSendAnimationEnabled,
                        AppConfigStore.shared.chatSendDelaySeconds <= 0 {
                         // 启动「输入框 → 气泡」Overlay 飞行（内部已调用 viewModel.sendMessage()）
-                        beginSendFlight(
+                        return beginSendFlight(
                             text: outgoingText,
                             localAgentMode: currentLocalAgentMode
                         )
                     } else {
-                        viewModel.sendMessage(localAgentMode: currentLocalAgentMode)
+                        return viewModel.sendMessage(localAgentMode: currentLocalAgentMode)
                     }
-                    draftText = ""
                 },
                 stopAction: {
                     cancelSendFlight()
                     viewModel.cancelSending()
                 },
                 slashCommandAction: performSlashCommand,
-                focus: $composerFocused
+                focus: $composerFocused,
+                availableHeight: availableHeight
             )
             .padding(.bottom, -tabBarCompensation)
         }

@@ -86,15 +86,17 @@ extension ChatView {
         isBottomPinnedStreamingBubble: Bool = false,
         isViewportTransitioning: Bool = false,
         isTimelineNavigationActive: Bool = false,
-        isAutomaticViewportMotionActive: Bool = false,
+        keepsBottomPinned: Bool = false,
+        isUserInteracting: Bool = false,
         isSendFlightTarget: Bool = false
     ) -> CGFloat {
+        // 静止贴底也由视口掌管位置，发送收尾不能重新引入尚未归零的波浪相位。
         guard isEnabled,
               !isConnectedToAdjacentBubble,
               !isBottomPinnedStreamingBubble,
               !isViewportTransitioning,
               !isTimelineNavigationActive,
-              !isAutomaticViewportMotionActive,
+              (!keepsBottomPinned || isUserInteracting),
               !isSendFlightTarget else {
             return 0
         }
@@ -278,6 +280,7 @@ extension ChatView {
 
     func handleDisplayedMessageIdentityChange() {
         let visibleMessageIDs = Set(viewModel.displayMessages.map(\.id))
+        confirmSendFlightDisplayedSources(in: visibleMessageIDs)
         if let activeTarget = scrollCoordinator.chatScrollPositionController.activeCommandTarget,
            !Self.isChatScrollTargetAvailable(activeTarget, visibleMessageIDs: visibleMessageIDs) {
             cancelPendingScrollTargetCommand()

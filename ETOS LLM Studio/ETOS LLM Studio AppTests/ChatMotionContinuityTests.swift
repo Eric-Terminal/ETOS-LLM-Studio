@@ -136,7 +136,7 @@ struct ChatMotionContinuityTests {
             configuredOffset: 20,
             isEnabled: true,
             isConnectedToAdjacentBubble: false,
-            isAutomaticViewportMotionActive: true
+            keepsBottomPinned: true
         ) == 0)
         #expect(ChatView.chatScrollTransitionOffset(
             phaseValue: 0.5,
@@ -157,5 +157,28 @@ struct ChatMotionContinuityTests {
             isEnabled: true,
             isConnectedToAdjacentBubble: false
         ) == 10)
+    }
+
+    @Test("静止贴底的发送收尾不重新引入相位偏移，手拖与离底减速仍有波浪", arguments: [-0.75, 0.75])
+    func completedFlightDoesNotRestartBottomPinnedWave(phase: Double) {
+        for isFlightTarget in [true, false] {
+            #expect(ChatView.chatScrollTransitionOffset(
+                phaseValue: CGFloat(phase), configuredOffset: 20, isEnabled: true,
+                isConnectedToAdjacentBubble: false,
+                keepsBottomPinned: true, isUserInteracting: false,
+                isSendFlightTarget: isFlightTarget
+            ) == 0)
+        }
+        // 拖动开始的同一帧，贴底意图可能尚未撤销；手势已接管时仍保留原有反馈。
+        #expect(ChatView.chatScrollTransitionOffset(
+            phaseValue: CGFloat(phase), configuredOffset: 20, isEnabled: true,
+            isConnectedToAdjacentBubble: false,
+            keepsBottomPinned: true, isUserInteracting: true
+        ) == CGFloat(phase * 20))
+        #expect(ChatView.chatScrollTransitionOffset(
+            phaseValue: CGFloat(phase), configuredOffset: 20, isEnabled: true,
+            isConnectedToAdjacentBubble: false,
+            keepsBottomPinned: false, isUserInteracting: false
+        ) == CGFloat(phase * 20))
     }
 }
