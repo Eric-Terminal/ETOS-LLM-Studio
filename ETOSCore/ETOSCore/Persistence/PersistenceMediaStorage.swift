@@ -10,6 +10,7 @@ import Foundation
 import os.log
 
 private let mediaStorageLogger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "PersistenceMediaStorage")
+private let fileDeduplicationLock = NSLock()
 
 extension Persistence {
     /// 获取用于存储音频文件的目录URL
@@ -236,6 +237,9 @@ extension Persistence {
     /// 保存文件附件；若同名文件内容完全一致，则复用现有实体文件并返回原文件名。
     /// 同名但内容不同的文件仍会另存为带短后缀的新文件，避免覆盖已有附件。
     public static func saveFileDeduplicatingByName(_ data: Data, preferredFileName: String) -> String? {
+        // 不同会话可以同时准备附件；检查与写入必须不可分割，避免两份正文占用同一文件名。
+        fileDeduplicationLock.lock()
+        defer { fileDeduplicationLock.unlock() }
         let fileDirectory = getFileDirectory()
         let fallbackName = preferredFileName.isEmpty ? "file-\(UUID().uuidString)" : preferredFileName
         let baseFileName = (fallbackName as NSString).lastPathComponent
