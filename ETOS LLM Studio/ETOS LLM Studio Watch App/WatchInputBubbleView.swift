@@ -13,6 +13,7 @@ import ETOSCore
 struct WatchInputBubbleView: View {
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @ObservedObject var viewModel: ChatViewModel
+    @ObservedObject var submissionState: ChatSendSubmissionState
     @ObservedObject private var composerDraftState = AppConfigStore.shared.composerDraftState
     @ObservedObject private var resourceUsageMonitor = LocalResourceUsageMonitor.shared
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
@@ -155,7 +156,7 @@ struct WatchInputBubbleView: View {
         let inputActionState = WatchChatInputActionState.resolve(
             isSending: viewModel.isSendingMessage
                 || viewModel.isSendDelayPending
-                || viewModel.isSendSubmissionPending,
+                || submissionState.isPending(for: viewModel.currentSession?.id),
             hasSendableContent: canSend,
             canQuickRetry: viewModel.canQuickRetryLatestMessage,
             isSpeechInputEnabled: viewModel.enableSpeechInput
@@ -191,7 +192,7 @@ struct WatchInputBubbleView: View {
                             .disabled(
                                 inputActionState.isDisabled
                                     || viewModel.attachmentImportInProgress
-                                    || viewModel.isSendSubmissionPending
+                                    || submissionState.isPending(for: viewModel.currentSession?.id)
                             )
                         } else {
                             ZStack {
@@ -219,7 +220,7 @@ struct WatchInputBubbleView: View {
                             .disabled(
                                 inputActionState.isDisabled
                                     || viewModel.attachmentImportInProgress
-                                    || viewModel.isSendSubmissionPending
+                                    || submissionState.isPending(for: viewModel.currentSession?.id)
                             )
                         }
                     }
@@ -254,7 +255,7 @@ struct WatchInputBubbleView: View {
                         .disabled(
                             inputActionState.isDisabled
                                 || viewModel.attachmentImportInProgress
-                                || viewModel.isSendSubmissionPending
+                                || submissionState.isPending(for: viewModel.currentSession?.id)
                         )
                     }
                     .frame(height: inputControlHeight)

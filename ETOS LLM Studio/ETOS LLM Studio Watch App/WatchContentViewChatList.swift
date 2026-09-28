@@ -233,6 +233,7 @@ extension ContentView {
             if viewModel.activeAskUserInputRequest == nil {
                 WatchInputBubbleView(
                     viewModel: viewModel,
+                    submissionState: viewModel.sendSubmissionState,
                     isLiquidGlassEnabled: isLiquidGlassEnabled,
                     inputControlHeight: inputControlHeight,
                     inputFillColor: inputFillColor,

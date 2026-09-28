@@ -22,11 +22,12 @@ struct TelegramMessageComposer: View {
     @ObservedObject var appConfig = AppConfigStore.shared
     @ObservedObject private var composerDraftState = AppConfigStore.shared.composerDraftState
     @ObservedObject private var customSlashCommandStore = CustomChatSlashCommandStore.shared
+    @ObservedObject var submissionState: ChatSendSubmissionState
     @Binding var text: String
     @Binding var isRequestControlsExpanded: Bool
     @Binding var localAgentMode: LocalAgentMode
-    let isSending: Bool
-    let isSendActionPending: Bool
+    var isSendActionPending: Bool { submissionState.isPending(for: viewModel.currentSession?.id) }
+    var isSending: Bool { viewModel.isSendingMessage || viewModel.isSendDelayPending || isSendActionPending }
     let sendAction: () -> Void
     let stopAction: () -> Void
     let slashCommandAction: (ChatSlashCommand) -> Void

@@ -54,6 +54,7 @@ extension ChatView {
             .padding(.bottom, 6 - tabBarCompensation)
         } else {
             TelegramMessageComposer(
+                submissionState: viewModel.sendSubmissionState,
                 text: Binding(
                     get: { draftText },
                     set: { newValue in
@@ -69,10 +70,6 @@ extension ChatView {
                         currentLocalAgentMode = mode
                     }
                 ),
-                isSending: viewModel.isSendingMessage
-                    || viewModel.isSendDelayPending
-                    || viewModel.isSendSubmissionPending,
-                isSendActionPending: viewModel.isSendSubmissionPending,
                 sendAction: {
                     guard viewModel.canSendMessage else { return }
                     scrollCoordinator.shouldKeepBottomPinned = true

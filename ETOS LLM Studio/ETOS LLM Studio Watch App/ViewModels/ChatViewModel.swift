@@ -128,7 +128,7 @@ class ChatViewModel: ObservableObject {
     @Published var autoOpenedPendingToolCallIDs: Set<String> = []
     @Published var isSendingMessage: Bool = false
     @Published var isSendDelayPending: Bool = false
-    @Published var pendingSendSubmissionSessionIDs: Set<UUID> = []
+    let sendSubmissionState = ChatSendSubmissionState()
     @Published var speechModels: [RunnableModel] = []
     @Published var selectedSpeechModel: RunnableModel?
     @Published var selectedEmbeddingModel: RunnableModel?
@@ -591,11 +591,20 @@ class ChatViewModel: ObservableObject {
     }
 
     private func sendCapturedMessage(_ payload: PendingChatSendPayload) {
+        let submissionToken: UUID?
         if let sessionID = payload.sessionID,
            !runningSessionIDs.contains(sessionID) {
-            pendingSendSubmissionSessionIDs.insert(sessionID)
+            submissionToken = sendSubmissionState.begin(for: sessionID)
+        } else {
+            submissionToken = nil
         }
-        Task { [weak self] in
+        Task { [weak self, submissionState = sendSubmissionState] in
+            defer {
+                if let sessionID = payload.sessionID, let submissionToken {
+                    submissionState.finish(for: sessionID, token: submissionToken)
+                }
+                self?.flushPendingToolSupplementMessagesIfPossible()
+            }
             guard let self else { return }
             await chatService.sendAndProcessMessage(
                 content: payload.content,
@@ -618,10 +627,6 @@ class ChatViewModel: ObservableObject {
                 fileAttachments: payload.fileAttachments,
                 targetSessionID: payload.sessionID
             )
-            if let sessionID = payload.sessionID {
-                pendingSendSubmissionSessionIDs.remove(sessionID)
-            }
-            flushPendingToolSupplementMessagesIfPossible()
         }
     }
 
@@ -808,8 +813,7 @@ class ChatViewModel: ObservableObject {
     }
 
     var isSendSubmissionPending: Bool {
-        guard let currentSessionID = currentSession?.id else { return false }
-        return pendingSendSubmissionSessionIDs.contains(currentSessionID)
+        sendSubmissionState.isPending(for: currentSession?.id)
     }
 
     func quickRetryLatestMessage() {
