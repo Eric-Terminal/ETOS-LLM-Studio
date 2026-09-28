@@ -684,13 +684,6 @@ final class ChatViewModel: ObservableObject {
         pendingFileAttachments = []
     }
     
-    /// 添加图片附件
-    func addImageAttachment(_ image: UIImage) {
-        if let attachment = ImageAttachment.from(image: image) {
-            pendingImageAttachments.append(attachment)
-        }
-    }
-
     /// 添加文件附件
     func addFileAttachment(_ attachment: FileAttachment) {
         pendingFileAttachments.append(attachment)

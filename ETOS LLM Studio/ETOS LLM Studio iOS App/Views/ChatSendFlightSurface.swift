@@ -169,7 +169,12 @@ final class ChatSendFlightController {
             view.clipsToBounds = true
             if case .image = capture.source { isImage = true } else { isImage = false }
             targetCornerRadius = background?.cornerRadius ?? 18
-            view.layer.cornerRadius = isImage ? 10 : 0
+            // 来源被横向滚动裁掉时，视口切边应保持直线；圆角属于完整图片而不是可见交集。
+            if isImage {
+                content.layer.cornerRadius = 10
+                content.layer.cornerCurve = .continuous
+                content.clipsToBounds = true
+            }
             if !isImage, let background {
                 let host = ChatSendFlightBackgroundHost(background: background, environment: environment)
                 view.addSubview(host.view)
@@ -250,7 +255,11 @@ final class ChatSendFlightController {
         private func updateView(frame: CGRect, material: CGFloat) {
             view.bounds.size = frame.size
             view.center = CGPoint(x: frame.midX, y: frame.midY)
-            view.layer.cornerRadius = isImage ? 10 + 6 * material : targetCornerRadius * material
+            if isImage {
+                content.layer.cornerRadius = 10 + 6 * material
+            } else {
+                view.layer.cornerRadius = targetCornerRadius * material
+            }
             backgroundHost?.update(frame: view.bounds, progress: material)
             let reveal = material
             let sourceSize = sourceContentFrame.size

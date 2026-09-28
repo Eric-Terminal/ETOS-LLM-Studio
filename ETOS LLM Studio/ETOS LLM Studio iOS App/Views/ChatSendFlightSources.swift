@@ -28,9 +28,21 @@ final class ChatSendFlightSources {
             let frame = anchor.convert(anchor.bounds, to: surface)
             let visible = visibleFrame(of: anchor, in: surface)
             guard !visible.isNull, visible.width > 1, visible.height > 1 else { return nil }
-            // 直接接走已显示的独立内容子树，保留异步准备后的字体和当前环境。
-            // 完整图像与初始裁切分开保存，半露出的缩略图不会被当成整图放大。
-            guard let snapshot = anchor.snapshotView(afterScreenUpdates: false) else { return nil }
+            let snapshot: UIView
+            if case .image = id {
+                // 图片必须保留完整原比例位图；屏幕快照已经裁成方形，无法在落点重新展开。
+                guard let imageView = anchor as? UIImageView, let image = imageView.image else { return nil }
+                let imageSnapshot = UIImageView(image: image)
+                imageSnapshot.contentMode = .scaleAspectFill
+                imageSnapshot.clipsToBounds = true
+                imageSnapshot.layer.cornerRadius = imageView.layer.cornerRadius
+                imageSnapshot.layer.cornerCurve = imageView.layer.cornerCurve
+                snapshot = imageSnapshot
+            } else {
+                // 标签接走已显示的独立内容子树，保留异步准备后的字体和当前环境。
+                guard let contentSnapshot = anchor.snapshotView(afterScreenUpdates: false) else { return nil }
+                snapshot = contentSnapshot
+            }
             return ChatSendFlightCapture(
                 source: id, content: snapshot, frame: visible,
                 sourceContentFrame: frame.offsetBy(dx: -visible.minX, dy: -visible.minY)

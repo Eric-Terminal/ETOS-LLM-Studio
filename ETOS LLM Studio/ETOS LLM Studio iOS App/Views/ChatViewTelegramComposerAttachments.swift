@@ -22,24 +22,7 @@ extension TelegramMessageComposer {
                     LazyHStack(spacing: 8) {
                         ForEach(viewModel.pendingImageAttachments) { attachment in
                             ZStack(alignment: .topTrailing) {
-                                if let thumbnail = attachment.thumbnailImage {
-                                    ChatSendContentSource(id: .image(attachment.id)) {
-                                        Image(uiImage: thumbnail)
-                                            .resizable()
-                                            .aspectRatio(contentMode: .fill)
-                                            .frame(width: 72, height: 72)
-                                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                    }
-                                    .frame(width: 72, height: 72)
-                                } else {
-                                    ZStack {
-                                        Color(uiColor: .secondarySystemBackground)
-                                        Image(systemName: "photo")
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .frame(width: 72, height: 72)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                }
+                                ChatPendingImagePreview(attachment: attachment)
 
                                 Button {
                                     viewModel.removePendingImageAttachment(attachment)

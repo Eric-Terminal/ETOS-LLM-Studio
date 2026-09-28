@@ -43,6 +43,8 @@ struct TelegramMessageComposer: View {
     @State private var showAudioImporter = false
     @State private var showFileImporter = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
+    @State private var photoImportTask: Task<Void, Never>?
+    @State private var cameraImagePreparationTask: Task<Void, Never>?
     @State var isExpandedComposer = false
     @State var adaptiveRequestControls: [ModelRequestBodyControl] = []
     @State var adaptiveHasSendableText = false
@@ -135,8 +137,19 @@ struct TelegramMessageComposer: View {
             matching: .any(of: [.images, .videos])
         )
         .onChange(of: selectedPhotos) { _, newItems in
-            Task {
+            photoImportTask?.cancel()
+            guard !newItems.isEmpty else {
+                photoImportTask = nil
+                return
+            }
+            let sessionID = viewModel.currentSession?.id
+            photoImportTask = Task {
+                defer {
+                    // A→B→A 的旧 A 即使值相同，也不能清掉新选择。
+                    if !Task.isCancelled, selectedPhotos == newItems { selectedPhotos = [] }
+                }
                 for item in newItems {
+                    guard !Task.isCancelled, viewModel.currentSession?.id == sessionID else { return }
                     let videoType = item.supportedContentTypes.first { $0.conforms(to: .movie) }
                     if let videoType {
                         guard let video = try? await item.loadTransferable(
@@ -147,21 +160,16 @@ struct TelegramMessageComposer: View {
                         let fileExtension = video.fileExtension
                         let mimeType = videoType.preferredMIMEType ?? video.mimeType
                         let fileName = "video_\(UUID().uuidString).\(fileExtension)"
-                        await MainActor.run {
-                            viewModel.addFileAttachment(FileAttachment(
-                                data: video.data,
-                                mimeType: mimeType,
-                                fileName: fileName
-                            ))
-                        }
-                    } else if let data = try? await item.loadTransferable(type: Data.self),
-                              let image = UIImage(data: data) {
-                        await MainActor.run {
-                            viewModel.addImageAttachment(image)
-                        }
+                        guard !Task.isCancelled, viewModel.currentSession?.id == sessionID else { return }
+                        viewModel.addFileAttachment(FileAttachment(
+                            data: video.data,
+                            mimeType: mimeType,
+                            fileName: fileName
+                        ))
+                    } else if let data = try? await item.loadTransferable(type: Data.self) {
+                        await viewModel.addImageAttachment(data: data, forSessionID: sessionID)
                     }
                 }
-                selectedPhotos = []
             }
         }
         .onChange(of: text) { _, newValue in
@@ -205,6 +213,10 @@ struct TelegramMessageComposer: View {
             Text(inlineSpeechErrorMessage ?? NSLocalizedString("发生未知错误，请稍后重试。", comment: ""))
         }
         .onDisappear {
+            photoImportTask?.cancel()
+            photoImportTask = nil
+            cameraImagePreparationTask?.cancel()
+            cameraImagePreparationTask = nil
             isRequestControlsExpanded = false
             inlineSpeechFinalizeTask?.cancel()
             inlineSpeechFinalizeTask = nil
@@ -221,8 +233,14 @@ struct TelegramMessageComposer: View {
                     .ignoresSafeArea()
 
                 CameraImagePicker(isPresented: $showCamera) { image in
+                    cameraImagePreparationTask?.cancel()
                     if let image {
-                        viewModel.addImageAttachment(image)
+                        let sessionID = viewModel.currentSession?.id
+                        cameraImagePreparationTask = Task {
+                            await viewModel.addImageAttachment(image, forSessionID: sessionID)
+                        }
+                    } else {
+                        cameraImagePreparationTask = nil
                     }
                 }
                 .ignoresSafeArea()

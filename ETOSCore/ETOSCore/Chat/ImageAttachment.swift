@@ -35,27 +35,16 @@ public struct ImageAttachment: Identifiable, Sendable {
     }
     
 #if canImport(UIKit) && !os(watchOS)
-    /// 从 UIImage 创建附件 (仅 iOS)
+    /// 从 UIImage 创建附件 (仅 iOS)。编码由调用方放到后台，显示位图交由 DisplayImageLoader 准备。
     public static func from(image: UIImage, compressionQuality: CGFloat = 0.8) -> ImageAttachment? {
         guard let data = image.jpegData(compressionQuality: compressionQuality) else {
             return nil
         }
         
-        // 生成缩略图
-        let thumbnailSize = CGSize(width: 100, height: 100)
-        let thumbnailData: Data? = {
-            let renderer = UIGraphicsImageRenderer(size: thumbnailSize)
-            let thumbnail = renderer.image { _ in
-                image.draw(in: CGRect(origin: .zero, size: thumbnailSize))
-            }
-            return thumbnail.jpegData(compressionQuality: 0.6)
-        }()
-        
         return ImageAttachment(
             data: data,
             mimeType: "image/jpeg",
-            fileName: "\(UUID().uuidString).jpg",
-            thumbnailData: thumbnailData
+            fileName: "\(UUID().uuidString).jpg"
         )
     }
     

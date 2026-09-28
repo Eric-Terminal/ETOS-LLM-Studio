@@ -222,14 +222,14 @@ struct ChatSendFlightSourceTests {
         #expect(editor.font == originalFont)
     }
 
-    @Test("来源宿主执行真实内容任务并保留完整图片与可见裁切")
+    @Test("来源宿主执行真实内容任务并保留独立标签与可见裁切")
     func hostedSourceKeepsLiveStateAndFullSnapshot() async throws {
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previousWindow = scene.windows.first(where: \.isKeyWindow)
         let window = UIWindow(windowScene: scene)
         window.frame = CGRect(x: 0, y: 0, width: 240, height: 240)
         let sources = ChatSendFlightSources()
-        let sourceID = ChatSendPresentationSource.image(UUID())
+        let sourceID = ChatSendPresentationSource.file(UUID())
         let prepared = PreparationFlag()
         let canvas = ScrollView(.horizontal) {
             ChatSendContentSource(id: sourceID) {
