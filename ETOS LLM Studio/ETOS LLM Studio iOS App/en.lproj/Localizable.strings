@@ -3340,6 +3340,7 @@
 "错误: 提供商“%@”的 API 地址格式无效，无法%@。请检查地址是否包含多余空格或换行。" = "Error: provider \"%@\" has an invalid API address, so it cannot %@. Check for extra spaces or line breaks.";
 "错误：%@数据库文件不存在，请先在应用内加载对应模块完成初始化。" = "Error: the %@ database file does not exist. Load the corresponding module in the app first to finish initialization.";
 "错误：SQL 不能为空。" = "Error: SQL cannot be empty.";
+"SQLite parameters 必须是 JSON 数组。" = "SQLite parameters must be a JSON array.";
 "错误：SQL 需要 %d 个参数，但实际提供了 %d 个。" = "Error: SQL requires %d parameters, but %d were provided.";
 "错误：SQL 首关键字不受支持，仅允许：%@。" = "Error: the first SQL keyword is not supported. Allowed: %@.";
 "错误：UPDATE/DELETE 语句默认必须包含 WHERE；如需全表操作，请显式设置 allow_without_where=true。" = "Error: UPDATE/DELETE statements must include WHERE by default. To operate on the whole table, explicitly set allow_without_where=true.";

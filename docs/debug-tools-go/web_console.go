@@ -643,6 +643,15 @@ func (s *DebugServer) handleAPISQLiteTables(w http.ResponseWriter, r *http.Reque
 	}, 30*time.Second)
 }
 
+func optionalSQLiteParameters(value any) ([]any, bool) {
+	// Go 的 nil 会编码成 JSON null；设备端的无参数请求统一发送空数组。
+	if value == nil {
+		return []any{}, true
+	}
+	parameters, ok := value.([]any)
+	return parameters, ok
+}
+
 func (s *DebugServer) handleAPISQLiteQuery(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"status": "error", "message": "仅支持 POST"})
@@ -659,11 +668,16 @@ func (s *DebugServer) handleAPISQLiteQuery(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "message": "缺少 database 或 sql 参数"})
 		return
 	}
+	parameters, ok := optionalSQLiteParameters(payload["parameters"])
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "error_code": "INVALID_ARGS", "message": "SQLite parameters 必须是 JSON 数组。"})
+		return
+	}
 	s.executeAPICommand(w, map[string]any{
 		"command":    "query_sqlite",
 		"database":   database,
 		"sql":        sql,
-		"parameters": payload["parameters"],
+		"parameters": parameters,
 		"max_rows":   payload["max_rows"],
 	}, 45*time.Second)
 }
@@ -684,11 +698,16 @@ func (s *DebugServer) handleAPISQLiteMutate(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "message": "缺少 database 或 sql 参数"})
 		return
 	}
+	parameters, ok := optionalSQLiteParameters(payload["parameters"])
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "error_code": "INVALID_ARGS", "message": "SQLite parameters 必须是 JSON 数组。"})
+		return
+	}
 	s.executeAPICommand(w, map[string]any{
 		"command":             "mutate_sqlite",
 		"database":            database,
 		"sql":                 sql,
-		"parameters":          payload["parameters"],
+		"parameters":          parameters,
 		"allow_without_where": payload["allow_without_where"],
 		"returning_max_rows":  payload["returning_max_rows"],
 	}, 60*time.Second)

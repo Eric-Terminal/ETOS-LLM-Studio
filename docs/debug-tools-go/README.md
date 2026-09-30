@@ -94,6 +94,8 @@ WebUI 和 TUI 共用同一组服务端能力。常用 SQLite API：
 - `POST /api/sqlite/query`：参数 `database`、`sql`，可选 `parameters`、`max_rows`
 - `POST /api/sqlite/mutate`：参数 `database`、`sql`，可选 `parameters`、`allow_without_where`、`returning_max_rows`
 
+SQLite 查询和写入的 `parameters` 必须是 JSON 数组；省略或传 `null` 均按 `[]` 处理。其他类型返回 HTTP 400 和 `INVALID_ARGS`，不会转发到设备。
+
 写入 SQL 默认只允许 `INSERT/UPDATE/DELETE/REPLACE`，且 `UPDATE/DELETE` 必须带 `WHERE`，除非显式传入 `allow_without_where=true`。
 
 ## 构建二进制

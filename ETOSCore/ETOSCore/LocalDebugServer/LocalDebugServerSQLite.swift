@@ -39,10 +39,11 @@ extension LocalDebugServer {
         }
 
         do {
-            let parameters = try decodeDebugSQLiteParameters(json["parameters"])
+            let rawParameters = json["parameters"]
             let maxRows = AppToolManager.sanitizedSQLiteMaxRows(Self.debugInt(from: json["max_rows"]))
             let payload = try await AppToolManager.runSQLiteOperationOffMainThread {
-                try AppToolManager.querySQLite(
+                let parameters = try Self.decodeDebugSQLiteParameters(rawParameters)
+                return try AppToolManager.querySQLite(
                     in: database,
                     sql: sql,
                     parameters: parameters,
@@ -62,10 +63,11 @@ extension LocalDebugServer {
         }
 
         do {
-            let parameters = try decodeDebugSQLiteParameters(json["parameters"])
+            let rawParameters = json["parameters"]
             let returningMaxRows = AppToolManager.sanitizedSQLiteMaxRows(Self.debugInt(from: json["returning_max_rows"]))
             let payload = try await AppToolManager.runSQLiteOperationOffMainThread {
-                try AppToolManager.mutateSQLite(
+                let parameters = try Self.decodeDebugSQLiteParameters(rawParameters)
+                return try AppToolManager.mutateSQLite(
                     in: database,
                     sql: sql,
                     parameters: parameters,
@@ -84,10 +86,21 @@ extension LocalDebugServer {
         return AppToolManager.parseSQLiteDatabase(rawValue: rawValue)
     }
 
-    private func decodeDebugSQLiteParameters(_ rawValue: Any?) throws -> [JSONValue] {
-        guard let rawValue else { return [] }
-        let data = try JSONSerialization.data(withJSONObject: rawValue)
-        return try makeWebConsoleJSONDecoder().decode([JSONValue].self, from: data)
+    nonisolated static func decodeDebugSQLiteParameters(_ rawValue: Any?) throws -> [JSONValue] {
+        // HTTP 转发可能把省略的可选参数编码为 null，两种情况都表示没有绑定参数。
+        guard let rawValue, !(rawValue is NSNull) else { return [] }
+        // 顶层标量会触发 Swift do/catch 无法捕获的 Objective-C 异常，必须先校验类型。
+        guard let parameters = rawValue as? [Any] else {
+            throw AppToolExecutionError.invalidArguments(
+                NSLocalizedString(
+                    "SQLite parameters 必须是 JSON 数组。",
+                    value: "SQLite parameters must be a JSON array.",
+                    comment: "SQLite 调试命令参数类型错误"
+                )
+            )
+        }
+        let data = try JSONSerialization.data(withJSONObject: parameters)
+        return try JSONDecoder().decode([JSONValue].self, from: data)
     }
 
     private func debugSQLiteOK(_ payload: [String: Any]) -> [String: Any] {
