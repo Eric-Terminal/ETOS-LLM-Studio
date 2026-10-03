@@ -1,18 +1,28 @@
 import Foundation
 
 public struct ChatRequestRetryStatus: Hashable, Sendable {
+    public enum Kind: Hashable, Sendable {
+        case automatic
+        case apiKey
+    }
+
+    public let kind: Kind
     public let attempt: Int
     public let maximumAttempts: Int
     /// 仅退避等待期间有值，请求发出后不再显示倒计时。
     public let remainingSeconds: Int?
 
-    init(attempt: Int, maximumAttempts: Int, remainingSeconds: Int? = nil) {
+    init(attempt: Int, maximumAttempts: Int, remainingSeconds: Int? = nil, kind: Kind = .automatic) {
+        self.kind = kind
         self.attempt = attempt
         self.maximumAttempts = maximumAttempts
         self.remainingSeconds = remainingSeconds
     }
 
     public var thinkingText: String {
+        if kind == .apiKey {
+            return String(format: NSLocalizedString("正在思考·切换 Key(%d/%d)", comment: ""), attempt, maximumAttempts)
+        }
         if let remainingSeconds {
             return String(
                 format: NSLocalizedString("正在思考·重试(%d/%d)·%ds", comment: ""),
@@ -63,14 +73,16 @@ extension ChatService {
         requestLogContext: RequestLogContext,
         initialPrefill: ChatMessage?,
         rebuildRequest: (ChatMessage) -> URLRequest?,
-        prepareRetryRequest: (URLRequest) async throws -> URLRequest = { $0 },
+        prepareKeyRetryRequest: (URLRequest) async throws -> URLRequest = { $0 },
         operation: (URLRequest, UUID, RequestLogContext, @escaping (Error) async -> Bool) async -> Void
     ) async {
         let (configuredMaximum, smartDetectionEnabled) = await MainActor.run {
             (AppConfigStore.shared.maximumRequestRetries, AppConfigStore.shared.requestRetrySmartDetectionEnabled)
         }
-        let maximumRetries = min(10, max(0, provider.multiKeyEnabled ? provider.maximumKeyRetries : configuredMaximum))
+        let maximumRetries = min(10, max(0, configuredMaximum))
+        let maximumKeyRetries = ProviderAPIKeyRetryPolicy.maximumRetries(for: provider)
         var retryCount = 0
+        var keyRetryCount = 0
         var currentRequest = request
         var currentLoadingID = loadingMessageID
         var currentLogContext = requestLogContext
@@ -79,20 +91,26 @@ extension ChatService {
         defer { setRequestRetryStatus(nil, messageID: currentLoadingID, sessionID: sessionID) }
         while !Task.isCancelled {
             var failure: Error?
+            var retryKind: ChatRequestRetryStatus.Kind = .automatic
             RequestTransactionLogRegistry.bindRequest(
                 currentRequest, requestID: currentLogContext.requestID,
                 requestedAt: currentLogContext.requestedAt, providerName: currentLogContext.providerName,
                 modelID: currentLogContext.modelID, isStreaming: currentLogContext.isStreaming
             )
             await operation(currentRequest, currentLoadingID, currentLogContext) { error in
-                guard !Task.isCancelled, retryCount < maximumRetries,
-                      ChatRequestRetryPolicy.isRetryable(error, smartDetectionEnabled: smartDetectionEnabled)
-                        || self.isKeyAuthenticationRetry(error, provider: provider) else { return false }
-                if smartDetectionEnabled,
-                   let message = self.messagesSnapshot(for: sessionID).first(where: { $0.id == currentLoadingID }),
-                   !(message.imageFileNames ?? []).isEmpty || message.audioFileName != nil {
-                    return false
+                guard !Task.isCancelled else { return false }
+                let message = self.messagesSnapshot(for: sessionID).first { $0.id == currentLoadingID }
+                let hasGeneratedMedia = !(message?.imageFileNames ?? []).isEmpty || message?.audioFileName != nil
+                if keyRetryCount < maximumKeyRetries, !hasGeneratedMedia,
+                   ProviderAPIKeyRetryPolicy.isRetryable(error) {
+                    retryKind = .apiKey
+                    failure = error
+                    return true
                 }
+                guard retryCount < maximumRetries,
+                      ChatRequestRetryPolicy.isRetryable(error, smartDetectionEnabled: smartDetectionEnabled),
+                      !smartDetectionEnabled || !hasGeneratedMedia else { return false }
+                retryKind = .automatic
                 failure = error
                 return true
             }
@@ -107,15 +125,23 @@ extension ChatService {
             if case NetworkError.badStatusCode(let code, _) = failure { statusCode = code } else { statusCode = nil }
             persistRequestLog(
                 context: currentLogContext, status: .failed, tokenUsage: partial?.tokenUsage,
-                finishedAt: Date(), httpStatusCode: statusCode, errorKind: "automatic_retry"
+                finishedAt: Date(), httpStatusCode: statusCode,
+                errorKind: retryKind == .apiKey ? "api_key_retry" : "automatic_retry"
             )
 
-            retryCount += 1
+            if retryKind == .apiKey {
+                keyRetryCount += 1
+            } else {
+                retryCount += 1
+                // 全局自动重试开始新一轮请求，换 Key 的预算重新计数，两个上限互不覆盖。
+                keyRetryCount = 0
+            }
             do {
                 // 使用同一单调时钟计算等待和显示，挂起恢复后不会补跑过期倒计时。
                 // 更新只存在于当前请求的退避期间，取消请求会同时结束等待。
                 let clock = ContinuousClock()
-                let deadline = clock.now.advanced(by: .seconds(ChatRequestRetryPolicy.delay(forRetry: retryCount)))
+                let delay = retryKind == .automatic ? ChatRequestRetryPolicy.delay(forRetry: retryCount) : 0
+                let deadline = clock.now.advanced(by: .seconds(delay))
                 while clock.now < deadline {
                     try Task.checkCancellation()
                     let remaining = clock.now.duration(to: deadline).components
@@ -154,18 +180,24 @@ extension ChatService {
                 if !hasGeneratedMedia { prefix = retryTarget.content }
             }
 
-            currentRequest = provider.rotatingAPIKey(in: currentRequest, apiFormat: apiFormat)
-            do {
-                currentRequest = try await prepareRetryRequest(currentRequest)
-            } catch {
-                guard !Task.isCancelled, !(error is CancellationError) else { return }
-                addErrorMessage(error.localizedDescription, sessionID: sessionID)
-                emitSessionRequestStatus(.error, sessionID: sessionID)
-                return
+            if retryKind == .apiKey {
+                currentRequest = provider.rotatingAPIKey(in: currentRequest, apiFormat: apiFormat)
+                do {
+                    currentRequest = try await prepareKeyRetryRequest(currentRequest)
+                } catch {
+                    guard !Task.isCancelled, !(error is CancellationError) else { return }
+                    addErrorMessage(error.localizedDescription, sessionID: sessionID)
+                    emitSessionRequestStatus(.error, sessionID: sessionID)
+                    return
+                }
             }
             resetPartialResponseForRetry(messageID: currentLoadingID, sessionID: sessionID, prefix: prefix)
             setRequestRetryStatus(
-                ChatRequestRetryStatus(attempt: retryCount, maximumAttempts: maximumRetries),
+                ChatRequestRetryStatus(
+                    attempt: retryKind == .apiKey ? keyRetryCount : retryCount,
+                    maximumAttempts: retryKind == .apiKey ? maximumKeyRetries : maximumRetries,
+                    kind: retryKind
+                ),
                 messageID: currentLoadingID, sessionID: sessionID
             )
             currentLogContext = RequestLogContext(
@@ -184,12 +216,6 @@ extension ChatService {
               messages[index].requestRetryStatus != status else { return }
         messages[index].requestRetryStatus = status
         _ = publishStreamingMessages(messages, loadingMessageID: messageID, sessionID: sessionID)
-    }
-
-    private func isKeyAuthenticationRetry(_ error: Error, provider: Provider) -> Bool {
-        guard provider.multiKeyEnabled, provider.apiKeys.count > 1,
-              case NetworkError.badStatusCode(let code, _) = error else { return false }
-        return code == 401 || code == 403
     }
 
     private func resetPartialResponseForRetry(messageID: UUID, sessionID: UUID, prefix: String) {

@@ -138,7 +138,7 @@ public enum GuideToolCatalog {
             "api_format": stringProperty("openai-compatible、openai-responses、gemini 或 anthropic"),
             "api_key": stringProperty("用户刚刚主动提供的新 API Key；可用逗号分隔多条；不可尝试读取现有值"),
             "multi_key_enabled": .dictionary(["type": .string("boolean"), "description": .string("是否启用多 Key 顺序轮换；关闭后保留全部密钥，只使用第一条")]),
-            "maximum_key_retries": .dictionary(["type": .string("integer"), "minimum": .int(0), "maximum": .int(10), "description": .string("多 Key 模式下当前提供商聊天请求的最大重试次数，不包含首次请求")])
+            "maximum_key_retries": .dictionary(["type": .string("integer"), "minimum": .int(0), "maximum": .int(10), "description": .string("当前提供商每轮聊天请求最多换 Key 几次；与全局自动重试独立计数，0 只禁用换 Key，不包含首次请求")])
         ])
     )
 

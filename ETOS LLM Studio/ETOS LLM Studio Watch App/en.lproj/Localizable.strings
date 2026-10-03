@@ -7393,8 +7393,10 @@
 "保存方式" = "Saving changes";
 "第 %d 个 API Key" = "API key %d";
 "请输入 0 到 10 之间的整数。" = "Enter an integer from 0 to 10.";
-"首次请求不计入重试次数。设为 0 时不自动重试。" = "The initial request does not count as a retry. Set to 0 to disable automatic retries.";
+"首次请求不计入换 Key 次数。设为 0 仅关闭换 Key 重试，不影响全局自动重试。" = "The first request does not count as a key switch. Setting this to 0 only disables key retries; global automatic retries remain unchanged.";
 "可用逗号分隔多个 Key，或开启多 Key 模式逐条添加并填写备注。" = "Separate multiple keys with commas, or enable multi-key mode to add keys individually with notes.";
-"按列表顺序轮换 API Key；聊天请求失败后，自动重试会使用下一条。可为每条 Key 添加备注，方便区分来源。" = "API keys rotate in list order. When a chat request fails, an automatic retry uses the next key. Add notes to distinguish each key.";
-"最大重试次数仅对当前提供商的聊天请求生效，优先于全局设置。关闭多 Key 模式后只使用第一条，其余 Key 和备注仍会保留。" = "The retry limit applies only to this provider’s chat requests and overrides the global setting. Turning off multi-key mode uses only the first key while keeping the other keys and notes.";
+"按列表顺序轮换 API Key；聊天请求遇到可重试错误时，先尝试下一条 Key。可为每条 Key 添加备注，方便区分来源。" = "API keys rotate in list order. When a chat request encounters a retryable error, the next key is tried first. Add notes to distinguish each key.";
+"换 Key 次数与全局自动重试分别计数。换 Key 次数用完后，再按全局设置判断是否等待并重试；每轮自动重试都会重新计算换 Key 次数。关闭多 Key 模式后只使用第一条，其余 Key 和备注仍会保留。" = "Key switches and global automatic retries have separate limits. When key retries run out, global settings determine whether to wait and retry. Each automatic retry starts a new key-switch budget. Turning off multi-key mode uses only the first key and keeps all other keys and notes.";
+"最大换 Key 次数" = "Maximum key switches";
+"正在思考·切换 Key(%d/%d)" = "Thinking · Switching key (%d/%d)";
 "此页修改先保留为草稿，返回提供商页面后点击保存生效。" = "Changes on this page remain a draft. Return to the provider page and tap Save to apply them.";

@@ -6,7 +6,7 @@ public enum ProviderAPIKeyGuideSupport {
             guard case .bool = value else { throw GuideError.invalidToolArguments }
         }
         if let value = arguments["maximum_key_retries"] {
-            guard case .int(let count) = value, ChatRequestRetryPolicy.allowedMaximumRetries.contains(count) else {
+            guard case .int(let count) = value, ProviderAPIKeyRetryPolicy.allowedMaximumRetries.contains(count) else {
                 throw GuideError.invalidToolArguments
             }
         }

@@ -49,7 +49,7 @@ public struct ProviderAPIKeyManagementForm: View {
                 }
             }
             Section {
-                TextField(NSLocalizedString("最大重试次数", comment: ""), text: textBinding($editor.draft.maximumRetriesText))
+                TextField(NSLocalizedString("最大换 Key 次数", comment: ""), text: textBinding($editor.draft.maximumRetriesText))
                     #if os(iOS)
                     .keyboardType(.numberPad)
                     #endif
@@ -59,9 +59,9 @@ public struct ProviderAPIKeyManagementForm: View {
                         .foregroundStyle(.red)
                 }
             } header: {
-                Text(NSLocalizedString("最大重试次数", comment: ""))
+                Text(NSLocalizedString("最大换 Key 次数", comment: ""))
             } footer: {
-                Text(NSLocalizedString("首次请求不计入重试次数。设为 0 时不自动重试。", comment: ""))
+                Text(NSLocalizedString("首次请求不计入换 Key 次数。设为 0 仅关闭换 Key 重试，不影响全局自动重试。", comment: ""))
             }
         }
         .navigationTitle(NSLocalizedString("管理 API Key", comment: ""))
@@ -76,10 +76,10 @@ public struct ProviderAPIKeyManagementForm: View {
     private var settingsIntroCard: some View {
         Section {
             DisclosureGroup(isExpanded: $showsIntroDetails) {
-                Text(NSLocalizedString("按列表顺序轮换 API Key；聊天请求失败后，自动重试会使用下一条。可为每条 Key 添加备注，方便区分来源。", comment: ""))
+                Text(NSLocalizedString("按列表顺序轮换 API Key；聊天请求遇到可重试错误时，先尝试下一条 Key。可为每条 Key 添加备注，方便区分来源。", comment: ""))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                Text(NSLocalizedString("最大重试次数仅对当前提供商的聊天请求生效，优先于全局设置。关闭多 Key 模式后只使用第一条，其余 Key 和备注仍会保留。", comment: ""))
+                Text(NSLocalizedString("换 Key 次数与全局自动重试分别计数。换 Key 次数用完后，再按全局设置判断是否等待并重试；每轮自动重试都会重新计算换 Key 次数。关闭多 Key 模式后只使用第一条，其余 Key 和备注仍会保留。", comment: ""))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 Text(NSLocalizedString("此页修改先保留为草稿，返回提供商页面后点击保存生效。", comment: ""))

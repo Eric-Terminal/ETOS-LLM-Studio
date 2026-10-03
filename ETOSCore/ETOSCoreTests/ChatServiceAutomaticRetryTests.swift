@@ -119,7 +119,7 @@ extension ChatServiceTests {
         )
     }
 
-    @Test("多密钥认证失败后按顺序切换，提供商重试上限覆盖全局值")
+    @Test("全局自动重试关闭后，换 Key 仍独立恢复认证失败并使用专属状态")
     @MainActor
     func multiKeyRetriesRotateAndRespectProviderLimit() async throws {
         await cleanup()
@@ -138,23 +138,28 @@ extension ChatServiceTests {
             .init(status: 401, body: "invalid key"),
             .init(status: 200, body: #"{"choices":[{"message":{"role":"assistant","content":"已切换"}}]}"#)
         ])
+        let recorder = RetryStatusRecorder()
+        let subscription = service.messagesForSessionSubject.sink { recorder.record($0) }
+        defer { subscription.cancel() }
         await sendAutomaticallyRetriedMessage(using: service, streaming: false)
         let requests = AutomaticRetryURLProtocol.requests
         #expect(requests.map { $0.value(forHTTPHeaderField: "Authorization") } == ["Bearer first-key", "Bearer second-key"])
         #expect(requests.map { $0.value(forHTTPHeaderField: "X-Key") } == ["first-key", "second-key"])
         #expect(service.messagesForSessionSubject.value.last?.content == "已切换")
+        #expect(!recorder.statuses.isEmpty)
+        #expect(recorder.statuses.allSatisfy { $0.kind == .apiKey && $0.attempt == 1 && $0.remainingSeconds == nil })
         #expect(requests.allSatisfy {
             !(String(data: $0.httpBody ?? Data(), encoding: .utf8) ?? "").contains(providerAPIKeyControlKey)
         })
     }
 
-    @Test("多密钥最大重试次数为零时不因全局重试设置换 Key 重放")
+    @Test("换 Key 上限为零时保留全局自动重试，重放仍沿用原 Key")
     @MainActor
-    func multiKeyZeroRetriesStopsImmediately() async throws {
+    func multiKeyZeroRetriesPreservesAutomaticRetries() async throws {
         await cleanup()
         let config = AppConfigStore.shared
         let previous = config.maximumRequestRetries
-        config.maximumRequestRetries = 3
+        config.maximumRequestRetries = 1
         defer { config.maximumRequestRetries = previous }
         var provider = dummyModel.provider
         provider.id = UUID()
@@ -162,10 +167,120 @@ extension ChatServiceTests {
         provider.multiKeyEnabled = true
         provider.maximumKeyRetries = 0
         let service = automaticRetryService(provider: provider)
-        AutomaticRetryURLProtocol.configure([.init(status: 503, body: "unavailable")])
+        AutomaticRetryURLProtocol.configure([
+            .init(status: 503, body: "unavailable"),
+            .init(status: 200, body: #"{"choices":[{"message":{"role":"assistant","content":"恢复成功"}}]}"#)
+        ])
+        let recorder = RetryStatusRecorder()
+        let subscription = service.messagesForSessionSubject.sink { recorder.record($0) }
+        defer { subscription.cancel() }
         await sendAutomaticallyRetriedMessage(using: service, streaming: false)
-        #expect(AutomaticRetryURLProtocol.requests.count == 1)
-        #expect(service.messagesForSessionSubject.value.contains { $0.role == .error })
+        #expect(AutomaticRetryURLProtocol.requests.map { $0.value(forHTTPHeaderField: "Authorization") }
+                == ["Bearer first-key", "Bearer first-key"])
+        #expect(service.messagesForSessionSubject.value.last?.content == "恢复成功")
+        #expect(!recorder.statuses.isEmpty)
+        #expect(recorder.statuses.allSatisfy { $0.kind == .automatic && $0.maximumAttempts == 1 })
+        #expect(recorder.statuses.contains { $0.remainingSeconds == 1 })
+    }
+
+    @Test("换 Key 耗尽后才进入自动退避，新一轮恢复换 Key 预算且两套日志分开")
+    @MainActor
+    func keyRetriesAndAutomaticRetriesHaveSeparateBudgets() async throws {
+        await cleanup()
+        let config = AppConfigStore.shared
+        let previousMaximum = config.maximumRequestRetries
+        let previousSmartDetection = config.requestRetrySmartDetectionEnabled
+        config.maximumRequestRetries = 1
+        config.requestRetrySmartDetectionEnabled = true
+        defer {
+            config.maximumRequestRetries = previousMaximum
+            config.requestRetrySmartDetectionEnabled = previousSmartDetection
+        }
+        AppConfigStore.persistSynchronously(.bool(true), for: .requestLogEnabled)
+        var provider = dummyModel.provider
+        provider.id = UUID()
+        provider.apiKeys = ["first-key", "second-key"]
+        provider.multiKeyEnabled = true
+        provider.maximumKeyRetries = 1
+        let service = automaticRetryService(provider: provider)
+        AutomaticRetryURLProtocol.configure(Array(repeating: .init(status: 503, body: "unavailable"), count: 4))
+        let recorder = RetryStatusRecorder()
+        let subscription = service.messagesForSessionSubject.sink { recorder.record($0) }
+        defer { subscription.cancel() }
+        await sendAutomaticallyRetriedMessage(using: service, streaming: false)
+        #expect(AutomaticRetryURLProtocol.requests.map { $0.value(forHTTPHeaderField: "Authorization") }
+                == ["Bearer first-key", "Bearer second-key", "Bearer second-key", "Bearer first-key"])
+        let firstKeyRetry = try #require(recorder.statuses.firstIndex { $0.kind == .apiKey })
+        let automaticRetry = try #require(recorder.statuses.firstIndex { $0.kind == .automatic })
+        let lastKeyRetry = try #require(recorder.statuses.lastIndex { $0.kind == .apiKey })
+        #expect(firstKeyRetry < automaticRetry && automaticRetry < lastKeyRetry)
+        #expect(recorder.statuses.allSatisfy { $0.attempt == 1 && $0.maximumAttempts == 1 })
+        #expect(recorder.statuses.filter { $0.kind == .apiKey }.allSatisfy { $0.remainingSeconds == nil })
+        #expect(service.messagesForSessionSubject.value.last?.role == .error)
+        let logs = Persistence.loadRequestLogs(query: .init(limit: 10))
+        #expect(logs.count == 4)
+        #expect(logs.filter { $0.errorKind == "api_key_retry" }.count == 2)
+        #expect(logs.filter { $0.errorKind == "automatic_retry" }.count == 1)
+        await cleanup()
+    }
+
+    @Test("换 Key 认证失败耗尽后，全局智能判断仍拒绝重试永久错误")
+    @MainActor
+    func keyExhaustionRespectsAutomaticErrorPolicy() async throws {
+        await cleanup()
+        let config = AppConfigStore.shared
+        let previousMaximum = config.maximumRequestRetries
+        let previousSmartDetection = config.requestRetrySmartDetectionEnabled
+        config.maximumRequestRetries = 2
+        config.requestRetrySmartDetectionEnabled = true
+        defer {
+            config.maximumRequestRetries = previousMaximum
+            config.requestRetrySmartDetectionEnabled = previousSmartDetection
+        }
+        var provider = dummyModel.provider
+        provider.id = UUID()
+        provider.apiKeys = ["first-key", "second-key"]
+        provider.multiKeyEnabled = true
+        provider.maximumKeyRetries = 1
+        let service = automaticRetryService(provider: provider)
+        AutomaticRetryURLProtocol.configure(Array(repeating: .init(status: 401, body: "invalid key"), count: 2))
+        await sendAutomaticallyRetriedMessage(using: service, streaming: false)
+        #expect(AutomaticRetryURLProtocol.requests.count == 2)
+        #expect(service.messagesForSessionSubject.value.last?.role == .error)
+    }
+
+    @Test("关闭全局智能判断只扩大自动重试范围，不把参数错误改为换 Key")
+    @MainActor
+    func automaticSmartDetectionDoesNotChangeKeyRetryPolicy() async throws {
+        await cleanup()
+        let config = AppConfigStore.shared
+        let previousMaximum = config.maximumRequestRetries
+        let previousSmartDetection = config.requestRetrySmartDetectionEnabled
+        config.maximumRequestRetries = 1
+        config.requestRetrySmartDetectionEnabled = false
+        defer {
+            config.maximumRequestRetries = previousMaximum
+            config.requestRetrySmartDetectionEnabled = previousSmartDetection
+        }
+        var provider = dummyModel.provider
+        provider.id = UUID()
+        provider.apiKeys = ["first-key", "second-key"]
+        provider.multiKeyEnabled = true
+        provider.maximumKeyRetries = 2
+        let service = automaticRetryService(provider: provider)
+        AutomaticRetryURLProtocol.configure([
+            .init(status: 400, body: "invalid parameters"),
+            .init(status: 200, body: #"{"choices":[{"message":{"role":"assistant","content":"恢复成功"}}]}"#)
+        ])
+        let recorder = RetryStatusRecorder()
+        let subscription = service.messagesForSessionSubject.sink { recorder.record($0) }
+        defer { subscription.cancel() }
+        await sendAutomaticallyRetriedMessage(using: service, streaming: false)
+        #expect(AutomaticRetryURLProtocol.requests.map { $0.value(forHTTPHeaderField: "Authorization") }
+                == ["Bearer first-key", "Bearer first-key"])
+        #expect(!recorder.statuses.isEmpty)
+        #expect(recorder.statuses.allSatisfy { $0.kind == .automatic })
+        #expect(service.messagesForSessionSubject.value.last?.content == "恢复成功")
     }
 
     @Test("503 自动退避后成功，状态包含次数，每次 HTTP 请求独立记账")

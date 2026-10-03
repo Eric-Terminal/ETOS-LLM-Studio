@@ -125,7 +125,7 @@ public struct Provider: Codable, Identifiable, Hashable {
         proxyConfiguration: NetworkProxyConfiguration? = nil,
         multiKeyEnabled: Bool? = nil,
         apiKeyNotes: [String: String] = [:],
-        maximumKeyRetries: Int = ChatRequestRetryPolicy.defaultMaximumRetries
+        maximumKeyRetries: Int = ProviderAPIKeyRetryPolicy.defaultMaximumRetries
     ) {
         self.id = id
         self.name = name
@@ -159,7 +159,7 @@ public struct Provider: Codable, Identifiable, Hashable {
         self.multiKeyEnabled = try container.decodeIfPresent(Bool.self, forKey: .multiKeyEnabled) ?? (apiKeys.count > 1)
         self.apiKeyNotes = try container.decodeIfPresent([String: String].self, forKey: .apiKeyNotes) ?? [:]
         self.maximumKeyRetries = min(10, max(0, try container.decodeIfPresent(Int.self, forKey: .maximumKeyRetries)
-            ?? ChatRequestRetryPolicy.defaultMaximumRetries))
+            ?? ProviderAPIKeyRetryPolicy.defaultMaximumRetries))
         self.apiFormat = try container.decode(String.self, forKey: .apiFormat)
         self.models = try container.decodeIfPresent([Model].self, forKey: .models) ?? []
         self.headerOverrides = try container.decodeIfPresent([String: String].self, forKey: .headerOverrides) ?? [:]

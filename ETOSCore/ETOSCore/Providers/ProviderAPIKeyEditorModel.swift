@@ -90,7 +90,7 @@ public final class ProviderAPIKeyEditorModel: ObservableObject {
         provider.apiKeys = keys
         provider.apiKeyNotes = notes
         provider.multiKeyEnabled = draft.multiKeyEnabled
-        provider.maximumKeyRetries = ChatRequestRetryPolicy.maximumRetries(from: draft.maximumRetriesText)
+        provider.maximumKeyRetries = ProviderAPIKeyRetryPolicy.maximumRetries(from: draft.maximumRetriesText)
             ?? provider.maximumKeyRetries
     }
 
@@ -111,7 +111,7 @@ public final class ProviderAPIKeyEditorModel: ObservableObject {
         keys = preparedKeys
         notes = preparedNotes
         keyCount = keys.count
-        retryInputIsValid = ChatRequestRetryPolicy.maximumRetries(from: draft.maximumRetriesText) != nil
+        retryInputIsValid = ProviderAPIKeyRetryPolicy.maximumRetries(from: draft.maximumRetriesText) != nil
         let firstKeyIsValid = draft.entries.first.map { !Self.split($0.value).isEmpty } ?? false
         isValid = (draft.multiKeyEnabled ? !keys.isEmpty : firstKeyIsValid)
             && (!draft.multiKeyEnabled || retryInputIsValid)
@@ -127,8 +127,8 @@ public final class ProviderAPIKeyEditorModel: ObservableObject {
             .bool("multi_key_enabled", label: NSLocalizedString("多 Key 模式", comment: ""),
                   get: { [weak self] in self?.draft.multiKeyEnabled ?? false },
                   set: { [weak self] in self?.draft.multiKeyEnabled = $0 }),
-            .integer("maximum_key_retries", label: NSLocalizedString("最大重试次数", comment: ""),
-                     range: ChatRequestRetryPolicy.allowedMaximumRetries,
+            .integer("maximum_key_retries", label: NSLocalizedString("最大换 Key 次数", comment: ""),
+                     range: ProviderAPIKeyRetryPolicy.allowedMaximumRetries,
                      get: { [weak self] in Int(self?.draft.maximumRetriesText ?? "") ?? 3 },
                      set: { [weak self] in self?.draft.maximumRetriesText = String($0) }),
             .readOnly("key_count", label: NSLocalizedString("API Key 数量", comment: ""),

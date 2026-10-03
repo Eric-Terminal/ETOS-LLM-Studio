@@ -801,7 +801,7 @@ extension ChatService {
                     imageAttachments: imageAttachments, fileAttachments: fileAttachments
                 )
             },
-            prepareRetryRequest: { retryRequest in
+            prepareKeyRetryRequest: { retryRequest in
                 guard let previousKey = selectedGeminiAPIKey,
                       let geminiAdapter = adapter as? GeminiAdapter,
                       let nextKey = retryRequest.value(forHTTPHeaderField: "x-goog-api-key"),

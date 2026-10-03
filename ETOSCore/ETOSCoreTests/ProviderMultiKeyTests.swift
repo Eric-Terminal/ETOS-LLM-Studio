@@ -9,6 +9,29 @@ struct ProviderMultiKeyTests {
                  apiFormat: "openai-compatible", apiKeyNotes: ["key-a": "主账户", "key-b": "备用账户"])
     }
 
+    @Test("换 Key 使用独立配置和错误范围，单 Key 不产生无效切换")
+    func keyRetryPolicyIsIndependent() {
+        var source = provider()
+        source.maximumKeyRetries = 2
+        #expect(ProviderAPIKeyRetryPolicy.maximumRetries(for: source) == 2)
+        source.multiKeyEnabled = false
+        #expect(ProviderAPIKeyRetryPolicy.maximumRetries(for: source) == 0)
+        source.multiKeyEnabled = true
+        source.apiKeys = ["same-key", " same-key "]
+        #expect(ProviderAPIKeyRetryPolicy.maximumRetries(for: source) == 0)
+        for code in [401, 403, 429, 503] {
+            #expect(ProviderAPIKeyRetryPolicy.isRetryable(ChatService.NetworkError.badStatusCode(code: code, responseBody: nil)))
+        }
+        #expect(!ProviderAPIKeyRetryPolicy.isRetryable(ChatService.NetworkError.badStatusCode(code: 400, responseBody: nil)))
+        #expect(!ProviderAPIKeyRetryPolicy.isRetryable(CancellationError()))
+        #expect(!ProviderAPIKeyRetryPolicy.isRetryable(URLError(.cancelled)))
+        #expect(!ProviderAPIKeyRetryPolicy.isRetryable(NetworkConnectionSecurityError.denied))
+        let keyStatus = ChatRequestRetryStatus(attempt: 1, maximumAttempts: 2, kind: .apiKey)
+        let automaticStatus = ChatRequestRetryStatus(attempt: 1, maximumAttempts: 2)
+        #expect(keyStatus.kind != automaticStatus.kind)
+        #expect(keyStatus.thinkingText != automaticStatus.thinkingText)
+    }
+
     @Test("旧 JSON 自动启用多密钥，新配置往返保留关闭状态、备注和重试次数")
     func codableMigration() throws {
         var source = provider()
