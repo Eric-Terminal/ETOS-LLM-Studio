@@ -63,7 +63,9 @@ public actor LocalLinuxDiagnosticsRecorder {
         runtime: LocalLinuxRuntimeSnapshot
     ) async -> UUID? {
         let events = eventsByJobID.removeValue(forKey: job.id) ?? []
-        await feedbackBuffer.finish(jobID: job.id)
+        await feedbackBuffer.finish(jobID: job.id, completion: LocalLinuxDiagnosticCompletion(
+            reason: completionReason, exitCode: exitCode, signal: signal, linuxError: linuxError
+        ))
         guard !events.isEmpty || completionReason != .exited || exitCode != 0 else { return nil }
         let first = events.first
         let category = diagnosticCategory(

@@ -37,12 +37,17 @@ struct LocalLinuxDiagnosticFeedbackTests {
         #expect(await offers.values.isEmpty)
         await buffer.append([Self.event()], jobID: jobID)
         await buffer.append((2...6).map { Self.event(sequence: UInt64($0), category: 2) }, jobID: jobID)
-        await buffer.finish(jobID: jobID)
+        await buffer.finish(jobID: jobID, completion: .init(reason: .exited, exitCode: 0, signal: nil, linuxError: nil))
         #expect(await offers.values.count == 1)
         let draft = try #require(try await buffer.makeDraft(jobID: jobID, runtime: .init(phase: .ready)))
         let payload = try Self.payload(draft)
         #expect(payload["event_count"] as? Int == 6)
         #expect((payload["events"] as? [[String: Any]])?.count == 6)
+        let completion = try #require(payload["completion"] as? [String: Any])
+        #expect(completion["state"] as? String == "observed")
+        #expect(completion["reason"] as? String == "exited")
+        #expect(completion["exit_code"] as? Int == 0)
+        #expect(completion["linux_errno"] == nil)
         #expect(try await buffer.makeDraft(jobID: jobID, runtime: .init(phase: .ready)) == nil)
     }
 
@@ -62,6 +67,9 @@ struct LocalLinuxDiagnosticFeedbackTests {
         #expect(events[0]["build_identity"] as? String == "test-ish-build")
         #expect(events[0]["guest_thread_group_id"] as? Int == 100)
         #expect(payload["seed_version"] as? String == "alpine-test")
+        let completion = try #require(payload["completion"] as? [String: Any])
+        #expect(completion["state"] as? String == "not_observed")
+        #expect(completion["exit_code"] == nil)
         let context = draft.extraContext ?? ""
         for excludedKey in ["arguments", "environment", "working_directory", "output", "last_error"] {
             #expect(!context.contains("\"\(excludedKey)\""))
@@ -86,6 +94,28 @@ struct LocalLinuxDiagnosticFeedbackTests {
         let events = try #require(payload["events"] as? [[String: Any]])
         #expect(events[0]["process_name"] as? String == "***")
         #expect(!(draft.extraContext ?? "").contains("sk-123456789012"))
+    }
+
+    @Test("兼容性事件与最终信号退出分别保存，不推断二者的因果关系")
+    func completionDoesNotReplaceEvents() async throws {
+        let offers = Offers()
+        let buffer = LocalLinuxDiagnosticFeedbackBuffer { await offers.append($0) }
+        let jobID = UUID()
+        await buffer.append([Self.event(category: 2)], jobID: jobID)
+        await buffer.finish(jobID: jobID, completion: .init(
+            reason: .signaled, exitCode: nil, signal: 9, linuxError: nil
+        ))
+        let draft = try #require(try await buffer.makeDraft(jobID: jobID, runtime: .init(phase: .ready)))
+        let payload = try Self.payload(draft)
+        let completion = try #require(payload["completion"] as? [String: Any])
+        #expect(completion["reason"] as? String == "signaled")
+        #expect(completion["signal"] as? Int == 9)
+        #expect(completion["exit_code"] == nil)
+        #expect(completion["linux_errno"] == nil)
+        let events = try #require(payload["events"] as? [[String: Any]])
+        #expect(events.count == 1)
+        #expect(events[0]["linux_errno"] as? Int == -38)
+        #expect(await offers.values.count == 1)
     }
 
     @Test("尚未允许或明确拒绝时不会调用发送接口，同一终端不再追问")
@@ -140,7 +170,7 @@ struct LocalLinuxDiagnosticFeedbackTests {
         let failure = try #require(coordinator.prompt)
         guard case .failed = failure.kind else { Issue.record("应保留发送失败状态供用户重试"); return }
         await buffer.append([Self.event(sequence: 2)], jobID: jobID)
-        await buffer.finish(jobID: jobID)
+        await buffer.finish(jobID: jobID, completion: .init(reason: .exited, exitCode: 1, signal: nil, linuxError: nil))
         await coordinator.send(promptID: failure.id)?.value
         #expect(submitted.count == 2)
         #expect(submitted[0] == submitted[1])

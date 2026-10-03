@@ -49,7 +49,7 @@ private struct LocalLinuxDiagnosticFeedbackModifier: ViewModifier {
                 case .consent:
                     Alert(
                         title: Text(NSLocalizedString("向开发者共享 Linux 诊断？", comment: "自动诊断反馈征求同意")),
-                        message: Text(String(format: NSLocalizedString("检测到 Linux 兼容性错误。允许后将通过反馈助手发送本次任务已收集的诊断事件（含进程名）、应用与设备信息及基本运行统计，不包含聊天记录、命令参数、环境变量或终端输出。\n\n%@", comment: "自动诊断反馈共享范围"), prompt.offer.summary)),
+                        message: Text(String(format: NSLocalizedString("检测到 Linux 兼容性事件，程序可能仍可正常运行。允许后将通过反馈助手发送本次任务已收集的诊断事件（含进程名）、应用与设备信息及基本运行统计，不包含聊天记录、命令参数、环境变量或终端输出。\n\n%@", comment: "自动诊断反馈共享范围"), prompt.offer.summary)),
                         primaryButton: .default(Text(NSLocalizedString("允许并发送", comment: "自动诊断反馈同意按钮"))) {
                             coordinator.send(promptID: prompt.id)
                         },
