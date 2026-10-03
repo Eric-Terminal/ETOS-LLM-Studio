@@ -7682,3 +7682,17 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "上传期间可切换到其他页面，完成或失败后会发送通知。" = "Vous pouvez changer de page pendant le téléversement. Une notification indiquera sa réussite ou son échec.";
 "开始上传后可在 App 内切换页面，返回此页可查看进度和结果。完成或失败后会使用与聊天回复相同的通知渠道，请允许 App 发送通知。关闭 App 不保证上传继续。" = "Après le démarrage du téléversement, vous pouvez consulter d’autres pages de l’app. Revenez ici pour voir la progression et le résultat. Les alertes de réussite ou d’échec utilisent les mêmes notifications que les réponses du chat ; autorisez les notifications de l’app. La poursuite du téléversement n’est pas garantie après la fermeture de l’app.";
 "对象存储 Endpoint" = "Point de terminaison du stockage objet";
+/* 多 Key 管理 */
+"多 Key 模式" = "Mode multi-clés";
+"管理 API Key" = "Gérer les clés API";
+"显示全部 API Key" = "Afficher toutes les clés API";
+"删除 API Key" = "Supprimer la clé API";
+"API Key 数量" = "Nombre de clés API";
+"保存方式" = "Enregistrement";
+"第 %d 个 API Key" = "Clé API %d";
+"请输入 0 到 10 之间的整数。" = "Saisissez un entier entre 0 et 10.";
+"首次请求不计入重试次数。设为 0 时不自动重试。" = "La requête initiale ne compte pas comme une nouvelle tentative. Réglez sur 0 pour désactiver les nouvelles tentatives automatiques.";
+"可用逗号分隔多个 Key，或开启多 Key 模式逐条添加并填写备注。" = "Séparez les clés par des virgules ou activez le mode multi-clés pour les ajouter individuellement avec des notes.";
+"按列表顺序轮换 API Key；聊天请求失败后，自动重试会使用下一条。可为每条 Key 添加备注，方便区分来源。" = "Les clés API sont utilisées dans l’ordre de la liste. Si une requête de chat échoue, la tentative automatique suivante utilise la clé suivante. Ajoutez des notes pour les distinguer.";
+"最大重试次数仅对当前提供商的聊天请求生效，优先于全局设置。关闭多 Key 模式后只使用第一条，其余 Key 和备注仍会保留。" = "Cette limite concerne uniquement les requêtes de chat de ce fournisseur et remplace le réglage global. Désactiver le mode multi-clés utilise uniquement la première clé et conserve les autres clés et leurs notes.";
+"此页修改先保留为草稿，返回提供商页面后点击保存生效。" = "Les modifications restent un brouillon. Revenez à la page du fournisseur et touchez Enregistrer pour les appliquer.";

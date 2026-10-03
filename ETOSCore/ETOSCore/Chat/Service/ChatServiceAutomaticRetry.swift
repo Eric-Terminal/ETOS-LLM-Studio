@@ -56,17 +56,20 @@ extension ChatService {
     /// 只重放当前模型请求；已完成的工具调用和附件预处理不会再次执行。
     func withAutomaticRequestRetries(
         request: URLRequest,
+        provider: Provider,
+        apiFormat: String,
         loadingMessageID: UUID,
         sessionID: UUID,
         requestLogContext: RequestLogContext,
         initialPrefill: ChatMessage?,
         rebuildRequest: (ChatMessage) -> URLRequest?,
+        prepareRetryRequest: (URLRequest) async throws -> URLRequest = { $0 },
         operation: (URLRequest, UUID, RequestLogContext, @escaping (Error) async -> Bool) async -> Void
     ) async {
         let (configuredMaximum, smartDetectionEnabled) = await MainActor.run {
             (AppConfigStore.shared.maximumRequestRetries, AppConfigStore.shared.requestRetrySmartDetectionEnabled)
         }
-        let maximumRetries = min(10, max(0, configuredMaximum))
+        let maximumRetries = min(10, max(0, provider.multiKeyEnabled ? provider.maximumKeyRetries : configuredMaximum))
         var retryCount = 0
         var currentRequest = request
         var currentLoadingID = loadingMessageID
@@ -83,7 +86,8 @@ extension ChatService {
             )
             await operation(currentRequest, currentLoadingID, currentLogContext) { error in
                 guard !Task.isCancelled, retryCount < maximumRetries,
-                      ChatRequestRetryPolicy.isRetryable(error, smartDetectionEnabled: smartDetectionEnabled) else { return false }
+                      ChatRequestRetryPolicy.isRetryable(error, smartDetectionEnabled: smartDetectionEnabled)
+                        || self.isKeyAuthenticationRetry(error, provider: provider) else { return false }
                 if smartDetectionEnabled,
                    let message = self.messagesSnapshot(for: sessionID).first(where: { $0.id == currentLoadingID }),
                    !(message.imageFileNames ?? []).isEmpty || message.audioFileName != nil {
@@ -145,11 +149,20 @@ extension ChatService {
                 persistAndPublishMessages(retry.storedMessages, for: sessionID)
                 currentLoadingID = retry.loadingMessage.id
                 updateRequestLoadingMessageID(currentLoadingID, for: sessionID)
-                currentRequest = rebuilt
+                currentRequest = provider.preservingAuthentication(from: currentRequest, in: rebuilt)
                 // 图片和音频无法拼接为文本前缀；保留中断版本，重新执行当前请求。
                 if !hasGeneratedMedia { prefix = retryTarget.content }
             }
 
+            currentRequest = provider.rotatingAPIKey(in: currentRequest, apiFormat: apiFormat)
+            do {
+                currentRequest = try await prepareRetryRequest(currentRequest)
+            } catch {
+                guard !Task.isCancelled, !(error is CancellationError) else { return }
+                addErrorMessage(error.localizedDescription, sessionID: sessionID)
+                emitSessionRequestStatus(.error, sessionID: sessionID)
+                return
+            }
             resetPartialResponseForRetry(messageID: currentLoadingID, sessionID: sessionID, prefix: prefix)
             setRequestRetryStatus(
                 ChatRequestRetryStatus(attempt: retryCount, maximumAttempts: maximumRetries),
@@ -171,6 +184,12 @@ extension ChatService {
               messages[index].requestRetryStatus != status else { return }
         messages[index].requestRetryStatus = status
         _ = publishStreamingMessages(messages, loadingMessageID: messageID, sessionID: sessionID)
+    }
+
+    private func isKeyAuthenticationRetry(_ error: Error, provider: Provider) -> Bool {
+        guard provider.multiKeyEnabled, provider.apiKeys.count > 1,
+              case NetworkError.badStatusCode(let code, _) = error else { return false }
+        return code == 401 || code == 403
     }
 
     private func resetPartialResponseForRetry(messageID: UUID, sessionID: UUID, prefix: String) {

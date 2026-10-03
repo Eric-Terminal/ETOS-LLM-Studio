@@ -103,6 +103,10 @@ public struct Provider: Codable, Identifiable, Hashable {
     public var chatEndpointPath: String
     /// 提供商 API Key，会随 Provider 一起持久化到 JSON（明文）。
     public var apiKeys: [String]
+    public var multiKeyEnabled: Bool
+    /// 备注按密钥关联，去重或调整顺序时不会串到另一条凭据。
+    public var apiKeyNotes: [String: String]
+    public var maximumKeyRetries: Int
     public var apiFormat: String // 例如: "openai-compatible"
     public var models: [Model]
     public var headerOverrides: [String: String]
@@ -118,13 +122,19 @@ public struct Provider: Codable, Identifiable, Hashable {
         apiFormat: String,
         models: [Model] = [],
         headerOverrides: [String: String] = [:],
-        proxyConfiguration: NetworkProxyConfiguration? = nil
+        proxyConfiguration: NetworkProxyConfiguration? = nil,
+        multiKeyEnabled: Bool? = nil,
+        apiKeyNotes: [String: String] = [:],
+        maximumKeyRetries: Int = ChatRequestRetryPolicy.defaultMaximumRetries
     ) {
         self.id = id
         self.name = name
         self.baseURL = baseURL
         self.chatEndpointPath = Self.normalizedChatEndpointPath(chatEndpointPath)
         self.apiKeys = apiKeys
+        self.multiKeyEnabled = multiKeyEnabled ?? (apiKeys.count > 1)
+        self.apiKeyNotes = apiKeyNotes
+        self.maximumKeyRetries = min(10, max(0, maximumKeyRetries))
         self.apiFormat = apiFormat
         self.models = models
         self.headerOverrides = headerOverrides
@@ -133,6 +143,7 @@ public struct Provider: Codable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, baseURL, chatEndpointPath, chatCompletionsPath, apiKeys, apiFormat, models, headerOverrides, proxyConfiguration
+        case multiKeyEnabled, apiKeyNotes, maximumKeyRetries
     }
 
     public init(from decoder: Decoder) throws {
@@ -145,6 +156,10 @@ public struct Provider: Codable, Identifiable, Hashable {
             ?? Self.defaultChatEndpointPath
         self.chatEndpointPath = Self.normalizedChatEndpointPath(decodedChatEndpointPath)
         self.apiKeys = try container.decodeIfPresent([String].self, forKey: .apiKeys) ?? []
+        self.multiKeyEnabled = try container.decodeIfPresent(Bool.self, forKey: .multiKeyEnabled) ?? (apiKeys.count > 1)
+        self.apiKeyNotes = try container.decodeIfPresent([String: String].self, forKey: .apiKeyNotes) ?? [:]
+        self.maximumKeyRetries = min(10, max(0, try container.decodeIfPresent(Int.self, forKey: .maximumKeyRetries)
+            ?? ChatRequestRetryPolicy.defaultMaximumRetries))
         self.apiFormat = try container.decode(String.self, forKey: .apiFormat)
         self.models = try container.decodeIfPresent([Model].self, forKey: .models) ?? []
         self.headerOverrides = try container.decodeIfPresent([String: String].self, forKey: .headerOverrides) ?? [:]
@@ -163,6 +178,9 @@ public struct Provider: Codable, Identifiable, Hashable {
         if !apiKeys.isEmpty {
             try container.encode(apiKeys, forKey: .apiKeys)
         }
+        try container.encode(multiKeyEnabled, forKey: .multiKeyEnabled)
+        try container.encode(apiKeyNotes, forKey: .apiKeyNotes)
+        try container.encode(maximumKeyRetries, forKey: .maximumKeyRetries)
         try container.encode(apiFormat, forKey: .apiFormat)
         try container.encode(models, forKey: .models)
         if !headerOverrides.isEmpty {

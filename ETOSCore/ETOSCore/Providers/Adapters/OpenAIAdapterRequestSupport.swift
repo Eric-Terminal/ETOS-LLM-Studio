@@ -69,7 +69,7 @@ extension OpenAIAdapter {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        guard let randomApiKey = model.provider.apiKeys.randomElement(), !randomApiKey.isEmpty else {
+        guard let randomApiKey = commonPayload[providerAPIKeyControlKey] as? String ?? model.provider.nextAPIKey(), !randomApiKey.isEmpty else {
             logger.error("构建聊天请求失败: 提供商 '\(model.provider.name)' 未配置有效的 API Key。")
             return nil
         }
@@ -180,6 +180,7 @@ extension OpenAIAdapter {
         let shouldIncludeUsageInStream = boolValue(from: commonPayload[Self.streamIncludeUsageControlKey]) ?? true
 
         var finalPayload = mergedRequestPayload(commonPayload, with: overrides)
+        finalPayload.removeValue(forKey: providerAPIKeyControlKey)
         finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
         finalPayload.removeValue(forKey: Self.reasoningContentEchoModeControlKey)
         finalPayload.removeValue(forKey: Self.assistantPrefillMessageIDControlKey)
@@ -263,7 +264,7 @@ extension OpenAIAdapter {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        guard let randomApiKey = model.provider.apiKeys.randomElement(), !randomApiKey.isEmpty else {
+        guard let randomApiKey = commonPayload[providerAPIKeyControlKey] as? String ?? model.provider.nextAPIKey(), !randomApiKey.isEmpty else {
             logger.error("构建 Responses 请求失败: 提供商 '\(model.provider.name)' 未配置有效的 API Key。")
             return nil
         }
@@ -282,6 +283,7 @@ extension OpenAIAdapter {
             ?? boolValue(from: overrides[Self.responsesForceFullInputControlKey])
             ?? false
         var finalPayload = mergedRequestPayload(commonPayload, with: overrides)
+        finalPayload.removeValue(forKey: providerAPIKeyControlKey)
         finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
         finalPayload.removeValue(forKey: Self.reasoningContentEchoModeControlKey)
         finalPayload.removeValue(forKey: Self.responsesForceFullInputControlKey)
@@ -407,7 +409,7 @@ extension OpenAIAdapter {
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        guard let randomApiKey = provider.apiKeys.randomElement(), !randomApiKey.isEmpty else {
+        guard let randomApiKey = provider.nextAPIKey(), !randomApiKey.isEmpty else {
             logger.error("构建模型列表请求失败: 提供商 '\(provider.name)' 未配置有效的 API Key。")
             return nil
         }
@@ -555,7 +557,7 @@ extension OpenAIAdapter {
             overrides: model.effectiveOverrideParameters.mapValues { $0.toAny() }
         )
         
-        guard let apiKey = model.provider.apiKeys.randomElement(), !apiKey.isEmpty else {
+        guard let apiKey = model.provider.nextAPIKey(), !apiKey.isEmpty else {
             logger.error("构建语音转文字请求失败: 提供商 '\(model.provider.name)' 缺少有效的 API Key")
             return nil
         }
@@ -604,7 +606,7 @@ extension OpenAIAdapter {
             overrides: model.effectiveOverrideParameters.mapValues { $0.toAny() }
         )
         
-        guard let apiKey = model.provider.apiKeys.randomElement(), !apiKey.isEmpty else {
+        guard let apiKey = model.provider.nextAPIKey(), !apiKey.isEmpty else {
             logger.error("构建嵌入请求失败: 提供商 '\(model.provider.name)' 缺少有效的 API Key")
             return nil
         }
@@ -650,7 +652,7 @@ extension OpenAIAdapter {
             return nil
         }
 
-        guard let apiKey = model.provider.apiKeys.randomElement(), !apiKey.isEmpty else {
+        guard let apiKey = model.provider.nextAPIKey(), !apiKey.isEmpty else {
             logger.error("构建生图请求失败: 提供商 '\(model.provider.name)' 缺少有效的 API Key")
             return nil
         }

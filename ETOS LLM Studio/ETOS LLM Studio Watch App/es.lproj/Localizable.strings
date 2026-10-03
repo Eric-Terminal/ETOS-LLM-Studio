@@ -7461,3 +7461,17 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 
 /* 手表统一页面操作菜单 */
 "watch.page.actions.title" = "Más acciones";
+/* 多 Key 管理 */
+"多 Key 模式" = "Modo de varias claves";
+"管理 API Key" = "Gestionar claves API";
+"显示全部 API Key" = "Mostrar todas las claves API";
+"删除 API Key" = "Eliminar clave API";
+"API Key 数量" = "Número de claves API";
+"保存方式" = "Guardar cambios";
+"第 %d 个 API Key" = "Clave API %d";
+"请输入 0 到 10 之间的整数。" = "Introduce un número entero entre 0 y 10.";
+"首次请求不计入重试次数。设为 0 时不自动重试。" = "La solicitud inicial no cuenta como reintento. Establece 0 para desactivar los reintentos automáticos.";
+"可用逗号分隔多个 Key，或开启多 Key 模式逐条添加并填写备注。" = "Separa las claves con comas o activa el modo de varias claves para añadirlas individualmente con notas.";
+"按列表顺序轮换 API Key；聊天请求失败后，自动重试会使用下一条。可为每条 Key 添加备注，方便区分来源。" = "Las claves API se alternan en el orden de la lista. Si falla una solicitud de chat, el reintento automático usa la siguiente clave. Añade notas para distinguirlas.";
+"最大重试次数仅对当前提供商的聊天请求生效，优先于全局设置。关闭多 Key 模式后只使用第一条，其余 Key 和备注仍会保留。" = "El límite solo se aplica al chat de este proveedor y sustituye el ajuste global. Al desactivar el modo de varias claves, solo se usa la primera; las demás claves y notas se conservan.";
+"此页修改先保留为草稿，返回提供商页面后点击保存生效。" = "Los cambios de esta página quedan como borrador. Vuelve a la página del proveedor y pulsa Guardar para aplicarlos.";

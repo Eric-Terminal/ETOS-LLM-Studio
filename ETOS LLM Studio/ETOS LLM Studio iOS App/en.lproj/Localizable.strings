@@ -7605,3 +7605,17 @@
 "上传期间可切换到其他页面，完成或失败后会发送通知。" = "You can visit other pages during upload. You’ll be notified when it finishes or fails.";
 "开始上传后可在 App 内切换页面，返回此页可查看进度和结果。完成或失败后会使用与聊天回复相同的通知渠道，请允许 App 发送通知。关闭 App 不保证上传继续。" = "After starting an upload, you can visit other pages in the app. Return here to check progress and results. Completion and failure alerts use the same notifications as chat replies; allow notifications for the app. Uploads are not guaranteed to continue after closing the app.";
 "对象存储 Endpoint" = "Object storage endpoint";
+/* 多 Key 管理 */
+"多 Key 模式" = "Multi-key mode";
+"管理 API Key" = "Manage API keys";
+"显示全部 API Key" = "Show all API keys";
+"删除 API Key" = "Delete API key";
+"API Key 数量" = "API key count";
+"保存方式" = "Saving changes";
+"第 %d 个 API Key" = "API key %d";
+"请输入 0 到 10 之间的整数。" = "Enter an integer from 0 to 10.";
+"首次请求不计入重试次数。设为 0 时不自动重试。" = "The initial request does not count as a retry. Set to 0 to disable automatic retries.";
+"可用逗号分隔多个 Key，或开启多 Key 模式逐条添加并填写备注。" = "Separate multiple keys with commas, or enable multi-key mode to add keys individually with notes.";
+"按列表顺序轮换 API Key；聊天请求失败后，自动重试会使用下一条。可为每条 Key 添加备注，方便区分来源。" = "API keys rotate in list order. When a chat request fails, an automatic retry uses the next key. Add notes to distinguish each key.";
+"最大重试次数仅对当前提供商的聊天请求生效，优先于全局设置。关闭多 Key 模式后只使用第一条，其余 Key 和备注仍会保留。" = "The retry limit applies only to this provider’s chat requests and overrides the global setting. Turning off multi-key mode uses only the first key while keeping the other keys and notes.";
+"此页修改先保留为草稿，返回提供商页面后点击保存生效。" = "Changes on this page remain a draft. Return to the provider page and tap Save to apply them.";

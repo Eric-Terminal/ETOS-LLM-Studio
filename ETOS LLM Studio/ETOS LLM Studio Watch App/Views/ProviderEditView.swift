@@ -17,12 +17,11 @@ struct ProviderEditView: View {
     
     // 正在编辑的提供商
     @State private var provider: Provider
-    // 独立保存每把密钥，避免手表窄屏把多个值压缩成无法辨认的一行。
-    @State private var apiKeyEntries: [APIKeyEntry]
+    @StateObject private var keyEditor: ProviderAPIKeyEditorModel
+    @State private var showKeyManagement = false
     @State private var headerOverrideEntries: [HeaderOverrideEntry]
     @State private var useProviderProxyOverride: Bool
     @State private var providerProxyConfiguration: NetworkProxyConfiguration
-    @State private var showApiKeys: Bool = false
     @State private var showProxyPassword: Bool = false
     @State private var showUnsavedChangesAlert = false
     
@@ -32,7 +31,6 @@ struct ProviderEditView: View {
     let navigationTitleOverride: String?
     let onSave: (Provider) -> Void
     private let savedProvider: Provider
-    private let savedAPIKeyValues: [String]
     private let savedHeaderOverrideTexts: [String]
     private let savedUseProviderProxyOverride: Bool
     private let savedProviderProxyConfiguration: NetworkProxyConfiguration
@@ -49,8 +47,7 @@ struct ProviderEditView: View {
         onSave: @escaping (Provider) -> Void = { _ in }
     ) {
         self._provider = State(initialValue: provider)
-        let apiKeyValues = provider.apiKeys.isEmpty ? [""] : provider.apiKeys
-        self._apiKeyEntries = State(initialValue: apiKeyValues.map { APIKeyEntry(value: $0) })
+        self._keyEditor = StateObject(wrappedValue: ProviderAPIKeyEditorModel(provider: provider))
         let serializedHeaders = HeaderExpressionParser.serialize(headers: provider.headerOverrides)
         let headerOverrideTexts = serializedHeaders.isEmpty ? [""] : serializedHeaders
         self._headerOverrideEntries = State(initialValue: serializedHeaders.isEmpty
@@ -66,7 +63,6 @@ struct ProviderEditView: View {
         self.navigationTitleOverride = navigationTitleOverride
         self.onSave = onSave
         self.savedProvider = provider
-        self.savedAPIKeyValues = apiKeyValues
         self.savedHeaderOverrideTexts = headerOverrideTexts
         self.savedUseProviderProxyOverride = useProviderProxyOverride
         self.savedProviderProxyConfiguration = providerProxyConfiguration
@@ -96,18 +92,31 @@ struct ProviderEditView: View {
             }
             
             Section(header: Text(NSLocalizedString("认证", comment: "")), footer: Text(apiKeysHint)) {
-                ForEach($apiKeyEntries) { $entry in
-                    APIKeyRow(entry: $entry, showsPlaintext: showApiKeys)
+                if !keyEditor.draft.multiKeyEnabled {
+                    Group {
+                        if keyEditor.showsPlaintext {
+                            TextField(NSLocalizedString("API Key", comment: ""), text: $keyEditor.singleKeyText.watchKeyboardNewlineBinding())
+                        } else {
+                            SecureField(NSLocalizedString("API Key", comment: ""), text: $keyEditor.singleKeyText.watchKeyboardNewlineBinding())
+                        }
+                    }
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    Toggle(NSLocalizedString("显示明文", comment: ""), isOn: $keyEditor.showsPlaintext)
                 }
-                .onDelete(perform: deleteAPIKeyEntries)
-
-                Button {
-                    addAPIKeyEntry()
-                } label: {
-                    Label(NSLocalizedString("添加 API Key", comment: "Add provider API key button"), systemImage: "plus")
+                Toggle(NSLocalizedString("多 Key 模式", comment: ""), isOn: Binding(
+                    get: { keyEditor.draft.multiKeyEnabled },
+                    set: { enabled in
+                        keyEditor.draft.multiKeyEnabled = enabled
+                        if enabled { showKeyManagement = true }
+                    }
+                ))
+                .disabled(isLocalProvider)
+                if keyEditor.draft.multiKeyEnabled {
+                    Button { showKeyManagement = true } label: {
+                        Label(NSLocalizedString("管理 API Key", comment: ""), systemImage: "key.horizontal")
+                    }
                 }
-
-                Toggle(NSLocalizedString("显示明文", comment: ""), isOn: $showApiKeys)
             }
 
             Section(
@@ -184,6 +193,17 @@ struct ProviderEditView: View {
             }
         }
         .navigationTitle(navigationTitle)
+        .sheet(isPresented: $showKeyManagement) {
+            NavigationStack {
+                ProviderAPIKeyManagementForm(editor: keyEditor, providerID: provider.id,
+                                             textBinding: { $0.watchKeyboardNewlineBinding() })
+                    .watchGuideEntry(actions: [
+                        WatchPageAction(title: NSLocalizedString("完成", comment: ""), systemImage: "checkmark") {
+                            showKeyManagement = false
+                        }
+                    ])
+            }
+        }
         .navigationBarBackButtonHidden(hasUnsavedChanges)
         .toolbar {
             if showsCancelButton {
@@ -222,6 +242,7 @@ struct ProviderEditView: View {
                 documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
                 tools: [GuidePageTool(definition: GuideToolCatalog.updateProviderConfiguration, access: .proposeChange)]
             ),
+            isActive: !showKeyManagement,
             snapshot: providerGuideSnapshot,
             buildProposal: buildProviderGuideProposal,
             execute: executeProviderGuideProposal
@@ -236,10 +257,10 @@ struct ProviderEditView: View {
     }
     
     private func saveProvider() {
-        guard let headerOverrides = buildHeaderOverrides() else { return }
+        guard !isSaveDisabled, let headerOverrides = buildHeaderOverrides() else { return }
         var updated = provider
         updated.chatEndpointPath = Provider.normalizedChatEndpointPath(updated.chatEndpointPath)
-        updated.apiKeys = parsedApiKeys
+        keyEditor.apply(to: &updated)
         updated.headerOverrides = headerOverrides
         updated.proxyConfiguration = useProviderProxyOverride ? normalizedProxyConfiguration(providerProxyConfiguration) : nil
         
@@ -258,7 +279,10 @@ struct ProviderEditView: View {
             "base_url": GuideSnapshotField(label: NSLocalizedString("API 地址", comment: "手表提供商向导快照字段"), value: .string(provider.baseURL)),
             "chat_endpoint_path": GuideSnapshotField(label: NSLocalizedString("聊天端点后缀", comment: "手表提供商向导快照字段"), value: .string(provider.chatEndpointPath)),
             "api_format": GuideSnapshotField(label: NSLocalizedString("API 格式", comment: "手表提供商向导快照字段"), value: .string(provider.apiFormat)),
-            "api_key": GuideSnapshotField(label: NSLocalizedString("API Key", comment: "手表提供商向导快照字段"), value: .string(apiKeysText), access: .writeOnly),
+            "api_key": GuideSnapshotField(label: NSLocalizedString("API Key", comment: "手表提供商向导快照字段"), value: .string(keyEditor.apiKeysText), access: .writeOnly),
+            "multi_key_enabled": GuideSnapshotField(label: NSLocalizedString("多 Key 模式", comment: ""), value: .bool(keyEditor.draft.multiKeyEnabled)),
+            "maximum_key_retries": GuideSnapshotField(label: NSLocalizedString("最大重试次数", comment: ""), value: .int(Int(keyEditor.draft.maximumRetriesText) ?? 3)),
+            "key_count": GuideSnapshotField(label: NSLocalizedString("API Key 数量", comment: ""), value: .int(keyEditor.keyCount), access: .readOnly),
             "uses_provider_proxy": GuideSnapshotField(label: NSLocalizedString("使用独立代理", comment: "手表提供商向导快照字段"), value: .bool(useProviderProxyOverride), access: .readOnly)
         ])
     }
@@ -280,7 +304,9 @@ struct ProviderEditView: View {
             "base_url": NSLocalizedString("API 地址", comment: "手表提供商向导修改字段"),
             "chat_endpoint_path": NSLocalizedString("聊天端点后缀", comment: "手表提供商向导修改字段"),
             "api_format": NSLocalizedString("API 格式", comment: "手表提供商向导修改字段"),
-            "api_key": NSLocalizedString("API Key", comment: "手表提供商向导修改字段")
+            "api_key": NSLocalizedString("API Key", comment: "手表提供商向导修改字段"),
+            "multi_key_enabled": NSLocalizedString("多 Key 模式", comment: ""),
+            "maximum_key_retries": NSLocalizedString("最大重试次数", comment: "")
         ]
         try GuideToolArguments.requireOnlyKeys(Set(labels.keys), in: arguments)
         _ = try GuideToolArguments.optionalString("name", in: arguments)
@@ -288,6 +314,7 @@ struct ProviderEditView: View {
         _ = try GuideToolArguments.optionalString("chat_endpoint_path", in: arguments)
         _ = try GuideToolArguments.optionalString("api_format", in: arguments)
         _ = try GuideToolArguments.optionalString("api_key", in: arguments)
+        try ProviderAPIKeyGuideSupport.validate(arguments)
         let mutations = labels.compactMap { key, label -> GuideSettingMutation? in
             guard let newValue = arguments[key] else { return nil }
             let sensitive = key == "api_key"
@@ -317,7 +344,7 @@ struct ProviderEditView: View {
             throw GuideError.unsupportedTool(proposal.toolName)
         }
         let originalProvider = provider
-        let originalAPIKeyEntries = apiKeyEntries
+        let originalKeyDraft = keyEditor.draft
         let oldArguments = currentProviderGuideArguments(for: proposal.arguments.keys)
         let headerOverrides: [String: String]
         do {
@@ -328,21 +355,22 @@ struct ProviderEditView: View {
             }
             if let value = try GuideToolArguments.optionalString("api_format", in: proposal.arguments) { provider.apiFormat = value }
             if let value = try GuideToolArguments.optionalString("api_key", in: proposal.arguments) {
-                setAPIKeyEntries(from: value)
+                keyEditor.replaceKeys(from: value)
             }
+            try ProviderAPIKeyGuideSupport.apply(proposal.arguments, to: keyEditor)
             guard !isSaveDisabled, let resolvedHeaderOverrides = buildHeaderOverrides() else {
                 throw GuideError.invalidToolArguments
             }
             headerOverrides = resolvedHeaderOverrides
         } catch {
             provider = originalProvider
-            apiKeyEntries = originalAPIKeyEntries
+            keyEditor.draft = originalKeyDraft
             throw error
         }
 
         var updated = provider
         updated.chatEndpointPath = Provider.normalizedChatEndpointPath(updated.chatEndpointPath)
-        updated.apiKeys = parsedApiKeys
+        keyEditor.apply(to: &updated)
         updated.headerOverrides = headerOverrides
         updated.proxyConfiguration = useProviderProxyOverride ? normalizedProxyConfiguration(providerProxyConfiguration) : nil
         ChatService.shared.saveProviderFromManagement(updated)
@@ -357,7 +385,8 @@ struct ProviderEditView: View {
         )
         return GuideActionExecution(
             message: NSLocalizedString("已保存提供商配置。", comment: "手表提供商向导执行结果"),
-            undoProposal: try buildProviderGuideProposal(call: undoCall, snapshot: undoSnapshot)
+            undoProposal: proposal.arguments["api_key"] == nil
+                ? try buildProviderGuideProposal(call: undoCall, snapshot: undoSnapshot) : nil
         )
     }
 
@@ -369,7 +398,9 @@ struct ProviderEditView: View {
             case "base_url": values[key] = .string(provider.baseURL)
             case "chat_endpoint_path": values[key] = .string(provider.chatEndpointPath)
             case "api_format": values[key] = .string(provider.apiFormat)
-            case "api_key": values[key] = .string(apiKeysText)
+            case "api_key": values[key] = .string(keyEditor.apiKeysText)
+            case "multi_key_enabled": values[key] = .bool(keyEditor.draft.multiKeyEnabled)
+            case "maximum_key_retries": values[key] = .int(Int(keyEditor.draft.maximumRetriesText) ?? 3)
             default: break
             }
         }
@@ -378,7 +409,7 @@ struct ProviderEditView: View {
 
     private var hasUnsavedChanges: Bool {
         provider != savedProvider ||
-        apiKeyEntries.map(\.value) != savedAPIKeyValues ||
+        keyEditor.hasUnsavedChanges ||
         headerOverrideEntries.map(\.text) != savedHeaderOverrideTexts ||
         useProviderProxyOverride != savedUseProviderProxyOverride ||
         providerProxyConfiguration != savedProviderProxyConfiguration
@@ -422,7 +453,7 @@ struct ProviderEditView: View {
         if isLocalProvider {
             return NSLocalizedString("本地推理不会读取 API Key。这里保留字段只是为了沿用提供商配置界面。", comment: "Local provider API key hint")
         }
-        return NSLocalizedString("每个 API Key 独立一行；向左轻扫可删除。", comment: "Provider API key list hint")
+        return NSLocalizedString("可用逗号分隔多个 Key，或开启多 Key 模式逐条添加并填写备注。", comment: "")
     }
 
     private var numberFormatter: NumberFormatter {
@@ -458,20 +489,10 @@ struct ProviderEditView: View {
         NSLocalizedString("使用 key=value 添加或覆盖请求头，例如: User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)。\n{api_key} 会替换为当前 API Key，例如: Authorization=Bearer {api_key}", comment: "")
     }
 
-    private var apiKeysText: String {
-        apiKeyEntries.map(\.value).joined(separator: ",")
-    }
-
-    private var parsedApiKeys: [String] {
-        apiKeyEntries
-            .map { $0.value.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-    }
-
     private var isSaveDisabled: Bool {
         provider.name.isEmpty ||
         provider.baseURL.isEmpty ||
-        (!isLocalProvider && parsedApiKeys.isEmpty) ||
+        (!isLocalProvider && !keyEditor.isValid) ||
         providerProxyValidationError != nil ||
         headerOverrideEntries.contains { $0.error != nil }
     }
@@ -485,21 +506,6 @@ struct ProviderEditView: View {
             username: configuration.username.trimmingCharacters(in: .whitespacesAndNewlines),
             password: configuration.password
         )
-    }
-
-    private func addAPIKeyEntry() {
-        apiKeyEntries.append(APIKeyEntry(value: ""))
-    }
-
-    private func deleteAPIKeyEntries(at offsets: IndexSet) {
-        apiKeyEntries.remove(atOffsets: offsets)
-    }
-
-    private func setAPIKeyEntries(from text: String) {
-        let values = text
-            .split(separator: ",", omittingEmptySubsequences: false)
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-        apiKeyEntries = (values.isEmpty ? [""] : values).map { APIKeyEntry(value: $0) }
     }
 
     private func addHeaderOverrideEntry() {
@@ -612,39 +618,6 @@ struct ProviderEditView: View {
 private struct HeaderOverridesPreview {
     let text: String
     let isPlaceholder: Bool
-}
-
-private struct APIKeyEntry: Identifiable, Equatable {
-    let id: UUID
-    var value: String
-
-    init(id: UUID = UUID(), value: String) {
-        self.id = id
-        self.value = value
-    }
-}
-
-private struct APIKeyRow: View {
-    @Binding var entry: APIKeyEntry
-    let showsPlaintext: Bool
-
-    var body: some View {
-        Group {
-            if showsPlaintext {
-                TextField(
-                    NSLocalizedString("API Key", comment: "Provider API key field"),
-                    text: $entry.value.watchKeyboardNewlineBinding()
-                )
-            } else {
-                SecureField(
-                    NSLocalizedString("API Key", comment: "Provider API key field"),
-                    text: $entry.value.watchKeyboardNewlineBinding()
-                )
-            }
-        }
-        .textInputAutocapitalization(.never)
-        .autocorrectionDisabled()
-    }
 }
 
 private struct HeaderOverrideEntry: Identifiable, Equatable {

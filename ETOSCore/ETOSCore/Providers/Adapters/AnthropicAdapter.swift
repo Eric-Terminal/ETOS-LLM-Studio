@@ -185,7 +185,7 @@ public class AnthropicAdapter: APIAdapter {
         
         let chatURL = baseURL.appendingPathComponent("messages")
         
-        guard let apiKey = model.provider.apiKeys.randomElement(), !apiKey.isEmpty else {
+        guard let apiKey = commonPayload[providerAPIKeyControlKey] as? String ?? model.provider.nextAPIKey(), !apiKey.isEmpty else {
             logger.error("构建聊天请求失败: 提供商 '\(model.provider.name)' 未配置有效的 API Key。")
             return nil
         }
@@ -422,7 +422,7 @@ public class AnthropicAdapter: APIAdapter {
             return nil
         }
 
-        guard let apiKey = provider.apiKeys.randomElement(), !apiKey.isEmpty else {
+        guard let apiKey = provider.nextAPIKey(), !apiKey.isEmpty else {
             logger.error("构建模型列表请求失败: 提供商 '\(provider.name)' 未配置有效的 API Key。")
             return nil
         }

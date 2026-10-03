@@ -138,6 +138,9 @@ extension ConfigLoader {
                     }
 
                     let hydration = hydrateProviderCredentials(for: provider)
+                    if provider.apiKeys.isEmpty, hydration.apiKeys.count > 1 {
+                        provider.multiKeyEnabled = true
+                    }
                     provider.apiKeys = hydration.apiKeys
                     providers.append(provider)
                     seenProviderIndexByID[provider.id] = providers.count - 1

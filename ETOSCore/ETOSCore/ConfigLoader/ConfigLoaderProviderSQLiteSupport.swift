@@ -59,6 +59,8 @@ extension ConfigLoader {
                 baseURL: provider.baseURL,
                 chatEndpointPath: provider.normalizedChatEndpointPath,
                 apiFormat: provider.apiFormat,
+                multiKeyEnabled: provider.multiKeyEnabled,
+                maximumKeyRetries: provider.maximumKeyRetries,
                 proxyIsEnabled: proxy.map { $0.isEnabled ? 1 : 0 },
                 proxyType: proxy?.type.rawValue,
                 proxyHost: proxy?.host,
@@ -73,7 +75,8 @@ extension ConfigLoader {
                 var apiKeyRecord = RelationalProviderAPIKeyRecord(
                     providerID: provider.id.uuidString,
                     keyIndex: index,
-                    apiKey: apiKey
+                    apiKey: apiKey,
+                    note: provider.apiKeyNotes[apiKey] ?? ""
                 )
                 try apiKeyRecord.insert(db)
             }
@@ -181,11 +184,13 @@ extension ConfigLoader {
             let providerIDRaw = row.id
             let providerID = UUID(uuidString: providerIDRaw) ?? UUID()
 
-            let apiKeys = try RelationalProviderAPIKeyRecord
+            let apiKeyRows = try RelationalProviderAPIKeyRecord
                 .filter(RelationalProviderAPIKeyRecord.Columns.providerID == providerIDRaw)
                 .fetchAll(db)
                 .sorted { $0.keyIndex < $1.keyIndex }
-                .map(\.apiKey)
+            let apiKeys = apiKeyRows.map(\.apiKey)
+            let apiKeyNotes = Dictionary(apiKeyRows.filter { !$0.note.isEmpty }.map { ($0.apiKey, $0.note) },
+                                         uniquingKeysWith: { first, _ in first })
 
             let headerRows = try RelationalProviderHeaderOverrideRecord
                 .filter(RelationalProviderHeaderOverrideRecord.Columns.providerID == providerIDRaw)
@@ -293,7 +298,10 @@ extension ConfigLoader {
                     apiFormat: row.apiFormat,
                     models: models,
                     headerOverrides: headerOverrides,
-                    proxyConfiguration: proxyConfiguration
+                    proxyConfiguration: proxyConfiguration,
+                    multiKeyEnabled: row.multiKeyEnabled,
+                    apiKeyNotes: apiKeyNotes,
+                    maximumKeyRetries: row.maximumKeyRetries
                 )
             )
         }

@@ -67,6 +67,20 @@ extension SyncEngine {
             changed = true
         }
 
+        let notes = local.apiKeyNotes.merging(incoming.apiKeyNotes) { localNote, incomingNote in
+            preferIncomingModelCapabilityShape ? incomingNote : localNote
+        }
+        if notes != merged.apiKeyNotes {
+            merged.apiKeyNotes = notes
+            changed = true
+        }
+        if preferIncomingModelCapabilityShape,
+           merged.multiKeyEnabled != incoming.multiKeyEnabled || merged.maximumKeyRetries != incoming.maximumKeyRetries {
+            merged.multiKeyEnabled = incoming.multiKeyEnabled
+            merged.maximumKeyRetries = incoming.maximumKeyRetries
+            changed = true
+        }
+
         let mergedChatEndpointPath = mergeProviderChatEndpointPathConservatively(
             merged.normalizedChatEndpointPath,
             incoming.normalizedChatEndpointPath
@@ -350,6 +364,16 @@ extension SyncEngine {
         let mergedAPIKeys = mergeProviderAPIKeys(local.apiKeys, incoming.apiKeys)
         if mergedAPIKeys != local.apiKeys {
             merged.apiKeys = mergedAPIKeys
+            changed = true
+        }
+
+        guard local.multiKeyEnabled == incoming.multiKeyEnabled,
+              local.maximumKeyRetries == incoming.maximumKeyRetries,
+              let mergedNotes = mergeStringDictionary(local.apiKeyNotes, incoming.apiKeyNotes) else {
+            return .conflict
+        }
+        if mergedNotes != local.apiKeyNotes {
+            merged.apiKeyNotes = mergedNotes
             changed = true
         }
 

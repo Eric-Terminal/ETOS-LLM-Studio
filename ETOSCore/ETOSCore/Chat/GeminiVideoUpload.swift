@@ -85,7 +85,8 @@ extension ChatService {
     func prepareGeminiNativeVideoAttachments(
         _ attachmentsByMessage: [UUID: [FileAttachment]],
         provider: Provider,
-        adapter: GeminiAdapter
+        adapter: GeminiAdapter,
+        selectedAPIKey: String? = nil
     ) async throws -> (
         attachments: [UUID: [FileAttachment]],
         apiKey: String?
@@ -97,7 +98,7 @@ extension ChatService {
             return (attachmentsByMessage, nil)
         }
 
-        guard let apiKey = provider.apiKeys.filter({ !$0.isEmpty }).randomElement() else {
+        guard let apiKey = selectedAPIKey ?? provider.nextAPIKey() else {
             throw GeminiVideoUploadError.missingAPIKey
         }
         guard let baseURL = adapter.normalizedGeminiBaseURL(from: provider.baseURL) else {

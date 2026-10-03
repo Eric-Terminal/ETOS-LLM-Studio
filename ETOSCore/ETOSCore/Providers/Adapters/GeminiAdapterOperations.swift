@@ -23,7 +23,8 @@ extension GeminiAdapter {
         
         let controlledAPIKey = commonPayload[Self.apiKeyControlKey] as? String
         guard let apiKey = controlledAPIKey.flatMap({ $0.isEmpty ? nil : $0 })
-            ?? model.provider.apiKeys.randomElement(),
+            ?? (commonPayload[providerAPIKeyControlKey] as? String)
+            ?? model.provider.nextAPIKey(),
               !apiKey.isEmpty else {
             logger.error("构建聊天请求失败: 提供商 '\(model.provider.name)' 未配置有效的 API Key。")
             return nil
@@ -289,7 +290,7 @@ extension GeminiAdapter {
             return nil
         }
         
-        guard let apiKey = provider.apiKeys.randomElement(), !apiKey.isEmpty else {
+        guard let apiKey = provider.nextAPIKey(), !apiKey.isEmpty else {
             logger.error("构建模型列表请求失败: 提供商 '\(provider.name)' 未配置有效的 API Key。")
             return nil
         }
@@ -509,7 +510,7 @@ extension GeminiAdapter {
             return nil
         }
         
-        guard let apiKey = model.provider.apiKeys.randomElement(), !apiKey.isEmpty else {
+        guard let apiKey = model.provider.nextAPIKey(), !apiKey.isEmpty else {
             logger.error("构建嵌入请求失败: 提供商 '\(model.provider.name)' 缺少有效的 API Key")
             return nil
         }

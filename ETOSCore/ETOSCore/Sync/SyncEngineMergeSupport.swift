@@ -217,6 +217,12 @@ extension SyncEngine {
         hasher.combine(normalizeProviderBaseURL(provider.baseURL, apiFormat: canonicalAPIFormat))
         hasher.combine(provider.normalizedChatEndpointPath)
         hasher.combine(canonicalAPIFormat)
+        hasher.combine(provider.multiKeyEnabled)
+        hasher.combine(provider.maximumKeyRetries)
+        for (key, note) in provider.apiKeyNotes.sorted(by: { $0.key < $1.key }) {
+            hasher.combine(key)
+            hasher.combine(note)
+        }
         for (key, value) in provider.headerOverrides.sorted(by: { $0.key < $1.key }) {
             hasher.combine(key)
             hasher.combine(value)

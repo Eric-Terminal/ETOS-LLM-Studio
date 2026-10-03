@@ -16,7 +16,7 @@ extension GeminiAdapter {
             return nil
         }
 
-        guard let apiKey = model.provider.apiKeys.randomElement(), !apiKey.isEmpty else {
+        guard let apiKey = model.provider.nextAPIKey(), !apiKey.isEmpty else {
             logger.error("构建 Gemini 生图请求失败: 提供商 '\(model.provider.name)' 缺少有效的 API Key")
             return nil
         }

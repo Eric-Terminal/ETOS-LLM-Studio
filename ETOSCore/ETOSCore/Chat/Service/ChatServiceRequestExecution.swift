@@ -692,6 +692,9 @@ extension ChatService {
         commonPayload[ReasoningContentEchoPayload.key] = await openAIReasoningContentEchoModeControlValue()
         if let selectedGeminiAPIKey {
             commonPayload[GeminiAdapter.apiKeyControlKey] = selectedGeminiAPIKey
+        } else if let apiKey = runnableModel.provider.nextAPIKey() {
+            // 首次构建、Responses 回退和续写重建属于同一尝试，只消费一次轮换。
+            commonPayload[providerAPIKeyControlKey] = apiKey
         }
         if adapter is OpenAIAdapter {
             let includeUsageInStream = await MainActor.run { AppConfigStore.shared.enableOpenAIStreamIncludeUsage }
@@ -777,10 +780,11 @@ extension ChatService {
             )
         }()
 
-        // 请求材料只准备一次。恢复时仅替换助手前缀，避免重复执行脚本、上传或工具。
+        // 恢复时沿用已完成的脚本和工具；仅续写前缀及换 Key 后的视频引用需要更新。
         let messagesBeforePrefill = assistantPrefill == nil ? messagesToSend : Array(messagesToSend.dropLast())
         await withAutomaticRequestRetries(
-            request: request, loadingMessageID: loadingMessageID,
+            request: request, provider: runnableModel.provider,
+            apiFormat: runnableModel.effectiveAPIFormat, loadingMessageID: loadingMessageID,
             sessionID: currentSessionID, requestLogContext: requestLogContext,
             initialPrefill: assistantPrefill,
             rebuildRequest: { prefix in
@@ -796,6 +800,23 @@ extension ChatService {
                     tools: effectiveTools, audioAttachments: audioAttachments,
                     imageAttachments: imageAttachments, fileAttachments: fileAttachments
                 )
+            },
+            prepareRetryRequest: { retryRequest in
+                guard let previousKey = selectedGeminiAPIKey,
+                      let geminiAdapter = adapter as? GeminiAdapter,
+                      let nextKey = retryRequest.value(forHTTPHeaderField: "x-goog-api-key"),
+                      nextKey != previousKey else { return retryRequest }
+                // Files API 的文件归属随凭据变化；切换 Key 后复用该 Key 的缓存或重新上传。
+                let preparation = try await self.prepareGeminiNativeVideoAttachments(
+                    fileAttachments, provider: runnableModel.provider,
+                    adapter: geminiAdapter, selectedAPIKey: nextKey
+                )
+                let updated = try GeminiVideoRequestRebinding.replacingFileReferences(
+                    in: retryRequest, previous: fileAttachments, updated: preparation.attachments
+                )
+                fileAttachments = preparation.attachments
+                selectedGeminiAPIKey = nextKey
+                return updated
             }
         ) { attemptRequest, attemptLoadingID, attemptLogContext, retryHandler in
             // 自动续写可能创建新占位，仍沿用这次请求的档位快照。
@@ -803,7 +824,9 @@ extension ChatService {
                 usesRainbow: usesRainbowThinkingSweep, messageID: attemptLoadingID, sessionID: currentSessionID
             )
             let fallbackRequest = self.openAIResponsesRequestUsesPreviousResponseID(attemptRequest)
-                ? responsesFullInputFallbackRequest : nil
+                ? responsesFullInputFallbackRequest.map {
+                    runnableModel.provider.preservingAuthentication(from: attemptRequest, in: $0)
+                } : nil
             if effectiveStreaming {
                 await handleStreamedResponse(
                     request: attemptRequest,

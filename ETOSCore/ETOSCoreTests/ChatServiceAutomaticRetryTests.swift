@@ -97,14 +97,14 @@ private final class RetryStatusRecorder: @unchecked Sendable {
 }
 
 extension ChatServiceTests {
-    private func automaticRetryService() -> ChatService {
+    private func automaticRetryService(provider: Provider? = nil) -> ChatService {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [AutomaticRetryURLProtocol.self]
         let service = ChatService(
             adapters: ["openai-compatible": OpenAIAdapter()],
             memoryManager: memoryManager, urlSession: URLSession(configuration: config)
         )
-        service.setSelectedModel(dummyModel)
+        service.setSelectedModel(provider.map { RunnableModel(provider: $0, model: dummyModel.model) } ?? dummyModel)
         let session = service.createSavedSession(name: "自动重试测试")
         service.setCurrentSession(session)
         return service
@@ -117,6 +117,55 @@ extension ChatServiceTests {
             enhancedPrompt: nil, enableMemory: false, enableMemoryWrite: false,
             includeSystemTime: false
         )
+    }
+
+    @Test("多密钥认证失败后按顺序切换，提供商重试上限覆盖全局值")
+    @MainActor
+    func multiKeyRetriesRotateAndRespectProviderLimit() async throws {
+        await cleanup()
+        let config = AppConfigStore.shared
+        let previous = config.maximumRequestRetries
+        config.maximumRequestRetries = 0
+        defer { config.maximumRequestRetries = previous }
+        var provider = dummyModel.provider
+        provider.id = UUID()
+        provider.apiKeys = ["first-key", "second-key"]
+        provider.multiKeyEnabled = true
+        provider.maximumKeyRetries = 1
+        provider.headerOverrides = ["X-Key": "{api_key}"]
+        let service = automaticRetryService(provider: provider)
+        AutomaticRetryURLProtocol.configure([
+            .init(status: 401, body: "invalid key"),
+            .init(status: 200, body: #"{"choices":[{"message":{"role":"assistant","content":"已切换"}}]}"#)
+        ])
+        await sendAutomaticallyRetriedMessage(using: service, streaming: false)
+        let requests = AutomaticRetryURLProtocol.requests
+        #expect(requests.map { $0.value(forHTTPHeaderField: "Authorization") } == ["Bearer first-key", "Bearer second-key"])
+        #expect(requests.map { $0.value(forHTTPHeaderField: "X-Key") } == ["first-key", "second-key"])
+        #expect(service.messagesForSessionSubject.value.last?.content == "已切换")
+        #expect(requests.allSatisfy {
+            !(String(data: $0.httpBody ?? Data(), encoding: .utf8) ?? "").contains(providerAPIKeyControlKey)
+        })
+    }
+
+    @Test("多密钥最大重试次数为零时不因全局重试设置换 Key 重放")
+    @MainActor
+    func multiKeyZeroRetriesStopsImmediately() async throws {
+        await cleanup()
+        let config = AppConfigStore.shared
+        let previous = config.maximumRequestRetries
+        config.maximumRequestRetries = 3
+        defer { config.maximumRequestRetries = previous }
+        var provider = dummyModel.provider
+        provider.id = UUID()
+        provider.apiKeys = ["first-key", "second-key"]
+        provider.multiKeyEnabled = true
+        provider.maximumKeyRetries = 0
+        let service = automaticRetryService(provider: provider)
+        AutomaticRetryURLProtocol.configure([.init(status: 503, body: "unavailable")])
+        await sendAutomaticallyRetriedMessage(using: service, streaming: false)
+        #expect(AutomaticRetryURLProtocol.requests.count == 1)
+        #expect(service.messagesForSessionSubject.value.contains { $0.role == .error })
     }
 
     @Test("503 自动退避后成功，状态包含次数，每次 HTTP 请求独立记账")
@@ -370,7 +419,8 @@ extension ChatServiceTests {
         let request = URLRequest(url: URL(string: "https://retry.example/chat")!)
         var attempts = 0
         await service.withAutomaticRequestRetries(
-            request: request, loadingMessageID: interrupted.id, sessionID: session.id,
+            request: request, provider: dummyModel.provider, apiFormat: dummyModel.effectiveAPIFormat,
+            loadingMessageID: interrupted.id, sessionID: session.id,
             requestLogContext: .init(
                 requestID: UUID(), sessionID: session.id, providerID: nil,
                 providerName: "测试路由", modelID: "test", requestSource: .chat,

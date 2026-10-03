@@ -643,6 +643,8 @@ struct ProviderOrderTests {
             baseURL: "https://example.com",
             chatEndpointPath: Provider.defaultChatEndpointPath,
             apiFormat: "openai-compatible",
+            multiKeyEnabled: false,
+            maximumKeyRetries: 3,
             proxyIsEnabled: nil,
             proxyType: nil,
             proxyHost: nil,

@@ -19,6 +19,8 @@ extension ConfigLoader {
             case baseURL = "base_url"
             case chatEndpointPath = "chat_endpoint_path"
             case apiFormat = "api_format"
+            case multiKeyEnabled = "multi_key_enabled"
+            case maximumKeyRetries = "maximum_key_retries"
             case proxyIsEnabled = "proxy_is_enabled"
             case proxyType = "proxy_type"
             case proxyHost = "proxy_host"
@@ -33,6 +35,8 @@ extension ConfigLoader {
         var baseURL: String
         var chatEndpointPath: String
         var apiFormat: String
+        var multiKeyEnabled: Bool
+        var maximumKeyRetries: Int
         var proxyIsEnabled: Int?
         var proxyType: String?
         var proxyHost: String?
@@ -49,6 +53,7 @@ extension ConfigLoader {
             case providerID = "provider_id"
             case keyIndex = "key_index"
             case apiKey = "api_key"
+            case note
         }
 
         enum Columns {
@@ -58,6 +63,7 @@ extension ConfigLoader {
         var providerID: String
         var keyIndex: Int
         var apiKey: String
+        var note: String
     }
 
     struct RelationalProviderHeaderOverrideRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
