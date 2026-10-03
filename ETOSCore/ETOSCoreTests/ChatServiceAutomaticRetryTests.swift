@@ -219,8 +219,10 @@ extension ChatServiceTests {
         #expect(service.messagesForSessionSubject.value.last?.role == .error)
         let logs = Persistence.loadRequestLogs(query: .init(limit: 10))
         #expect(logs.count == 4)
-        #expect(logs.filter { $0.errorKind == "api_key_retry" }.count == 2)
-        #expect(logs.filter { $0.errorKind == "automatic_retry" }.count == 1)
+        let events = Persistence.loadUsageStatsDayBundles().flatMap(\.events).filter { $0.providerID == provider.id }
+        #expect(events.count == 4)
+        #expect(events.filter { $0.errorKind == "api_key_retry" }.count == 2)
+        #expect(events.filter { $0.errorKind == "automatic_retry" }.count == 1)
         await cleanup()
     }
 
