@@ -75,19 +75,37 @@ public struct ProviderAPIKeyManagementForm: View {
 
     private var settingsIntroCard: some View {
         Section {
+            #if os(watchOS)
+            // watchOS 没有 DisclosureGroup，使用独立按钮保留说明的展开交互。
+            Button {
+                showsIntroDetails.toggle()
+            } label: {
+                Label(NSLocalizedString("多 Key 模式", comment: ""), systemImage: showsIntroDetails ? "chevron.up" : "chevron.down")
+            }
+            .buttonStyle(.borderless)
+            if showsIntroDetails {
+                introDetails
+            }
+            #else
             DisclosureGroup(isExpanded: $showsIntroDetails) {
-                Text(NSLocalizedString("按列表顺序轮换 API Key；聊天请求遇到可重试错误时，先尝试下一条 Key。可为每条 Key 添加备注，方便区分来源。", comment: ""))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Text(NSLocalizedString("换 Key 次数与全局自动重试分别计数。换 Key 次数用完后，再按全局设置判断是否等待并重试；每轮自动重试都会重新计算换 Key 次数。关闭多 Key 模式后只使用第一条，其余 Key 和备注仍会保留。", comment: ""))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Text(NSLocalizedString("此页修改先保留为草稿，返回提供商页面后点击保存生效。", comment: ""))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                introDetails
             } label: {
                 Label(NSLocalizedString("多 Key 模式", comment: ""), systemImage: "key.horizontal")
             }
+            #endif
         }
+    }
+
+    @ViewBuilder
+    private var introDetails: some View {
+        Text(NSLocalizedString("按列表顺序轮换 API Key；聊天请求遇到可重试错误时，先尝试下一条 Key。可为每条 Key 添加备注，方便区分来源。", comment: ""))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        Text(NSLocalizedString("换 Key 次数与全局自动重试分别计数。换 Key 次数用完后，再按全局设置判断是否等待并重试；每轮自动重试都会重新计算换 Key 次数。关闭多 Key 模式后只使用第一条，其余 Key 和备注仍会保留。", comment: ""))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        Text(NSLocalizedString("此页修改先保留为草稿，返回提供商页面后点击保存生效。", comment: ""))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
     }
 }
