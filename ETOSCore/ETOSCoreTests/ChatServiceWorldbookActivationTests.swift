@@ -4,8 +4,8 @@ import Testing
 @testable import ETOSCore
 
 extension ChatServiceTests {
-    @Test("实际聊天请求只注入命中条目，多书绑定不会重新开启导入时关闭的递归")
-    func requestRespectsImportedWorldbookActivationBoundaries() async throws {
+    @Test("实际聊天请求按关键词决定是否注入，多书绑定不会重新开启导入时关闭的递归", arguments: ["启程", "普通问候"])
+    func requestRespectsImportedWorldbookActivationBoundaries(userMessage: String) async throws {
         await cleanup()
         setupMockResponsesForChatAndTitle()
         let store = WorldbookStore.shared
@@ -40,14 +40,14 @@ extension ChatServiceTests {
         chatService.currentSessionSubject.send(session)
         chatService.messagesForSessionSubject.send([])
         await chatService.sendAndProcessMessage(
-            content: "启程", aiTemperature: 0, aiTopP: 1, systemPrompt: "系统提示",
+            content: userMessage, aiTemperature: 0, aiTopP: 1, systemPrompt: "系统提示",
             maxChatHistory: 10, enableStreaming: false, enhancedPrompt: nil,
             enableMemory: false, enableMemoryWrite: false, includeSystemTime: false
         )
 
         let messages = try #require(mockAdapter.receivedMessages)
         let requestContent = messages.map(\.content).joined(separator: "\n")
-        #expect(requestContent.contains("本轮路线经过树屋和湖泊。"))
+        #expect(requestContent.contains("本轮路线经过树屋和湖泊。") == (userMessage == "启程"))
         #expect(!requestContent.contains("不应发送的树屋详情"))
         #expect(!requestContent.contains("不应发送的湖泊详情"))
         #expect(!requestContent.contains("完全无关的未命中条目"))
