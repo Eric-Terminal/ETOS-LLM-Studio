@@ -38,10 +38,17 @@ struct PromptMacroRequest: Sendable {
         return messages.map { message in
             guard message.content.contains("\u{E000}") else { return message }
             var restored = message
-            for (marker, text) in literals {
-                restored.content = restored.content.replacingOccurrences(of: marker, with: text)
-            }
+            restored.content = restoringLiterals(in: message.content)
             return restored
         }
+    }
+
+    func restoringLiterals(in text: String) -> String {
+        guard !literals.isEmpty, text.contains("\u{E000}") else { return text }
+        var restored = text
+        for (marker, literal) in literals {
+            restored = restored.replacingOccurrences(of: marker, with: literal)
+        }
+        return restored
     }
 }

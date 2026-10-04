@@ -275,13 +275,22 @@ extension ChatService {
             regexRules: resolvedRoleplay?.regexRules ?? [],
             macroContext: &promptTemplateMacroContext
         )
+        let messagesForWorldbookScan = requestMessages
+        // 关键词扫描复用本轮提示词宏快照；只还原扫描副本，后续模板链路仍保留字面宏保护。
+        let worldbookScanInput = await Task.detached(priority: .userInitiated) {
+            (
+                messages: promptMacroRequest.restoringLiterals(in: messagesForWorldbookScan),
+                topic: promptTemplates.topic.map { promptMacroRequest.restoringLiterals(in: $0) },
+                enhanced: promptTemplates.enhanced.map { promptMacroRequest.restoringLiterals(in: $0) }
+            )
+        }.value
         var worldbookResult = await worldbookEngine.evaluateAsync(
             .init(
                 sessionID: currentSessionID,
                 worldbooks: boundWorldbooks,
-                messages: requestMessages,
-                topicPrompt: sessionForRequest?.topicPrompt,
-                enhancedPrompt: resolvedEnhancedPrompt,
+                messages: worldbookScanInput.messages,
+                topicPrompt: worldbookScanInput.topic,
+                enhancedPrompt: worldbookScanInput.enhanced,
                 personaDescription: resolvedRoleplay?.persona?.description,
                 characterDescription: resolvedRoleplay?.characters.first?.description,
                 characterPersonality: resolvedRoleplay?.characters.first?.personality,
