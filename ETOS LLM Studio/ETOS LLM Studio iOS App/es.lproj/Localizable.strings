@@ -7896,3 +7896,16 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "这些参数无法无损转换为所选编辑方式，请继续使用当前方式。" = "No es posible convertir estos parámetros sin pérdida. Mantén el modo actual.";
 "选项" = "Opción";
 "键" = "Clave";
+
+/* Mac 聊天请求控制 */
+"聊天控制" = "Controles del chat";
+"跟随默认" = "Usar valor predeterminado";
+"跟随默认（%@）" = "Usar valor predeterminado (%@)";
+"有效覆盖参数" = "Parámetros efectivos";
+"调整聊天控制" = "Ajustar controles del chat";
+"当前模型没有启用的聊天控制。" = "Este modelo no tiene controles de chat activados.";
+"聊天控制的更改会保存，并用于后续请求。" = "Los cambios se guardan para las próximas solicitudes.";
+"聊天控制已保存，将用于后续请求。" = "Controles guardados para las próximas solicitudes.";
+"修改当前模型的一项聊天控制，确认后保存并用于后续请求。" = "Cambiar un control del modelo actual. Guardarlo tras la confirmación y usarlo en futuras solicitudes.";
+"这里只显示模型参数与当前控制合并后的结果，不包含消息、工具或完整 HTTP 请求。" = "Se muestran los parámetros del modelo combinados con los controles actuales, sin mensajes, herramientas ni una solicitud HTTP completa.";
+"Mac 聊天控制使用说明" = "Ajusta interruptores, opciones y deslizadores del modelo de esta conversación. Los cambios se guardan como selecciones del modelo para futuras solicitudes. No cambian las solicitudes ya enviadas ni los valores predeterminados de la configuración.\n\nUsar valor predeterminado elimina la selección personalizada sin desactivar el grupo. El deslizador se guarda al soltarlo o ajustarlo con el teclado; un arrastre sin terminar no se guarda. Desactivar un interruptor omite sus parámetros sin enviar false.\n\nLa vista previa combina los parámetros base y los controles en orden. Los objetos se fusionan recursivamente; las matrices y valores posteriores sustituyen a los anteriores. No incluye mensajes, herramientas ni la solicitud completa. Tras la confirmación nativa, la guía puede cambiar un control. Solo ve nombres, opciones y selecciones, nunca el contenido de los parámetros. Cambiar de modelo o conversación, o restaurar datos, invalida las propuestas anteriores.";

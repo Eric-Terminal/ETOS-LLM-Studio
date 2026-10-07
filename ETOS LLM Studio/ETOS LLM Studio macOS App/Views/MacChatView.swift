@@ -10,6 +10,7 @@ struct MacChatView: View {
     @State private var editingMessage: MacMessageEditTarget?
     @State private var rewritingMessage: MacMessageEditTarget?
     @State private var deletingMessage: MacMessageDeletionTarget?
+    @State private var showsRequestControls = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -105,6 +106,7 @@ struct MacChatView: View {
             MacMessageEditor(message: target.message, sessionID: target.sessionID)
         }
         .sheet(item: $rewritingMessage) { MacMessageRewriteView(target: $0) }
+        .sheet(isPresented: $showsRequestControls) { MacRequestRuntimeView(model: workspace.requestControls) }
         .confirmationDialog(NSLocalizedString("删除消息", comment: ""), isPresented: Binding(
             get: { deletingMessage != nil }, set: { if !$0 { deletingMessage = nil } }
         ), titleVisibility: .visible) {
@@ -163,6 +165,10 @@ struct MacChatView: View {
                 }
                 .disabled(workspace.isImportingAttachments)
                 if workspace.isImportingAttachments { ProgressView().controlSize(.small) }
+                Button { showsRequestControls = true } label: {
+                    Label(NSLocalizedString("聊天控制", comment: ""), systemImage: "slider.horizontal.3")
+                }
+                .disabled(workspace.effectiveModelName == nil || !workspace.canEditRequestControls)
                 Spacer()
                 if workspace.isGenerating || workspace.isPreparingSend {
                     Button { workspace.stop() } label: {

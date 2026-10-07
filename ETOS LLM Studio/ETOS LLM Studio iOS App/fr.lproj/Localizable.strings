@@ -7896,3 +7896,16 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "这些参数无法无损转换为所选编辑方式，请继续使用当前方式。" = "Ces paramètres ne peuvent pas être convertis sans perte. Conservez le mode actuel.";
 "选项" = "Option";
 "键" = "Clé";
+
+/* Mac 聊天请求控制 */
+"聊天控制" = "Contrôles du chat";
+"跟随默认" = "Valeur par défaut";
+"跟随默认（%@）" = "Valeur par défaut (%@)";
+"有效覆盖参数" = "Paramètres effectifs";
+"调整聊天控制" = "Ajuster les contrôles du chat";
+"当前模型没有启用的聊天控制。" = "Ce modèle n’a aucun contrôle de chat activé.";
+"聊天控制的更改会保存，并用于后续请求。" = "Les modifications sont enregistrées pour les prochaines requêtes.";
+"聊天控制已保存，将用于后续请求。" = "Contrôles enregistrés pour les prochaines requêtes.";
+"修改当前模型的一项聊天控制，确认后保存并用于后续请求。" = "Modifier un contrôle du modèle actuel. Enregistrer après confirmation pour les prochaines requêtes.";
+"这里只显示模型参数与当前控制合并后的结果，不包含消息、工具或完整 HTTP 请求。" = "Ces paramètres combinent ceux du modèle et les contrôles actuels, sans messages, outils ni requête HTTP complète.";
+"Mac 聊天控制使用说明" = "Réglez les interrupteurs, options et curseurs du modèle utilisé dans cette conversation. Les choix sont enregistrés pour les prochaines requêtes. Les requêtes déjà envoyées et les valeurs par défaut du modèle ne changent pas.\n\nValeur par défaut efface la sélection personnalisée sans désactiver le groupe. Le curseur s’enregistre au relâchement ou lors d’un réglage au clavier, mais pas pendant un glissement inachevé. Désactiver un interrupteur ignore ses paramètres sans envoyer false.\n\nL’aperçu fusionne les paramètres de base et les contrôles dans l’ordre : les objets fusionnent récursivement, les tableaux et valeurs suivants remplacent les précédents. Il exclut messages, outils et requête complète. Après confirmation native, le guide peut changer un contrôle. Il ne voit que les noms, options et sélections, jamais le contenu des paramètres. Changer de modèle ou de conversation, ou restaurer les données, invalide les anciennes propositions.";

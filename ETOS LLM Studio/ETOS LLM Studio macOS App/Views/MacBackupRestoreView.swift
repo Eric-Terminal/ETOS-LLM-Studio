@@ -119,6 +119,7 @@ struct MacBackupRestoreView: View {
         Task {
             defer { workspace.endSnapshotExport() }
             do {
+                await workspace.requestControls.waitForPendingWrites()
                 await configuration.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
                 try await Task.detached(priority: .userInitiated) {

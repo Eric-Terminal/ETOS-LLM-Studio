@@ -58,6 +58,7 @@ final class MacWorkspaceModel: ObservableObject {
     let worldbookModel = MacWorldbookModel()
     let roleplayModel = MacRoleplayModel()
     let roleplayRuntime = MacRoleplayRuntime()
+    let requestControls = MacRequestRuntimeModel()
     private var roleplayHostVisible = false
     private var roleplayLifecycleRevision = UUID()
     private var isClosingRoleplay = false
@@ -65,6 +66,7 @@ final class MacWorkspaceModel: ObservableObject {
     private var toolDrafts: [UUID: [AppToolInputDraftRequest]] = [:]
     private var pendingSupplements: [UUID: [String]] = [:]
     private var rewriteTasks: [UUID: Task<Void, Never>] = [:]
+    private var sendTasks: [UUID: Task<Void, Never>] = [:]
     private var effectiveModel: RunnableModel?
 
     var isPreparingSend: Bool {
@@ -77,7 +79,13 @@ final class MacWorkspaceModel: ObservableObject {
 
     var canSend: Bool {
         phase == .ready && !isRestoringData && !isMutatingHistory && !roleplayRuntime.isBusy && !sessionLibrary.isWorking && currentSession != nil && effectiveModel != nil && !isGenerating && !isPreparingSend
+            && !requestControls.isWorking && !requestControls.isSuspended
             && !isImportingAttachments && (!draft.isEmpty || !attachments.isEmpty)
+    }
+
+    var canEditRequestControls: Bool {
+        phase == .ready && !isRestoringData && !isExportingSnapshot && !isClosingRoleplay && !isPreparingSend
+            && !requestControls.isSuspended && AppLockManager.shared.state != .locked
     }
 
     var canModifyCurrentHistory: Bool {
@@ -110,6 +118,8 @@ final class MacWorkspaceModel: ObservableObject {
         worldbookModel.start(service: service, workspace: self)
         roleplayModel.start(service: service, workspace: self)
         roleplayRuntime.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
+        requestControls.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
+        configuration.$appLanguage.dropFirst().sink { [weak self] _ in self?.requestControls.reload() }.store(in: &subscriptions)
         sessionLibrary.$isWorking.dropFirst().sink { [weak self] working in
             self?.objectWillChange.send()
             if !working { Task { [weak self] in self?.flushToolSupplements() } }
@@ -213,8 +223,8 @@ final class MacWorkspaceModel: ObservableObject {
             refreshToolInteractions()
         }.store(in: &subscriptions)
         AppLockManager.shared.$state.receive(on: DispatchQueue.main).sink { [weak self] state in
-            if state == .locked { self?.suspendRoleplayPresentation() }
-            else { self?.resumeRoleplayPresentation(); self?.flushToolSupplements() }
+            if state == .locked { self?.suspendRoleplayPresentation(); self?.requestControls.suspend() }
+            else { self?.resumeRoleplayPresentation(); self?.resumeRequestControls(); self?.flushToolSupplements() }
         }.store(in: &subscriptions)
         for name in [RoleplayStore.didChangeNotification, RoleplayDisplayedMessageBridge.didChangeNotification,
                      WorldbookStore.didChangeNotification, MessageRegexRuleStore.didChangeNotification] {
@@ -268,9 +278,14 @@ final class MacWorkspaceModel: ObservableObject {
         }
     }
 
-    func prepareRoleplayForTermination() async {
+    func prepareForTermination() async {
         isClosingRoleplay = true
+        // 退出时不能让等待控件落盘的发送任务随后发出新请求。
+        for task in sendTasks.values { task.cancel() }
+        for task in rewriteTasks.values { task.cancel() }
         suspendRoleplayPresentation()
+        requestControls.suspend()
+        await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()
         await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
@@ -297,8 +312,10 @@ final class MacWorkspaceModel: ObservableObject {
             let configuration = MacChatRequestConfiguration(AppConfigStore.shared, session: session)
             sendingSessionIDs.insert(sessionID)
             // HTML 发送自己的正文，保留用户尚未发送的输入和附件。
-            Task { [weak self] in
-                await configuration.send(text, through: service, sessionID: sessionID)
+            sendTasks[sessionID] = Task { [weak self] in
+                await self?.requestControls.waitForPendingWrites()
+                if !Task.isCancelled { await configuration.send(text, through: service, sessionID: sessionID) }
+                self?.sendTasks.removeValue(forKey: sessionID)
                 self?.sendingSessionIDs.remove(sessionID)
                 self?.flushToolSupplements()
             }
@@ -306,8 +323,10 @@ final class MacWorkspaceModel: ObservableObject {
             guard !isGenerating, !isPreparingSend, effectiveModel != nil, let message = sourceMessages.last(where: { $0.role == .assistant }) else { return }
             let configuration = MacChatRequestConfiguration(AppConfigStore.shared, session: session)
             sendingSessionIDs.insert(sessionID)
-            Task { [weak self] in
-                await configuration.retry(message, through: service, sessionID: sessionID, prefill: false)
+            sendTasks[sessionID] = Task { [weak self] in
+                await self?.requestControls.waitForPendingWrites()
+                if !Task.isCancelled { await configuration.retry(message, through: service, sessionID: sessionID, prefill: false) }
+                self?.sendTasks.removeValue(forKey: sessionID)
                 self?.sendingSessionIDs.remove(sessionID)
                 self?.flushToolSupplements()
             }
@@ -326,16 +345,17 @@ final class MacWorkspaceModel: ObservableObject {
             guard let self, !Task.isCancelled else { return }
             self.models = models
             sessionModelCatalog = catalog
-            refreshEffectiveModel()
+            refreshEffectiveModel(forceRequestControls: true)
         }
     }
 
-    private func refreshEffectiveModel() {
+    private func refreshEffectiveModel(forceRequestControls: Bool = false) {
         effectiveModel = sessionModelCatalog.resolvedModel(preferredID: currentSession?.preferredModelIdentifier,
                                                          global: service?.selectedModelSubject.value)
         effectiveModelName = effectiveModel?.model.displayName
         selectedModelSupportsPrefill = effectiveModel?.canRequestAssistantPrefill == true
         selectedModelSupportsRewrite = effectiveModel?.model.isChatModel == true
+        requestControls.select(effectiveModel, sessionID: currentSession?.id, force: forceRequestControls)
     }
 
     func selectSession(_ id: UUID?) {
@@ -468,8 +488,10 @@ final class MacWorkspaceModel: ObservableObject {
         sendingSessionIDs.insert(session.id)
         draft = ""
         self.attachments = []
-        Task { [weak self] in
-            await configuration.send(content, attachments: attachments, through: service, sessionID: session.id)
+        sendTasks[session.id] = Task { [weak self] in
+            await self?.requestControls.waitForPendingWrites()
+            if !Task.isCancelled { await configuration.send(content, attachments: attachments, through: service, sessionID: session.id) }
+            self?.sendTasks.removeValue(forKey: session.id)
             self?.sendingSessionIDs.remove(session.id)
             self?.flushToolSupplements()
         }
@@ -518,8 +540,10 @@ final class MacWorkspaceModel: ObservableObject {
             pendingSupplements[sessionID] = queue.isEmpty ? nil : queue
             let configuration = MacChatRequestConfiguration(AppConfigStore.shared, session: session)
             sendingSessionIDs.insert(sessionID)
-            Task { [weak self] in
-                await configuration.send(content, through: service, sessionID: sessionID)
+            sendTasks[sessionID] = Task { [weak self] in
+                await self?.requestControls.waitForPendingWrites()
+                if !Task.isCancelled { await configuration.send(content, through: service, sessionID: sessionID) }
+                self?.sendTasks.removeValue(forKey: sessionID)
                 self?.sendingSessionIDs.remove(sessionID)
                 self?.flushToolSupplements()
             }
@@ -546,6 +570,7 @@ final class MacWorkspaceModel: ObservableObject {
     func stop() {
         guard let service, let sessionID = currentSession?.id else { return }
         rewriteTasks[sessionID]?.cancel()
+        sendTasks[sessionID]?.cancel()
         Task { await service.cancelRequest(for: sessionID) }
     }
 
@@ -557,6 +582,8 @@ final class MacWorkspaceModel: ObservableObject {
         sendingSessionIDs.insert(request.sessionID)
         rewriteTasks[request.sessionID] = Task { [weak self] in
             do {
+                await self?.requestControls.waitForPendingWrites()
+                try Task.checkCancellation()
                 try await service.rewriteMessage(request.message, instruction: request.instruction, aiTemperature: temperature,
                                                  sessionID: request.sessionID, referenceVersions: request.references,
                                                  selectionTarget: request.selection, runnableModel: model, expectedMessage: request.message)
@@ -575,8 +602,10 @@ final class MacWorkspaceModel: ObservableObject {
               let service, let session = currentSession else { return }
         let configuration = MacChatRequestConfiguration(AppConfigStore.shared, session: session)
         sendingSessionIDs.insert(session.id)
-        Task { [weak self] in
-            await configuration.retry(message, through: service, sessionID: session.id, prefill: prefill)
+        sendTasks[session.id] = Task { [weak self] in
+            await self?.requestControls.waitForPendingWrites()
+            if !Task.isCancelled { await configuration.retry(message, through: service, sessionID: session.id, prefill: prefill) }
+            self?.sendTasks.removeValue(forKey: session.id)
             self?.sendingSessionIDs.remove(session.id)
             self?.flushToolSupplements()
         }
@@ -658,10 +687,16 @@ final class MacWorkspaceModel: ObservableObject {
         guard !isRestoringData, !isMutatingHistory, !roleplayRuntime.isBusy, !sessionLibrary.isWorking, !worldbookModel.isWorking, !roleplayModel.isWorking, !isExportingSnapshot, !SnapshotUploadManager.shared.isUploading else { return false }
         isExportingSnapshot = true
         suspendRoleplayPresentation()
+        requestControls.suspend()
         return true
     }
 
-    func endSnapshotExport() { isExportingSnapshot = false; resumeRoleplayPresentation() }
+    func endSnapshotExport() { isExportingSnapshot = false; resumeRoleplayPresentation(); resumeRequestControls() }
+
+    private func resumeRequestControls() {
+        guard phase == .ready, !isRestoringData, !isExportingSnapshot, !isClosingRoleplay, AppLockManager.shared.state != .locked else { return }
+        requestControls.resume()
+    }
 
     func restoreSnapshot(from url: URL, password: String?) async throws {
         let cloud = CloudSyncManager.shared
@@ -675,13 +710,16 @@ final class MacWorkspaceModel: ObservableObject {
         }
         isRestoringData = true
         suspendRoleplayPresentation()
+        requestControls.suspend()
         discardToolInteractions()
         var didRestore = false
         defer {
             cloud.endLocalDataRestore(didRestore: didRestore)
             isRestoringData = false
             resumeRoleplayPresentation()
+            resumeRequestControls()
         }
+        await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
@@ -714,8 +752,10 @@ final class MacWorkspaceModel: ObservableObject {
         }
         isRestoringData = true
         suspendRoleplayPresentation()
+        requestControls.suspend()
         discardToolInteractions()
-        defer { isRestoringData = false; resumeRoleplayPresentation() }
+        defer { isRestoringData = false; resumeRoleplayPresentation(); resumeRequestControls() }
+        await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
