@@ -9,6 +9,7 @@ struct MacLocalModelLibraryView: View {
     @ObservedObject private var configuration = AppConfigStore.shared
     @State private var editor: MacLocalModelEditorSource?
     @State private var importing = false
+    @State private var downloading = false
     @State private var importEpoch = UUID()
     @State private var preparation: Task<Void, Never>?
     @State private var pageEpoch = UUID()
@@ -38,6 +39,9 @@ struct MacLocalModelLibraryView: View {
                     importEpoch = library.epoch; importPageEpoch = pageEpoch; importing = true
                 } label: {
                     Label(NSLocalizedString("导入 GGUF 权重", comment: ""), systemImage: "square.and.arrow.down")
+                }
+                Button { downloading = true } label: {
+                    Label(NSLocalizedString("下载权重", comment: ""), systemImage: "arrow.down.circle")
                 }
                 if library.isWorking { ProgressView(NSLocalizedString("处理中", comment: "")) }
             } footer: {
@@ -75,12 +79,16 @@ struct MacLocalModelLibraryView: View {
         .task { await library.start() }
         .onAppear { pageIsVisible = true }
         .onChange(of: configuration.appLanguage) { _, _ in library.refresh() }
-        .onChange(of: library.epoch) { _, _ in editor = nil; importing = false }
+        .onChange(of: library.epoch) { _, _ in editor = nil; importing = false; downloading = false }
         .onChange(of: isActive) { _, active in
-            if !active { pageEpoch = UUID(); preparation?.cancel(); editor = nil; importing = false }
+            if !active { pageEpoch = UUID(); preparation?.cancel(); editor = nil; importing = false; downloading = false }
         }
         .onDisappear { pageIsVisible = false; pageEpoch = UUID(); preparation?.cancel() }
         .sheet(item: $editor) { source in MacLocalModelEditor(source: source, library: library) }
+        .sheet(isPresented: $downloading) {
+            MacLocalModelDownloadView(library: library, isActive: isActive && pageIsVisible && workspace.canManageLocalModels)
+                .environment(\.isEnabled, workspace.canManageLocalModels)
+        }
         .fileImporter(isPresented: $importing, allowedContentTypes: [UTType(filenameExtension: "gguf") ?? .data], allowsMultipleSelection: true) { result in
             guard isActive, pageIsVisible, importPageEpoch == pageEpoch, importEpoch == library.epoch, workspace.canManageLocalModels else { return }
             switch result {
@@ -94,14 +102,14 @@ struct MacLocalModelLibraryView: View {
             }
         }
         .alert(NSLocalizedString("本地模型", comment: ""), isPresented: Binding(
-            get: { editor == nil && library.error != nil }, set: { if !$0 { library.error = nil } }
+            get: { editor == nil && !downloading && library.error != nil }, set: { if !$0 { library.error = nil } }
         )) {
             Button(NSLocalizedString("好的", comment: ""), role: .cancel) { library.error = nil }
         } message: { Text(library.error ?? "") }
         .guideSettingsPageContext(
             id: "mac-local-models", title: NSLocalizedString("本地模型", comment: ""),
             documents: [GuideDocumentReference(id: "local-models", title: "Local Models")],
-            isActive: isActive && pageIsVisible && editor == nil && !importing && workspace.canManageLocalModels,
+            isActive: isActive && pageIsVisible && editor == nil && !importing && !downloading && workspace.canManageLocalModels,
             settings: guideSettings
         )
     }

@@ -12,6 +12,7 @@ final class MacLocalModelLibraryModel: ObservableObject {
     @Published private(set) var isSuspended = false
     @Published private(set) var epoch = UUID()
     @Published var error: String?
+    let download: MacLocalModelDownload
     private var store: LocalModelStore?
     private var subscription: AnyCancellable?
     private var presentationTask: Task<Void, Never>?
@@ -21,7 +22,10 @@ final class MacLocalModelLibraryModel: ObservableObject {
 
     var canWrite: Bool { isLoaded && !isWorking && !isSuspended }
 
-    init(store: LocalModelStore? = nil) {
+    init(store: LocalModelStore? = nil, downloadTransport: @escaping MacLocalModelDownload.Transport = { request, progress in
+        try await SyncPackageUploadService.downloadTemporaryFile(request: request, progress: progress)
+    }) {
+        download = MacLocalModelDownload(transport: downloadTransport)
         if let store { attach(store) }
     }
 
@@ -79,6 +83,22 @@ final class MacLocalModelLibraryModel: ObservableObject {
                 _ = try store.importModel(from: url, mmprojURL: index == 0 ? selection.projector : nil)
             }
         }
+    }
+
+    func startDownload(urlText: String, displayName: String, expectedEpoch: UUID) -> UUID? {
+        guard canWrite, expectedEpoch == epoch, let store else { return nil }
+        isWorking = true; writeID = UUID()
+        let token = writeID
+        let task = download.start(urlText: urlText, displayName: displayName, store: store) { [weak self] in
+            guard let self else { return false }
+            return !isSuspended && epoch == expectedEpoch
+        }
+        writeTask = Task { [weak self] in
+            let succeeded = await task.value
+            self?.finishWrite(token)
+            return succeeded
+        }
+        return download.id
     }
 
     nonisolated static func importSelection(_ urls: [URL]) throws -> (weights: [URL], projector: URL?) {
@@ -149,6 +169,7 @@ final class MacLocalModelLibraryModel: ObservableObject {
 
     func suspend() {
         isSuspended = true; epoch = UUID()
+        download.cancel(download.id)
         presentationTask?.cancel(); presentationID = UUID()
     }
 

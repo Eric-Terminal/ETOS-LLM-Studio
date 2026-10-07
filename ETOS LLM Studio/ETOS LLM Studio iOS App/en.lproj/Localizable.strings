@@ -7872,3 +7872,15 @@
 "参数导入不读取任意路径文件，请改用 Grammar 文本。" = "Argument import does not read files from arbitrary paths. Use Grammar text instead.";
 
 "Mac 本地模型管理使用说明" = "Import GGUF weights and optionally a matching mmproj. When importing several weights, the projector attaches only to the first. Enable the provider and model to select it in chat. Library switches save automatically; detail changes require Save.\n\nBlank numbers keep defaults; seed -1 means random. Speech models can use a compatible decoder and optional VAD. LoRA must match the base architecture; scale 1 applies its original effect, while 0 keeps it attached without changing output. Newly selected mmproj and LoRA files are copied on Save. Cancel discards the draft. Reopen details if another change or deletion makes the original outdated.\n\nFor CLI arguments, parse the preview, apply it to the draft, then save the model. Unsupported options are not applied. Adjust the sampler chain with presets, move/add/remove controls, or the codes shown in each row. Codes cannot repeat; blank restores the default. Done returns the chain to the detail draft.\n\nModel caching reduces reloads. Conversation KV caching speeds up consecutive text turns and uses extra memory. Resource monitoring samples only while a local-model chat window is in the foreground. CPU shows process usage; Metal shows allocated memory, not GPU utilization. Lock, backup, restore and quit stop new file operations and allow started writes to finish. Deleting weights requires confirmation and cannot be undone.";
+
+"已下载 %@" = "Downloaded %@";
+
+"下载失败" = "Download Failed";
+
+"请输入有效的 HTTP 或 HTTPS 模型链接。" = "Enter a valid HTTP or HTTPS model URL.";
+
+"下载权重失败：服务器响应无效。" = "Weight download failed: invalid server response.";
+
+"关闭下载页会取消尚未保存的下载。" = "Closing this page cancels downloads that have not started saving.";
+
+"Mac 本地模型下载使用说明" = "Enter a direct GGUF download URL and an optional name, then choose Download Weights. Links stay in this page and are not saved. The guide can replace the link and name after confirmation, but cannot read the existing link or start a download.\n\nProgress shows received bytes; a total appears only when supplied by the server. HTTP connections or certificate exceptions use the app’s network approval dialog. Cancel, close this page, lock the app, back up, restore or quit to cancel an unfinished transfer. If saving has already started, the app waits for it to finish. Invalid responses and invalid GGUF files are not added to the library.\n\nAfter completion, return to the model list to review its settings and select it in chat.";

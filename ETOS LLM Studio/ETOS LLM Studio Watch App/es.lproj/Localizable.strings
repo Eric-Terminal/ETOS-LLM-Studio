@@ -7744,3 +7744,15 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "请选择与基础模型架构匹配的 LoRA GGUF。强度 1 使用原始效果，0 保留挂载但不改变输出。" = "Selecciona un LoRA GGUF compatible con la arquitectura del modelo base. La intensidad 1 aplica el efecto original; 0 lo mantiene adjunto sin cambiar la salida.";
 
 "选择 LoRA" = "Seleccionar LoRA";
+
+"已下载 %@" = "%@ descargados";
+
+"下载失败" = "Error de descarga";
+
+"请输入有效的 HTTP 或 HTTPS 模型链接。" = "Introduce una URL de modelo HTTP o HTTPS válida.";
+
+"下载权重失败：服务器响应无效。" = "No se pudieron descargar los pesos: respuesta del servidor no válida.";
+
+"关闭下载页会取消尚未保存的下载。" = "Cerrar esta página cancela las descargas que aún no han empezado a guardarse.";
+
+"Mac 本地模型下载使用说明" = "Introduce un enlace de descarga directa del archivo GGUF y un nombre opcional; después, elige Descargar pesos. El enlace solo permanece en esta página y no se guarda. Tras la confirmación, la guía puede reemplazar el enlace y el nombre, pero no puede leer el enlace existente ni iniciar la descarga.\n\nEl progreso muestra los bytes recibidos y el total cuando el servidor lo proporciona. Las conexiones HTTP y las excepciones de certificado usan el diálogo de autorización de red de la aplicación. Cancelar, cerrar esta página, bloquear, crear una copia, restaurar o salir cancela la transferencia si aún no ha empezado a guardarse. Si ya se está guardando, la aplicación espera a que termine. Las respuestas o archivos GGUF no válidos no se añaden a la biblioteca.\n\nAl terminar, revisa los ajustes en la lista de modelos y selecciona el modelo en el chat.";
