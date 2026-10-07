@@ -30,8 +30,12 @@ struct MacRoleplayCharacterDetail: View {
                 }
                 Section(NSLocalizedString("内容", comment: "")) {
                     LabeledContent(NSLocalizedString("候选开场白", comment: ""), value: row.character.alternateGreetings.count.formatted())
-                    LabeledContent(NSLocalizedString("角色正则", comment: ""), value: row.character.regexRules.count.formatted())
-                    LabeledContent(NSLocalizedString("助手脚本", comment: ""), value: row.character.helperScripts.count.formatted())
+                    NavigationLink(NSLocalizedString("角色正则", comment: "")) {
+                        MacRoleplayContentList(model: model, characterID: characterID, kind: .regex)
+                    }
+                    NavigationLink(NSLocalizedString("助手脚本", comment: "")) {
+                        MacRoleplayContentList(model: model, characterID: characterID, kind: .scripts)
+                    }
                     LabeledContent(NSLocalizedString("资源文件", comment: ""), value: (row.character.assets?.count ?? 0).formatted())
                     if let id = row.character.embeddedWorldbookID {
                         NavigationLink(NSLocalizedString("内嵌世界书", comment: "")) { MacWorldbookDetailView(model: workspace.worldbookModel, bookID: id) }
@@ -52,7 +56,9 @@ struct MacRoleplayCharacterDetail: View {
         .guideSettingsPageContext(
             id: GuidePageID(rawValue: "mac-roleplay-character-\(characterID)"), title: NSLocalizedString("角色资料", comment: ""),
             documents: [GuideDocumentReference(id: "roleplay", title: "Roleplay")], settings: [
-                .readOnly("character", label: NSLocalizedString("角色卡", comment: ""), value: { model.snapshot.charactersByID[characterID]?.guideValue ?? .null })
+                .readOnly("character", label: NSLocalizedString("角色卡", comment: ""), value: { model.snapshot.charactersByID[characterID]?.guideValue ?? .null }),
+                .readOnly("regex_requires_navigation", label: NSLocalizedString("角色正则", comment: ""), value: { .bool(true) }),
+                .readOnly("scripts_require_navigation", label: NSLocalizedString("助手脚本", comment: ""), value: { .bool(true) })
             ]
         )
     }

@@ -5,6 +5,7 @@ struct MacRoleplayCharacterRow: Identifiable, Sendable {
     let character: RoleplayCharacter
     let preview: String
     let format: String
+    let content: MacRoleplayContentSnapshot
     let guideValue: JSONValue
     var id: UUID { character.id }
 }
@@ -27,6 +28,7 @@ struct MacRoleplaySnapshot: Sendable {
         let allCharacters = characters.map { character in
             let format = [character.sourceSpec, character.sourceSpecVersion].compactMap { $0 }.joined(separator: " ")
             return MacRoleplayCharacterRow(character: character, preview: String(character.description.prefix(180)), format: format,
+                                   content: MacRoleplayContentSnapshot(character: character),
                                    guideValue: .dictionary([
                                     "id": .string(character.id.uuidString), "name": .string(character.name),
                                     "creator": .string(character.creator), "version": .string(character.characterVersion), "format": .string(format),

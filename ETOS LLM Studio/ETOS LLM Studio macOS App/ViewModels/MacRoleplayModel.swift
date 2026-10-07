@@ -1,6 +1,7 @@
 import Combine
 import ETOSCore
 import Foundation
+import SwiftUI
 
 @MainActor
 final class MacRoleplayModel: ObservableObject {
@@ -53,6 +54,36 @@ final class MacRoleplayModel: ObservableObject {
 
     func save(_ draft: MacRoleplayCharacterDraft) async throws {
         try await perform { service in try service.saveRoleplayCharacterDraft(draft.preparedCharacter(), replacing: draft.original) }
+    }
+
+    func save(_ draft: MacRoleplayRegexDraft) async throws {
+        try await perform { try $0.saveRoleplayCharacterDraft(draft.preparedCharacter(), replacing: draft.originalCharacter) }
+    }
+
+    func save(_ draft: MacRoleplayScriptDraft) async throws {
+        try await perform { try $0.saveRoleplayCharacterDraft(draft.preparedCharacter(), replacing: draft.originalCharacter) }
+    }
+
+    func deleteContent(_ id: UUID, kind: MacRoleplayContentKind, in original: RoleplayCharacter) async throws {
+        try await perform { service in
+            var character = original
+            switch kind {
+            case .regex: character.regexRules.removeAll { $0.id == id }
+            case .scripts: character.helperScripts.removeAll { $0.id == id }
+            }
+            try service.saveRoleplayCharacterDraft(character, replacing: original)
+        }
+    }
+
+    func moveContent(_ kind: MacRoleplayContentKind, in original: RoleplayCharacter, from offsets: IndexSet, to destination: Int) async throws {
+        try await perform { service in
+            var character = original
+            switch kind {
+            case .regex: character.regexRules.move(fromOffsets: offsets, toOffset: destination)
+            case .scripts: character.helperScripts.move(fromOffsets: offsets, toOffset: destination)
+            }
+            try service.saveRoleplayCharacterDraft(character, replacing: original)
+        }
     }
 
     func save(_ draft: PersonaProfile, replacing original: PersonaProfile?, avatarData: Data?) async throws {
