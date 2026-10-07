@@ -84,6 +84,7 @@ struct MacChatView: View {
                 }
             }
             Divider()
+            MacRoleplayScriptHost(runtime: workspace.roleplayRuntime).padding(.horizontal)
             if let mode = workspace.temporaryChatMemoryMode {
                 Label(mode.isMemoryEnabled ? NSLocalizedString("允许使用记忆", comment: "") : NSLocalizedString("隔离记忆上下文", comment: ""), systemImage: "clock")
                     .font(.caption).foregroundStyle(.secondary)
@@ -92,6 +93,8 @@ struct MacChatView: View {
                 MacQuestionnaireView(model: model)
             } else { composer }
         }
+        .onAppear { workspace.setRoleplayHostVisible(true) }
+        .onDisappear { workspace.setRoleplayHostVisible(false) }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             switch result {
             case .success(let urls): Task { await workspace.importAttachments(urls) }
@@ -216,6 +219,9 @@ private struct MacMessageRow: View {
                     .textSelection(.enabled)
                     .foregroundStyle(row.message.role == .error ? Color.red : Color.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                ForEach(row.roleplayDocuments) { document in
+                    MacRoleplayHTMLView(document: document, runtime: workspace.roleplayRuntime)
+                }
             }
             ForEach(row.toolCalls, id: \.id) { tool in
                 DisclosureGroup(tool.toolName) {

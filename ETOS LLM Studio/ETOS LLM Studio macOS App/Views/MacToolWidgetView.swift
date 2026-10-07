@@ -67,27 +67,7 @@ private struct MacWidgetWebView: NSViewRepresentable {
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
         // 不安装 native message handler；Widget 脚本没有直接执行 App 工具的能力。
-        content.capturePNG = { [weak webView] in
-            guard let webView, !webView.isLoading else { throw InlineHTMLExportError.notReady }
-            let size = webView.bounds.size
-            try InlineHTMLExportSupport.validateSnapshotSize(size, scale: webView.window?.backingScaleFactor ?? 2)
-            let configuration = WKSnapshotConfiguration()
-            configuration.rect = CGRect(origin: .zero, size: size)
-            let image: NSImage = try await withCheckedThrowingContinuation { continuation in
-                webView.takeSnapshot(with: configuration) { image, error in
-                    if let error { continuation.resume(throwing: error) }
-                    else if let image { continuation.resume(returning: image) }
-                    else { continuation.resume(throwing: InlineHTMLExportError.imageFailed) }
-                }
-            }
-            guard let image = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { throw InlineHTMLExportError.imageFailed }
-            return try await Task.detached(priority: .userInitiated) { try InlineHTMLExportSupport.pngData(image: image) }.value
-        }
-        content.readText = { [weak webView] in
-            guard let webView, !webView.isLoading else { throw InlineHTMLExportError.notReady }
-            return try await webView.evaluateJavaScript("document.body?.innerText ?? ''") as? String ?? ""
-        }
-        InlineHTMLContentRegistry.shared.register(content)
+        MacInlineHTMLWebViewSupport.connect(content, to: webView)
         return webView
     }
 
@@ -145,7 +125,7 @@ private struct MacWidgetWebView: NSViewRepresentable {
 }
 
 @MainActor
-private enum MacInlineHTMLExport {
+enum MacInlineHTMLExport {
     static func save(_ data: Data, _ fileExtension: String) async throws -> URL? {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [fileExtension == "png" ? .png : .html]

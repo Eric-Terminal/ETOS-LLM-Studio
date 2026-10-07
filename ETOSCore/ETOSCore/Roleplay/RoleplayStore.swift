@@ -187,8 +187,8 @@ public final class RoleplayStore: @unchecked Sendable {
         return true
     }
 
-    public func variableSnapshot(sessionID: UUID) -> RoleplayVariableSnapshot {
-        queue.sync { variableSnapshotUnlocked(sessionID: sessionID) }
+    public func variableSnapshot(sessionID: UUID, migrateLegacyValues: Bool = true) -> RoleplayVariableSnapshot {
+        queue.sync { variableSnapshotUnlocked(sessionID: sessionID, migrate: migrateLegacyValues) }
     }
 
     func variableSnapshotUnlocked(sessionID: UUID, migrate: Bool = true) -> RoleplayVariableSnapshot {

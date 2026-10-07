@@ -19,6 +19,7 @@ struct ETOSMacApp: App {
                 .environmentObject(workspace)
                 .frame(minWidth: 760, minHeight: 520)
                 .disabled(applicationDelegate.isTerminating)
+                .onAppear { applicationDelegate.workspace = workspace }
         }
         .defaultSize(width: 1120, height: 760)
         .commands {

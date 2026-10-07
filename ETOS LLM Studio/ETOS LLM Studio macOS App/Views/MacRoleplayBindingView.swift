@@ -65,6 +65,8 @@ struct MacRoleplayBindingView: View {
                         NavigationLink(NSLocalizedString("宏与变量", comment: "")) { MacRoleplayDataView(session: session) }
                         MacSettingsIntroCard(id: "roleplay-binding", title: NSLocalizedString("使用说明", comment: ""),
                                              details: NSLocalizedString("Mac 会话角色绑定使用说明", comment: ""), documentID: "roleplay")
+                        MacSettingsIntroCard(id: "roleplay-runtime", title: NSLocalizedString("角色卡 HTML", comment: ""),
+                                             details: NSLocalizedString("Mac 角色 HTML 与脚本运行说明", comment: ""), documentID: "roleplay")
                         if draft.original != nil {
                             Button(NSLocalizedString("解除角色扮演绑定", comment: ""), role: .destructive) { confirmingRemoval = true }
                         }

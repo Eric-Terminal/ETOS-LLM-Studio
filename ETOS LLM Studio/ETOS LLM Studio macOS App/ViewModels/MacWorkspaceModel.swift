@@ -57,6 +57,10 @@ final class MacWorkspaceModel: ObservableObject {
     let sessionLibrary = MacSessionLibraryModel()
     let worldbookModel = MacWorldbookModel()
     let roleplayModel = MacRoleplayModel()
+    let roleplayRuntime = MacRoleplayRuntime()
+    private var roleplayHostVisible = false
+    private var roleplayLifecycleRevision = UUID()
+    private var isClosingRoleplay = false
     private var questionnaires: [UUID: [MacQuestionnaireModel]] = [:]
     private var toolDrafts: [UUID: [AppToolInputDraftRequest]] = [:]
     private var pendingSupplements: [UUID: [String]] = [:]
@@ -72,12 +76,12 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     var canSend: Bool {
-        phase == .ready && !isRestoringData && !isMutatingHistory && !sessionLibrary.isWorking && currentSession != nil && effectiveModel != nil && !isGenerating && !isPreparingSend
+        phase == .ready && !isRestoringData && !isMutatingHistory && !roleplayRuntime.isBusy && !sessionLibrary.isWorking && currentSession != nil && effectiveModel != nil && !isGenerating && !isPreparingSend
             && !isImportingAttachments && (!draft.isEmpty || !attachments.isEmpty)
     }
 
     var canModifyCurrentHistory: Bool {
-        !isRestoringData && !isMutatingHistory && !sessionLibrary.isWorking && !isGenerating && !isPreparingSend
+        !isRestoringData && !isMutatingHistory && !roleplayRuntime.isBusy && !sessionLibrary.isWorking && !isGenerating && !isPreparingSend
             && currentSession != nil && AppLockManager.shared.state != .locked
     }
 
@@ -105,6 +109,7 @@ final class MacWorkspaceModel: ObservableObject {
         sessionLibrary.start(service: service, workspace: self)
         worldbookModel.start(service: service, workspace: self)
         roleplayModel.start(service: service, workspace: self)
+        roleplayRuntime.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
         sessionLibrary.$isWorking.dropFirst().sink { [weak self] working in
             self?.objectWillChange.send()
             if !working { Task { [weak self] in self?.flushToolSupplements() } }
@@ -142,6 +147,7 @@ final class MacWorkspaceModel: ObservableObject {
                 self?.presentationRevision = UUID()
                 self?.sourceMessages = []
                 self?.messages = []
+                self?.roleplayRuntime.showSession(session?.id, running: service.runningSessionIDsSubject.value)
             }
             self?.currentSession = session
             self?.refreshEffectiveModel()
@@ -158,6 +164,7 @@ final class MacWorkspaceModel: ObservableObject {
         }.store(in: &subscriptions)
         service.runningSessionIDsSubject.receive(on: DispatchQueue.main).sink { [weak self] ids in
             self?.runningSessionIDs = ids
+            self?.refreshMessagePresentation()
             self?.flushToolSupplements()
         }.store(in: &subscriptions)
         NotificationCenter.default.publisher(for: .temporaryChatStateDidChange, object: service)
@@ -206,11 +213,18 @@ final class MacWorkspaceModel: ObservableObject {
             refreshToolInteractions()
         }.store(in: &subscriptions)
         AppLockManager.shared.$state.receive(on: DispatchQueue.main).sink { [weak self] state in
-            if state != .locked { self?.flushToolSupplements() }
+            if state == .locked { self?.suspendRoleplayPresentation() }
+            else { self?.resumeRoleplayPresentation(); self?.flushToolSupplements() }
         }.store(in: &subscriptions)
+        for name in [RoleplayStore.didChangeNotification, RoleplayDisplayedMessageBridge.didChangeNotification,
+                     WorldbookStore.didChangeNotification, MessageRegexRuleStore.didChangeNotification] {
+            NotificationCenter.default.publisher(for: name).receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.refreshMessagePresentation() }.store(in: &subscriptions)
+        }
     }
 
     func refreshMessagePresentation() {
+        guard roleplayHostVisible, !isRestoringData, !isExportingSnapshot, !isClosingRoleplay, AppLockManager.shared.state != .locked, let service else { return }
         presentationTask?.cancel()
         let revision = UUID()
         presentationRevision = revision
@@ -219,10 +233,85 @@ final class MacWorkspaceModel: ObservableObject {
         let markdown = AppConfigStore.shared.enableMarkdown
         let language = AppConfigStore.shared.appLanguage
         let store = presentationStore
+        var scriptSessionIDs = runningSessionIDs
+        if let sessionID { scriptSessionIDs.insert(sessionID) }
         presentationTask = Task { [weak self] in
-            guard let prepared = try? await store.prepare(snapshot, markdown: markdown, language: language, sessionID: sessionID) else { return }
+            guard let prepared = try? await store.prepareWorkspace(snapshot, markdown: markdown, language: language, sessionID: sessionID,
+                                                                 scriptSessionIDs: scriptSessionIDs, service: service) else { return }
             guard let self, !Task.isCancelled, presentationRevision == revision else { return }
-            messages = prepared
+            roleplayRuntime.apply(prepared, workspace: self)
+            messages = prepared.rows
+        }
+    }
+
+    func setRoleplayHostVisible(_ visible: Bool) {
+        roleplayHostVisible = visible
+        if visible { resumeRoleplayPresentation() } else { suspendRoleplayPresentation() }
+    }
+
+    private func suspendRoleplayPresentation() {
+        roleplayLifecycleRevision = UUID()
+        presentationTask?.cancel()
+        roleplayRuntime.suspend()
+    }
+
+    private func resumeRoleplayPresentation() {
+        guard roleplayHostVisible, !isRestoringData, !isExportingSnapshot, !isClosingRoleplay, AppLockManager.shared.state != .locked else { return }
+        let revision = UUID()
+        roleplayLifecycleRevision = revision
+        Task { [weak self] in
+            guard let self else { return }
+            await roleplayRuntime.waitForPendingActions()
+            guard revision == roleplayLifecycleRevision else { return }
+            roleplayRuntime.resume()
+            refreshMessagePresentation()
+        }
+    }
+
+    func prepareRoleplayForTermination() async {
+        isClosingRoleplay = true
+        suspendRoleplayPresentation()
+        await presentationTask?.value
+        await roleplayRuntime.waitForPendingActions()
+        await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
+    }
+
+    func allowsRoleplayAction(_ action: String, sessionID: UUID) -> Bool {
+        guard phase == .ready, !isRestoringData, !isClosingRoleplay, AppLockManager.shared.state != .locked,
+              sessions.contains(where: { $0.id == sessionID }) else { return false }
+        if ["macro_expansion_response", "prompt_mutation_response"].contains(action) { return true }
+        guard !isExportingSnapshot, !isMutatingHistory, !sessionLibrary.isWorking, !roleplayModel.isWorking, !worldbookModel.isWorking else { return false }
+        if ["set_chat_messages", "create_chat_messages", "delete_chat_messages", "rotate_chat_messages"].contains(action) {
+            return !runningSessionIDs.contains(sessionID) && !sendingSessionIDs.contains(sessionID)
+        }
+        return true
+    }
+
+    func handleRoleplayAction(_ action: String, text: String, sessionID: UUID) {
+        guard allowsRoleplayAction(action, sessionID: sessionID), let session = currentSession, session.id == sessionID,
+              let service else { return }
+        switch action {
+        case "set_input": draft = text
+        case "send_message":
+            guard !isGenerating, !isPreparingSend, effectiveModel != nil, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            let configuration = MacChatRequestConfiguration(AppConfigStore.shared, session: session)
+            sendingSessionIDs.insert(sessionID)
+            // HTML 发送自己的正文，保留用户尚未发送的输入和附件。
+            Task { [weak self] in
+                await configuration.send(text, through: service, sessionID: sessionID)
+                self?.sendingSessionIDs.remove(sessionID)
+                self?.flushToolSupplements()
+            }
+        case "generate":
+            guard !isGenerating, !isPreparingSend, effectiveModel != nil, let message = sourceMessages.last(where: { $0.role == .assistant }) else { return }
+            let configuration = MacChatRequestConfiguration(AppConfigStore.shared, session: session)
+            sendingSessionIDs.insert(sessionID)
+            Task { [weak self] in
+                await configuration.retry(message, through: service, sessionID: sessionID, prefill: false)
+                self?.sendingSessionIDs.remove(sessionID)
+                self?.flushToolSupplements()
+            }
+        default: break
         }
     }
 
@@ -329,7 +418,7 @@ final class MacWorkspaceModel: ObservableObject {
 
     func saveRoleplayBinding(_ draft: MacRoleplayBindingDraft, removing: Bool = false) async throws {
         guard phase == .ready, !isRestoringData, !isExportingSnapshot, !isMutatingHistory, !sessionLibrary.isWorking,
-              !roleplayModel.isWorking, !worldbookModel.isWorking, !sendingSessionIDs.contains(draft.sessionID),
+              !roleplayModel.isWorking, !worldbookModel.isWorking, !roleplayRuntime.isBusy, !sendingSessionIDs.contains(draft.sessionID),
               !runningSessionIDs.contains(draft.sessionID), AppLockManager.shared.state != .locked,
               let service else { throw MacMemoryWriteError.busy }
         // 修改可能初始化或替换开场白，沿用历史写入屏障，并始终操作编辑页捕获的会话。
@@ -358,7 +447,7 @@ final class MacWorkspaceModel: ObservableObject {
 
     func saveRoleplayData(_ source: RoleplayDataDraft, values: [String: JSONValue], message: ChatMessage?) async throws -> RoleplayDataDraft {
         guard phase == .ready, !isRestoringData, !isExportingSnapshot, !isMutatingHistory, !sessionLibrary.isWorking,
-              !roleplayModel.isWorking, !worldbookModel.isWorking, sendingSessionIDs.isEmpty, runningSessionIDs.isEmpty,
+              !roleplayModel.isWorking, !worldbookModel.isWorking, !roleplayRuntime.isBusy, sendingSessionIDs.isEmpty, runningSessionIDs.isEmpty,
               AppLockManager.shared.state != .locked, let service else { throw MacMemoryWriteError.busy }
         // 共享层可能影响其他会话；编辑期间不与桌面的任何生成或历史写入并发。
         isMutatingHistory = true
@@ -566,12 +655,13 @@ final class MacWorkspaceModel: ObservableObject {
     func removeAttachment(_ id: UUID) { attachments.removeAll { $0.id == id } }
 
     func beginSnapshotExport() -> Bool {
-        guard !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, !worldbookModel.isWorking, !roleplayModel.isWorking, !isExportingSnapshot, !SnapshotUploadManager.shared.isUploading else { return false }
+        guard !isRestoringData, !isMutatingHistory, !roleplayRuntime.isBusy, !sessionLibrary.isWorking, !worldbookModel.isWorking, !roleplayModel.isWorking, !isExportingSnapshot, !SnapshotUploadManager.shared.isUploading else { return false }
         isExportingSnapshot = true
+        suspendRoleplayPresentation()
         return true
     }
 
-    func endSnapshotExport() { isExportingSnapshot = false }
+    func endSnapshotExport() { isExportingSnapshot = false; resumeRoleplayPresentation() }
 
     func restoreSnapshot(from url: URL, password: String?) async throws {
         let cloud = CloudSyncManager.shared
@@ -584,12 +674,16 @@ final class MacWorkspaceModel: ObservableObject {
             ])
         }
         isRestoringData = true
+        suspendRoleplayPresentation()
         discardToolInteractions()
         var didRestore = false
         defer {
             cloud.endLocalDataRestore(didRestore: didRestore)
             isRestoringData = false
+            resumeRoleplayPresentation()
         }
+        await presentationTask?.value
+        await roleplayRuntime.waitForPendingActions()
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
         await mcp.prepareForDatabaseRestore()
         do {
@@ -619,8 +713,11 @@ final class MacWorkspaceModel: ObservableObject {
             ])
         }
         isRestoringData = true
+        suspendRoleplayPresentation()
         discardToolInteractions()
-        defer { isRestoringData = false }
+        defer { isRestoringData = false; resumeRoleplayPresentation() }
+        await presentationTask?.value
+        await roleplayRuntime.waitForPendingActions()
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
         await mcp.prepareForDatabaseRestore()
         await AppConfigStore.shared.flushPendingWrites()

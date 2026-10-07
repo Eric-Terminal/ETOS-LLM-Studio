@@ -50,10 +50,20 @@ public enum RoleplayBridgeDispatcher {
         messageID: UUID,
         versionIndex: Int,
         store: RoleplayStore = .shared,
-        service: ChatService? = nil
+        service: ChatService? = nil,
+        validateSource: @escaping @Sendable () -> Bool = { true }
     ) -> Task<Void, Never> {
         let submitted = RoleplayBridgeSubmittedPayload(values: payload)
         let operation: @Sendable () async -> Void = {
+            guard !Task.isCancelled else { return }
+            guard validateSource() else {
+                if submitted.values["action"] as? String == "generate_text",
+                   let requestID = submitted.values["request_id"] as? String {
+                    postGenerationResult(nil, error: RoleplayDraftWriteError.changedExternally.localizedDescription,
+                                         requestID: requestID, sessionID: sessionID)
+                }
+                return
+            }
             guard !Task.isCancelled else { return }
             await dispatch(submitted.values, sessionID: sessionID, messageID: messageID,
                            versionIndex: versionIndex, store: store, service: service ?? .shared)
