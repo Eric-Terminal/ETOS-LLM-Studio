@@ -7606,3 +7606,17 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "次级关键词" = "Mots-clés secondaires";
 "请填写条目正文。" = "Saisissez le contenu de l’entrée.";
 "Mac 世界书使用说明" = "Créez des livres de monde dans Contexte ou importez des fichiers JSON/PNG et des liens. Un clic droit permet d’exporter ou de supprimer un livre. La recherche porte sur les noms, le contenu et les mots-clés ; effacez-la pour réordonner les livres par glissement. Ouvrez les détails pour modifier les informations, les règles et les entrées. Les changements enregistrés affectent toutes les conversations utilisant ce livre. Les associations se sauvegardent séparément ; retirer une association manuelle ne retire pas les livres fournis par un personnage. Les éditeurs conservent des brouillons : confirmer une proposition du guide ne remplace pas Enregistrer. Rouvrez l’éditeur si une autre fenêtre ou la synchronisation modifie l’original. Le format existant entre appareils est conservé.";
+
+/* Mac MCP 资源与提示词 */
+"资源模板" = "Modèles de ressources";
+"获取提示词" = "Obtenir le prompt";
+"参数说明" = "Référence des arguments";
+"MCP 读取" = "Lecture MCP";
+"参数保留在当前页面，点击读取后发送给服务器。" = "Les arguments restent sur cette page jusqu’à la demande d’une ressource ou d’un prompt.";
+"请填写已替换模板变量的完整资源 URI。" = "Saisissez l’URI complet de la ressource en remplaçant toutes les variables du modèle.";
+"提示词参数 %@ 必须是字符串。" = "L’argument de prompt %@ doit être une chaîne.";
+"请提供必填参数：%@" = "Fournissez l’argument requis : %@";
+"Mac MCP 读取说明" = "Après connexion ou actualisation d’un serveur, ouvrez une ressource, un modèle ou un prompt depuis ses détails. Les requêtes de ressources utilisent des objets JSON. Les valeurs des arguments de prompt doivent être des chaînes ; la référence indique les champs requis. Remplacez manuellement les variables des modèles et saisissez l’URI complet. La requête est envoyée uniquement en cliquant sur Lire ou Obtenir le prompt. Les résultats peuvent être consultés et copiés, sans ajout automatique au chat. Quitter la page ou annuler annule sa requête. Rouvrez la page si la configuration du serveur change ou est supprimée. Le guide peut remplir les brouillons, mais ne peut ni lire les arguments ou résultats existants ni exécuter de requêtes MCP.";
+
+"填写读取草稿" = "Remplir le brouillon de lecture";
+"已更新草稿，请手动读取。" = "Brouillon mis à jour. Lancez la lecture manuellement.";

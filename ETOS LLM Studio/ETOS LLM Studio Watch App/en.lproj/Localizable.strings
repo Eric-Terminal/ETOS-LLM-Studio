@@ -7529,3 +7529,17 @@
 "次级关键词" = "Secondary Keywords";
 "请填写条目正文。" = "Enter the entry content.";
 "Mac 世界书使用说明" = "Create worldbooks under Context or import JSON/PNG files and links. Right-click a book to export or delete it. Search covers names, content and keywords; clear the search to drag books into a new order. Open details to edit information, default rules and entries. Saved changes affect all conversations using that book. Conversation bindings require their own Save; removing a manual binding does not remove books provided by characters. Editors keep drafts, and guide confirmation does not replace Save. Reopen the editor if another window or sync changes the original content. Import and export use the existing cross-device format.";
+
+/* Mac MCP 资源与提示词 */
+"资源模板" = "Resource templates";
+"获取提示词" = "Get prompt";
+"参数说明" = "Argument reference";
+"MCP 读取" = "MCP reader";
+"参数保留在当前页面，点击读取后发送给服务器。" = "Arguments stay on this page until you request a resource or prompt.";
+"请填写已替换模板变量的完整资源 URI。" = "Enter the full resource URI with all template variables replaced.";
+"提示词参数 %@ 必须是字符串。" = "Prompt argument %@ must be a string.";
+"请提供必填参数：%@" = "Provide the required argument: %@";
+"Mac MCP 读取说明" = "After connecting or refreshing a server, open a resource, resource template, or prompt from its details. Resource queries use JSON objects. Prompt argument values must be strings; the argument reference lists required fields. For resource templates, replace the variables yourself and enter the complete URI. A request is sent only when you click Read or Get prompt. Results can be viewed and copied and are not added to chat automatically. Leaving the page or cancelling cancels this page’s request. Reopen the page after changing or deleting the server configuration. The guide can fill drafts but cannot read existing arguments or results, or execute MCP requests.";
+
+"填写读取草稿" = "Fill read request draft";
+"已更新草稿，请手动读取。" = "Draft updated. Start the read request manually.";

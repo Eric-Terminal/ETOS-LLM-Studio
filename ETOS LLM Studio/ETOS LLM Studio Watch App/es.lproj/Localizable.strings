@@ -7606,3 +7606,17 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "次级关键词" = "Palabras clave secundarias";
 "请填写条目正文。" = "Introduce el contenido de la entrada.";
 "Mac 世界书使用说明" = "Crea libros de mundo en Contexto o importa archivos JSON/PNG y enlaces. Haz clic derecho en un libro para exportarlo o eliminarlo. La búsqueda incluye nombres, contenido y palabras clave; bórrala para ordenar los libros arrastrándolos. Abre los detalles para editar información, reglas y entradas. Los cambios guardados afectan a todas las conversaciones que usan el libro. Las vinculaciones se guardan por separado; quitar una vinculación manual no elimina los libros aportados por personajes. Los editores mantienen borradores y la confirmación del asistente no sustituye a Guardar. Vuelve a abrir el editor si otra ventana o una sincronización cambia el original. Se usa el formato existente entre dispositivos.";
+
+/* Mac MCP 资源与提示词 */
+"资源模板" = "Plantillas de recursos";
+"获取提示词" = "Obtener prompt";
+"参数说明" = "Referencia de argumentos";
+"MCP 读取" = "Lectura MCP";
+"参数保留在当前页面，点击读取后发送给服务器。" = "Los argumentos permanecen en esta página hasta que solicites un recurso o un prompt.";
+"请填写已替换模板变量的完整资源 URI。" = "Introduce el URI completo del recurso con todas las variables de plantilla sustituidas.";
+"提示词参数 %@ 必须是字符串。" = "El argumento de prompt %@ debe ser una cadena.";
+"请提供必填参数：%@" = "Proporciona el argumento obligatorio: %@";
+"Mac MCP 读取说明" = "Tras conectar o actualizar un servidor, abre un recurso, una plantilla o un prompt desde sus detalles. Las consultas de recursos usan objetos JSON. Los argumentos del prompt deben ser cadenas; consulta los campos obligatorios en la referencia. Sustituye manualmente las variables de las plantillas y escribe el URI completo. La solicitud solo se envía al pulsar Leer u Obtener prompt. Puedes ver y copiar los resultados; no se añaden al chat automáticamente. Salir de la página o cancelar cancela su solicitud. Vuelve a abrirla si cambia o se elimina la configuración del servidor. La guía puede rellenar borradores, pero no leer argumentos o resultados existentes ni ejecutar solicitudes MCP.";
+
+"填写读取草稿" = "Rellenar borrador de lectura";
+"已更新草稿，请手动读取。" = "Borrador actualizado. Inicia la lectura manualmente.";

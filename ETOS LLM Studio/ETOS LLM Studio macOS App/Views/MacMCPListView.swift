@@ -120,6 +120,28 @@ private struct MacMCPServerDetail: View {
                 }
             } header: { Text(NSLocalizedString("工具", comment: "")) }
             Section {
+                ForEach(status.resources) { resource in
+                    NavigationLink(resource.resourceId) { MacMCPReadView(server: server, target: .resource(resource)) }
+                }
+                if status.resources.isEmpty {
+                    Text(NSLocalizedString("当前服务器尚未暴露资源。", comment: "")).font(.footnote).foregroundStyle(.secondary)
+                }
+            } header: { Text(NSLocalizedString("资源", comment: "")) }
+            if !status.resourceTemplates.isEmpty {
+                Section {
+                    ForEach(status.resourceTemplates) { template in
+                        NavigationLink(template.title ?? template.name ?? template.uriTemplate) { MacMCPReadView(server: server, target: .template(template)) }
+                    }
+                } header: { Text(NSLocalizedString("资源模板", comment: "")) }
+            }
+            if !status.prompts.isEmpty {
+                Section {
+                    ForEach(status.prompts) { prompt in
+                        NavigationLink(prompt.name) { MacMCPReadView(server: server, target: .prompt(prompt)) }
+                    }
+                } header: { Text(NSLocalizedString("提示词", comment: "")) }
+            }
+            Section {
                 Button(NSLocalizedString("编辑", comment: "")) { editing = true }
                 Button(NSLocalizedString("删除", comment: ""), role: .destructive) { deleting = true }
             }

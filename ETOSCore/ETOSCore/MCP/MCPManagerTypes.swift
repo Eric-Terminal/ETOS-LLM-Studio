@@ -277,7 +277,7 @@ struct RoutedPrompt {
 }
 
 extension JSONValue {
-    func prettyPrinted() -> String {
+    public func prettyPrinted() -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         if let data = try? encoder.encode(self),

@@ -137,7 +137,7 @@ public struct MCPToolDescription: Codable, Identifiable, Hashable {
     }
 }
 
-public struct MCPResourceDescription: Codable, Identifiable, Hashable {
+public struct MCPResourceDescription: Codable, Identifiable, Hashable, Sendable {
     public var id: String { resourceId }
 
     public let resourceId: String
@@ -184,7 +184,7 @@ public struct MCPResourceDescription: Codable, Identifiable, Hashable {
     }
 }
 
-public struct MCPResourceTemplate: Codable, Identifiable, Hashable {
+public struct MCPResourceTemplate: Codable, Identifiable, Hashable, Sendable {
     public var id: String { uriTemplate }
 
     public let uriTemplate: String
