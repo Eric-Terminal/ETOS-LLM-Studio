@@ -10,6 +10,8 @@ public enum GuideMacWorkspaceKnowledge {
             content: chinese ? """
             Mac 聊天窗口左侧选择会话，右侧选择模型并输入消息；⌘N 新建会话，⌘Return 发送。附件通过系统文件选择器导入，正文与 Markdown 在后台准备。生成期间可以切换会话，工具调用继续使用 ETOSCore 的原生审批。右键消息可以复制、编辑或删除；编辑消息只修改历史，不执行其中的工具调用。消息正文不向页面向导公开。系统文件选择器属于系统页面，不提供配置向导。
 
+            右键消息可重新生成；支持预填充的模型还可从助手正文续写。回复版本菜单切换整轮回复和关联工具结果，旧格式消息则切换正文版本。重试固定来源会话与模型，等待旧请求结束时切换会话不会改变目标。工具栏可复制整段历史和提示词或只复制提示词建立分支；右键消息可从该处建立分支并选择是否复制提示词。分支沿用会话首选模型，包含提示词时也保留会话系统提示词。
+
             “设置”窗口按通用、模型管理、MCP 工具、上下文、数据管理和安全分组。提供商、模型、会话和 MCP 编辑器都保留草稿；向导确认仅更新这些编辑器的草稿，需要点击页面保存。模型编辑器的完成先返回提供商草稿，还需保存提供商。JSON 子页面返回时不直接保存；已有请求头、请求体与密钥对向导不可读，可以通过提案替换用户主动提供的新 JSON 对象。数据库配置在其他页面或同步中变化后，旧 MCP 草稿会拒绝覆盖，需重新打开。MCP 详情及单个工具设置则在确认后直接保存。切换前台窗口、页面、协议或锁定应用后，旧页面提案不再可执行。
 
             上下文中的记忆页可搜索激活或归档条目、选择嵌入模型并调整检索设置。记忆编辑器保存内容、分类、重要度、置信度、实体及归档草稿；已有条目在其他位置变化或被删除后，旧草稿不能覆盖。原文保存成功与嵌入生成成功分别处理，嵌入失败可以从数据维护页重试。全部重新嵌入必须由用户确认；向导仅能修改并发配置或编辑草稿。
@@ -27,6 +29,8 @@ public enum GuideMacWorkspaceKnowledge {
             Mac 与 iOS/watchOS 复用数据库结构、配置编码和附件相对路径；Mac 数据目录为 Application Support/ETOS LLM Studio，不直接读写移动设备的沙盒。平台路径和本地执行环境需要分别配置。页面向导只能使用当前页面声明的工具，不能执行用户 MCP、系统命令或快捷指令，也不会从 JSON 编辑器读取已有秘密。
             """ : """
             Select a session in the Mac sidebar, choose a model and compose on the right. Command-N creates a session and Command-Return sends. Import attachments with the system file picker. Message and Markdown preparation runs in the background. Sessions can be switched during generation; ETOSCore still controls native tool approval. Right-click a message to copy, edit or delete it. Editing changes history without executing tool calls. Message content is hidden from the page guide. The system file picker has no app configuration guide.
+
+            Right-click to regenerate a message, or continue assistant text with prefill when supported by the model. The version menu switches a whole response attempt and its tool results; legacy messages switch content versions. Retry retains its source session and model while waiting for the previous request to stop. The toolbar can branch with all history and prompts or with prompts only. A message menu can branch at that message, with or without prompts. Branches retain the preferred model, and copying prompts also preserves the session system prompt.
 
             Settings contains General, Model Management, MCP Tools, Context, Data Management and Security. Provider, model, session and MCP editors keep drafts: confirming a guide proposal changes the draft, and Save commits it. Completing a model editor returns to the provider draft, which must also be saved. Returning from a JSON subpage does not save. Existing headers, request bodies and keys are unreadable to the guide; proposals may replace them with JSON objects the user supplies. A stale MCP draft cannot overwrite a configuration changed elsewhere. MCP detail and tool settings save directly after confirmation. Switching the foreground window, page or protocol, or locking the app invalidates old page proposals.
 

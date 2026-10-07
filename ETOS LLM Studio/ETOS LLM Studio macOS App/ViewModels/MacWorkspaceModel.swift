@@ -21,6 +21,7 @@ final class MacWorkspaceModel: ObservableObject {
     @Published private(set) var providers: [Provider] = []
     @Published private(set) var models: [RunnableModel] = []
     @Published private(set) var selectedModelID: String?
+    @Published private(set) var selectedModelSupportsPrefill = false
     @Published private(set) var messages: [MacMessagePresentation] = []
     @Published private(set) var runningSessionIDs: Set<UUID> = []
     @Published private(set) var activeQuestionnaireModel: MacQuestionnaireModel?
@@ -29,6 +30,7 @@ final class MacWorkspaceModel: ObservableObject {
     @Published private(set) var isImportingAttachments = false
     @Published private(set) var isRestoringData = false
     @Published private(set) var isExportingSnapshot = false
+    @Published private(set) var isMutatingHistory = false
     @Published private(set) var attachments: [MacComposerAttachment] = []
     @Published private(set) var recoveryRequest: Persistence.LaunchRecoveryRequest?
     @Published var errorMessage: String?
@@ -64,8 +66,13 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     var canSend: Bool {
-        phase == .ready && !isRestoringData && currentSession != nil && selectedModelID != nil && !isGenerating && !isPreparingSend
+        phase == .ready && !isRestoringData && !isMutatingHistory && currentSession != nil && selectedModelID != nil && !isGenerating && !isPreparingSend
             && !isImportingAttachments && (!draft.isEmpty || !attachments.isEmpty)
+    }
+
+    var canModifyCurrentHistory: Bool {
+        !isRestoringData && !isMutatingHistory && !isGenerating && !isPreparingSend
+            && currentSession != nil && AppLockManager.shared.state != .locked
     }
 
     func start() async {
@@ -118,6 +125,12 @@ final class MacWorkspaceModel: ObservableObject {
             self?.pruneToolInteractions()
         }.store(in: &subscriptions)
         service.currentSessionSubject.receive(on: DispatchQueue.main).sink { [weak self] session in
+            if self?.currentSession?.id != session?.id {
+                self?.presentationTask?.cancel()
+                self?.presentationRevision = UUID()
+                self?.sourceMessages = []
+                self?.messages = []
+            }
             self?.currentSession = session
             self?.refreshToolInteractions()
         }.store(in: &subscriptions)
@@ -127,17 +140,20 @@ final class MacWorkspaceModel: ObservableObject {
         }.store(in: &subscriptions)
         service.selectedModelSubject.receive(on: DispatchQueue.main).sink { [weak self] model in
             self?.selectedModelID = model?.id
+            self?.selectedModelSupportsPrefill = model?.canRequestAssistantPrefill == true
         }.store(in: &subscriptions)
         service.runningSessionIDsSubject.receive(on: DispatchQueue.main).sink { [weak self] ids in
             self?.runningSessionIDs = ids
             self?.flushToolSupplements()
         }.store(in: &subscriptions)
         service.messagesForSessionSubject
+            .map { [weak service] in (sessionID: service?.currentSessionSubject.value?.id, messages: $0) }
             .throttle(for: .milliseconds(60), scheduler: DispatchQueue.global(qos: .userInitiated), latest: true)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] messages in
-                self?.sourceMessages = messages
-                self?.refreshMessagePresentation()
+            .sink { [weak self] event in
+                guard let self, currentSession?.id == event.sessionID else { return }
+                sourceMessages = event.messages
+                refreshMessagePresentation()
             }.store(in: &subscriptions)
         // Core 在 MainActor 同步发送通知，并立即读取回执；不能在认领前异步转发。
         NotificationCenter.default.publisher(for: .appToolAskUserInputRequested).sink { [weak self] notification in
@@ -180,11 +196,12 @@ final class MacWorkspaceModel: ObservableObject {
         let revision = UUID()
         presentationRevision = revision
         let snapshot = sourceMessages
+        let sessionID = currentSession?.id
         let markdown = AppConfigStore.shared.enableMarkdown
         let language = AppConfigStore.shared.appLanguage
         let store = presentationStore
         presentationTask = Task { [weak self] in
-            guard let prepared = try? await store.prepare(snapshot, markdown: markdown, language: language) else { return }
+            guard let prepared = try? await store.prepare(snapshot, markdown: markdown, language: language, sessionID: sessionID) else { return }
             guard let self, !Task.isCancelled, presentationRevision == revision else { return }
             messages = prepared
         }
@@ -214,17 +231,17 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     func selectSession(_ id: UUID?) {
-        guard let service, let session = sessions.first(where: { $0.id == id }) else { return }
+        guard !isMutatingHistory, let service, let session = sessions.first(where: { $0.id == id }) else { return }
         Task { await service.selectSession(session) }
     }
 
     func newSession() {
-        guard !isRestoringData, AppLockManager.shared.state != .locked, let service else { return }
+        guard !isRestoringData, !isMutatingHistory, AppLockManager.shared.state != .locked, let service else { return }
         Task.detached(priority: .userInitiated) { service.createNewSession() }
     }
 
     func deleteSession(_ session: ChatSession) {
-        guard let service else { return }
+        guard !isMutatingHistory, let service else { return }
         Task.detached(priority: .userInitiated) { service.deleteSessions([session]) }
     }
 
@@ -295,7 +312,7 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     private func flushToolSupplements() {
-        guard !isRestoringData, AppLockManager.shared.state != .locked, let service else { return }
+        guard !isRestoringData, !isMutatingHistory, AppLockManager.shared.state != .locked, let service else { return }
         for sessionID in Array(pendingSupplements.keys) {
             guard !service.runningSessionIDsSubject.value.contains(sessionID), !sendingSessionIDs.contains(sessionID),
                   let session = sessions.first(where: { $0.id == sessionID }) else { continue }
@@ -334,6 +351,48 @@ final class MacWorkspaceModel: ObservableObject {
         Task { await service.cancelRequest(for: sessionID) }
     }
 
+    func retryMessage(_ message: ChatMessage, prefill: Bool = false) {
+        guard !isRestoringData, !isMutatingHistory, !isPreparingSend, !isGenerating,
+              selectedModelID != nil, AppLockManager.shared.state != .locked,
+              let service, let session = currentSession else { return }
+        let configuration = MacChatRequestConfiguration(AppConfigStore.shared, session: session)
+        sendingSessionIDs.insert(session.id)
+        Task { [weak self] in
+            await configuration.retry(message, through: service, sessionID: session.id, prefill: prefill)
+            self?.sendingSessionIDs.remove(session.id)
+            self?.flushToolSupplements()
+        }
+    }
+
+    func selectVersion(_ index: Int, of message: ChatMessage) {
+        guard !isRestoringData, !isMutatingHistory, !isPreparingSend, !isGenerating,
+              let service, let sessionID = currentSession?.id else { return }
+        isMutatingHistory = true
+        Task { [weak self] in
+            let didSave = await Task.detached(priority: .userInitiated) {
+                service.selectMessageVersion(at: index, of: message, sessionID: sessionID)
+            }.value
+            self?.isMutatingHistory = false
+            if !didSave { self?.errorMessage = MessageToolCallEditingError.messageChanged.localizedDescription }
+            self?.flushToolSupplements()
+        }
+    }
+
+    func branchSession(at message: ChatMessage? = nil, copyMessages: Bool = true, copyPrompts: Bool = true) {
+        guard !isRestoringData, !isMutatingHistory, !isPreparingSend, !isGenerating,
+              let service, let session = currentSession else { return }
+        isMutatingHistory = true
+        Task { [weak self] in
+            await Task.detached(priority: .userInitiated) {
+                if let message {
+                    _ = service.branchSessionFromMessage(from: session, upToMessage: message, copyPrompts: copyPrompts)
+                } else { _ = service.branchSession(from: session, copyMessages: copyMessages) }
+            }.value
+            self?.isMutatingHistory = false
+            self?.flushToolSupplements()
+        }
+    }
+
     func updateMessage(_ message: ChatMessage, content: String) async throws {
         guard let service else { throw MessageToolCallEditingError.messageChanged }
         var edited = message
@@ -367,7 +426,7 @@ final class MacWorkspaceModel: ObservableObject {
     func removeAttachment(_ id: UUID) { attachments.removeAll { $0.id == id } }
 
     func beginSnapshotExport() -> Bool {
-        guard !isRestoringData, !isExportingSnapshot, !SnapshotUploadManager.shared.isUploading else { return false }
+        guard !isRestoringData, !isMutatingHistory, !isExportingSnapshot, !SnapshotUploadManager.shared.isUploading else { return false }
         isExportingSnapshot = true
         return true
     }
@@ -377,7 +436,7 @@ final class MacWorkspaceModel: ObservableObject {
     func restoreSnapshot(from url: URL, password: String?) async throws {
         let cloud = CloudSyncManager.shared
         let mcp = MCPManager.shared
-        guard !isRestoringData, !isExportingSnapshot, !memoryModel.isWorking, !conversationMemoryModel.isWorking, sendingSessionIDs.isEmpty,
+        guard !isRestoringData, !isMutatingHistory, !isExportingSnapshot, !memoryModel.isWorking, !conversationMemoryModel.isWorking, sendingSessionIDs.isEmpty,
               !SnapshotUploadManager.shared.isUploading, !mcp.isBusy,
               let service, cloud.beginLocalDataRestore() else {
             throw NSError(domain: "ETOSMacSnapshot", code: 1, userInfo: [
@@ -412,7 +471,7 @@ final class MacWorkspaceModel: ObservableObject {
     func resolveCloudConflict(using resolution: CloudSyncInitialResolution, conflictID: UUID) async throws {
         let cloud = CloudSyncManager.shared
         let mcp = MCPManager.shared
-        guard !isRestoringData, !isExportingSnapshot, !memoryModel.isWorking, !conversationMemoryModel.isWorking, sendingSessionIDs.isEmpty,
+        guard !isRestoringData, !isMutatingHistory, !isExportingSnapshot, !memoryModel.isWorking, !conversationMemoryModel.isWorking, sendingSessionIDs.isEmpty,
               !SnapshotUploadManager.shared.isUploading, !mcp.isBusy, let service,
               cloud.initialConflict?.id == conflictID else {
             throw NSError(domain: "ETOSMacSnapshot", code: 1, userInfo: [
@@ -488,7 +547,8 @@ struct MacChatRequestConfiguration {
     init(_ configuration: AppConfigStore, session: ChatSession) {
         temperature = configuration.aiTemperature
         topP = configuration.aiTopP
-        systemPrompt = session.systemPrompt ?? configuration.systemPrompt
+        // Core 会单独拼入会话提示词；此处只传全局提示词，避免覆盖或重复注入。
+        systemPrompt = configuration.systemPrompt
         historyLimit = configuration.maxChatHistory
         streaming = configuration.enableStreaming
         memory = configuration.enableMemory
@@ -512,6 +572,17 @@ struct MacChatRequestConfiguration {
             enablePeriodicTimeLandmark: timeLandmark, periodicTimeLandmarkIntervalMinutes: timeLandmarkMinutes,
             enableResponseSpeedMetrics: speedMetrics, imageAttachments: attachments.compactMap(\.image),
             fileAttachments: attachments.compactMap(\.file), targetSessionID: sessionID
+        )
+    }
+
+    func retry(_ message: ChatMessage, through service: ChatService, sessionID: UUID, prefill: Bool) async {
+        await service.retryMessage(
+            message, aiTemperature: temperature, aiTopP: topP, systemPrompt: systemPrompt,
+            maxChatHistory: historyLimit, enableStreaming: streaming, enhancedPrompt: enhancedPrompt,
+            enableMemory: memory, enableMemoryWrite: memoryWrite, enableMemoryActiveRetrieval: memoryRetrieval,
+            includeSystemTime: systemTime, systemTimeInjectionPosition: timePosition,
+            enablePeriodicTimeLandmark: timeLandmark, periodicTimeLandmarkIntervalMinutes: timeLandmarkMinutes,
+            enableResponseSpeedMetrics: speedMetrics, prefill: prefill, targetSessionID: sessionID
         )
     }
 }

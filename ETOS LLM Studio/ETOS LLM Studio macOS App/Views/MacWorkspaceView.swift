@@ -69,9 +69,14 @@ struct MacWorkspaceView: View {
                     } label: {
                         Label(NSLocalizedString("会话设置", comment: ""), systemImage: "slider.horizontal.3")
                     }
+                    Menu {
+                        Button(NSLocalizedString("分支提示词和对话记录", comment: "")) { workspace.branchSession() }
+                        Button(NSLocalizedString("仅分支提示词", comment: "")) { workspace.branchSession(copyMessages: false) }
+                    } label: { Label(NSLocalizedString("创建分支", comment: ""), systemImage: "arrow.triangle.branch") }
+                        .disabled(!workspace.canModifyCurrentHistory)
                 }
         }
-        .disabled(workspace.isRestoringData)
+        .disabled(workspace.isRestoringData || workspace.isMutatingHistory)
         .sheet(item: $sessionToEdit) { session in
             MacSessionEditor(session: session)
         }

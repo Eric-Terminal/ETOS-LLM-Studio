@@ -30,9 +30,22 @@ struct MacChatView: View {
                                         NSPasteboard.general.setString(row.message.content, forType: .string)
                                     }
                                     Button(NSLocalizedString("编辑", comment: "")) { editingMessage = row.message }
-                                        .disabled(workspace.isGenerating)
+                                        .disabled(!workspace.canModifyCurrentHistory)
+                                    if row.message.role != .system {
+                                        Button(NSLocalizedString("重新生成", comment: "")) { workspace.retryMessage(row.message) }
+                                            .disabled(!workspace.canModifyCurrentHistory || workspace.selectedModelID == nil)
+                                    }
+                                    if row.message.canPrefill && workspace.selectedModelSupportsPrefill {
+                                        Button(NSLocalizedString("预填充续写", comment: "")) { workspace.retryMessage(row.message, prefill: true) }
+                                            .disabled(!workspace.canModifyCurrentHistory)
+                                    }
+                                    Menu(NSLocalizedString("从此处创建分支", comment: "")) {
+                                        Button(NSLocalizedString("仅复制消息历史", comment: "")) { workspace.branchSession(at: row.message, copyPrompts: false) }
+                                        Button(NSLocalizedString("复制消息历史和提示词", comment: "")) { workspace.branchSession(at: row.message) }
+                                    }
+                                    .disabled(!workspace.canModifyCurrentHistory)
                                     Button(NSLocalizedString("删除", comment: ""), role: .destructive) { deletingMessage = row.message }
-                                        .disabled(workspace.isGenerating)
+                                        .disabled(!workspace.canModifyCurrentHistory)
                                 }
                         }
                         Color.clear.frame(height: 1).id("latest-message")
@@ -127,6 +140,7 @@ struct MacChatView: View {
 }
 
 private struct MacMessageRow: View {
+    @EnvironmentObject private var workspace: MacWorkspaceModel
     let row: MacMessagePresentation
 
     var body: some View {
@@ -135,6 +149,20 @@ private struct MacMessageRow: View {
                 Text(row.roleTitle).font(.caption).foregroundStyle(.secondary)
                 if row.message.isReceivingStream { ProgressView().controlSize(.mini) }
                 Spacer()
+                if !row.versionOptions.isEmpty {
+                    Menu {
+                        ForEach(row.versionOptions) { option in
+                            Button { workspace.selectVersion(option.id, of: row.message) } label: {
+                                if option.id == row.versionIndex { Label(option.title, systemImage: "checkmark") }
+                                else { Text(option.title) }
+                            }
+                            .disabled(option.id == row.versionIndex)
+                        }
+                    } label: { Text(row.versionLabel) }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .disabled(!workspace.canModifyCurrentHistory)
+                }
             }
             if let reasoning = row.reasoning, !reasoning.isEmpty {
                 DisclosureGroup(NSLocalizedString("思考过程", comment: "")) {

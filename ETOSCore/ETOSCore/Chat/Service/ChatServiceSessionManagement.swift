@@ -371,8 +371,10 @@ extension ChatService {
                 format: NSLocalizedString("分支: %@", comment: "Branched chat session name"),
                 sourceSession.name
             ),
+            systemPrompt: sourceSession.systemPrompt,
             topicPrompt: sourceSession.topicPrompt,
             enhancedPrompt: sourceSession.enhancedPrompt,
+            preferredModelIdentifier: sourceSession.preferredModelIdentifier,
             lorebookIDs: sourceSession.lorebookIDs,
             tagIDs: sourceSession.tagIDs,
             memoryContextIsolationEnabled: sourceSession.memoryContextIsolationEnabled,
@@ -383,7 +385,7 @@ extension ChatService {
         )
         logger.info("创建了分支会话: \(newSession.name)")
         if copyMessages {
-            var sourceMessages = Persistence.loadMessages(for: sourceSession.id)
+            var sourceMessages = messagesSnapshot(for: sourceSession.id)
             if !sourceMessages.isEmpty {
                 for i in sourceMessages.indices {
                     if let originalFileName = sourceMessages[i].audioFileName,
@@ -418,7 +420,7 @@ extension ChatService {
     /// - Parameters:
     ///   - sourceSession: 源会话
     ///   - upToMessage: 包含此消息及之前的所有消息
-    ///   - copyPrompts: 是否复制话题提示词和增强提示词
+    ///   - copyPrompts: 是否复制会话系统提示词、话题提示词和增强提示词
     /// - Returns: 新创建的分支会话
     @discardableResult
     public func branchSessionFromMessage(from sourceSession: ChatSession, upToMessage: ChatMessage, copyPrompts: Bool) -> ChatSession {
@@ -428,8 +430,10 @@ extension ChatService {
                 format: NSLocalizedString("分支: %@", comment: "Branched chat session name"),
                 sourceSession.name
             ),
+            systemPrompt: copyPrompts ? sourceSession.systemPrompt : nil,
             topicPrompt: copyPrompts ? sourceSession.topicPrompt : nil,
             enhancedPrompt: copyPrompts ? sourceSession.enhancedPrompt : nil,
+            preferredModelIdentifier: sourceSession.preferredModelIdentifier,
             lorebookIDs: sourceSession.lorebookIDs,
             tagIDs: sourceSession.tagIDs,
             memoryContextIsolationEnabled: sourceSession.memoryContextIsolationEnabled,
@@ -440,7 +444,7 @@ extension ChatService {
         )
         logger.info("从消息处创建分支会话: \(newSession.name)\(copyPrompts ? "（包含提示词）": "（不含提示词）")")
 
-        let sourceMessages = ChatResponseAttemptSupport.visibleMessages(from: Persistence.loadMessages(for: sourceSession.id))
+        let sourceMessages = ChatResponseAttemptSupport.visibleMessages(from: messagesSnapshot(for: sourceSession.id))
         if let messageIndex = sourceMessages.firstIndex(where: { $0.id == upToMessage.id }) {
             var messagesToCopy = Array(sourceMessages[0...messageIndex])
 
@@ -644,9 +648,29 @@ extension ChatService {
 
     /// 更新整个消息列表（用于版本管理等批量操作）
     public func updateMessages(_ messages: [ChatMessage], for sessionID: UUID) {
-        publishMessages(messages)
-        persistMessages(messages, for: sessionID)
+        persistAndPublishMessages(messages, for: sessionID)
         logger.info("已更新会话消息列表: \(sessionID.uuidString)")
+    }
+
+    /// 桌面历史操作显式指定来源；回复尝试切换整条工具链，旧格式仍切换正文版本。
+    @discardableResult
+    public func selectMessageVersion(at index: Int, of original: ChatMessage, sessionID: UUID) -> Bool {
+        guard !hasActiveRequestContext(for: sessionID), conversationSession(withID: sessionID) != nil else { return false }
+        let source = messagesSnapshot(for: sessionID)
+        guard let position = source.firstIndex(where: { $0.id == original.id }), source[position] == original else { return false }
+        let updated: [ChatMessage]
+        if let info = ChatResponseAttemptSupport.versionInfo(for: original, in: source) {
+            let attempts = ChatResponseAttemptSupport.orderedAttemptIDs(for: info.responseGroupID, in: source)
+            guard attempts.indices.contains(index) else { return false }
+            updated = ChatResponseAttemptSupport.selectAttempt(attemptID: attempts[index], groupID: info.responseGroupID, in: source)
+        } else {
+            guard original.getAllVersions().indices.contains(index) else { return false }
+            var messages = source
+            messages[position].switchToVersion(index)
+            updated = messages
+        }
+        updateMessages(updated, for: sessionID)
+        return true
     }
 
     public func updateSession(_ session: ChatSession) {

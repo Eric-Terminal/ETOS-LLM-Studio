@@ -8,6 +8,11 @@ import ETOSCore
 import Foundation
 
 struct MacMessagePresentation: Identifiable {
+    struct VersionOption: Identifiable {
+        let id: Int
+        let title: String
+    }
+
     struct Attachment: Identifiable {
         let id: String
         let url: URL
@@ -21,9 +26,13 @@ struct MacMessagePresentation: Identifiable {
     let toolCalls: [InternalToolCall]
     let attachments: [Attachment]
     let widget: CompletedToolWidget?
+    let versionInfo: ChatResponseAttemptVersionInfo?
+    let versionOptions: [VersionOption]
+    let versionIndex: Int
+    let versionLabel: String
     var id: UUID { message.id }
 
-    static func prepare(_ message: ChatMessage, markdown: Bool) -> MacMessagePresentation {
+    static func prepare(_ message: ChatMessage, markdown: Bool, versionInfo: ChatResponseAttemptVersionInfo? = nil) -> MacMessagePresentation {
         let content: AttributedString
         if markdown, message.role == .assistant,
            let parsed = try? AttributedString(markdown: message.content, options: .init(interpretedSyntax: .full)) {
@@ -46,6 +55,8 @@ struct MacMessagePresentation: Identifiable {
         if let audio = message.audioFileName {
             attachments.append(.init(id: "audio:\(audio)", url: Persistence.getAudioDirectory().appendingPathComponent(audio), isImage: false))
         }
+        let count = versionInfo?.totalCount ?? message.getAllVersions().count
+        let index = versionInfo?.currentIndex ?? message.getCurrentVersionIndex()
         return MacMessagePresentation(
             message: message,
             content: content,
@@ -53,7 +64,13 @@ struct MacMessagePresentation: Identifiable {
             reasoning: message.reasoningContent,
             toolCalls: message.toolCalls ?? [],
             attachments: attachments,
-            widget: CompletedToolWidget(message: message)
+            widget: CompletedToolWidget(message: message),
+            versionInfo: versionInfo,
+            versionOptions: count > 1 ? (0..<count).map {
+                VersionOption(id: $0, title: String(format: NSLocalizedString("版本 %d", comment: ""), $0 + 1))
+            } : [],
+            versionIndex: index,
+            versionLabel: String(format: NSLocalizedString("切换版本 (%d/%d)", comment: ""), index + 1, count)
         )
     }
 }
@@ -62,8 +79,11 @@ actor MacMessagePresentationStore {
     private var cache: [UUID: MacMessagePresentation] = [:]
     private var usesMarkdown = false
     private var language = ""
+    private let versionIndex = ChatResponseAttemptIndexWorker()
 
-    func prepare(_ messages: [ChatMessage], markdown: Bool, language: String) throws -> [MacMessagePresentation] {
+    func prepare(_ messages: [ChatMessage], markdown: Bool, language: String, sessionID: UUID? = nil) async throws -> [MacMessagePresentation] {
+        let versions = await versionIndex.prepare(messages: messages, sessionID: sessionID).entries
+        try Task.checkCancellation()
         if usesMarkdown != markdown || self.language != language {
             cache.removeAll()
             usesMarkdown = markdown
@@ -73,10 +93,10 @@ actor MacMessagePresentationStore {
         let result = try ChatResponseAttemptSupport.visibleMessages(from: messages).map { message in
             try Task.checkCancellation()
             let row: MacMessagePresentation
-            if let previous = cache[message.id], previous.message == message {
+            if let previous = cache[message.id], previous.message == message, previous.versionInfo == versions[message.id] {
                 row = previous
             } else {
-                row = MacMessagePresentation.prepare(message, markdown: markdown)
+                row = MacMessagePresentation.prepare(message, markdown: markdown, versionInfo: versions[message.id])
             }
             updated[message.id] = row
             return row
