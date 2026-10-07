@@ -20,6 +20,8 @@ final class MacWorkspaceModel: ObservableObject {
     @Published private(set) var temporaryChatMemoryMode: TemporaryChatMemoryMode?
     @Published private(set) var providers: [Provider] = []
     @Published private(set) var models: [RunnableModel] = []
+    @Published private(set) var sessionModelCatalog = MacSessionModelCatalog(models: [])
+    @Published private(set) var effectiveModelName: String?
     @Published private(set) var selectedModelID: String?
     @Published private(set) var selectedModelSupportsPrefill = false
     @Published private(set) var selectedModelSupportsRewrite = false
@@ -57,6 +59,7 @@ final class MacWorkspaceModel: ObservableObject {
     private var toolDrafts: [UUID: [AppToolInputDraftRequest]] = [:]
     private var pendingSupplements: [UUID: [String]] = [:]
     private var rewriteTasks: [UUID: Task<Void, Never>] = [:]
+    private var effectiveModel: RunnableModel?
 
     var isPreparingSend: Bool {
         currentSession.map { sendingSessionIDs.contains($0.id) } ?? false
@@ -67,7 +70,7 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     var canSend: Bool {
-        phase == .ready && !isRestoringData && !isMutatingHistory && !sessionLibrary.isWorking && currentSession != nil && selectedModelID != nil && !isGenerating && !isPreparingSend
+        phase == .ready && !isRestoringData && !isMutatingHistory && !sessionLibrary.isWorking && currentSession != nil && effectiveModel != nil && !isGenerating && !isPreparingSend
             && !isImportingAttachments && (!draft.isEmpty || !attachments.isEmpty)
     }
 
@@ -137,6 +140,7 @@ final class MacWorkspaceModel: ObservableObject {
                 self?.messages = []
             }
             self?.currentSession = session
+            self?.refreshEffectiveModel()
             self?.temporaryChatMemoryMode = service.temporaryChatMemoryMode(for: session?.id)
             self?.refreshToolInteractions()
         }.store(in: &subscriptions)
@@ -146,8 +150,7 @@ final class MacWorkspaceModel: ObservableObject {
         }.store(in: &subscriptions)
         service.selectedModelSubject.receive(on: DispatchQueue.main).sink { [weak self] model in
             self?.selectedModelID = model?.id
-            self?.selectedModelSupportsPrefill = model?.canRequestAssistantPrefill == true
-            self?.selectedModelSupportsRewrite = model?.model.isChatModel == true
+            self?.refreshEffectiveModel()
         }.store(in: &subscriptions)
         service.runningSessionIDsSubject.receive(on: DispatchQueue.main).sink { [weak self] ids in
             self?.runningSessionIDs = ids
@@ -223,10 +226,23 @@ final class MacWorkspaceModel: ObservableObject {
         guard let service else { return }
         modelListTask?.cancel()
         modelListTask = Task { [weak self] in
-            let models = await Task.detached { service.activatedConversationModels }.value
+            let (models, catalog) = await Task.detached {
+                let models = service.activatedConversationModels
+                return (models, MacSessionModelCatalog(models: models))
+            }.value
             guard let self, !Task.isCancelled else { return }
             self.models = models
+            sessionModelCatalog = catalog
+            refreshEffectiveModel()
         }
+    }
+
+    private func refreshEffectiveModel() {
+        effectiveModel = sessionModelCatalog.resolvedModel(preferredID: currentSession?.preferredModelIdentifier,
+                                                         global: service?.selectedModelSubject.value)
+        effectiveModelName = effectiveModel?.model.displayName
+        selectedModelSupportsPrefill = effectiveModel?.canRequestAssistantPrefill == true
+        selectedModelSupportsRewrite = effectiveModel?.model.isChatModel == true
     }
 
     func selectSession(_ id: UUID?) {
@@ -404,7 +420,7 @@ final class MacWorkspaceModel: ObservableObject {
     @discardableResult
     func rewriteMessage(_ request: MacMessageRewriteRequest) -> Bool {
         guard canModifyCurrentHistory, currentSession?.id == request.sessionID,
-              let service, let model = service.selectedModelSubject.value, model.model.isChatModel else { return false }
+              let service, let model = effectiveModel, model.model.isChatModel else { return false }
         let temperature = AppConfigStore.shared.aiTemperature
         sendingSessionIDs.insert(request.sessionID)
         rewriteTasks[request.sessionID] = Task { [weak self] in
@@ -423,7 +439,7 @@ final class MacWorkspaceModel: ObservableObject {
 
     func retryMessage(_ message: ChatMessage, prefill: Bool = false) {
         guard canModifyCurrentHistory,
-              selectedModelID != nil, AppLockManager.shared.state != .locked,
+              effectiveModel != nil, AppLockManager.shared.state != .locked,
               let service, let session = currentSession else { return }
         let configuration = MacChatRequestConfiguration(AppConfigStore.shared, session: session)
         sendingSessionIDs.insert(session.id)

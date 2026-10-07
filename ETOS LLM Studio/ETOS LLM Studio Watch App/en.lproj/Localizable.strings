@@ -7509,3 +7509,10 @@
 "开启选区重写后，在原文中拖动选择需要修改的文字。重写只替换对应的原文片段，其他内容保持原样。" = "Enable selection rewriting, then drag over the text to change in the original preview. Only the corresponding source text is replaced; the rest stays unchanged.";
 
 "AI 只会生成选区的替换内容，全文会保存为新版本；原版本仍可随时切回。" = "AI generates only a replacement for the selection. The full response is saved as a new version, and you can switch back at any time.";
+
+/* Mac 会话模型与提示词 */
+"全局模型" = "Global Model";
+"会话首选模型优先于全局选择；可在会话设置中修改。" = "The conversation’s preferred model takes precedence over the global selection. Change it in Conversation Settings.";
+"会话系统提示词、主题提示和增强提示词分别保存在当前会话中，不会修改全局提示词。首选模型优先于工具栏的全局选择；选择“跟随全局模型”可取消绑定。模型暂时不可用时保留绑定，本轮按核心规则回退到全局模型。三个隔离开关独立控制记忆、工具和全局提示词，角色卡与世界书不受影响。向导只修改草稿，点击保存后生效；会话在其他位置变化后需要重新打开编辑器。" = "The conversation system, topic and enhancement prompts are saved separately for this conversation without changing global prompts. Its preferred model takes precedence over the global toolbar selection; choose “Follow global model” to remove the binding. An unavailable model keeps its binding while the core falls back to the global model for this request. The three isolation switches independently control memory, tools and global prompts; character cards and worldbooks are unaffected. Guide proposals change only the draft. Click Save to apply it; reopen the editor if the conversation changes elsewhere.";
+
+"这些提示词只对当前会话生效，App 的工具协议与运行约束不会被替换。" = "These prompts apply only to this conversation. App tool protocols and runtime constraints remain in effect.";

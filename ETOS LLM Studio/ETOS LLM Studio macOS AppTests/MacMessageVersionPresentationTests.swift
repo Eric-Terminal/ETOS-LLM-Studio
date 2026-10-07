@@ -11,9 +11,10 @@ struct MacMessageVersionPresentationTests {
         let previous = configuration.systemPrompt
         defer { configuration.systemPrompt = previous }
         configuration.systemPrompt = "全局提示词"
-        let session = ChatSession(id: UUID(), name: "会话", systemPrompt: "会话提示词")
+        let session = ChatSession(id: UUID(), name: "会话", systemPrompt: "会话提示词", topicPrompt: "主题提示词", enhancedPrompt: "增强提示词")
         let snapshot = MacChatRequestConfiguration(configuration, session: session)
         #expect(snapshot.systemPrompt == "全局提示词")
+        #expect(snapshot.enhancedPrompt == "增强提示词")
     }
 
     @Test("回复组增加版本时，未改变正文的用户行也刷新版本选项")

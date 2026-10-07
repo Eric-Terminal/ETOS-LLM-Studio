@@ -36,7 +36,7 @@ struct MacChatView: View {
                                         .disabled(!workspace.canModifyCurrentHistory)
                                     if row.message.role != .system {
                                         Button(NSLocalizedString("重新生成", comment: "")) { workspace.retryMessage(row.message) }
-                                            .disabled(!workspace.canModifyCurrentHistory || workspace.selectedModelID == nil)
+                                            .disabled(!workspace.canModifyCurrentHistory || workspace.effectiveModelName == nil)
                                     }
                                     if row.message.canPrefill && workspace.selectedModelSupportsPrefill {
                                         Button(NSLocalizedString("预填充续写", comment: "")) { workspace.retryMessage(row.message, prefill: true) }

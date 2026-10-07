@@ -21,7 +21,7 @@ struct MacWorkspaceView: View {
                 .toolbar {
                     ToolbarItem { MacTemporaryChatMenu() }
                     ToolbarItem(placement: .principal) {
-                        Picker(NSLocalizedString("模型", comment: ""), selection: Binding(
+                        Picker(NSLocalizedString("全局模型", comment: ""), selection: Binding(
                             get: { workspace.selectedModelID },
                             set: { workspace.selectModel($0) }
                         )) {
@@ -32,6 +32,11 @@ struct MacWorkspaceView: View {
                         }
                         .labelsHidden()
                         .frame(maxWidth: 320)
+                        .help(NSLocalizedString("会话首选模型优先于全局选择；可在会话设置中修改。", comment: ""))
+                    }
+                    if workspace.currentSession?.preferredModelIdentifier != nil, let name = workspace.effectiveModelName {
+                        LabeledContent(NSLocalizedString("当前模型", comment: ""), value: name)
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                     Button {
                         sessionToEdit = workspace.currentSession
@@ -85,80 +90,5 @@ struct MacWorkspaceView: View {
             workspace.refreshMessagePresentation()
         }
         .onChange(of: configuration.enableMarkdown) { _, _ in workspace.refreshMessagePresentation() }
-    }
-}
-
-private struct MacSessionEditor: View {
-    @EnvironmentObject private var workspace: MacWorkspaceModel
-    @Environment(\.dismiss) private var dismiss
-    @State private var draft: ChatSession
-    @State private var isSaving = false
-    @State private var error: String?
-    private let original: ChatSession
-
-    init(session: ChatSession) {
-        original = session
-        _draft = State(initialValue: session)
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField(NSLocalizedString("名称", comment: ""), text: $draft.name)
-                    TextField(NSLocalizedString("系统提示词", comment: ""), text: Binding(
-                        get: { draft.systemPrompt ?? "" },
-                        set: { draft.systemPrompt = $0.isEmpty ? nil : $0 }
-                    ), axis: .vertical)
-                    .lineLimit(3...10)
-                }
-                Section {
-                    Toggle(NSLocalizedString("隔离记忆上下文", comment: ""), isOn: $draft.memoryContextIsolationEnabled)
-                    Toggle(NSLocalizedString("隔离工具上下文", comment: ""), isOn: $draft.toolContextIsolationEnabled)
-                    Toggle(NSLocalizedString("隔离全局系统提示词", comment: ""), isOn: $draft.globalSystemPromptIsolationEnabled)
-                } footer: {
-                    Text(NSLocalizedString("修改保留为草稿，点击保存后生效。", comment: ""))
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                if let error { Text(error).font(.footnote).foregroundStyle(.red) }
-            }
-            .formStyle(.grouped)
-            .disabled(isSaving || workspace.isRestoringData)
-            .navigationTitle(NSLocalizedString("会话设置", comment: ""))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(NSLocalizedString("取消", comment: "")) { dismiss() }.disabled(isSaving)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(NSLocalizedString("保存", comment: "")) {
-                        isSaving = true
-                        Task {
-                            defer { isSaving = false }
-                            do { try await workspace.saveSession(draft, replacing: original); dismiss() }
-                            catch { self.error = error.localizedDescription }
-                        }
-                    }
-                    .disabled(isSaving || draft.name.isEmpty || workspace.isRestoringData)
-                }
-            }
-            .guideSettingsPageContext(
-                id: GuidePageID(rawValue: "mac-session-\(draft.id)"),
-                title: NSLocalizedString("会话设置", comment: ""),
-                documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
-                settings: isSaving || workspace.isRestoringData ? [
-                    .readOnly("working", label: NSLocalizedString("状态", comment: ""), value: { .bool(true) })
-                ] : [
-                    .readOnly("editing_mode", label: NSLocalizedString("编辑方式", comment: ""), value: { .string(NSLocalizedString("修改后需要保存", comment: "")) }),
-                    .string("name", label: NSLocalizedString("名称", comment: ""), allowsEmpty: false, get: { draft.name }, set: { draft.name = $0 }),
-                    .string("system_prompt", label: NSLocalizedString("系统提示词", comment: ""), get: { draft.systemPrompt ?? "" }, set: { draft.systemPrompt = $0.isEmpty ? nil : $0 }),
-                    .bool("memory_isolation", label: NSLocalizedString("隔离记忆上下文", comment: ""), get: { draft.memoryContextIsolationEnabled }, set: { draft.memoryContextIsolationEnabled = $0 }),
-                    .bool("tool_isolation", label: NSLocalizedString("隔离工具上下文", comment: ""), get: { draft.toolContextIsolationEnabled }, set: { draft.toolContextIsolationEnabled = $0 }),
-                    .bool("prompt_isolation", label: NSLocalizedString("隔离全局系统提示词", comment: ""), get: { draft.globalSystemPromptIsolationEnabled }, set: { draft.globalSystemPromptIsolationEnabled = $0 })
-                ]
-            )
-        }
-        .modifier(MacGuideInspector())
-        .interactiveDismissDisabled(isSaving)
-        .frame(minWidth: 480, minHeight: 440)
     }
 }
