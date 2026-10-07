@@ -7,6 +7,8 @@ struct MacChatView: View {
     @EnvironmentObject private var workspace: MacWorkspaceModel
     @ObservedObject private var configuration = AppConfigStore.shared
     @State private var importing = false
+    @State private var importContext: UUID?
+    @State private var isVisible = false
     @State private var followsLatest = true
     @State private var editingMessage: MacMessageEditTarget?
     @State private var rewritingMessage: MacMessageEditTarget?
@@ -98,14 +100,34 @@ struct MacChatView: View {
                 MacQuestionnaireView(model: model)
             } else { composer }
         }
-        .onAppear { workspace.setRoleplayHostVisible(true) }
-        .onDisappear { workspace.setRoleplayHostVisible(false) }
+        .onAppear { isVisible = true; workspace.setRoleplayHostVisible(true) }
+        .onDisappear { isVisible = false; importing = false; workspace.setRoleplayHostVisible(false) }
+        .onChange(of: workspace.incomingDocuments.contextID) { _, _ in importing = false; importContext = nil }
+        .dropDestination(for: URL.self) { urls, _ in
+            guard isVisible, workspace.canManageLocalModels else { return false }
+            return workspace.receiveDocuments(urls)
+        }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            guard isVisible, workspace.canManageLocalModels, importContext == workspace.incomingDocuments.contextID else { return }
             switch result {
-            case .success(let urls): Task { await workspace.importAttachments(urls) }
+            case .success(let urls): workspace.receiveDocuments(urls)
             case .failure(let error): workspace.errorMessage = error.localizedDescription
             }
         }
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "mac-chat-\(workspace.currentSession?.id.uuidString ?? "none")"),
+            title: NSLocalizedString("对话", comment: ""),
+            documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace"),
+                        GuideDocumentReference(id: "local-models", title: "Local Models")],
+            isActive: isVisible && workspace.canManageLocalModels && !importing && editingMessage == nil
+                && rewritingMessage == nil && deletingMessage == nil && !showsRequestControls,
+            settings: [
+                .readOnly("attachment_count", label: NSLocalizedString("附件", comment: ""), value: { .int(workspace.attachments.count) }),
+                .readOnly("importing_files", label: NSLocalizedString("处理中", comment: ""), value: { .bool(workspace.isImportingAttachments) }),
+                .readOnly("imported_local_models", label: NSLocalizedString("本地模型", comment: ""), value: { .int(workspace.incomingDocuments.importedModelCount) }),
+                .readOnly("requires_manual_send", label: NSLocalizedString("发送", comment: ""), value: { .bool(true) })
+            ]
+        )
         .sheet(item: $editingMessage) { target in
             MacMessageEditor(message: target.message, sessionID: target.sessionID)
         }
@@ -143,6 +165,10 @@ struct MacChatView: View {
 
     private var composer: some View {
         VStack(alignment: .leading) {
+            if workspace.incomingDocuments.importedModelCount > 0 {
+                Text(String(format: NSLocalizedString("已导入 %d 个本地模型，可在模型管理中查看。", comment: ""), workspace.incomingDocuments.importedModelCount))
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
             if !workspace.attachments.isEmpty {
                 ScrollView(.horizontal) {
                     HStack {
@@ -164,10 +190,12 @@ struct MacChatView: View {
                 .frame(minHeight: 60, maxHeight: 140)
                 .accessibilityLabel(NSLocalizedString("消息", comment: ""))
             HStack {
-                Button { importing = true } label: {
+                Button {
+                    importContext = workspace.incomingDocuments.contextID; importing = true
+                } label: {
                     Label(NSLocalizedString("添加附件", comment: ""), systemImage: "paperclip")
                 }
-                .disabled(workspace.isImportingAttachments)
+                .disabled(workspace.isImportingAttachments || !workspace.canManageLocalModels)
                 if workspace.isImportingAttachments { ProgressView().controlSize(.small) }
                 Button { showsRequestControls = true } label: {
                     Label(NSLocalizedString("聊天控制", comment: ""), systemImage: "slider.horizontal.3")

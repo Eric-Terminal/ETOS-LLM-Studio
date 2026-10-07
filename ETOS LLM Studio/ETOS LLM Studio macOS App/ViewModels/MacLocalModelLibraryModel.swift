@@ -20,7 +20,7 @@ final class MacLocalModelLibraryModel: ObservableObject {
     private var presentationID = UUID()
     private var writeID = UUID()
 
-    var canWrite: Bool { isLoaded && !isWorking && !isSuspended }
+    var canWrite: Bool { isLoaded && !isWorking && !isSuspended && AppLockManager.shared.state != .locked }
 
     init(store: LocalModelStore? = nil, downloadTransport: @escaping MacLocalModelDownload.Transport = { request, progress in
         try await SyncPackageUploadService.downloadTemporaryFile(request: request, progress: progress)
@@ -91,7 +91,7 @@ final class MacLocalModelLibraryModel: ObservableObject {
         let token = writeID
         let task = download.start(urlText: urlText, displayName: displayName, store: store) { [weak self] in
             guard let self else { return false }
-            return !isSuspended && epoch == expectedEpoch
+            return !isSuspended && epoch == expectedEpoch && AppLockManager.shared.state != .locked
         }
         writeTask = Task { [weak self] in
             let succeeded = await task.value
@@ -119,7 +119,7 @@ final class MacLocalModelLibraryModel: ObservableObject {
 
     /// 同一向导提案可同时改多个开关，不能因第一个开关开始落盘而丢弃后续字段。
     func updateSetting(_ key: AppConfigKey, enabled: Bool, service: ChatService?) {
-        guard isLoaded, !isSuspended else { return }
+        guard isLoaded, !isSuspended, AppLockManager.shared.state != .locked else { return }
         let configuration = AppConfigStore.shared
         switch key {
         case .localModelsEnabled: configuration.localModelsEnabled = enabled

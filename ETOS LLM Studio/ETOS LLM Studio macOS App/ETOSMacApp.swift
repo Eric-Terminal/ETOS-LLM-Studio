@@ -15,11 +15,10 @@ struct ETOSMacApp: App {
 
     var body: some Scene {
         Window(NSLocalizedString("ETOS LLM Studio", comment: ""), id: "workspace") {
-            MacLaunchView()
+            MacLaunchView(applicationDelegate: applicationDelegate)
                 .environmentObject(workspace)
                 .frame(minWidth: 760, minHeight: 520)
                 .disabled(applicationDelegate.isTerminating)
-                .onAppear { applicationDelegate.workspace = workspace }
         }
         .defaultSize(width: 1120, height: 760)
         .commands {
@@ -49,7 +48,9 @@ struct ETOSMacApp: App {
 }
 
 private struct MacLaunchView: View {
+    let applicationDelegate: MacApplicationDelegate
     @EnvironmentObject private var workspace: MacWorkspaceModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
@@ -75,6 +76,13 @@ private struct MacLaunchView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            let openWorkspace = openWindow
+            applicationDelegate.attach(workspace: workspace) {
+                openWorkspace(id: "workspace")
+                NSApplication.shared.activate()
+            }
+        }
         .task { await workspace.start() }
         .alert(NSLocalizedString("错误", comment: ""), isPresented: Binding(
             get: { workspace.errorMessage != nil },

@@ -12,6 +12,8 @@ public enum GuideMacWorkspaceKnowledge {
 
             Mac 聊天窗口左侧选择会话，右侧选择模型并输入消息；⌘N 新建会话，⌘Return 发送。附件通过系统文件选择器导入，正文与 Markdown 在后台准备。生成期间可以切换会话，工具调用继续使用 ETOSCore 的原生审批。右键消息可以复制、编辑或删除；编辑消息只修改历史，不执行其中的工具调用。消息正文不向页面向导公开。系统文件选择器属于系统页面，不提供配置向导。
 
+            Finder 打开、聊天拖放和附件面板共用本机文件队列。GGUF 进入模型库，同批次首个 mmproj 附加给第一个权重，不作为聊天附件读取；其他文件进入输入区后仍需手动发送。启动或锁定期间新收到的请求等到解锁处理；库忙碌时等待其完成。锁定取消旧导入，备份、恢复和退出清空旧队列并等待已开始的文件操作，不把迟到附件写入新会话。已有权重保存不会强行中断。聊天向导只公开附件数量、导入状态和成功导入的模型数，不读取文件或执行导入、发送。
+
             右键消息可重新生成；支持预填充的模型还可从助手正文续写。回复版本菜单切换整轮回复和关联工具结果，旧格式消息则切换正文版本。重试固定来源会话与模型，等待旧请求结束时切换会话不会改变目标。工具栏可复制整段历史和提示词或只复制提示词建立分支；右键消息可从该处建立分支并选择是否复制提示词。分支沿用会话首选模型，包含提示词时也保留会话系统提示词。
 
             版本消息的右键菜单可删除当前版本或所有版本，确认框固定来源会话。整轮删除包含该版本的工具结果，并保留用户问题锚点；旧正文格式逐个移除正文版本。已经切换或修改的目标会拒绝旧确认。消息编辑器同样固定来源，不能把草稿写入后来切换到的另一会话。删除确认只向向导提供操作类型和来源 ID，不暴露消息正文或提供删除执行器。
@@ -69,6 +71,8 @@ public enum GuideMacWorkspaceKnowledge {
             Mac 与 iOS/watchOS 复用数据库结构、配置编码和附件相对路径；Mac 数据目录为 Application Support/ETOS LLM Studio，不直接读写移动设备的沙盒。平台路径和本地执行环境需要分别配置。页面向导只能使用当前页面声明的工具，不能执行用户 MCP、系统命令或快捷指令，也不会从 JSON 编辑器读取已有秘密。
             """ : """
             Select a session in the Mac sidebar, choose a model and compose on the right. Command-N creates a session and Command-Return sends. Import attachments with the system file picker. Message and Markdown preparation runs in the background. Sessions can be switched during generation; ETOSCore still controls native tool approval. Right-click a message to copy, edit or delete it. Editing changes history without executing tool calls. Message content is hidden from the page guide. The system file picker has no app configuration guide.
+
+            Finder opening, chat drops and the attachment picker share a local-file queue. GGUF batches enter the model library; the first mmproj attaches to the first weight and is not read as a chat attachment. Other files enter the composer and require a manual send. New requests received during startup or lock wait for unlocking, and a busy model library delays imports. Lock cancels old imports; backup, restore and quit clear old queued requests and wait for started file operations. Late attachment results cannot enter another conversation. Started weight saves finish normally. The chat guide exposes only attachment counts, import state and the number of imported models; it cannot read files, import or send.
 
             Right-click to regenerate a message, or continue assistant text with prefill when supported by the model. The version menu switches a whole response attempt and its tool results; legacy messages switch content versions. Retry retains its source session and model while waiting for the previous request to stop. The toolbar can branch with all history and prompts or with prompts only. A message menu can branch at that message, with or without prompts. Branches retain the preferred model, and copying prompts also preserves the session system prompt.
 
