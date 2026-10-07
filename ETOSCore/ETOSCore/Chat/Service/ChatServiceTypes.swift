@@ -13,6 +13,7 @@ public struct RunnableModel: Identifiable, Hashable {
     public var id: String { "\(provider.id.uuidString)-\(model.id.uuidString)" }
     public let provider: Provider
     public let model: Model
+    private let requestBodyControlStateSnapshot: ModelRequestBodyControlState?
 
     /// 模型级覆盖优先于提供商默认值，所有实际请求都应使用这个格式选择适配器。
     public var effectiveAPIFormat: String {
@@ -20,7 +21,8 @@ public struct RunnableModel: Identifiable, Hashable {
     }
 
     public var requestBodyControlState: ModelRequestBodyControlState {
-        ModelRequestBodyControlRuntimeStore.state(
+        if let requestBodyControlStateSnapshot { return requestBodyControlStateSnapshot }
+        return ModelRequestBodyControlRuntimeStore.state(
             forModelKey: id,
             controls: model.requestBodyControls
         )
@@ -42,9 +44,11 @@ public struct RunnableModel: Identifiable, Hashable {
         )
     }
 
-    public init(provider: Provider, model: Model) {
+    /// 显式状态用于草稿示例等固定来源，不读取或迁移数据库中的当前选择。
+    public init(provider: Provider, model: Model, requestBodyControlState: ModelRequestBodyControlState? = nil) {
         self.provider = provider
         self.model = model
+        requestBodyControlStateSnapshot = requestBodyControlState
     }
 
     // 只根据 ID 判断相等性，避免参数变化导致 Picker 匹配失败。

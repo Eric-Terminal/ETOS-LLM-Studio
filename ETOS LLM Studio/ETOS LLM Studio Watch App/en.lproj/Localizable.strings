@@ -7623,3 +7623,11 @@
 "参数结构建议" = "Parameter Structure Suggestion";
 
 "仅显示上一项的字段结构，未编辑的建议不会保存。" = "Only the previous option’s field structure is shown. Untouched suggestions are not saved.";
+
+"聊天请求体示例" = "Sample Chat Request Body";
+
+"使用示例消息和控制默认值，不发送请求。" = "Uses a sample message and control defaults. No request is sent.";
+
+"Mac 聊天请求体示例使用说明" = "This page shows the current model draft’s chat body: base parameters are combined with control defaults and passed through the protocol adapter. <message> represents a sample message. Explicit custom parameters and adapter defaults remain.\n\nIt excludes the current conversation, attachments, global sampling configuration and enabled tools. It reads no provider credentials, changes no chat selections and adds no request log. It is not the actual pending request and does not verify upstream support.\n\nKnown sensitive fields are redacted. This page is read-only; copy the example or return to edit parameters and controls. Finish the parent drafts and save the provider to apply changes. The page guide cannot read the example body.";
+
+"无法生成聊天请求体示例。" = "Unable to generate a sample chat request body.";

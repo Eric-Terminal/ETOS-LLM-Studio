@@ -210,6 +210,22 @@ extension GuideInfrastructureTests {
         }
         #expect(!GuideToolCatalog.knowledgeDefinitions.contains { $0.name == GuideModelRequestBodyControls.toolDefinition.name })
     }
+
+    @Test("Mac 请求体示例的向导说明保持只读，不沿用参数编辑工具")
+    func macSamplePreviewIsReadOnly() {
+        let page = GuidePageDescriptor(id: "mac-request-preview-fixture", title: "示例", documents: [
+            GuideDocumentReference(id: "model-request-body", title: "请求体")
+        ])
+        let chinese = GuideRequestBodyControlKnowledge.orientation(for: page, locale: Locale(identifier: "zh-Hans"))
+        let english = GuideRequestBodyControlKnowledge.orientation(for: page, locale: Locale(identifier: "en"))
+        for text in [chinese, english] {
+            #expect(text.contains("<message>"))
+            #expect(!text.contains("propose_mac_request_parameters"))
+            #expect(!text.contains("propose_mac_runtime_control"))
+        }
+        #expect(chinese.contains("不能读取正文"))
+        #expect(english.contains("cannot read the body"))
+    }
 }
 
 private func requestControlProposal(

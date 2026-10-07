@@ -9,6 +9,13 @@ public enum GuideRequestBodyControlKnowledge {
                 ? "ELS 提供名为“结构化控制”的能力，可以帮助用户自定义请求 Body；需要配置时，引导用户进入模型编辑页面。"
                 : "ELS provides Structured Controls to help users customize request bodies. Guide users to the model editor when they need to configure them."
         }
+        if page.id.rawValue.hasPrefix("mac-request-preview") {
+            return locale.language.languageCode?.identifier == "zh" ? """
+            当前是只读的聊天请求体示例。它使用模型编辑草稿、控制默认值和 <message> 示例消息，由实际协议适配器构造；不包含当前对话、附件、应用全局采样配置或已启用工具。显式自定义参数和适配器默认字段仍会保留。示例不发送请求，不读取提供商密钥，不改变聊天选择或请求日志。界面按已知敏感字段脱敏，但向导不能读取正文或复制到历史，也不能发送、执行或修改示例。调整参数需返回参数或控制编辑页；保存仍需逐级完成并保存提供商。这不是实际待发送请求，也不证明上游接受参数。
+            """ : """
+            This is a read-only sample chat request body. Actual protocol adapters use the model draft, control defaults and a <message> sample. It excludes the current conversation, attachments, global sampling configuration and enabled tools; explicit custom parameters and adapter defaults remain. It sends no request, reads no provider credentials, and changes neither chat selections nor request logs. The UI redacts known sensitive fields, but the guide cannot read the body, copy it into history, send it, execute it or edit it. Return to parameter/control editors to make changes, then finish parent drafts and save the provider. This is not the actual pending request or proof of upstream parameter support.
+            """
+        }
         if page.id.rawValue.hasPrefix("mac-request-runtime") {
             return locale.language.languageCode?.identifier == "zh" ? """
             Mac 聊天控制位于输入区的“聊天控制”按钮，作用于当前会话实际使用的模型。propose_mac_runtime_control 接受 control_id 及且仅及 active、option_id、position 中的一项；active 仅用于开关，option_id 为已声明的选项 ID，空字符串清除当前覆盖并跟随默认，position 为启用滑块的 0–1 有限位置，核心会吸附离散档位或邻近锚点。用户原生确认后直接保存为后续请求的运行态，不修改模型配置默认值。参数正文与预览不向向导公开。切换模型/会话、修改选择或恢复数据使旧提案失效。Mac 原生滑块按位置使用已保存端点配色，最高档开启彩虹时数值显示流动颜色；减弱动态效果时静止，窗口非活跃时暂停。思考扫光来自每次请求的消息快照，不随之后调整档位改变。当前页面只能修改已声明的选择，不可调用配置编辑工具或外部工具。关闭控制只跳过叠加，不发送 false。
@@ -62,6 +69,8 @@ public enum GuideRequestBodyControlKnowledge {
     private static let chineseDocument = """
     结构化控制不是仅用于思考的特殊功能，而是把任意 API 请求 JSON 包装成聊天时可快速切换的开关、选项组或滑块。路径：模型管理 → 提供商 → 模型信息 → 结构化控制。不要把“键值对/表达式/原始 JSON”三种自定义 Body 编辑方式与结构化控制混为一谈；它们是基础参数的编辑方式，控制项则在发送时叠加到基础参数上。
 
+    Mac 的“聊天请求体示例”是独立只读页，后台将当前草稿与控制默认值送入实际协议适配器，使用 <message> 示例消息，不发送网络、不读取真实提供商密钥、不写运行态或请求日志。它不含当前聊天、附件、全局采样配置和已启用工具；显式自定义参数及适配器默认字段仍会保留，因此不能用它承诺真实请求的完整内容或上游兼容性。已知敏感字段脱敏；向导不能读取正文，也没有发送、执行或修改工具。仅远程聊天模型显示此入口。
+
     Mac 的空选项可建议沿用前一项的字段结构，标量清空，JSON 模板以 null 表示待填位置。未编辑建议或仅切换编辑方式不生成参数；键值表里仍与建议相同的行，即使其他行已修改，也不会保存。编辑 JSON 后留下的 null 按实际值保存。完成接受当前草稿，取消参数页或选项页丢弃该层修改。已消费的建议清空后不再出现。向导只看到只读的建议状态，不能读取原值。
 
     Mac 在模型配置的“自定义 Body”中编辑基础参数及控制定义。参数、控制、选项、导入目录和说明页各有向导上下文，所有完成按钮仅返回父级草稿，最终保存提供商才持久化。参数页的 propose_mac_request_parameters 只接受 parameters 对象和/或 edit_mode（keyValue、expression、rawJSON）；替换对象是完整替换，不是补丁。已有参数不可读，新提案预览脱敏，手动修改使旧版本提案失效。切换编辑方式先验证原稿，不能通过切换丢弃无效输入；表单不能表示的外部键会保留为 JSON。控制列表支持原生新增、复制、导入、上下移动和删除，详情可编辑默认值、选项、滑块粒度、端点颜色及最高档效果，可按数值排序或按嵌套路径拆分。导入与复制重新分配控制/选项 ID；拆分保留核心合并语义。Mac 默认参数预览不是完整请求，不读取消息、不调用网络、不写聊天运行状态。输入区的“聊天控制”使用另一个独立页面，直接保存当前运行态；propose_mac_runtime_control 每次修改一个已有控制，参数与秘密不可读。选项 ID 为空表示跟随默认，滑块范围为 0–1。界面与向导共享来源版本检查，切换模型或会话会使旧操作失效。发送、重试、重写、HTML 发送及工具补充消息等待已接受的写入；备份、恢复和退出也等待该队列。Mac 滑块使用共享配色并保留系统操作，最高档数值使用彩虹；思考/等待/重试提示使用当前真实请求 ID 和每次请求的样式快照，历史及结束消息不播放活动动画。减弱动态效果与非活跃窗口会停止动态效果。
@@ -91,6 +100,8 @@ public enum GuideRequestBodyControlKnowledge {
 
     private static let englishDocument = """
     Structured Controls wrap arbitrary API request JSON into reusable chat switches, option groups or sliders, not just reasoning settings. Path: Model Management → Provider → Model Information → Structured Controls. Key/value, expression and raw JSON are three editors for the base custom Body, not structured controls themselves.
+
+    Mac Sample Chat Request Body is a separate read-only page. In the background, actual protocol adapters use the current draft, control defaults and a <message> sample. It sends no network request, reads no real provider credentials, and writes no runtime state or request log. Current chat, attachments, global sampling configuration and enabled tools are excluded; explicit custom parameters and adapter defaults remain. Do not present it as the complete actual request or proof of upstream compatibility. Known sensitive fields are redacted. The guide cannot read the body or send, execute or edit it. Only remote chat models offer this entry.
 
     Mac empty options can suggest the preceding option's field structure, with scalar values removed and JSON placeholders represented as null. Untouched templates, including mode-only changes, do not become parameters. Key/value rows still matching their suggested structure are omitted even when another row is edited; edited JSON retains explicit nulls. Done accepts the current draft; cancelling a parameter or option editor discards that editor's changes. Consumed suggestions do not reappear after clearing. The guide sees only read-only availability flags, never the original values.
 

@@ -4,11 +4,14 @@ import SwiftUI
 struct MacRequestBodyEditor: View {
     let modelID: UUID
     let apiFormat: String
+    private let sourceModel: Model
+    private let canPreviewChatBody: Bool
     let onSave: (MacRequestBodyDraft) -> Void
     @State private var draft: MacRequestBodyDraft
     @State private var editing: ModelRequestBodyControl?
     @State private var editsParameters = false
     @State private var importsControls = false
+    @State private var showsRequestPreview = false
     @State private var preview = ""
     @State private var error: String?
     @State private var validatedDraft: MacRequestBodyDraft?
@@ -19,7 +22,8 @@ struct MacRequestBodyEditor: View {
     @EnvironmentObject private var workspace: MacWorkspaceModel
 
     init(model: Model, apiFormat: String, onSave: @escaping (MacRequestBodyDraft) -> Void) {
-        modelID = model.id; self.apiFormat = apiFormat; self.onSave = onSave
+        modelID = model.id; self.apiFormat = apiFormat; self.onSave = onSave; sourceModel = model
+        canPreviewChatBody = ModelChatRequestBodyPreview.supports(model: model, providerAPIFormat: apiFormat)
         _draft = State(initialValue: MacRequestBodyDraft(model: model))
     }
 
@@ -59,6 +63,14 @@ struct MacRequestBodyEditor: View {
                     else { Text(preview).font(.system(.body, design: .monospaced)).textSelection(.enabled) }
                 } header: { Text(NSLocalizedString("当前有效请求参数", comment: "")) } footer: {
                     Text(NSLocalizedString("Mac 默认请求参数预览说明", comment: "")).font(.footnote).foregroundStyle(.secondary)
+                }
+                if canPreviewChatBody {
+                    Section {
+                        Button(NSLocalizedString("聊天请求体示例", comment: "")) { showsRequestPreview = true }
+                            .disabled(busy || error != nil)
+                    } footer: {
+                        Text(NSLocalizedString("使用示例消息和控制默认值，不发送请求。", comment: "")).font(.footnote).foregroundStyle(.secondary)
+                    }
                 }
                 if let error { Text(error).font(.footnote).foregroundStyle(.red) }
             }
@@ -100,6 +112,9 @@ struct MacRequestBodyEditor: View {
         }
         .sheet(isPresented: $importsControls) {
             MacRequestControlImportView(modelID: modelID) { controls in draft.controls.append(contentsOf: controls) }
+        }
+        .sheet(isPresented: $showsRequestPreview) {
+            MacChatRequestBodyPreviewView(model: sourceModel, draft: draft, apiFormat: apiFormat)
         }
         .onAppear { refresh() }
         .onChange(of: draft) { _, _ in refresh() }

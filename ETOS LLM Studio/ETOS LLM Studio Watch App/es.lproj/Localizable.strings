@@ -7700,3 +7700,11 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "参数结构建议" = "Sugerencia de estructura";
 
 "仅显示上一项的字段结构，未编辑的建议不会保存。" = "Solo se muestra la estructura de la opción anterior. Las sugerencias sin editar no se guardan.";
+
+"聊天请求体示例" = "Ejemplo del cuerpo de solicitud de chat";
+
+"使用示例消息和控制默认值，不发送请求。" = "Usa un mensaje de ejemplo y los valores predeterminados de los controles. No envía solicitudes.";
+
+"Mac 聊天请求体示例使用说明" = "Esta página muestra el cuerpo de chat del borrador actual: los parámetros base se combinan con los controles predeterminados y pasan por el adaptador del protocolo. <message> representa un mensaje de ejemplo. Se conservan los parámetros personalizados explícitos y los campos predeterminados del adaptador.\n\nNo incluye la conversación actual, los adjuntos, la configuración global de muestreo ni las herramientas activadas. No lee claves del proveedor, cambia selecciones del chat ni añade registros de solicitudes. No es la solicitud pendiente real ni verifica la compatibilidad del servidor.\n\nLos campos sensibles conocidos se ocultan. Esta página es de solo lectura: copie el ejemplo o vuelva para editar parámetros y controles. Termine los borradores superiores y guarde el proveedor para aplicar los cambios. El asistente no puede leer este cuerpo.";
+
+"无法生成聊天请求体示例。" = "No se pudo generar un ejemplo del cuerpo de solicitud de chat.";

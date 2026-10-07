@@ -7913,3 +7913,11 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "参数结构建议" = "Suggestion de structure";
 
 "仅显示上一项的字段结构，未编辑的建议不会保存。" = "Seule la structure de l’option précédente est affichée. Les suggestions non modifiées ne sont pas enregistrées.";
+
+"聊天请求体示例" = "Exemple de corps de requête de chat";
+
+"使用示例消息和控制默认值，不发送请求。" = "Utilise un message d’exemple et les valeurs par défaut des contrôles. Aucune requête envoyée.";
+
+"Mac 聊天请求体示例使用说明" = "Cette page montre le corps de chat du brouillon actuel : les paramètres de base et les contrôles par défaut passent par l’adaptateur du protocole. <message> représente un message d’exemple. Les paramètres personnalisés explicites et les champs par défaut de l’adaptateur sont conservés.\n\nLa conversation actuelle, les pièces jointes, les réglages globaux d’échantillonnage et les outils activés sont exclus. Aucune clé du fournisseur n’est lue ; aucun choix de chat ni journal de requête n’est modifié. Ce n’est pas la requête en attente et cela ne valide pas la prise en charge par le serveur.\n\nLes champs sensibles connus sont masqués. Cette page est en lecture seule : copiez l’exemple ou revenez modifier les paramètres et contrôles. Terminez les brouillons parents et enregistrez le fournisseur pour appliquer les changements. Le guide ne peut pas lire ce corps.";
+
+"无法生成聊天请求体示例。" = "Impossible de générer un exemple de corps de requête de chat.";

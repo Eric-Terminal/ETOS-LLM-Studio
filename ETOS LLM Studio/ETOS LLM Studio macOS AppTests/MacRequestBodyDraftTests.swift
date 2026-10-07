@@ -87,6 +87,18 @@ struct MacRequestBodyDraftTests {
         #expect(throws: MacRequestBodyDraftError.self) { try draft.prepared() }
     }
 
+    @Test("聊天请求体示例使用当前编辑草稿，不改变原模型配置")
+    func sampleUsesCurrentDraft() throws {
+        let original = Model(modelName: "fixture", overrideParameters: ["temperature": .double(0.1)])
+        var draft = MacRequestBodyDraft(model: original)
+        draft.parameters = ["temperature": .double(0.9)]
+        var previewModel = original
+        draft.apply(to: &previewModel)
+        let text = try ModelChatRequestBodyPreview.body(model: previewModel, providerAPIFormat: "openai-compatible")
+        #expect(try ParameterExpressionParser.parseRawJSONObject(text)["temperature"] == .double(0.9))
+        #expect(original.overrideParameters["temperature"] == .double(0.1))
+    }
+
     @Test("参数手动修改和关闭页面使旧向导来源失效")
     @MainActor
     func staleGuideDraftIsRejected() async throws {
