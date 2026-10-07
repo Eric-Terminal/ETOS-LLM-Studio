@@ -20,6 +20,7 @@ struct MacMessagePresentation: Identifiable {
     let reasoning: String?
     let toolCalls: [InternalToolCall]
     let attachments: [Attachment]
+    let widget: CompletedToolWidget?
     var id: UUID { message.id }
 
     static func prepare(_ message: ChatMessage, markdown: Bool) -> MacMessagePresentation {
@@ -51,7 +52,8 @@ struct MacMessagePresentation: Identifiable {
             roleTitle: title,
             reasoning: message.reasoningContent,
             toolCalls: message.toolCalls ?? [],
-            attachments: attachments
+            attachments: attachments,
+            widget: CompletedToolWidget(message: message)
         )
     }
 }

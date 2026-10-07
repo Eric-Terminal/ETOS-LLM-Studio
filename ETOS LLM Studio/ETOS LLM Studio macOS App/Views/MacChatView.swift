@@ -56,7 +56,9 @@ struct MacChatView: View {
                 }
             }
             Divider()
-            composer
+            if let model = workspace.activeQuestionnaireModel {
+                MacQuestionnaireView(model: model)
+            } else { composer }
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             switch result {
@@ -139,10 +141,14 @@ private struct MacMessageRow: View {
                     Text(reasoning).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
                 }
             }
-            Text(row.content)
-                .textSelection(.enabled)
-                .foregroundStyle(row.message.role == .error ? Color.red : Color.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if let widget = row.widget {
+                MacToolWidgetView(widget: widget, messageID: row.id)
+            } else {
+                Text(row.content)
+                    .textSelection(.enabled)
+                    .foregroundStyle(row.message.role == .error ? Color.red : Color.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             ForEach(row.toolCalls, id: \.id) { tool in
                 DisclosureGroup(tool.toolName) {
                     Text(tool.arguments).font(.system(.caption, design: .monospaced)).textSelection(.enabled)

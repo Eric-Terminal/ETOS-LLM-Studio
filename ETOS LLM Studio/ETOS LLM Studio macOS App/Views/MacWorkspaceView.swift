@@ -21,6 +21,10 @@ struct MacWorkspaceView: View {
                         Label(session.name, systemImage: session.isTemporary ? "bubble.left" : "bubble.left.and.bubble.right")
                             .lineLimit(2)
                         Spacer()
+                        if workspace.pendingQuestionnaireSessionIDs.contains(session.id) {
+                            Image(systemName: "questionmark.bubble")
+                                .help(NSLocalizedString("等待你的回答", comment: ""))
+                        }
                         if workspace.runningSessionIDs.contains(session.id) {
                             ProgressView().controlSize(.small)
                         }

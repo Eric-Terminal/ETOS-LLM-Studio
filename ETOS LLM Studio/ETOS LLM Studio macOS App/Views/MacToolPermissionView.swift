@@ -2,6 +2,7 @@ import ETOSCore
 import SwiftUI
 
 struct MacToolPermissionView: View {
+    @EnvironmentObject private var workspace: MacWorkspaceModel
     let request: ToolPermissionRequest
     @ObservedObject private var center = ToolPermissionCenter.shared
 
@@ -22,9 +23,17 @@ struct MacToolPermissionView: View {
             }
             HStack {
                 Button(NSLocalizedString("拒绝", comment: ""), role: .cancel) { resolve(.deny) }
+                Button(NSLocalizedString("补充提示", comment: "")) {
+                    if center.resolveRequest(withID: request.id, decision: .supplement) {
+                        workspace.selectSession(request.sourceSessionID)
+                    }
+                }
                 Spacer()
                 if !request.forcePrompt {
-                    Button(NSLocalizedString("允许此工具", comment: "")) { resolve(.allowForTool) }
+                    Menu(NSLocalizedString("更多", comment: "")) {
+                        Button(NSLocalizedString("允许此工具", comment: "")) { resolve(.allowForTool) }
+                        Button(NSLocalizedString("完全权限", comment: "")) { resolve(.allowAll) }
+                    }
                 }
                 Button(NSLocalizedString("允许一次", comment: "")) { resolve(.allowOnce) }
                     .buttonStyle(.borderedProminent)

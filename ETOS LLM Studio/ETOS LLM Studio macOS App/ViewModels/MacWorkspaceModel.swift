@@ -23,6 +23,8 @@ final class MacWorkspaceModel: ObservableObject {
     @Published private(set) var selectedModelID: String?
     @Published private(set) var messages: [MacMessagePresentation] = []
     @Published private(set) var runningSessionIDs: Set<UUID> = []
+    @Published private(set) var activeQuestionnaireModel: MacQuestionnaireModel?
+    @Published private(set) var pendingQuestionnaireSessionIDs: Set<UUID> = []
     @Published private var sendingSessionIDs: Set<UUID> = []
     @Published private(set) var isImportingAttachments = false
     @Published private(set) var isRestoringData = false
@@ -47,6 +49,9 @@ final class MacWorkspaceModel: ObservableObject {
     private var modelListTask: Task<Void, Never>?
     private var presentationRevision = UUID()
     private let presentationStore = MacMessagePresentationStore()
+    private var questionnaires: [UUID: [MacQuestionnaireModel]] = [:]
+    private var toolDrafts: [UUID: [AppToolInputDraftRequest]] = [:]
+    private var pendingSupplements: [UUID: [String]] = [:]
 
     var isPreparingSend: Bool {
         currentSession.map { sendingSessionIDs.contains($0.id) } ?? false
@@ -108,9 +113,11 @@ final class MacWorkspaceModel: ObservableObject {
         service.chatSessionsSubject.receive(on: DispatchQueue.main).sink { [weak self] sessions in
             self?.sessions = sessions
             self?.refreshSessionList()
+            self?.pruneToolInteractions()
         }.store(in: &subscriptions)
         service.currentSessionSubject.receive(on: DispatchQueue.main).sink { [weak self] session in
             self?.currentSession = session
+            self?.refreshToolInteractions()
         }.store(in: &subscriptions)
         service.providersSubject.receive(on: DispatchQueue.main).sink { [weak self] providers in
             self?.providers = providers
@@ -121,6 +128,7 @@ final class MacWorkspaceModel: ObservableObject {
         }.store(in: &subscriptions)
         service.runningSessionIDsSubject.receive(on: DispatchQueue.main).sink { [weak self] ids in
             self?.runningSessionIDs = ids
+            self?.flushToolSupplements()
         }.store(in: &subscriptions)
         service.messagesForSessionSubject
             .throttle(for: .milliseconds(60), scheduler: DispatchQueue.global(qos: .userInitiated), latest: true)
@@ -129,6 +137,40 @@ final class MacWorkspaceModel: ObservableObject {
                 self?.sourceMessages = messages
                 self?.refreshMessagePresentation()
             }.store(in: &subscriptions)
+        // Core 在 MainActor 同步发送通知，并立即读取回执；不能在认领前异步转发。
+        NotificationCenter.default.publisher(for: .appToolAskUserInputRequested).sink { [weak self] notification in
+            guard let self, !isRestoringData,
+                  var request = AppToolAskUserInputRequest.decode(from: notification.userInfo),
+                  let sessionID = request.sourceSessionID ?? currentSession?.id,
+                  service.chatSessionsSubject.value.contains(where: { $0.id == sessionID && !$0.isEmbeddedSubagent }),
+                  let receipt = AppToolUIRequestDeliveryReceipt.decode(from: notification.userInfo),
+                  receipt.claim(currentSession?.id == sessionID && activeQuestionnaireModel == nil && AppLockManager.shared.state != .locked ? .displayed : .queued) else { return }
+            // 来源缺省时固定为接收会话，之后切换标签不会把答案送到另一段对话。
+            if request.sourceSessionID == nil {
+                request = AppToolAskUserInputRequest(
+                    requestID: request.requestID, title: request.title, description: request.description,
+                    submitLabel: request.submitLabel, questions: request.questions,
+                    sourceSessionID: sessionID, sourceMessageID: request.sourceMessageID
+                )
+            }
+            guard !questionnaires[sessionID, default: []].contains(where: { $0.request.id == request.id }) else { return }
+            questionnaires[sessionID, default: []].append(MacQuestionnaireModel(request: request))
+            pendingQuestionnaireSessionIDs.insert(sessionID)
+            refreshToolInteractions()
+        }.store(in: &subscriptions)
+        NotificationCenter.default.publisher(for: .appToolFillUserInputRequested).sink { [weak self] notification in
+            guard let self, !isRestoringData,
+                  let request = AppToolInputDraftRequest.decode(from: notification.userInfo),
+                  let sessionID = request.sourceSessionID ?? currentSession?.id,
+                  service.chatSessionsSubject.value.contains(where: { $0.id == sessionID && !$0.isEmbeddedSubagent }),
+                  let receipt = AppToolUIRequestDeliveryReceipt.decode(from: notification.userInfo),
+                  receipt.claim(currentSession?.id == sessionID ? .applied : .queued) else { return }
+            toolDrafts[sessionID, default: []].append(request)
+            refreshToolInteractions()
+        }.store(in: &subscriptions)
+        AppLockManager.shared.$state.receive(on: DispatchQueue.main).sink { [weak self] state in
+            if state != .locked { self?.flushToolSupplements() }
+        }.store(in: &subscriptions)
     }
 
     func refreshMessagePresentation() {
@@ -211,28 +253,78 @@ final class MacWorkspaceModel: ObservableObject {
         draft = ""
         self.attachments = []
         Task { [weak self] in
-            await service.sendAndProcessMessage(
-                content: content,
-                aiTemperature: configuration.temperature,
-                aiTopP: configuration.topP,
-                systemPrompt: configuration.systemPrompt,
-                maxChatHistory: configuration.historyLimit,
-                enableStreaming: configuration.streaming,
-                enhancedPrompt: session.enhancedPrompt,
-                enableMemory: configuration.memory,
-                enableMemoryWrite: configuration.memoryWrite,
-                enableMemoryActiveRetrieval: configuration.memoryRetrieval,
-                includeSystemTime: configuration.systemTime,
-                systemTimeInjectionPosition: configuration.timePosition,
-                enablePeriodicTimeLandmark: configuration.timeLandmark,
-                periodicTimeLandmarkIntervalMinutes: configuration.timeLandmarkMinutes,
-                enableResponseSpeedMetrics: configuration.speedMetrics,
-                imageAttachments: attachments.compactMap(\.image),
-                fileAttachments: attachments.compactMap(\.file),
-                targetSessionID: session.id
-            )
+            await configuration.send(content, attachments: attachments, through: service, sessionID: session.id)
             self?.sendingSessionIDs.remove(session.id)
+            self?.flushToolSupplements()
         }
+    }
+
+    private func refreshToolInteractions() {
+        guard let sessionID = currentSession?.id else { activeQuestionnaireModel = nil; return }
+        activeQuestionnaireModel = questionnaires[sessionID]?.first
+        for request in toolDrafts.removeValue(forKey: sessionID) ?? [] {
+            switch request.mode {
+            case .replace: draft = request.text
+            case .append:
+                draft += draft.isEmpty || draft.last?.isWhitespace == true ? request.text : "\n" + request.text
+            }
+        }
+    }
+
+    func submitQuestionnaire(_ request: AppToolAskUserInputRequest, answers: [AppToolAskUserInputQuestionAnswer], cancelled: Bool) async {
+        guard !isRestoringData, let sessionID = request.sourceSessionID,
+              questionnaires[sessionID]?.first?.request == request else { return }
+        let content = await Task.detached(priority: .userInitiated) {
+            let submission = AppToolAskUserInputSubmission(
+                requestID: request.id, cancelled: cancelled,
+                submittedAt: ISO8601DateFormatter().string(from: Date()), answers: answers
+            )
+            return AppToolAskUserInputSubmissionFormatter.messageContent(request: request, submission: submission)
+        }.value
+        guard !isRestoringData, questionnaires[sessionID]?.first?.request == request else { return }
+        questionnaires[sessionID]?.removeFirst()
+        if questionnaires[sessionID]?.isEmpty == true {
+            questionnaires.removeValue(forKey: sessionID)
+            pendingQuestionnaireSessionIDs.remove(sessionID)
+        }
+        pendingSupplements[sessionID, default: []].append(content)
+        refreshToolInteractions()
+        flushToolSupplements()
+    }
+
+    private func flushToolSupplements() {
+        guard !isRestoringData, AppLockManager.shared.state != .locked, let service else { return }
+        for sessionID in Array(pendingSupplements.keys) {
+            guard !service.runningSessionIDsSubject.value.contains(sessionID), !sendingSessionIDs.contains(sessionID),
+                  let session = sessions.first(where: { $0.id == sessionID }) else { continue }
+            guard var queue = pendingSupplements[sessionID], !queue.isEmpty else { continue }
+            let content = queue.removeFirst()
+            pendingSupplements[sessionID] = queue.isEmpty ? nil : queue
+            let configuration = MacChatRequestConfiguration(AppConfigStore.shared, session: session)
+            sendingSessionIDs.insert(sessionID)
+            Task { [weak self] in
+                await configuration.send(content, through: service, sessionID: sessionID)
+                self?.sendingSessionIDs.remove(sessionID)
+                self?.flushToolSupplements()
+            }
+        }
+    }
+
+    private func discardToolInteractions() {
+        questionnaires.removeAll()
+        toolDrafts.removeAll()
+        pendingSupplements.removeAll()
+        activeQuestionnaireModel = nil
+        pendingQuestionnaireSessionIDs.removeAll()
+    }
+
+    private func pruneToolInteractions() {
+        let ids = Set(sessions.map(\.id))
+        questionnaires = questionnaires.filter { ids.contains($0.key) }
+        toolDrafts = toolDrafts.filter { ids.contains($0.key) }
+        pendingSupplements = pendingSupplements.filter { ids.contains($0.key) }
+        pendingQuestionnaireSessionIDs.formIntersection(ids)
+        refreshToolInteractions()
     }
 
     func stop() {
@@ -291,6 +383,7 @@ final class MacWorkspaceModel: ObservableObject {
             ])
         }
         isRestoringData = true
+        discardToolInteractions()
         var didRestore = false
         defer {
             cloud.endLocalDataRestore(didRestore: didRestore)
@@ -325,6 +418,7 @@ final class MacWorkspaceModel: ObservableObject {
             ])
         }
         isRestoringData = true
+        discardToolInteractions()
         defer { isRestoringData = false }
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
         await mcp.prepareForDatabaseRestore()
@@ -385,6 +479,7 @@ struct MacChatRequestConfiguration {
     let timeLandmark: Bool
     let timeLandmarkMinutes: Int
     let speedMetrics: Bool
+    let enhancedPrompt: String?
 
     @MainActor
     init(_ configuration: AppConfigStore, session: ChatSession) {
@@ -401,5 +496,19 @@ struct MacChatRequestConfiguration {
         timeLandmark = configuration.enablePeriodicTimeLandmark
         timeLandmarkMinutes = configuration.periodicTimeLandmarkIntervalMinutes
         speedMetrics = configuration.enableResponseSpeedMetrics
+        enhancedPrompt = session.enhancedPrompt
+    }
+
+    func send(_ content: String, attachments: [MacComposerAttachment] = [], through service: ChatService, sessionID: UUID) async {
+        await service.sendAndProcessMessage(
+            content: content, aiTemperature: temperature, aiTopP: topP,
+            systemPrompt: systemPrompt, maxChatHistory: historyLimit,
+            enableStreaming: streaming, enhancedPrompt: enhancedPrompt,
+            enableMemory: memory, enableMemoryWrite: memoryWrite, enableMemoryActiveRetrieval: memoryRetrieval,
+            includeSystemTime: systemTime, systemTimeInjectionPosition: timePosition,
+            enablePeriodicTimeLandmark: timeLandmark, periodicTimeLandmarkIntervalMinutes: timeLandmarkMinutes,
+            enableResponseSpeedMetrics: speedMetrics, imageAttachments: attachments.compactMap(\.image),
+            fileAttachments: attachments.compactMap(\.file), targetSessionID: sessionID
+        )
     }
 }

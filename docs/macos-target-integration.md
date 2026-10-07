@@ -8,6 +8,7 @@
 - Mac 最低系统与 ETOSCore 的现有配置保持一致：macOS 26.0。语言模式先与核心保持 Swift 5；默认 actor 隔离使用 `nonisolated`，界面模型已显式标注 `@MainActor`。不要照搬移动端 target 的 `SWIFT_DEFAULT_ACTOR_ISOLATION=MainActor`，否则后台展示数据的静态方法会变成主执行器隔离。
 - 添加 workspace 内的 ETOSCore framework target 依赖与嵌入签名。ETOSCore 使用同步文件夹，新加入的 Core Swift 文件仍需确认 Target Membership；Mac App 文件夹需要单独绑定新 target。
 - 复用既有第三方依赖版本，不创建 `Package.swift`。重点核实 SQLCipher、llama.cpp、iSH runtime 的 macOS 架构切片及链接条件；不能把 iOS 模拟器产物当作原生 macOS 产物。
+- Mac App 的 `PRODUCT_MODULE_NAME` 使用 `ETOS_LLM_Studio_macOS_App`；新增相应的 macOS 单元测试 target，加入 `ETOS LLM Studio/ETOS LLM Studio macOS AppTests` 中的测试源码。该测试目录不加入 App target。
 
 ## 资源与签名
 
@@ -30,5 +31,6 @@ Mac 根目录为 `Application Support/ETOS LLM Studio`，通过 `StorageUtility.
 3. 多会话生成、流式滚动、消息编辑关联结果、切换窗口和锁定后的审批、HTTP/证书原生弹窗、向导草稿确认及页面失效。
 4. ETOSCore 新增的 `MCPConfigurationPersistenceTests`、`CloudSyncLocalRestoreTests`、此前 Mac stdio/图片/存储目录测试；当前都只有测试源码，未执行。
 5. 系统保存面板的文件权限、覆盖已有快照、加密快照导入、S3/R2 列表及取消下载、恢复时后台任务隔离、首次 iCloud 裁决及过期确认；iCloud 还需配置容器、签名和通知能力。
+6. 工具问答的必填、单选/多选、自由文本、跨会话排队及补充发送；Widget 的交互 DOM、复制、PNG/HTML 保存和链接。Core 已有 `ToolInteractionPresentationTests` 源码，Mac 有 `MacQuestionnaireModelTests` 源码；原生 UI 自动化与 WebKit 实机检查须在 target 接入后补做。
 
 目前源码包含聊天、附件、会话草稿、提供商/模型/MCP 基础配置、快照备份恢复、S3/R2 与 iCloud 同步管理和向导入口。完整功能对齐仍在继续，角色扮演、世界书、记忆管理、Agent/浏览器、工具交互及高级模型配置等不能据此视为完成。

@@ -7777,3 +7777,8 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "请填写一致的快照密码和确认密码。" = "Introduce una contraseña para la instantánea y una confirmación idéntica.";
 
 "上次同步" = "Última sincronización";
+
+"其他（可选）" = "Otro (opcional)";
+"可跳过" = "Opcional";
+"必填" = "Obligatorio";
+"等待你的回答" = "Esperando tu respuesta";

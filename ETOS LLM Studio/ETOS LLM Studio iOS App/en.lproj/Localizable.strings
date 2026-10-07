@@ -7700,3 +7700,8 @@
 "请填写一致的快照密码和确认密码。" = "Enter a snapshot password and a matching confirmation.";
 
 "上次同步" = "Last sync";
+
+"其他（可选）" = "Other (optional)";
+"可跳过" = "Optional";
+"必填" = "Required";
+"等待你的回答" = "Waiting for your answer";
