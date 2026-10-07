@@ -6,11 +6,13 @@ public enum GuideMacWorkspaceKnowledge {
         return GuideDocument(
             id: "macos-workspace",
             title: chinese ? "Mac 聊天与配置草稿" : "Mac Chat and Configuration Drafts",
-            keywords: ["macOS", "Mac", "桌面", "stdio", "数据库", "草稿", "快捷键", "draft", "database"],
+            keywords: ["macOS", "Mac", "桌面", "stdio", "数据库", "草稿", "快捷键", "文件夹", "标签", "draft", "database", "folder", "tag"],
             content: chinese ? """
             Mac 聊天窗口左侧选择会话，右侧选择模型并输入消息；⌘N 新建会话，⌘Return 发送。附件通过系统文件选择器导入，正文与 Markdown 在后台准备。生成期间可以切换会话，工具调用继续使用 ETOSCore 的原生审批。右键消息可以复制、编辑或删除；编辑消息只修改历史，不执行其中的工具调用。消息正文不向页面向导公开。系统文件选择器属于系统页面，不提供配置向导。
 
             右键消息可重新生成；支持预填充的模型还可从助手正文续写。回复版本菜单切换整轮回复和关联工具结果，旧格式消息则切换正文版本。重试固定来源会话与模型，等待旧请求结束时切换会话不会改变目标。工具栏可复制整段历史和提示词或只复制提示词建立分支；右键消息可从该处建立分支并选择是否复制提示词。分支沿用会话首选模型，包含提示词时也保留会话系统提示词。
+
+            会话窗口分为分类侧栏、会话列表和聊天正文。侧栏按文件夹、标签或系统颜色筛选；文件夹使用完整路径，只显示直接归属的会话。搜索在所选分类内查找标题、提示词和消息正文，搜索与计数均在后台处理。右键会话可以移动文件夹或切换多个标签、颜色。侧栏加号创建文件夹或标签，右键分类可以编辑或删除；系统颜色不可改名或删除。编辑器和介绍页分别声明向导上下文，向导只能修改草稿，保存时核对原版本。删除需要用户手动确认：删除文件夹包含子文件夹，会话移回未分类；删除标签保留会话内容。删除确认期间向导仅能读取状态。
 
             “设置”窗口按通用、模型管理、MCP 工具、上下文、数据管理和安全分组。提供商、模型、会话和 MCP 编辑器都保留草稿；向导确认仅更新这些编辑器的草稿，需要点击页面保存。模型编辑器的完成先返回提供商草稿，还需保存提供商。JSON 子页面返回时不直接保存；已有请求头、请求体与密钥对向导不可读，可以通过提案替换用户主动提供的新 JSON 对象。数据库配置在其他页面或同步中变化后，旧 MCP 草稿会拒绝覆盖，需重新打开。MCP 详情及单个工具设置则在确认后直接保存。切换前台窗口、页面、协议或锁定应用后，旧页面提案不再可执行。
 
@@ -31,6 +33,8 @@ public enum GuideMacWorkspaceKnowledge {
             Select a session in the Mac sidebar, choose a model and compose on the right. Command-N creates a session and Command-Return sends. Import attachments with the system file picker. Message and Markdown preparation runs in the background. Sessions can be switched during generation; ETOSCore still controls native tool approval. Right-click a message to copy, edit or delete it. Editing changes history without executing tool calls. Message content is hidden from the page guide. The system file picker has no app configuration guide.
 
             Right-click to regenerate a message, or continue assistant text with prefill when supported by the model. The version menu switches a whole response attempt and its tool results; legacy messages switch content versions. Retry retains its source session and model while waiting for the previous request to stop. The toolbar can branch with all history and prompts or with prompts only. A message menu can branch at that message, with or without prompts. Branches retain the preferred model, and copying prompts also preserves the session system prompt.
+
+            The workspace has a classification sidebar, a session list and the conversation. Filter by folder, tag or system color. Folders show full paths and only their directly assigned sessions. Search checks titles, prompts and message text within the selected scope; searching and counts run in the background. Right-click sessions to move them or toggle multiple tags and colors. The sidebar plus menu creates folders and tags; category menus edit or delete them. System colors cannot be renamed or deleted. Editors and introduction pages declare their own guide context. Guide proposals change drafts only, and Save checks the original version. Deletion requires manual confirmation: deleting a folder includes its subfolders and moves their sessions to Uncategorized; deleting a tag retains conversation content. The guide sees read-only state during deletion confirmation.
 
             Settings contains General, Model Management, MCP Tools, Context, Data Management and Security. Provider, model, session and MCP editors keep drafts: confirming a guide proposal changes the draft, and Save commits it. Completing a model editor returns to the provider draft, which must also be saved. Returning from a JSON subpage does not save. Existing headers, request bodies and keys are unreadable to the guide; proposals may replace them with JSON objects the user supplies. A stale MCP draft cannot overwrite a configuration changed elsewhere. MCP detail and tool settings save directly after confirmation. Switching the foreground window, page or protocol, or locking the app invalidates old page proposals.
 

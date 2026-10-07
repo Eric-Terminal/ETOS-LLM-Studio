@@ -287,7 +287,8 @@ public class ChatService {
         }
     }
 
-    func messagesSnapshot(for sessionID: UUID) -> [ChatMessage] {
+    /// 优先读取运行期消息；历史检索等调用方须在后台执行，未缓存时会读持久化层。
+    public func messagesSnapshot(for sessionID: UUID) -> [ChatMessage] {
         if currentSessionSubject.value?.id == sessionID {
             return messagesForSessionSubject.value
         }

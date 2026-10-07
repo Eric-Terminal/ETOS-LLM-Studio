@@ -12,41 +12,9 @@ struct MacWorkspaceView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(selection: Binding(
-                get: { workspace.currentSession?.id },
-                set: { workspace.selectSession($0) }
-            )) {
-                ForEach(workspace.visibleSessions) { session in
-                    HStack {
-                        Label(session.name, systemImage: session.isTemporary ? "bubble.left" : "bubble.left.and.bubble.right")
-                            .lineLimit(2)
-                        Spacer()
-                        if workspace.pendingQuestionnaireSessionIDs.contains(session.id) {
-                            Image(systemName: "questionmark.bubble")
-                                .help(NSLocalizedString("等待你的回答", comment: ""))
-                        }
-                        if workspace.runningSessionIDs.contains(session.id) {
-                            ProgressView().controlSize(.small)
-                        }
-                    }
-                    .tag(session.id)
-                    .contextMenu {
-                        Button(NSLocalizedString("编辑", comment: "")) { sessionToEdit = session }
-                        Button(NSLocalizedString("删除", comment: ""), role: .destructive) { sessionToDelete = session }
-                    }
-                }
-            }
-            .navigationTitle(NSLocalizedString("对话", comment: ""))
-            .searchable(text: $workspace.searchText, prompt: NSLocalizedString("搜索会话", comment: ""))
-            .navigationSplitViewColumnWidth(min: 200, ideal: 260)
-            .toolbar {
-                Button { workspace.newSession() } label: {
-                    Label(NSLocalizedString("新建对话", comment: ""), systemImage: "square.and.pencil")
-                }
-                SettingsLink {
-                    Label(NSLocalizedString("设置", comment: ""), systemImage: "gearshape")
-                }
-            }
+            MacSessionLibrarySidebar(model: workspace.sessionLibrary)
+        } content: {
+            MacSessionListView(model: workspace.sessionLibrary, edit: { sessionToEdit = $0 }, delete: { sessionToDelete = $0 })
         } detail: {
             MacChatView()
                 .navigationTitle(workspace.currentSession?.name ?? NSLocalizedString("新的对话", comment: ""))
@@ -154,10 +122,11 @@ private struct MacSessionEditor: View {
                 if let error { Text(error).font(.footnote).foregroundStyle(.red) }
             }
             .formStyle(.grouped)
+            .disabled(isSaving || workspace.isRestoringData)
             .navigationTitle(NSLocalizedString("会话设置", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(NSLocalizedString("取消", comment: "")) { dismiss() }
+                    Button(NSLocalizedString("取消", comment: "")) { dismiss() }.disabled(isSaving)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(NSLocalizedString("保存", comment: "")) {
@@ -168,15 +137,17 @@ private struct MacSessionEditor: View {
                             catch { self.error = error.localizedDescription }
                         }
                     }
-                    .disabled(isSaving || draft.name.isEmpty)
+                    .disabled(isSaving || draft.name.isEmpty || workspace.isRestoringData)
                 }
             }
             .guideSettingsPageContext(
                 id: GuidePageID(rawValue: "mac-session-\(draft.id)"),
                 title: NSLocalizedString("会话设置", comment: ""),
                 documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
-                settings: [
-                    .readOnly("editing_mode", label: NSLocalizedString("编辑方式", comment: ""), value: { .string("draft_until_save") }),
+                settings: isSaving || workspace.isRestoringData ? [
+                    .readOnly("working", label: NSLocalizedString("状态", comment: ""), value: { .bool(true) })
+                ] : [
+                    .readOnly("editing_mode", label: NSLocalizedString("编辑方式", comment: ""), value: { .string(NSLocalizedString("修改后需要保存", comment: "")) }),
                     .string("name", label: NSLocalizedString("名称", comment: ""), allowsEmpty: false, get: { draft.name }, set: { draft.name = $0 }),
                     .string("system_prompt", label: NSLocalizedString("系统提示词", comment: ""), get: { draft.systemPrompt ?? "" }, set: { draft.systemPrompt = $0.isEmpty ? nil : $0 }),
                     .bool("memory_isolation", label: NSLocalizedString("隔离记忆上下文", comment: ""), get: { draft.memoryContextIsolationEnabled }, set: { draft.memoryContextIsolationEnabled = $0 }),
@@ -186,6 +157,7 @@ private struct MacSessionEditor: View {
             )
         }
         .modifier(MacGuideInspector())
+        .interactiveDismissDisabled(isSaving)
         .frame(minWidth: 480, minHeight: 440)
     }
 }

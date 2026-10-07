@@ -7571,3 +7571,9 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "用户画像内容不能为空。" = "El contenido del perfil no puede estar vacío.";
 "用户画像已在其他位置修改，请重新打开后再编辑。" = "El perfil se modificó en otro lugar. Vuelve a abrirlo antes de editarlo.";
 "跨对话记忆会在后台整理会话摘要，并向后续对话提供最近摘要和用户画像。启用记忆及异步跨对话记忆后，摘要按轮次和最小间隔触发；画像可每天自动更新，也可手动编辑。编辑只改变草稿，保存时保留结构化事实；清空操作需单独确认。" = "La memoria entre conversaciones prepara resúmenes en segundo plano y aporta los resúmenes recientes y tu perfil a conversaciones posteriores. Al activar la memoria y la memoria asíncrona entre conversaciones, los resúmenes respetan el umbral de turnos y el intervalo mínimo. El perfil puede actualizarse a diario o editarse manualmente. Los cambios quedan como borrador hasta guardarlos y conservan los hechos estructurados. Borrar los datos requiere una confirmación adicional.";
+
+/* Mac 会话分类 */
+"会话分类已在其他位置更改，请重新打开后再编辑。" = "La clasificación de la conversación cambió en otro lugar. Vuelve a abrirla antes de editarla.";
+"名称重复或目标位置已不可用，请刷新后重试。" = "El nombre ya existe o el destino no está disponible. Actualiza e inténtalo de nuevo.";
+"删除标签只会移除分类，会话内容保持不变。" = "Al eliminar una etiqueta se quita la clasificación. El contenido de las conversaciones se conserva.";
+"侧栏按文件夹、标签或颜色筛选会话；文件夹显示完整路径，只列出直接归属的会话。右键会话可移动位置或切换多个标签。删除文件夹会同时删除子文件夹，其中的会话移回未分类；删除标签保留会话内容。名称和位置先保存为草稿，点击保存后生效。" = "Filtra conversaciones por carpeta, etiqueta o color en la barra lateral. Las carpetas muestran su ruta completa y solo las conversaciones asignadas directamente. Haz clic derecho para mover una conversación o activar varias etiquetas. Al eliminar una carpeta también se eliminan sus subcarpetas y sus conversaciones pasan a Sin clasificar; eliminar una etiqueta conserva el contenido. Los cambios de nombre y ubicación quedan como borrador hasta pulsar Guardar.";

@@ -16,7 +16,6 @@ final class MacWorkspaceModel: ObservableObject {
 
     @Published private(set) var phase: Phase = .loading
     @Published private(set) var sessions: [ChatSession] = []
-    @Published private(set) var visibleSessions: [ChatSession] = []
     @Published private(set) var currentSession: ChatSession?
     @Published private(set) var providers: [Provider] = []
     @Published private(set) var models: [RunnableModel] = []
@@ -34,7 +33,6 @@ final class MacWorkspaceModel: ObservableObject {
     @Published private(set) var attachments: [MacComposerAttachment] = []
     @Published private(set) var recoveryRequest: Persistence.LaunchRecoveryRequest?
     @Published var errorMessage: String?
-    @Published var searchText = "" { didSet { refreshSessionList() } }
     @Published var draft = "" {
         didSet {
             guard phase == .ready else { return }
@@ -47,12 +45,12 @@ final class MacWorkspaceModel: ObservableObject {
     private var subscriptions = Set<AnyCancellable>()
     private var sourceMessages: [ChatMessage] = []
     private var presentationTask: Task<Void, Never>?
-    private var sessionListTask: Task<Void, Never>?
     private var modelListTask: Task<Void, Never>?
     private var presentationRevision = UUID()
     private let presentationStore = MacMessagePresentationStore()
     let memoryModel = MacMemoryModel()
     let conversationMemoryModel = MacConversationMemoryModel()
+    let sessionLibrary = MacSessionLibraryModel()
     private var questionnaires: [UUID: [MacQuestionnaireModel]] = [:]
     private var toolDrafts: [UUID: [AppToolInputDraftRequest]] = [:]
     private var pendingSupplements: [UUID: [String]] = [:]
@@ -66,12 +64,12 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     var canSend: Bool {
-        phase == .ready && !isRestoringData && !isMutatingHistory && currentSession != nil && selectedModelID != nil && !isGenerating && !isPreparingSend
+        phase == .ready && !isRestoringData && !isMutatingHistory && !sessionLibrary.isWorking && currentSession != nil && selectedModelID != nil && !isGenerating && !isPreparingSend
             && !isImportingAttachments && (!draft.isEmpty || !attachments.isEmpty)
     }
 
     var canModifyCurrentHistory: Bool {
-        !isRestoringData && !isMutatingHistory && !isGenerating && !isPreparingSend
+        !isRestoringData && !isMutatingHistory && !sessionLibrary.isWorking && !isGenerating && !isPreparingSend
             && currentSession != nil && AppLockManager.shared.state != .locked
     }
 
@@ -96,6 +94,11 @@ final class MacWorkspaceModel: ObservableObject {
         let service = await Task.detached(priority: .userInitiated) { ChatService.shared }.value
         self.service = service
         bind(service)
+        sessionLibrary.start(service: service, workspace: self)
+        sessionLibrary.$isWorking.dropFirst().sink { [weak self] working in
+            self?.objectWillChange.send()
+            if !working { Task { [weak self] in self?.flushToolSupplements() } }
+        }.store(in: &subscriptions)
         await service.waitForInitialPersistenceStateIfNeeded()
         draft = configuration.chatComposerDraft
         phase = .ready
@@ -121,7 +124,6 @@ final class MacWorkspaceModel: ObservableObject {
     private func bind(_ service: ChatService) {
         service.chatSessionsSubject.receive(on: DispatchQueue.main).sink { [weak self] sessions in
             self?.sessions = sessions
-            self?.refreshSessionList()
             self?.pruneToolInteractions()
         }.store(in: &subscriptions)
         service.currentSessionSubject.receive(on: DispatchQueue.main).sink { [weak self] session in
@@ -207,19 +209,6 @@ final class MacWorkspaceModel: ObservableObject {
         }
     }
 
-    private func refreshSessionList() {
-        sessionListTask?.cancel()
-        let sessions = self.sessions
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        sessionListTask = Task { [weak self] in
-            let result = await Task.detached(priority: .userInitiated) {
-                sessions.filter { !$0.isEmbeddedSubagent && (query.isEmpty || $0.name.localizedStandardContains(query)) }
-            }.value
-            guard let self, !Task.isCancelled else { return }
-            visibleSessions = result
-        }
-    }
-
     private func refreshModels() {
         guard let service else { return }
         modelListTask?.cancel()
@@ -231,22 +220,34 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     func selectSession(_ id: UUID?) {
-        guard !isMutatingHistory, let service, let session = sessions.first(where: { $0.id == id }) else { return }
+        guard !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, let service, let session = sessions.first(where: { $0.id == id }) else { return }
         Task { await service.selectSession(session) }
     }
 
     func newSession() {
-        guard !isRestoringData, !isMutatingHistory, AppLockManager.shared.state != .locked, let service else { return }
-        Task.detached(priority: .userInitiated) { service.createNewSession() }
+        guard !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, AppLockManager.shared.state != .locked, let service else { return }
+        sessionLibrary.scope = .all
+        sessionLibrary.query = ""
+        isMutatingHistory = true
+        Task {
+            defer { isMutatingHistory = false; flushToolSupplements() }
+            await Task.detached(priority: .userInitiated) { service.createNewSession() }.value
+        }
     }
 
     func deleteSession(_ session: ChatSession) {
-        guard !isMutatingHistory, let service else { return }
-        Task.detached(priority: .userInitiated) { service.deleteSessions([session]) }
+        guard !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, let service else { return }
+        isMutatingHistory = true
+        Task {
+            defer { isMutatingHistory = false; flushToolSupplements() }
+            await Task.detached(priority: .userInitiated) { service.deleteSessions([session]) }.value
+        }
     }
 
     func saveSession(_ session: ChatSession, replacing original: ChatSession) async throws {
-        guard let service else { return }
+        guard !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, let service else { throw MacMemoryWriteError.busy }
+        isMutatingHistory = true
+        defer { isMutatingHistory = false; flushToolSupplements() }
         try await Task.detached(priority: .userInitiated) {
             guard service.chatSessionsSubject.value.first(where: { $0.id == original.id }) == original else {
                 throw MCPConfigurationWriteError.changedExternally
@@ -312,7 +313,7 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     private func flushToolSupplements() {
-        guard !isRestoringData, !isMutatingHistory, AppLockManager.shared.state != .locked, let service else { return }
+        guard !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, AppLockManager.shared.state != .locked, let service else { return }
         for sessionID in Array(pendingSupplements.keys) {
             guard !service.runningSessionIDsSubject.value.contains(sessionID), !sendingSessionIDs.contains(sessionID),
                   let session = sessions.first(where: { $0.id == sessionID }) else { continue }
@@ -426,7 +427,7 @@ final class MacWorkspaceModel: ObservableObject {
     func removeAttachment(_ id: UUID) { attachments.removeAll { $0.id == id } }
 
     func beginSnapshotExport() -> Bool {
-        guard !isRestoringData, !isMutatingHistory, !isExportingSnapshot, !SnapshotUploadManager.shared.isUploading else { return false }
+        guard !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, !isExportingSnapshot, !SnapshotUploadManager.shared.isUploading else { return false }
         isExportingSnapshot = true
         return true
     }
@@ -436,7 +437,7 @@ final class MacWorkspaceModel: ObservableObject {
     func restoreSnapshot(from url: URL, password: String?) async throws {
         let cloud = CloudSyncManager.shared
         let mcp = MCPManager.shared
-        guard !isRestoringData, !isMutatingHistory, !isExportingSnapshot, !memoryModel.isWorking, !conversationMemoryModel.isWorking, sendingSessionIDs.isEmpty,
+        guard !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, !isExportingSnapshot, !memoryModel.isWorking, !conversationMemoryModel.isWorking, sendingSessionIDs.isEmpty,
               !SnapshotUploadManager.shared.isUploading, !mcp.isBusy,
               let service, cloud.beginLocalDataRestore() else {
             throw NSError(domain: "ETOSMacSnapshot", code: 1, userInfo: [
@@ -471,7 +472,7 @@ final class MacWorkspaceModel: ObservableObject {
     func resolveCloudConflict(using resolution: CloudSyncInitialResolution, conflictID: UUID) async throws {
         let cloud = CloudSyncManager.shared
         let mcp = MCPManager.shared
-        guard !isRestoringData, !isMutatingHistory, !isExportingSnapshot, !memoryModel.isWorking, !conversationMemoryModel.isWorking, sendingSessionIDs.isEmpty,
+        guard !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, !isExportingSnapshot, !memoryModel.isWorking, !conversationMemoryModel.isWorking, sendingSessionIDs.isEmpty,
               !SnapshotUploadManager.shared.isUploading, !mcp.isBusy, let service,
               cloud.initialConflict?.id == conflictID else {
             throw NSError(domain: "ETOSMacSnapshot", code: 1, userInfo: [
