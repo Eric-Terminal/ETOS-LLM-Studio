@@ -40,189 +40,144 @@ public enum RoleplayEventBridge {
 }
 
 public enum RoleplayBridgeDispatcher {
-    private static let mutationQueue = DispatchQueue(label: "com.ETOS.roleplayBridge.mutations", qos: .utility)
+    private static let mutationQueue = RoleplayBridgeOperationQueue()
 
+    /// 返回任务覆盖动作执行和异步生成；消息落盘仍须等待 Persistence 的写入屏障。
+    @discardableResult
     public static func handle(
         _ payload: [String: Any],
         sessionID: UUID,
         messageID: UUID,
         versionIndex: Int,
-        store: RoleplayStore = .shared
-    ) {
+        store: RoleplayStore = .shared,
+        service: ChatService? = nil
+    ) -> Task<Void, Never> {
+        let submitted = RoleplayBridgeSubmittedPayload(values: payload)
+        let operation: @Sendable () async -> Void = {
+            guard !Task.isCancelled else { return }
+            await dispatch(submitted.values, sessionID: sessionID, messageID: messageID,
+                           versionIndex: versionIndex, store: store, service: service ?? .shared)
+        }
+        // 生成会等待网页返回宏和提示词；这些响应不能排在生成后面，否则形成互相等待。
+        if let action = payload["action"] as? String,
+           ["generate_text", "macro_expansion_response", "prompt_mutation_response"].contains(action) {
+            return Task.detached(priority: .utility, operation: operation)
+        }
+        return mutationQueue.enqueue(operation)
+    }
+
+    private static func dispatch(
+        _ payload: [String: Any], sessionID: UUID, messageID: UUID, versionIndex: Int,
+        store: RoleplayStore, service: ChatService
+    ) async {
         guard let action = payload["action"] as? String else { return }
         switch action {
         case "set_variable":
             guard let path = payload["path"] as? String,
                   let value = payload["value"].flatMap(JSONValue.init(anyJSONValue:)) else { return }
             let scope = variableScope(payload["scope"] as? String)
-            Task.detached(priority: .utility) {
-                var snapshot = store.variableSnapshot(sessionID: sessionID)
-                snapshot.setValue(
-                    value,
-                    scope: scope,
-                    path: path,
-                    messageID: messageID,
-                    versionIndex: versionIndex
-                )
-                store.saveVariableSnapshot(snapshot, sessionID: sessionID)
-            }
+            var snapshot = store.variableSnapshot(sessionID: sessionID)
+            snapshot.setValue(value, scope: scope, path: path, messageID: messageID, versionIndex: versionIndex)
+            store.saveVariableSnapshot(snapshot, sessionID: sessionID)
         case "replace_variables":
             guard let dictionary = payload["value"] as? [String: Any] else { return }
             let variables = dictionary.compactMapValues(JSONValue.init(anyJSONValue:))
             let scope = variableScope(payload["scope"] as? String)
             let scriptID = (payload["script_id"] as? String).flatMap(UUID.init(uuidString:))
             let extensionID = payload["extension_id"] as? String
-            Task.detached(priority: .utility) {
-                var snapshot = store.variableSnapshot(sessionID: sessionID)
-                if scope == .script, let scriptID {
-                    snapshot.replaceScriptVariables(variables, scriptID: scriptID)
-                } else if let extensionID, !extensionID.isEmpty {
-                    snapshot.replaceExtensionVariables(variables, extensionID: extensionID)
-                } else {
-                    snapshot.replaceVariables(
-                        variables,
-                        scope: scope,
-                        messageID: messageID,
-                        versionIndex: versionIndex
-                    )
-                }
-                store.saveVariableSnapshot(snapshot, sessionID: sessionID)
+            var snapshot = store.variableSnapshot(sessionID: sessionID)
+            if scope == .script, let scriptID {
+                snapshot.replaceScriptVariables(variables, scriptID: scriptID)
+            } else if let extensionID, !extensionID.isEmpty {
+                snapshot.replaceExtensionVariables(variables, extensionID: extensionID)
+            } else {
+                snapshot.replaceVariables(variables, scope: scope, messageID: messageID, versionIndex: versionIndex)
             }
+            store.saveVariableSnapshot(snapshot, sessionID: sessionID)
         case "replace_message_variables":
             guard let dictionary = payload["value"] as? [String: Any],
                   let messageIndex = (payload["message_id"] as? NSNumber)?.intValue else { return }
             let variables = dictionary.compactMapValues(JSONValue.init(anyJSONValue:))
             let swipeIndex = (payload["swipe_id"] as? NSNumber)?.intValue ?? 0
-            Task.detached(priority: .utility) {
-                let messages = Persistence.loadMessages(for: sessionID)
-                guard messages.indices.contains(messageIndex) else { return }
-                var snapshot = store.variableSnapshot(sessionID: sessionID)
-                snapshot.replaceVariables(
-                    variables,
-                    scope: .message,
-                    messageID: messages[messageIndex].id,
-                    versionIndex: swipeIndex
-                )
-                store.saveVariableSnapshot(snapshot, sessionID: sessionID)
-            }
+            let messages = service.messagesSnapshot(for: sessionID)
+            guard messages.indices.contains(messageIndex) else { return }
+            var snapshot = store.variableSnapshot(sessionID: sessionID)
+            snapshot.replaceVariables(variables, scope: .message, messageID: messages[messageIndex].id, versionIndex: swipeIndex)
+            store.saveVariableSnapshot(snapshot, sessionID: sessionID)
         case "delete_variable":
             guard let path = payload["path"] as? String else { return }
             let scope = variableScope(payload["scope"] as? String)
-            Task.detached(priority: .utility) {
-                var snapshot = store.variableSnapshot(sessionID: sessionID)
-                snapshot.removeValue(
-                    scope: scope,
-                    path: path,
-                    messageID: messageID,
-                    versionIndex: versionIndex
-                )
-                store.saveVariableSnapshot(snapshot, sessionID: sessionID)
-            }
+            var snapshot = store.variableSnapshot(sessionID: sessionID)
+            snapshot.removeValue(scope: scope, path: path, messageID: messageID, versionIndex: versionIndex)
+            store.saveVariableSnapshot(snapshot, sessionID: sessionID)
         case "set_chat_messages":
             guard let value = payload["value"].flatMap(JSONValue.init(anyJSONValue:)) else { return }
-            Task.detached(priority: .utility) {
-                ChatService.shared.applyRoleplayMessageUpdates(value, sessionID: sessionID)
-            }
+            service.applyRoleplayMessageUpdates(value, sessionID: sessionID)
         case "create_chat_messages":
             guard let value = payload["value"].flatMap(JSONValue.init(anyJSONValue:)) else { return }
             let insertBefore = (payload["insert_before"] as? NSNumber)?.intValue
-            Task.detached(priority: .utility) {
-                ChatService.shared.createRoleplayMessages(value, insertBefore: insertBefore, sessionID: sessionID)
-            }
+            service.createRoleplayMessages(value, insertBefore: insertBefore, sessionID: sessionID)
         case "delete_chat_messages":
             guard let value = payload["value"].flatMap(JSONValue.init(anyJSONValue:)) else { return }
-            Task.detached(priority: .utility) {
-                ChatService.shared.deleteRoleplayMessages(value, sessionID: sessionID)
-            }
+            service.deleteRoleplayMessages(value, sessionID: sessionID)
         case "rotate_chat_messages":
             guard let begin = (payload["begin"] as? NSNumber)?.intValue,
                   let middle = (payload["middle"] as? NSNumber)?.intValue,
                   let end = (payload["end"] as? NSNumber)?.intValue else { return }
-            Task.detached(priority: .utility) {
-                ChatService.shared.rotateRoleplayMessages(begin: begin, middle: middle, end: end, sessionID: sessionID)
-            }
+            service.rotateRoleplayMessages(begin: begin, middle: middle, end: end, sessionID: sessionID)
         case "replace_worldbook":
             guard let name = payload["name"] as? String,
                   let entries = payload["entries"].flatMap(JSONValue.init(anyJSONValue:)) else { return }
-            mutationQueue.async {
-                ChatService.shared.replaceRoleplayWorldbook(named: name, entries: entries)
-            }
+            service.replaceRoleplayWorldbook(named: name, entries: entries)
         case "create_worldbook":
             guard let name = payload["name"] as? String else { return }
-            mutationQueue.async {
-                ChatService.shared.createRoleplayWorldbook(named: name)
-            }
+            service.createRoleplayWorldbook(named: name)
         case "delete_worldbook":
             guard let name = payload["name"] as? String else { return }
-            mutationQueue.async {
-                ChatService.shared.deleteRoleplayWorldbook(named: name)
-            }
+            service.deleteRoleplayWorldbook(named: name)
         case "rebind_character_worldbooks":
             guard let value = payload["value"].flatMap(JSONValue.init(anyJSONValue:)) else { return }
-            mutationQueue.async {
-                ChatService.shared.rebindRoleplayCharacterWorldbooks(value, sessionID: sessionID)
-            }
+            service.rebindRoleplayCharacterWorldbooks(value, sessionID: sessionID)
         case "replace_regex_rules":
             guard let value = payload["value"].flatMap(JSONValue.init(anyJSONValue:)) else { return }
-            mutationQueue.async {
-                ChatService.shared.replaceRoleplayRegexRules(value, sessionID: sessionID)
-            }
+            service.replaceRoleplayRegexRules(value, sessionID: sessionID)
         case "set_displayed_message":
             guard let messageIndex = (payload["message_id"] as? NSNumber)?.intValue,
                   let html = payload["html"] as? String else { return }
-            Task.detached(priority: .utility) {
-                let messages = Persistence.loadMessages(for: sessionID)
-                guard messages.indices.contains(messageIndex) else { return }
-                let target = messages[messageIndex]
-                var snapshot = store.variableSnapshot(sessionID: sessionID)
-                snapshot.setValue(
-                    .string(html),
-                    scope: .message,
-                    path: RoleplayDisplayedMessageBridge.variableKey,
-                    messageID: target.id,
-                    versionIndex: target.getCurrentVersionIndex()
-                )
-                store.saveVariableSnapshot(snapshot, sessionID: sessionID)
-                RoleplayDisplayedMessageBridge.postDidChange(sessionID: sessionID)
-            }
+            let messages = service.messagesSnapshot(for: sessionID)
+            guard messages.indices.contains(messageIndex) else { return }
+            let target = messages[messageIndex]
+            var snapshot = store.variableSnapshot(sessionID: sessionID)
+            snapshot.setValue(.string(html), scope: .message, path: RoleplayDisplayedMessageBridge.variableKey,
+                              messageID: target.id, versionIndex: target.getCurrentVersionIndex())
+            store.saveVariableSnapshot(snapshot, sessionID: sessionID)
+            RoleplayDisplayedMessageBridge.postDidChange(sessionID: sessionID)
         case "replace_script_buttons":
             guard let scriptID = (payload["script_id"] as? String).flatMap(UUID.init(uuidString:)),
                   let buttons = payload["buttons"].flatMap(JSONValue.init(anyJSONValue:)) else { return }
-            Task.detached(priority: .utility) {
-                ChatService.shared.replaceRoleplayScriptButtons(scriptID: scriptID, buttons: buttons)
-            }
+            service.replaceRoleplayScriptButtons(scriptID: scriptID, buttons: buttons)
         case "generate_text":
             guard let requestID = payload["request_id"] as? String,
                   let config = payload["config"].flatMap(JSONValue.init(anyJSONValue:)) else { return }
             let raw = (payload["raw"] as? Bool) ?? false
-            Task {
-                do {
-                    let result = try await ChatService.shared.generateRoleplayCompletion(
-                        config: config,
-                        raw: raw,
-                        sessionID: sessionID,
-                        store: store
-                    )
-                    postGenerationResult(result, error: nil, requestID: requestID, sessionID: sessionID)
-                } catch {
-                    postGenerationResult(nil, error: error.localizedDescription, requestID: requestID, sessionID: sessionID)
-                }
+            do {
+                let result = try await service.generateRoleplayCompletion(config: config, raw: raw, sessionID: sessionID, store: store)
+                guard !Task.isCancelled else { return }
+                postGenerationResult(result, error: nil, requestID: requestID, sessionID: sessionID)
+            } catch {
+                guard !Task.isCancelled else { return }
+                postGenerationResult(nil, error: error.localizedDescription, requestID: requestID, sessionID: sessionID)
             }
         case "macro_expansion_response":
             guard let requestID = payload["request_id"] as? String,
                   let text = payload["text"] as? String else { return }
-            Task { await RoleplayMacroExpansionBridge.shared.receive(requestID: requestID, text: text) }
+            await RoleplayMacroExpansionBridge.shared.receive(requestID: requestID, text: text)
         case "prompt_mutation_response":
             guard let requestID = payload["request_id"] as? String,
                   let prompt = payload["prompt"] as? [[String: Any]] else { return }
             let contents = prompt.compactMap { $0["content"] as? String }
             guard contents.count == prompt.count else { return }
-            Task {
-                await RoleplayPromptMutationBridge.shared.receive(
-                    requestID: requestID,
-                    contents: contents
-                )
-            }
+            await RoleplayPromptMutationBridge.shared.receive(requestID: requestID, contents: contents)
         case "event":
             guard let name = payload["name"] as? String else { return }
             NotificationCenter.default.post(
