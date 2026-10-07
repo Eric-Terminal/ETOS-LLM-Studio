@@ -302,6 +302,8 @@ extension MCPManager {
         options: MCPManagedToolCallOptions,
         clientOverride: MCPClient? = nil
     ) async throws -> JSONValue {
+        let macUsage = beginMacStdioUse(serverID: serverID)
+        defer { endMacStdioUse(serverID: serverID, usage: macUsage) }
         let client = if let clientOverride {
             clientOverride
         } else {

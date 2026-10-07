@@ -91,6 +91,8 @@ extension MCPManager {
         appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: String(format: NSLocalizedString("调试读取资源：%@", comment: "MCP governance debug resource read started"), resourceId))
 
         Task {
+            let macUsage = beginMacStdioUse(serverID: serverID)
+            defer { endMacStdioUse(serverID: serverID, usage: macUsage) }
             do {
                 let client = try await self.ensureClientReady(serverID: serverID, refreshMetadataIfCacheMissing: false)
                 let result = try await client.readResource(resourceId: resourceId, query: query)
@@ -112,6 +114,8 @@ extension MCPManager {
         appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: String(format: NSLocalizedString("调试获取提示词：%@", comment: "MCP governance debug prompt get started"), name))
 
         Task {
+            let macUsage = beginMacStdioUse(serverID: serverID)
+            defer { endMacStdioUse(serverID: serverID, usage: macUsage) }
             do {
                 let client = try await self.ensureClientReady(serverID: serverID, refreshMetadataIfCacheMissing: false)
                 let result = try await client.getPrompt(name: name, arguments: arguments)
@@ -130,6 +134,8 @@ extension MCPManager {
         guard let routed = routedPrompts[promptName] else {
             throw MCPChatBridgeError.unknownPrompt
         }
+        let macUsage = beginMacStdioUse(serverID: routed.server.id)
+        defer { endMacStdioUse(serverID: routed.server.id, usage: macUsage) }
         let client = try await ensureClientReady(serverID: routed.server.id, refreshMetadataIfCacheMissing: false)
         return try await client.getPrompt(name: routed.prompt.name, arguments: arguments)
     }
@@ -159,6 +165,8 @@ extension MCPManager {
 
     public func setLogLevel(on serverID: UUID, level: MCPLogLevel) {
         Task {
+            let macUsage = beginMacStdioUse(serverID: serverID)
+            defer { endMacStdioUse(serverID: serverID, usage: macUsage) }
             do {
                 let client = try await self.ensureClientReady(serverID: serverID, refreshMetadataIfCacheMissing: false)
                 try await client.setLogLevel(level)
@@ -263,9 +271,8 @@ extension MCPManager {
                !selectedServerIDs.contains(available.server.id) {
                 return nil
             }
-            // 本地 stdio MCP 与 Linux 用户态共享进程生命周期；Chat 模式或未启用
-            // 本地 Linux 的 Agent Run 不能只暴露工具、等到执行阶段才失败。
-            if case .localStdio = available.server.transport,
+            // 移动端 stdio 与 Linux 用户态共享生命周期；Mac 本机进程无需 Linux Run。
+            if available.server.usesLocalLinuxStdio,
                !includeLocalLinuxTools {
                 return nil
             }
@@ -340,7 +347,7 @@ extension MCPManager {
         if routed.server.approvalPolicy(for: routed.tool.toolId) == .alwaysDeny {
             throw MCPChatBridgeError.toolDeniedByPolicy(displayName(for: routed))
         }
-        if case .localStdio = routed.server.transport {
+        if routed.server.usesLocalLinuxStdio {
             guard activeLocalAgentRun != nil else {
                 // 工具定义已在请求准备阶段隔离；执行层仍要拒绝历史或伪造调用，
                 // 避免已手动连接的 stdio 客户端绕过 Chat 模式边界。
@@ -420,7 +427,8 @@ extension MCPManager {
         var localInstanceKey: MCPLocalStdioInstanceKey?
         do {
             let clientOverride: MCPClient?
-            if case .localStdio(let configuration) = routed.server.transport,
+            if routed.server.usesLocalLinuxStdio,
+               case .localStdio(let configuration) = routed.server.transport,
                configuration.launchPolicy == .onDemand,
                let sourceAgentRunID {
                 guard let sourceSessionID else {
@@ -515,6 +523,7 @@ extension MCPManager {
     ) async -> LocalLinuxCommandRuleMatch? {
         guard AppConfigStore.boolValue(for: .localLinuxCommandSafetyEnabled),
               let routed = routedTools[toolName],
+              routed.server.usesLocalLinuxStdio,
               let sourceAgentRunID,
               let run = Persistence.loadLocalAgentRun(id: sourceAgentRunID) else {
             return nil

@@ -174,6 +174,15 @@ extension MCPServerConfiguration {
 }
 
 public extension MCPServerConfiguration {
+    /// 移动端 stdio 属于 Linux Agent；Mac 的本机进程也可作为普通聊天 MCP。
+    var usesLocalLinuxStdio: Bool {
+        #if os(macOS)
+        false
+        #else
+        if case .localStdio = transport { true } else { false }
+        #endif
+    }
+
     var humanReadableEndpoint: String {
         switch transport {
         case .http(let endpoint, _, _):
@@ -290,11 +299,15 @@ public extension MCPServerConfiguration {
                 )
             )
         case .localStdio(let configuration):
+            #if os(macOS)
+            let transport = MCPMacStdioTransport(configuration: configuration)
+            #else
             let transport = MCPLocalStdioTransport(
                 serverID: id,
                 configuration: configuration,
                 approvedCommandRuleIDs: approvedLocalLinuxCommandRuleIDs
             )
+            #endif
             return MCPSDKTransportBundle(
                 transport: transport,
                 streamControl: MCPTransportControlBox(control: transport)

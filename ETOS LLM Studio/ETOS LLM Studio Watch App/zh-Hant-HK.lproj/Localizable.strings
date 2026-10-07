@@ -7392,3 +7392,5 @@
 "最大换 Key 次数" = "最大換 Key 次數";
 "正在思考·切换 Key(%d/%d)" = "正在思考·切換 Key(%d/%d)";
 "此页修改先保留为草稿，返回提供商页面后点击保存生效。" = "此頁修改先保留為草稿，返回供應商頁面後按儲存生效。";
+/* MCP 标准输出边界 */
+"The MCP process exceeded the standard output buffer limit." = "MCP 程序的標準輸出超過了緩衝區限制。";

@@ -104,6 +104,7 @@ public final class MCPManager: ObservableObject {
     var inFlightConnections: [UUID: Task<MCPClient, Error>] = [:]
     var localStdioInstances: [MCPLocalStdioInstanceKey: MCPLocalStdioInstance] = [:]
     var localStdioConnectionTasks: [MCPLocalStdioInstanceKey: Task<MCPLocalStdioInstance, Error>] = [:]
+    var macStdioUsage: [UUID: MCPMacStdioUsage] = [:]
     var trackedToolCallTasks: [UUID: Task<JSONValue, Error>] = [:]
     var trackedToolCallObservers: [UUID: @Sendable (MCPProgressParams) -> Void] = [:]
     var trackedToolCallTokenKeys: [UUID: String] = [:]
@@ -155,6 +156,7 @@ public final class MCPManager: ObservableObject {
     }
 
     func removeConnectionArtifacts(for serverID: UUID) -> MCPClient? {
+        macStdioUsage.removeValue(forKey: serverID)?.idleTask?.cancel()
         let client = clients.removeValue(forKey: serverID)
         let transport = streamingTransports.removeValue(forKey: serverID)
         notificationRelays[serverID] = nil
@@ -519,6 +521,8 @@ public final class MCPManager: ObservableObject {
         keepReadyStateDuringHandshake: Bool,
         refreshMetadataIfCacheMissing: Bool
     ) async throws -> MCPClient {
+        let macUsage = beginMacStdioUse(serverID: server.id)
+        defer { endMacStdioUse(serverID: server.id, usage: macUsage) }
         if retryOnFailure {
             cancelAutoConnectRetry(for: server.id, resetAttempts: false)
         } else {
@@ -552,7 +556,8 @@ public final class MCPManager: ObservableObject {
         }
 
         var approvedLocalLinuxCommandRuleIDs: Set<UUID> = []
-        if case .localStdio(let configuration) = server.transport,
+        if server.usesLocalLinuxStdio,
+           case .localStdio(let configuration) = server.transport,
            AppConfigStore.boolValue(for: .localLinuxCommandSafetyEnabled) {
             let command = configuration.command.trimmingCharacters(in: .whitespacesAndNewlines)
             let request = LocalLinuxJobRequest(

@@ -7698,3 +7698,5 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "最大换 Key 次数" = "Máximo de cambios de clave";
 "正在思考·切换 Key(%d/%d)" = "Pensando · Cambiando clave (%d/%d)";
 "此页修改先保留为草稿，返回提供商页面后点击保存生效。" = "Los cambios de esta página quedan como borrador. Vuelve a la página del proveedor y pulsa Guardar para aplicarlos.";
+/* MCP 标准输出边界 */
+"The MCP process exceeded the standard output buffer limit." = "La salida estándar del proceso MCP superó el límite del búfer.";

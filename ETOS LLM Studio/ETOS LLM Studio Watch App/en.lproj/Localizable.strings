@@ -7400,3 +7400,5 @@
 "最大换 Key 次数" = "Maximum key switches";
 "正在思考·切换 Key(%d/%d)" = "Thinking · Switching key (%d/%d)";
 "此页修改先保留为草稿，返回提供商页面后点击保存生效。" = "Changes on this page remain a draft. Return to the provider page and tap Save to apply them.";
+/* MCP 标准输出边界 */
+"The MCP process exceeded the standard output buffer limit." = "The MCP process exceeded the standard output buffer limit.";

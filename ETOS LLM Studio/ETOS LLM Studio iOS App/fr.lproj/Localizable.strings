@@ -7698,3 +7698,5 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "最大换 Key 次数" = "Nombre maximal de changements de clé";
 "正在思考·切换 Key(%d/%d)" = "Réflexion · Changement de clé (%d/%d)";
 "此页修改先保留为草稿，返回提供商页面后点击保存生效。" = "Les modifications restent un brouillon. Revenez à la page du fournisseur et touchez Enregistrer pour les appliquer.";
+/* MCP 标准输出边界 */
+"The MCP process exceeded the standard output buffer limit." = "La sortie standard du processus MCP a dépassé la limite du tampon.";

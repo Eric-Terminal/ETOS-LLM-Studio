@@ -98,7 +98,8 @@ public actor LocalLinuxProcessEnvironmentProvider {
         additional: [String: String] = [:],
         frozenGlobalValues: [String: String]? = nil,
         frozenReferences: [LocalLinuxEnvironmentReferenceSnapshot]? = nil,
-        frozenRedactionValues: [String]? = nil
+        frozenRedactionValues: [String]? = nil,
+        baseValues: [String: String]? = nil
     ) throws -> LocalLinuxEnvironmentSnapshot {
         let allVariables = variables()
         var environment: [String: String]
@@ -108,7 +109,7 @@ public actor LocalLinuxProcessEnvironmentProvider {
                 environment = frozenGlobalValues
                 redactionValues = frozenRedactionValues ?? []
             } else {
-                environment = Self.baseEnvironment
+                environment = baseValues ?? Self.baseEnvironment
                 let enabled = allVariables.filter(\.isEnabled)
                 for variable in enabled {
                     environment[variable.name] = variable.value
@@ -116,8 +117,8 @@ public actor LocalLinuxProcessEnvironmentProvider {
                 redactionValues = enabled.map(\.value)
             }
         } else {
-            // 即使不继承用户变量，仍保留 Linux 进程启动所需的基础 PATH/HOME。
-            environment = Self.baseEnvironment
+            // 即使不继承用户变量，仍保留所选执行环境启动所需的基础 PATH/HOME。
+            environment = baseValues ?? Self.baseEnvironment
             redactionValues = []
         }
 

@@ -30,6 +30,8 @@ extension MCPManager {
     }
 
     func refreshMetadata(for serverID: UUID, client: MCPClient, serverInfo: MCPServerInfo?) async {
+        let macUsage = beginMacStdioUse(serverID: serverID)
+        defer { endMacStdioUse(serverID: serverID, usage: macUsage) }
         do {
             let tools = try await client.listTools()
             let resources = try await listResourcesIfSupported(client: client)
