@@ -356,6 +356,21 @@ final class MacWorkspaceModel: ObservableObject {
         Task.detached(priority: .userInitiated) { service.setSelectedModel(model) }
     }
 
+    func saveRoleplayData(_ source: RoleplayDataDraft, values: [String: JSONValue], message: ChatMessage?) async throws -> RoleplayDataDraft {
+        guard phase == .ready, !isRestoringData, !isExportingSnapshot, !isMutatingHistory, !sessionLibrary.isWorking,
+              !roleplayModel.isWorking, !worldbookModel.isWorking, sendingSessionIDs.isEmpty, runningSessionIDs.isEmpty,
+              AppLockManager.shared.state != .locked, let service else { throw MacMemoryWriteError.busy }
+        // 共享层可能影响其他会话；编辑期间不与桌面的任何生成或历史写入并发。
+        isMutatingHistory = true
+        defer { isMutatingHistory = false; flushToolSupplements() }
+        let task = Task.detached(priority: .userInitiated) {
+            try Task.checkCancellation()
+            guard service.runningSessionIDsSubject.value.isEmpty else { throw MacMemoryWriteError.busy }
+            return try service.saveRoleplayDataDraft(source, values: values, matching: message)
+        }
+        return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+    }
+
     func send() {
         guard canSend, let service, let session = currentSession else { return }
         let content = draft

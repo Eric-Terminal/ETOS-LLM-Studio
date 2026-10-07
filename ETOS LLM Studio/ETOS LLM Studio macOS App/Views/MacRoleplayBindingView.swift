@@ -62,6 +62,7 @@ struct MacRoleplayBindingView: View {
                         Toggle(NSLocalizedString("启用助手脚本", comment: ""), isOn: $draft.helperScriptsEnabled)
                     }
                     Section {
+                        NavigationLink(NSLocalizedString("宏与变量", comment: "")) { MacRoleplayDataView(session: session) }
                         MacSettingsIntroCard(id: "roleplay-binding", title: NSLocalizedString("使用说明", comment: ""),
                                              details: NSLocalizedString("Mac 会话角色绑定使用说明", comment: ""), documentID: "roleplay")
                         if draft.original != nil {
@@ -111,6 +112,7 @@ struct MacRoleplayBindingView: View {
         var fields: [GuidePageSetting] = [
             .readOnly("session_id", label: NSLocalizedString("当前会话", comment: ""), value: { .string(session.id.uuidString) }),
             .readOnly("requires_save", label: NSLocalizedString("修改后需要保存", comment: ""), value: { .bool(true) }),
+            .readOnly("data_requires_navigation", label: NSLocalizedString("宏与变量", comment: ""), value: { .bool(true) }),
             .readOnly("original_references", label: NSLocalizedString("角色与用户身份", comment: ""), value: { draft.originalReferences }),
             .readOnly("editable", label: NSLocalizedString("状态", comment: ""), value: { .bool(editable && !confirmingRemoval) }),
             .readOnly("available_characters", label: NSLocalizedString("角色卡", comment: ""), value: { catalog.charactersValue }),

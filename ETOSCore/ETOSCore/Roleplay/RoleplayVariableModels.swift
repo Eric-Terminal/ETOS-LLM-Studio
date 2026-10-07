@@ -97,6 +97,15 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
         return result
     }
 
+    static func containsReservedValues(_ values: [String: JSONValue], scope: RoleplayVariableScope) -> Bool {
+        switch scope {
+        case .script:
+            return [customMacrosKey, scriptScopesKey, promptTemplateInitialKey].contains { values[$0] != nil }
+        case .message: return values[displayedHTMLKey] != nil
+        default: return false
+        }
+    }
+
     public func scriptVariables(scriptID: UUID) -> [String: JSONValue] {
         guard case .dictionary(let scopes) = script[Self.scriptScopesKey],
               case .dictionary(let values) = scopes[scriptID.uuidString] else { return [:] }

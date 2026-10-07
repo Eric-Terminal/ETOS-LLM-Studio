@@ -7567,3 +7567,12 @@
 /* Mac 角色正则与助手脚本 */
 "保留导入值" = "Keep imported value";
 "Mac 角色正则与脚本使用说明" = "Open Regex or Helper Scripts from character details. Select an item to edit, then Save; dragging saves the order immediately, and deletion requires confirmation. Regex fields include find/replace, scope, placements, Markdown/prompt/edit modes and macro substitution. Enter one literal trim string per line; spaces are preserved. Unedited trim lists and imported depth limits remain unchanged. Script edits cover name, description, enablement and source, retaining imported buttons and extensions. Saving checks for changes to the character in another window; reopen after a conflict. The guide only edits drafts. Existing script source is write-only, and manual source edits invalidate old proposals. Editing does not execute scripts. Roleplay HTML/script interaction on Mac still requires integration.";
+
+/* Mac 宏与分层变量编辑 */
+"宏值必须是字符串。" = "Macro values must be strings.";
+"宏名称不能重复。" = "Macro names must be unique.";
+"当前作用域暂不可用，请先绑定角色、身份或创建消息。" = "This scope is unavailable. Bind a character or persona, or create a message first.";
+"变量包含内部保留字段，请通过对应设置修改。" = "Variables contain reserved internal fields. Change them in their corresponding settings.";
+"完整自定义宏对象，键为不含花括号的宏名称，值为替换文本" = "Complete custom macro object: keys are macro names without braces, and values are replacement text";
+"当前所选作用域的完整变量对象" = "Complete variable object for the selected scope";
+"Mac 宏与变量使用说明" = "Edit custom macros as names and values, referenced with {{name}} or {{{name}}}. Names must be unique after trimming surrounding spaces and ignoring case; value whitespace is preserved. Open and save each variable scope separately using a JSON object. Global and preset variables are shared across sessions. Character and persona variables belong to the saved binding, not an unsaved character selection. Chat, script and custom macros belong to this session. Message variables target the current version of the last message when the page opens; reopen after that message or version changes. Save replaces only the selected scope, retaining internal script spaces and cached HTML. Saving is blocked during generation; stale drafts cannot overwrite changes to the same scope. The guide only edits drafts and hides sensitive keys. Save manually; leaving the page does not save.";
