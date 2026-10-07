@@ -27,7 +27,7 @@ Mac 根目录为 `Application Support/ETOS LLM Studio`，通过 `StorageUtility.
 待验证项目包括：
 
 1. 从移动端完整备份恢复未加密和加密数据库，核对会话、模型、密钥条目、MCP 环境引用和媒体相对路径；Mac 修改后的备份再回到移动端核对。
-2. MCP stdio 完整握手、工具目录和调用、超时与取消、stderr 分离、空闲退出和后台退出；使用本机实际安装路径检查 argv 和环境变量。`MCPMacStdioProcessTests` 增加忽略 SIGTERM 的实际子进程、并发停止与重复停止用例，要求停止返回前进程已退出，尚未运行。应用级退出等待全部任务的流程仍待接入，不能把传输层收尾等同于完整退出保护。
+2. MCP stdio 完整握手、工具目录和调用、超时与取消、stderr 分离、空闲退出和后台退出；使用本机实际安装路径检查 argv 和环境变量。`MCPMacStdioProcessTests` 包含忽略 SIGTERM、并发停止与重复停止用例。Mac AppKit 退出委托使用 `terminateLater`，封闭原生 MCP 启动入口，并等待全部登记进程（包括已从连接缓存移除、正在断开的实例）退出；`MCPMacStdioProcessLifetimeTests` 覆盖并发退出、退出先于启动和启动失败。两组测试尚未运行；需要在 Mac target 创建后补充真实 ⌘Q 与多窗口 UI 验证。此入口只等待原生 MCP 子进程，聊天记账、画像、云同步和其他后台写入的完整退出屏障仍待接入，不能视为全部任务已安全结束。
 3. 多会话生成、流式滚动、消息编辑关联结果、切换窗口和锁定后的审批、HTTP/证书原生弹窗、向导草稿确认及页面失效。
 4. ETOSCore 新增的 `MCPConfigurationPersistenceTests`、`CloudSyncLocalRestoreTests`、此前 Mac stdio/图片/存储目录测试；当前都只有测试源码，未执行。
 5. 系统保存面板的文件权限、覆盖已有快照、加密快照导入、S3/R2 列表及取消下载、恢复时后台任务隔离、首次 iCloud 裁决及过期确认；iCloud 还需配置容器、签名和通知能力。

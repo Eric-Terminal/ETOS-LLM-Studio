@@ -21,17 +21,21 @@ final class MCPMacStdioProcess: @unchecked Sendable {
     private var closed = false
     private var terminationRequested = false
     private var stopWaiters: [CheckedContinuation<Void, Never>] = []
+    private let lifetime: MCPMacStdioProcessLifetime
 
-    init() {
+    init(lifetime: MCPMacStdioProcessLifetime = .shared) {
+        self.lifetime = lifetime
         let pair = AsyncThrowingStream<Data, Error>.makeStream(bufferingPolicy: .bufferingOldest(256))
         stream = pair.stream
         continuation = pair.continuation
     }
 
     func start(configuration: MCPLocalStdioConfiguration, environment: [String: String]) async throws {
+        try await lifetime.register(self)
         try await withCheckedThrowingContinuation { (result: CheckedContinuation<Void, Error>) in
             queue.async { [self] in
                 guard !closed else {
+                    finish(error: nil)
                     result.resume(throwing: CancellationError())
                     return
                 }
@@ -196,6 +200,9 @@ final class MCPMacStdioProcess: @unchecked Sendable {
             return
         }
         process = nil
+        let lifetime = lifetime
+        let id = ObjectIdentifier(self)
+        Task { await lifetime.remove(id) }
         let waiters = stopWaiters
         stopWaiters.removeAll()
         waiters.forEach { $0.resume() }

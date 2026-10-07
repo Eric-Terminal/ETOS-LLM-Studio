@@ -10,6 +10,7 @@ import SwiftUI
 
 @main
 struct ETOSMacApp: App {
+    @NSApplicationDelegateAdaptor(MacApplicationDelegate.self) private var applicationDelegate
     @StateObject private var workspace = MacWorkspaceModel()
 
     var body: some Scene {
@@ -17,24 +18,26 @@ struct ETOSMacApp: App {
             MacLaunchView()
                 .environmentObject(workspace)
                 .frame(minWidth: 760, minHeight: 520)
+                .disabled(applicationDelegate.isTerminating)
         }
         .defaultSize(width: 1120, height: 760)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button(NSLocalizedString("新建对话", comment: "")) { workspace.newSession() }
                     .keyboardShortcut("n", modifiers: .command)
-                    .disabled(workspace.phase != .ready || workspace.isRestoringData)
+                    .disabled(applicationDelegate.isTerminating || workspace.phase != .ready || workspace.isRestoringData)
             }
             CommandGroup(after: .pasteboard) {
                 Button(NSLocalizedString("停止生成", comment: "")) { workspace.stop() }
                     .keyboardShortcut(".", modifiers: .command)
-                    .disabled(!workspace.isGenerating)
+                    .disabled(applicationDelegate.isTerminating || !workspace.isGenerating)
             }
         }
         Settings {
             if workspace.phase == .ready {
                 MacSettingsView()
                     .environmentObject(workspace)
+                    .disabled(applicationDelegate.isTerminating)
             } else {
                 Text(NSLocalizedString("请先解锁数据库。", comment: ""))
                     .foregroundStyle(.secondary)

@@ -78,6 +78,11 @@ public actor MCPMacStdioTransport: Transport, MCPSDKTransportControl {
     public func updateProtocolVersion(_ protocolVersion: String?) async {}
     public func terminateSession() async { await disconnect() }
 
+    /// 仅供应用最终退出使用；完成后本进程内不再允许启动原生 MCP。
+    public static func prepareForApplicationTermination() async {
+        await MCPMacStdioProcessLifetime.shared.shutdown()
+    }
+
     /// Finder 启动的 App 没有登录 shell 的 PATH。只继承基本系统变量，避免把
     /// 启动 ELS 的终端中无关的令牌、代理或调试环境意外传给 MCP 进程。
     static var baseEnvironment: [String: String] {
