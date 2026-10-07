@@ -9,14 +9,17 @@
 - 添加 workspace 内的 ETOSCore framework target 依赖与嵌入签名。ETOSCore 使用同步文件夹，新加入的 Core Swift 文件仍需确认 Target Membership；Mac App 文件夹需要单独绑定新 target。
 - Mac 浏览器需要 WebKit/AppKit；共享 Core 的公开 WKWebView 分支已包含 macOS，不能再把 `BrowserSessionManagerUnavailable` 加入条件配置来代替实际实现。`BrowserMacRuntimeTests` 只在 macOS + WebKit 下编译，需要原生 Mac 测试目标验证。
 - 复用既有第三方依赖版本，不创建 `Package.swift`。重点核实 SQLCipher、llama.cpp、iSH runtime 的 macOS 架构切片及链接条件；不能把 iOS 模拟器产物当作原生 macOS 产物。
+- iSH 公共 SDK 的构建声明已包含 macOS 26.0 `arm64`/`x86_64`，由 `scripts/build-native-static-libraries.sh` 进入九切片完整构建，再把 `products/macosx/libiSHApple.a` 放到既有 `llama-build/products/macosx-$(CONFIGURATION)` 链接目录。Core 的 `LocalLinuxISHAdapter.c` 已启用 `TARGET_OS_OSX` 并携带 iSH/SQLite/resolv/z 的链接选项。GUI 接入时确认该 C 文件属于 Core target、Mac 库搜索路径与配置一致；声明本身不是已成功链接的证明。公共 SDK 脚本还调用包含运行用例的 Swift 检查入口，执行整套脚本需要同时获得编译和测试授权。
 - Mac App 的 `PRODUCT_MODULE_NAME` 使用 `ETOS_LLM_Studio_macOS_App`；新增相应的 macOS 单元测试 target，加入 `ETOS LLM Studio/ETOS LLM Studio macOS AppTests` 中的测试源码。该测试目录不加入 App target。
 
 ## 资源与签名
 
 - Mac target 共享 iOS 目录下八种 `*.lproj/Localizable.strings`，保持 `en` 为开发语言。不复制第三份本地化表；本次新增文案已同步到 iOS/watchOS 资源。
 - 共享需要的图片、字体、默认配置、许可证和向导源码包。检查 iOS 的资源构建步骤后逐项选择，不直接复制移动端 Info.plist、扩展、Watch App 或移动端 entitlements。
+- Mac target 复用 iOS `Resources/LocalLinux` 整个资源目录，包括原 AArch64 seed/metadata、迁移清单及全部合规文件。可保留 `LocalLinux` 文件夹引用；Core 也支持 bundle 顶层查找。不要只添加压缩包，或为 Intel Mac 换成宿主 x86_64 RootFS：两种宿主都通过 iSH 运行同一 AArch64 guest。无需维护第三份 seed。发布 ELS 前必须先推送对应 iSH 提交，目前新增 iSH 提交仍只在本地。
 - 新建独立的 Mac bundle identifier 和对应的签名配置。iCloud 如要读取现有云端容器，继续使用项目现有容器 `iCloud.com.ericterminal.els`，并在开发者账号中为 Mac App 启用所需能力。钥匙串访问组和 App Group 必须与实际签名配置匹配。
 - 本机 stdio 需要运行用户安装的可执行文件及访问其依赖。当前实现面向具有这些权限的原生桌面进程；启用 App Sandbox 后不能假定任意 `node`／`uvx` 程序及其数据路径均可访问。发布签名与沙盒策略确定后需实际验证，不能用移动端 Linux 的 workspace/mount 字段充当本机隔离措施。
+- Mac Linux 外部目录的创建/恢复使用显式安全作用域书签，并继续配对持有/释放目录访问；guest 的只读标志仍由挂载层控制。若采用 App Sandbox，需配置与系统目录面板、持久书签相符的文件访问能力，并验证退出重启后的授权恢复。参考 [Apple 的书签创建选项](https://developer.apple.com/documentation/foundation/nsurl/bookmarkcreationoptions/withsecurityscope)，显式安全作用域不能与 `minimalBookmark` 混用；iOS/watchOS 仍使用原有书签选项。
 - Finder 打开由 `MacApplicationDelegate.application(_:open:)` 接收整批 URL，不使用 `NSDocument`。在新 target 的 Document Types 中注册 GGUF（`com.ericterminal.els.gguf`）及普通聊天附件支持的文件类型，角色为 Viewer、处理顺序为 Alternate；GGUF 的 Imported Type 声明沿用 `Config/iOSInfo.plist` 的标识、`public.data` 继承和 `gguf` 扩展名。普通附件可注册 `public.data`，不要给尚未接入专用打开流程的备份/记忆归档宣称恢复操作。沙盒文件读取能力需与系统面板、Finder 打开及拖放一同验证；不把移动端的其他文档类型或权限整体复制到 Mac。
 - 在新 Mac target 的 URL Types 中注册 `etosllmstudio`，用于本机快捷指令的完成回调。桌面委托将 `callback` 与 `template-status` 从文件批次中分离，冷启动过期回调不创建工具管理器，也不读取剪贴板。官方导出结束仅回传完成状态，用户再从导入页手动读取清单；外部导入 URL 不自动读取剪贴板。需验证系统“快捷指令”App 的 URL 跳转、回调、超时与取消，以及同名快捷指令和桥接在本机的实际安装情况。
 - 按最终启用的 Mac 能力补充系统权限用途说明及相应本地化，例如麦克风、相机、照片、联系人、日历、提醒事项、位置和本地网络。尚未完成桌面接入的功能不能仅凭复制用途说明就宣称可用。
@@ -123,6 +126,12 @@ Mac 根目录为 `Application Support/ETOS LLM Studio`，通过 `StorageUtility.
 
    根页向导提供不含正文的只读目录及选用提案，原生确认后直接保存；列表重新加载使旧提案失效。编辑器声明名称、正文、启用草稿及只读内置/保存状态，介绍页独立只读。恢复默认与删除确认属于原生系统弹窗，期间停用来源页向导，不提供相应执行器。向导不切换会话模式、不启动 Linux、不执行命令。锁定、备份恢复和退出使旧草稿失效，数据操作和退出等待已登记的读写收尾；解锁早于写入结束时会在完成后重新读取目录。双端八语言新增七个键，补齐介绍与共享错误文案，Mac 继续使用 iOS 资源。
 
-   新增 `LocalAgentPromptLibraryTests` 七个事务用例和 `MacAgentPromptPresentationTests` 两个展示用例，覆盖默认项保护、局部更新、正文空白、过期编辑/删除、不复活记录、选用条件、删除/选择原子回滚、内置身份保护、数据库失败、摘要与向导正文隔离、停用项回退。这些只是未执行的测试源码；未编译、未运行测试或 App。工具链恢复并获授权后需验证三端构建、数据库往返、原生编辑/删除、语言切换、向导切页/刷新失效，以及锁定和备份恢复的收尾行为。现有 `LocalLinuxISHAdapter.c` 只启用 iOS/watchOS，Mac 仍进入不支持分支；本次完成操作说明管理，不代表 Linux 终端、工作区或运行时已移植。
+   新增 `LocalAgentPromptLibraryTests` 七个事务用例和 `MacAgentPromptPresentationTests` 两个展示用例，覆盖默认项保护、局部更新、正文空白、过期编辑/删除、不复活记录、选用条件、删除/选择原子回滚、内置身份保护、数据库失败、摘要与向导正文隔离、停用项回退。这些只是未执行的测试源码；未编译、未运行测试或 App。工具链恢复并获授权后需验证三端构建、数据库往返、原生编辑/删除、语言切换、向导切页/刷新失效，以及锁定和备份恢复的收尾行为。此项仅完成操作说明管理；后续 C 桥接入见下一项，Linux 终端和工作区界面仍待实现。
+
+44. iSH 子模块更新到 `71292568436a8be1bcfd52ccfa2401ede267b6ea`。公共构建门禁增加 Mac 原生 arm64/x86_64 切片，声明 64 位 ABI、macOS 26.0 部署版本以及对应 threaded/C 后端，复用既有 Darwin 内核、公共命令/PTY、文件、挂载及诊断实现。打包生成 `macos-arm64_x86_64` 变体，保留公共符号白名单，从成品头文件链接两个 Mac 消费者；Swift 包装与 API 编译矩阵也增加两个 Mac target。ELS 原生依赖脚本接入产物、缓存版本升级，并固定完整 SDK 构建以防仅 Watch 的外部环境选项留下旧包。C 桥对原生 Mac 启用真实公共入口，不再落入 ENOSYS 分支；没有把本机 MCP stdio 改成 Linux 子进程。
+
+   更新子模块时用原有 seed metadata 在临时目录重新生成双端六个合规文件（清单、SBOM、源码说明），seed 和数据库结构均未改动。源码说明现在覆盖三平台。`scripts/verify-local-linux-rootfs.sh` 已执行并通过，两端资源一致且 revision 匹配。另完成脚本静态语法和差异格式检查；没有运行编译脚本、类型检查、单元测试、App 或 Linux。外部目录授权源码补上 macOS 安全书签创建和恢复选项，失败提示引导到 Finder，并补齐双端八语言。现有新管理器恢复用例扩展为只读/读写参数；真实系统面板、沙盒签名与跨进程授权仍需运行验收。
+
+   待工具链和授权就绪后，验证九个 ABI 切片、Mac 成品符号及平台/部署版本、Core C 桥的完整链接闭包、两种宿主的 seed 安装/命令/PTY/取消/停止重启、外部只读挂载和重新授权、数据库往返、锁定/备份恢复/退出与 Linux 活动的协调。Mac 的 Linux 管理页、终端、工作区和执行任务生命周期尚未完成，不能把构建声明当作运行可用证据。iSH 与 ELS 两个提交均不主动推送；发布 ELS 前先推送该 iSH 提交。
 
 目前源码包含聊天、附件、会话草稿、文件夹/标签/颜色分类与正文搜索、提供商/模型/MCP 基础配置、模型独立协议与完整价格草稿、请求参数与结构化控制编辑、聊天控制运行态及有效覆盖参数预览、滑块配色与请求思考反馈、MCP 资源/提示词读取、快捷指令配置/导入/描述生成、内置工具及审批设置、Skills 管理与导入、本机会话浏览器、Agent 提示词管理、快照备份恢复、S3/R2 与 iCloud 同步管理、工具问答与 Widget、记忆编辑、嵌入维护、归档传输、跨对话摘要与画像、世界书管理/会话绑定、角色与身份资料管理、角色正则/脚本编辑、宏和分层变量编辑、角色 HTML/脚本承载及向导入口。完整功能对齐仍在继续，Agent/Linux 工作区、工具中心其余入口、其余高级配置及平台能力等不能据此视为完成，浏览器与其他新 Mac 功能还需工程接入及运行验证。

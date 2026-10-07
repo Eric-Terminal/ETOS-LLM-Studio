@@ -563,9 +563,14 @@ public actor LocalLinuxMountManager {
         var stale = false
         let url: URL
         do {
+            #if os(macOS)
+            let options: URL.BookmarkResolutionOptions = [.withoutUI, .withSecurityScope]
+            #else
+            let options: URL.BookmarkResolutionOptions = [.withoutUI]
+            #endif
             url = try URL(
                 resolvingBookmarkData: bookmark,
-                options: [.withoutUI],
+                options: options,
                 relativeTo: nil,
                 bookmarkDataIsStale: &stale
             )
@@ -595,12 +600,18 @@ public actor LocalLinuxMountManager {
             if shouldStop { url.stopAccessingSecurityScopedResource() }
             if persistState { persistAuthorizationState(record, state: .unavailable) }
             LocalLinuxExternalDirectory.recordFailure("准备目录", error: error, didStartAccess: shouldStop)
-            throw LocalLinuxRuntimeError.runtimeUnavailable(
-                NSLocalizedString(
-                    "外部目录尚未在本机准备好。请先在“文件”App 中打开该目录，等待 iCloud 或文件提供者下载完成后重试。",
-                    comment: "Linux mount File Provider materialization error"
-                )
+            #if os(macOS)
+            let message = NSLocalizedString(
+                "外部目录尚未在本机准备好。请先在 Finder 中打开该目录，等待 iCloud 或文件提供者下载完成后重试。",
+                comment: "Mac 外部目录尚未准备好"
             )
+            #else
+            let message = NSLocalizedString(
+                "外部目录尚未在本机准备好。请先在“文件”App 中打开该目录，等待 iCloud 或文件提供者下载完成后重试。",
+                comment: "Linux mount File Provider materialization error"
+            )
+            #endif
+            throw LocalLinuxRuntimeError.runtimeUnavailable(message)
         }
     }
 

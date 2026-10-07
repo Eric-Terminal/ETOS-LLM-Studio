@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if TARGET_OS_WATCH || (TARGET_OS_IOS && !TARGET_OS_MACCATALYST && !TARGET_OS_VISION)
+#if TARGET_OS_OSX || TARGET_OS_WATCH || (TARGET_OS_IOS && !TARGET_OS_MACCATALYST && !TARGET_OS_VISION)
 #define ETOS_ISH_SUPPORTED 1
 #include "../../../Dependencies/ish-multiarch/sdk/iSHApple/Headers/iSHApple.h"
 

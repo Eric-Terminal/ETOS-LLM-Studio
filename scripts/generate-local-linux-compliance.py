@@ -175,7 +175,7 @@ def main() -> None:
     source_offer = f"""ETOS 本地 Linux 对应源码说明 / Corresponding Source Information
 
 本 App 内置的最小 Alpine AArch64 RootFS 由固定上游归档生成，只在 iSH guest
-ABI/指令解释层内运行。它不作为 iOS 或 watchOS 原生可执行文件启动。
+ABI/指令解释层内运行。它不作为 iOS、watchOS 或 macOS 原生可执行文件启动。
 
 Alpine 版本：{metadata['alpineVersion']}
 上游归档：{metadata['sourceURL']}

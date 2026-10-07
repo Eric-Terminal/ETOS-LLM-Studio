@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# iSH 的公共门禁一次生成 iOS/watchOS 七切片与 XCFramework；这里把可消费产物
+# iSH 的公共门禁一次生成 iOS/watchOS/macOS 九切片与 XCFramework；这里把可消费产物
 # 收敛到 ETOS 的忽略目录，供本地构建与 Xcode Cloud 复用。
 ROOT_PATH=$(cd "$(dirname "$0")/.." && pwd -P)
 ISH_SOURCE_PATH="$ROOT_PATH/Dependencies/ish-multiarch"
@@ -29,14 +29,14 @@ ISH_WORKTREE_FINGERPRINT=$(
     } | shasum -a 256 | awk '{print $1}'
 )
 XCODE_VERSION=$(xcodebuild -version | tr '\n' ' ')
-SIGNATURE="ish=$ISH_REVISION worktree=$ISH_WORKTREE_FINGERPRINT xcode=$XCODE_VERSION gate=apple-core-v1"
+SIGNATURE="ish=$ISH_REVISION worktree=$ISH_WORKTREE_FINGERPRINT xcode=$XCODE_VERSION gate=apple-core-v2-macos"
 
 products_are_current() {
     [[ -f "$STAMP_PATH" && "$(<"$STAMP_PATH")" == "$SIGNATURE" ]] || return 1
     [[ -f "$XCFRAMEWORK_PATH/Info.plist" ]] || return 1
 
     local platform
-    for platform in iphoneos iphonesimulator watchos watchsimulator; do
+    for platform in iphoneos iphonesimulator watchos watchsimulator macosx; do
         [[ -f "$PRODUCT_ROOT/$platform/libiSHApple.a" ]] || return 1
     done
 }
@@ -58,7 +58,8 @@ if ! command -v ninja >/dev/null 2>&1; then
 fi
 
 mkdir -p "$OUTPUT_ROOT" "$PRODUCT_ROOT"
-"$ISH_SOURCE_PATH/tools/apple-core-gate.sh" "$GATE_ROOT"
+# ELS 消费完整公共 SDK；不能让仅 Watch 的外部环境选项复用上次残留的包。
+APPLE_SKIP_IOS=0 "$ISH_SOURCE_PATH/tools/apple-core-gate.sh" "$GATE_ROOT"
 
 SOURCE_XCFRAMEWORK="$GATE_ROOT/xcframeworks/iSHApple.xcframework"
 if [[ ! -f "$SOURCE_XCFRAMEWORK/Info.plist" ]]; then
@@ -87,6 +88,7 @@ copy_product iphoneos ios-arm64
 copy_product iphonesimulator ios-arm64_x86_64-simulator
 copy_product watchos watchos-arm64_arm64_32
 copy_product watchsimulator watchos-arm64_x86_64-simulator
+copy_product macosx macos-arm64_x86_64
 
 printf '%s' "$SIGNATURE" > "$STAMP_PATH"
 echo "已生成 iSHApple XCFramework 与 ETOS 链接产物：$OUTPUT_ROOT"

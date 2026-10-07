@@ -9,8 +9,14 @@ enum LocalLinuxExternalDirectory {
         }
         do {
             return try coordinateRead(at: url) { coordinatedURL in
-                try coordinatedURL.bookmarkData(
-                    options: .minimalBookmark,
+                #if os(macOS)
+                // Mac 的持久目录授权需要显式安全作用域；不能与 minimalBookmark 混用。
+                let options: URL.BookmarkCreationOptions = .withSecurityScope
+                #else
+                let options: URL.BookmarkCreationOptions = .minimalBookmark
+                #endif
+                return try coordinatedURL.bookmarkData(
+                    options: options,
                     includingResourceValuesForKeys: nil,
                     relativeTo: nil
                 )

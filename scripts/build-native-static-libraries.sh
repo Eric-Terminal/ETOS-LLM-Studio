@@ -17,7 +17,7 @@ if [ "$REQUESTED_ARCHS" = "undefined_arch" ] || [ -z "$REQUESTED_ARCHS" ]; then
 fi
 
 case "$SDK_FAMILY" in
-    iphoneos|iphonesimulator|watchos|watchsimulator)
+    iphoneos|iphonesimulator|watchos|watchsimulator|macosx)
         # 清单通过编译不代表可启动；本地和云端构建都必须核对真实安装收据身份。
         "$ROOT_PATH/scripts/verify-local-linux-rootfs.sh"
         "$ROOT_PATH/scripts/build-ish-static-library.sh"
@@ -27,7 +27,7 @@ esac
 "$ROOT_PATH/scripts/build-llama-static-library.sh" "$@"
 
 case "$SDK_FAMILY" in
-    iphoneos|iphonesimulator|watchos|watchsimulator)
+    iphoneos|iphonesimulator|watchos|watchsimulator|macosx)
         SOURCE_ISH_LIBRARY="$ROOT_PATH/Dependencies/ish-build/products/$SDK_FAMILY/libiSHApple.a"
         PRODUCT_DIR="$ROOT_PATH/Dependencies/llama-build/products/$SDK_FAMILY-$CONFIGURATION"
         LLAMA_LIBRARY="$PRODUCT_DIR/libetos-llama.a"
