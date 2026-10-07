@@ -3,6 +3,18 @@ import Testing
 @testable import ETOSCore
 
 struct GuideMacLinuxKnowledgeTests {
+    @Test("文件指引说明预览预算、原件比较、递归删除和向导隐私")
+    func fileBrowserGuidance() {
+        let chinese = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "zh-Hans"))
+        #expect(chinese.content.contains("文件预览最多 256 KiB"))
+        #expect(chinese.content.contains("inode 元数据与原始字节"))
+        #expect(chinese.content.contains("递归删除失败也可能已删除部分内容"))
+        #expect(chinese.content.contains("不提供路径、文件名或正文"))
+        let english = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "en"))
+        #expect(english.content.contains("not a guest file lock"))
+        #expect(english.content.contains("Restore never replays saves or deletions"))
+    }
+
     @Test("配置指引明确值的只写权限、规则优先顺序和快捷栏草稿边界")
     func configurationGuidance() {
         let chinese = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "zh-Hans"))
