@@ -646,10 +646,16 @@ extension MemoryManager {
         before: MemoryItem?,
         after: MemoryItem?,
         operation: MemoryMutationOperation,
-        context: MemoryMutationContext
+        context: MemoryMutationContext,
+        expectedSnapshot: MemoryVersionSnapshot? = nil
     ) -> Bool {
         guard let memoryID = after?.id ?? before?.id else { return false }
         let committedSnapshot: [MemoryItem]? = mutationQueue.sync {
+            if let expectedSnapshot {
+                // 比较与持久化共用同一个串行临界区，删除后的旧编辑器也不能重建条目。
+                guard let current = cachedMemories.first(where: { $0.id == memoryID }),
+                      MemoryVersionSnapshot(memory: current) == expectedSnapshot else { return nil }
+            }
             let currentBefore = cachedMemories.first { $0.id == memoryID } ?? before
             let record = MemoryMutationRecord(
                 memoryID: memoryID,

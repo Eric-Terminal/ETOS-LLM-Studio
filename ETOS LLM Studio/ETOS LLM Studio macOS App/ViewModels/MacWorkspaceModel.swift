@@ -49,6 +49,7 @@ final class MacWorkspaceModel: ObservableObject {
     private var modelListTask: Task<Void, Never>?
     private var presentationRevision = UUID()
     private let presentationStore = MacMessagePresentationStore()
+    let memoryModel = MacMemoryModel()
     private var questionnaires: [UUID: [MacQuestionnaireModel]] = [:]
     private var toolDrafts: [UUID: [AppToolInputDraftRequest]] = [:]
     private var pendingSupplements: [UUID: [String]] = [:]
@@ -375,7 +376,7 @@ final class MacWorkspaceModel: ObservableObject {
     func restoreSnapshot(from url: URL, password: String?) async throws {
         let cloud = CloudSyncManager.shared
         let mcp = MCPManager.shared
-        guard !isRestoringData, !isExportingSnapshot, sendingSessionIDs.isEmpty,
+        guard !isRestoringData, !isExportingSnapshot, !memoryModel.isWorking, sendingSessionIDs.isEmpty,
               !SnapshotUploadManager.shared.isUploading, !mcp.isBusy,
               let service, cloud.beginLocalDataRestore() else {
             throw NSError(domain: "ETOSMacSnapshot", code: 1, userInfo: [
@@ -410,7 +411,7 @@ final class MacWorkspaceModel: ObservableObject {
     func resolveCloudConflict(using resolution: CloudSyncInitialResolution, conflictID: UUID) async throws {
         let cloud = CloudSyncManager.shared
         let mcp = MCPManager.shared
-        guard !isRestoringData, !isExportingSnapshot, sendingSessionIDs.isEmpty,
+        guard !isRestoringData, !isExportingSnapshot, !memoryModel.isWorking, sendingSessionIDs.isEmpty,
               !SnapshotUploadManager.shared.isUploading, !mcp.isBusy, let service,
               cloud.initialConflict?.id == conflictID else {
             throw NSError(domain: "ETOSMacSnapshot", code: 1, userInfo: [

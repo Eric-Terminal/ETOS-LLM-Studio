@@ -236,18 +236,20 @@ public class MemoryManager {
     // MARK: - 公开方法 (CRUD)
 
     /// 添加一条新的记忆。
-    public func addMemory(content: String) async {
+    @discardableResult
+    public func addMemory(content: String) async -> UUID? {
         await addMemory(MemoryWriteRequest(content: content))
     }
 
-    /// 添加一条带结构化元数据的新记忆。
-    public func addMemory(_ request: MemoryWriteRequest) async {
+    /// 返回已持久化原文的 ID；嵌入失败仍保留原文，并单独通过错误发布者通知。
+    @discardableResult
+    public func addMemory(_ request: MemoryWriteRequest) async -> UUID? {
         await initializationTask.value
         let trimmed = request.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else { return nil }
         
         let chunkTexts = chunker.chunk(text: trimmed)
-        guard !chunkTexts.isEmpty else { return }
+        guard !chunkTexts.isEmpty else { return nil }
         
         let memory = MemoryItem(
             id: UUID(),
@@ -270,13 +272,13 @@ public class MemoryManager {
             context: request.mutationContext
         ) else {
             logger.error("保存新记忆及其审计记录失败。")
-            return
+            return nil
         }
         
         // 如果没有选择嵌入模型，只保存原文，跳过嵌入生成
         guard hasConfiguredEmbeddingModel() else {
             logger.warning("尚未选择嵌入模型，记忆已保存但无法生成嵌入向量。")
-            return
+            return memory.id
         }
         
         do {
@@ -290,6 +292,7 @@ public class MemoryManager {
                 scheduleConsistencyCheck(after: consistencyCheckDefaultDelay)
             }
         }
+        return memory.id
     }
     
     /// 从外部导入一条记忆（用于设备同步等场景）。
@@ -355,19 +358,23 @@ public class MemoryManager {
         }
     }
 
-    /// 更新一条现有的记忆。
+    /// 返回原文是否保存成功；编辑草稿可传入预期快照，防止覆盖同步或其他页面的新版本。
+    @discardableResult
     public func updateMemory(
         item: MemoryItem,
-        context: MemoryMutationContext = MemoryMutationContext()
-    ) async {
+        context: MemoryMutationContext = MemoryMutationContext(),
+        expectedSnapshot: MemoryVersionSnapshot? = nil
+    ) async -> Bool {
         await initializationTask.value
         let trimmed = item.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
+            // 编辑草稿不能借空白正文删除；无预期版本的既有调用仍保留删除语义。
+            guard expectedSnapshot == nil else { return false }
             await deleteMemories([item], context: context)
-            return
+            return !cachedMemories.contains { $0.id == item.id }
         }
         let chunkTexts = chunker.chunk(text: trimmed)
-        guard !chunkTexts.isEmpty else { return }
+        guard !chunkTexts.isEmpty else { return false }
         let existingMemory = cachedMemories.first(where: { $0.id == item.id })
         let contentChanged = existingMemory?.content != trimmed
         
@@ -394,22 +401,23 @@ public class MemoryManager {
             before: existingMemory,
             after: updatedMemory,
             operation: .edited,
-            context: context
+            context: context,
+            expectedSnapshot: expectedSnapshot
         ) else {
             logger.error("更新记忆及其审计记录失败。")
-            return
+            return false
         }
 
         // 仅修改分类、重要度或有效期时，已有文本向量仍然有效。
         guard contentChanged else {
             logger.info("已更新记忆元数据。")
-            return
+            return true
         }
         
         // 如果没有选择嵌入模型，只更新原文，跳过嵌入生成
         guard hasConfiguredEmbeddingModel() else {
             logger.warning("尚未选择嵌入模型，记忆已更新但无法生成嵌入向量。")
-            return
+            return true
         }
         
         do {
@@ -424,6 +432,7 @@ public class MemoryManager {
                 scheduleConsistencyCheck(after: consistencyCheckDefaultDelay)
             }
         }
+        return true
     }
 
     /// 删除一条或多条记忆。

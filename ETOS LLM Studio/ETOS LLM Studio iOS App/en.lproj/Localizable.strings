@@ -7705,3 +7705,9 @@
 "可跳过" = "Optional";
 "必填" = "Required";
 "等待你的回答" = "Waiting for your answer";
+
+"删除记忆" = "Delete memory";
+"搜索记忆" = "Search memories";
+"已选模型不可用" = "Selected model unavailable";
+"无法保存记忆，请刷新列表后重试。" = "Could not save the memory. Refresh the list and try again.";
+"记忆已在其他位置修改，请重新打开后再编辑。" = "This memory was changed elsewhere. Reopen it before editing.";

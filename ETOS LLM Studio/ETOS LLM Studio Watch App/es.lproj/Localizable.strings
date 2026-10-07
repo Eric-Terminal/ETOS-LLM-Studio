@@ -7560,3 +7560,9 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "可跳过" = "Opcional";
 "必填" = "Obligatorio";
 "等待你的回答" = "Esperando tu respuesta";
+
+"删除记忆" = "Eliminar memoria";
+"搜索记忆" = "Buscar memorias";
+"已选模型不可用" = "Modelo seleccionado no disponible";
+"无法保存记忆，请刷新列表后重试。" = "No se pudo guardar la memoria. Actualiza la lista e inténtalo de nuevo.";
+"记忆已在其他位置修改，请重新打开后再编辑。" = "Esta memoria se modificó en otro lugar. Vuelve a abrirla para editarla.";

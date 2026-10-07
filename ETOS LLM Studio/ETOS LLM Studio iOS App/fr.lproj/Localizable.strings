@@ -7782,3 +7782,9 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "可跳过" = "Facultatif";
 "必填" = "Obligatoire";
 "等待你的回答" = "En attente de votre réponse";
+
+"删除记忆" = "Supprimer la mémoire";
+"搜索记忆" = "Rechercher dans les mémoires";
+"已选模型不可用" = "Modèle sélectionné indisponible";
+"无法保存记忆，请刷新列表后重试。" = "Impossible d’enregistrer la mémoire. Actualisez la liste et réessayez.";
+"记忆已在其他位置修改，请重新打开后再编辑。" = "Cette mémoire a été modifiée ailleurs. Rouvrez-la avant de la modifier.";

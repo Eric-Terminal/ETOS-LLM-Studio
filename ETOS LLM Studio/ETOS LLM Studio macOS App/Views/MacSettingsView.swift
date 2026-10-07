@@ -2,7 +2,7 @@ import ETOSCore
 import SwiftUI
 
 struct MacSettingsView: View {
-    private enum Tab: Hashable { case general, providers, mcp, data, security }
+    private enum Tab: Hashable { case general, providers, mcp, context, data, security }
     @EnvironmentObject private var workspace: MacWorkspaceModel
     @ObservedObject private var configuration = AppConfigStore.shared
     @ObservedObject private var appLock = AppLockManager.shared
@@ -20,6 +20,19 @@ struct MacSettingsView: View {
             NavigationStack { MacMCPListView(isActive: selectedTab == .mcp) }
                 .tabItem { Label(NSLocalizedString("MCP 工具", comment: ""), systemImage: "puzzlepiece.extension") }
                 .tag(Tab.mcp)
+            NavigationStack {
+                List {
+                    NavigationLink(NSLocalizedString("记忆", comment: "")) { MacMemorySettingsView(model: workspace.memoryModel) }
+                }
+                .navigationTitle(NSLocalizedString("上下文", comment: ""))
+                .guideSettingsPageContext(
+                    id: "mac-context", title: NSLocalizedString("上下文", comment: ""),
+                    documents: [GuideDocumentReference(id: "settings-memory", title: "Memory System")], isActive: selectedTab == .context,
+                    settings: [.readOnly("requires_navigation", label: NSLocalizedString("记忆", comment: ""), value: { .bool(true) })]
+                )
+            }
+            .tabItem { Label(NSLocalizedString("上下文", comment: ""), systemImage: "brain.head.profile") }
+            .tag(Tab.context)
             NavigationStack {
                 List {
                     NavigationLink(NSLocalizedString("快照备份", comment: "")) { MacBackupRestoreView() }

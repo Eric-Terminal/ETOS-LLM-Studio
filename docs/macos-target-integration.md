@@ -32,5 +32,6 @@ Mac 根目录为 `Application Support/ETOS LLM Studio`，通过 `StorageUtility.
 4. ETOSCore 新增的 `MCPConfigurationPersistenceTests`、`CloudSyncLocalRestoreTests`、此前 Mac stdio/图片/存储目录测试；当前都只有测试源码，未执行。
 5. 系统保存面板的文件权限、覆盖已有快照、加密快照导入、S3/R2 列表及取消下载、恢复时后台任务隔离、首次 iCloud 裁决及过期确认；iCloud 还需配置容器、签名和通知能力。
 6. 工具问答的必填、单选/多选、自由文本、跨会话排队及补充发送；Widget 的交互 DOM、复制、PNG/HTML 保存和链接。Core 已有 `ToolInteractionPresentationTests` 源码，Mac 有 `MacQuestionnaireModelTests` 源码；原生 UI 自动化与 WebKit 实机检查须在 target 接入后补做。
+7. 记忆草稿保存、并发编辑与已删除条目保护、重新嵌入进度及单条重试。`MemoryDraftWriteTests` 检查写入结果、旧版本与空白草稿；尚未运行。原生编辑器和数据库恢复期间的后台嵌入任务仍需集成验证。
 
-目前源码包含聊天、附件、会话草稿、提供商/模型/MCP 基础配置、快照备份恢复、S3/R2 与 iCloud 同步管理和向导入口。完整功能对齐仍在继续，角色扮演、世界书、记忆管理、Agent/浏览器、工具交互及高级模型配置等不能据此视为完成。
+目前源码包含聊天、附件、会话草稿、提供商/模型/MCP 基础配置、快照备份恢复、S3/R2 与 iCloud 同步管理、工具问答与 Widget、记忆编辑及嵌入维护和向导入口。完整功能对齐仍在继续，角色扮演、世界书、记忆归档传输与跨对话画像、Agent/浏览器、MCP 资源和提示词、高级模型配置等不能据此视为完成。
