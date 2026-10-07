@@ -37,7 +37,7 @@ public final class LocalModelStore: ObservableObject {
     }
 
     public static func localModelsDirectoryURL(fileManager: FileManager = .default) -> URL {
-        let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documents = StorageUtility.documentsDirectory
         let directory = documents.appendingPathComponent(directoryName, isDirectory: true)
         if !fileManager.fileExists(atPath: directory.path) {
             try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)

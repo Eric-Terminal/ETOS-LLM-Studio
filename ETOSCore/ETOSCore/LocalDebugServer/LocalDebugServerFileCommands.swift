@@ -16,7 +16,7 @@ extension LocalDebugServer {
             return ["status": "error", "message": "缺少 path 参数"]
         }
 
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = StorageUtility.documentsDirectory
 
         let normalizedPath = path.trimmingCharacters(in: .whitespaces)
         let targetURL: URL
@@ -64,7 +64,7 @@ extension LocalDebugServer {
             return ["status": "error", "message": "缺少 path 参数"]
         }
 
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = StorageUtility.documentsDirectory
         let targetURL = documentsURL.appendingPathComponent(path)
 
         guard targetURL.path.hasPrefix(documentsURL.path),
@@ -92,7 +92,7 @@ extension LocalDebugServer {
             return ["status": "error", "message": "参数错误"]
         }
 
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = StorageUtility.documentsDirectory
         let targetURL = documentsURL.appendingPathComponent(path)
 
         guard targetURL.path.hasPrefix(documentsURL.path) else {
@@ -120,7 +120,7 @@ extension LocalDebugServer {
             return ["status": "error", "message": "缺少 path 参数"]
         }
 
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = StorageUtility.documentsDirectory
         let targetURL = documentsURL.appendingPathComponent(path)
 
         guard targetURL.path.hasPrefix(documentsURL.path),
@@ -139,7 +139,7 @@ extension LocalDebugServer {
     /// 兼容模式：只返回文件路径列表（不含文件数据）
     /// 用于让 Python 端逐个请求下载。
     func handleListAll() async -> [String: Any] {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = StorageUtility.documentsDirectory
 
         do {
             logger.info("开始扫描 Documents 目录（仅路径）...")
@@ -161,7 +161,7 @@ extension LocalDebugServer {
     }
 
     func handleDownloadAll() async -> [String: Any] {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = StorageUtility.documentsDirectory
 
         do {
             logger.info("开始扫描 Documents 目录...")
@@ -183,7 +183,7 @@ extension LocalDebugServer {
 
     /// HTTP 流式下载：连续发送所有文件到电脑（不等待响应）
     func handleDownloadAllStream() async {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = StorageUtility.documentsDirectory
 
         guard httpSession != nil else {
             logger.error("httpSession 为 nil，无法执行流式下载")
@@ -330,7 +330,7 @@ extension LocalDebugServer {
 
         logger.info("收到文件列表: \(total) 个文件")
 
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = StorageUtility.documentsDirectory
         let fileManager = FileManager.default
 
         do {
@@ -392,7 +392,7 @@ extension LocalDebugServer {
                 return
             }
 
-            let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let documentsURL = StorageUtility.documentsDirectory
             let fileURL = documentsURL.appendingPathComponent(path)
             let dirURL = fileURL.deletingLastPathComponent()
 
@@ -416,7 +416,7 @@ extension LocalDebugServer {
 
         let remaining = json["remaining"] as? Int ?? 0
 
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = StorageUtility.documentsDirectory
         let fileManager = FileManager.default
 
         do {
@@ -444,7 +444,7 @@ extension LocalDebugServer {
 
     /// 清空 Documents 目录
     func handleClearDocuments() async -> [String: Any] {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = StorageUtility.documentsDirectory
         let fileManager = FileManager.default
 
         do {
@@ -462,7 +462,7 @@ extension LocalDebugServer {
 
     /// 批量上传（WebSocket 模式）
     func handleBatchUpload(files: [[String: Any]]) async -> [String: Any] {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = StorageUtility.documentsDirectory
         let fileManager = FileManager.default
 
         do {
@@ -505,7 +505,7 @@ extension LocalDebugServer {
             return ["status": "error", "message": "缺少 path 参数"]
         }
 
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = StorageUtility.documentsDirectory
 
         let normalizedPath = path.trimmingCharacters(in: .whitespaces)
         let targetURL: URL

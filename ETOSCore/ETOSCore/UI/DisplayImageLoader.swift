@@ -1,6 +1,10 @@
 import Foundation
 import ImageIO
+#if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 /// 显示尺寸只决定派生位图的像素数，不限制原始附件的大小或数量。
 public struct DisplayImageTarget: Hashable, Sendable {
@@ -18,7 +22,7 @@ public struct DisplayImageTarget: Hashable, Sendable {
 }
 
 public struct PreparedDisplayImage: @unchecked Sendable {
-    public let image: UIImage
+    public let image: ETPlatformImage
     public let sourceRevision: String
     /// 模糊半径原本以源图像素为单位，缩图后按同一比例换算，保持视觉强度。
     public let sourcePixelScale: CGFloat
@@ -97,20 +101,21 @@ public actor DisplayImageLoader {
     }
 
     /// 高清原图只由正在预览的页面持有，避免滚动过的附件都在缓存中留下原图。
-    public nonisolated func original(at url: URL) async -> UIImage? {
+    public nonisolated func original(at url: URL) async -> ETPlatformImage? {
         await Task.detached(priority: .userInitiated) {
             Self.decodeOriginal(at: url)
         }.value
     }
 
-    public nonisolated func originalAttachment(named fileName: String) async -> UIImage? {
+    public nonisolated func originalAttachment(named fileName: String) async -> ETPlatformImage? {
         await Task.detached(priority: .userInitiated) {
             let url = Persistence.getImageDirectory().appendingPathComponent(fileName)
             return Self.decodeOriginal(at: url)
         }.value
     }
 
-    nonisolated private static func decodeOriginal(at url: URL) -> UIImage? {
+    nonisolated private static func decodeOriginal(at url: URL) -> ETPlatformImage? {
+        #if canImport(UIKit)
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(
                 source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary
@@ -129,6 +134,21 @@ public actor DisplayImageLoader {
         default: orientation = .up
         }
         return UIImage(cgImage: image, scale: 1, orientation: orientation)
+        #else
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+              let height = properties[kCGImagePropertyPixelHeight] as? NSNumber else { return nil }
+        // NSImage 不携带 UIImage 的方向枚举；在后台将 EXIF 方向应用到原尺寸位图。
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(width.intValue, height.intValue)
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        return NSImage(cgImage: image, size: .zero)
+        #endif
     }
 
     nonisolated private static func decode(at url: URL, target: DisplayImageTarget, sourceRevision: String) -> PreparedDisplayImage? {
@@ -159,8 +179,13 @@ public actor DisplayImageLoader {
             kCGImageSourceThumbnailMaxPixelSize: maximumDimension
         ]
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        #if canImport(UIKit)
+        let platformImage = UIImage(cgImage: image)
+        #else
+        let platformImage = NSImage(cgImage: image, size: .zero)
+        #endif
         return PreparedDisplayImage(
-            image: UIImage(cgImage: image),
+            image: platformImage,
             sourceRevision: sourceRevision,
             sourcePixelScale: CGFloat(image.width) / sourceWidth
         )
