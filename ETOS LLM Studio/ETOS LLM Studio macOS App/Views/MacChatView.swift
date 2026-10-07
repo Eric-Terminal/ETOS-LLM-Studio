@@ -7,8 +7,8 @@ struct MacChatView: View {
     @EnvironmentObject private var workspace: MacWorkspaceModel
     @State private var importing = false
     @State private var followsLatest = true
-    @State private var editingMessage: ChatMessage?
-    @State private var deletingMessage: ChatMessage?
+    @State private var editingMessage: MacMessageEditTarget?
+    @State private var deletingMessage: MacMessageDeletionTarget?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,7 +29,9 @@ struct MacChatView: View {
                                         NSPasteboard.general.clearContents()
                                         NSPasteboard.general.setString(row.message.content, forType: .string)
                                     }
-                                    Button(NSLocalizedString("编辑", comment: "")) { editingMessage = row.message }
+                                    Button(NSLocalizedString("编辑", comment: "")) {
+                                        if let sessionID = workspace.currentSession?.id { editingMessage = MacMessageEditTarget(message: row.message, sessionID: sessionID) }
+                                    }
                                         .disabled(!workspace.canModifyCurrentHistory)
                                     if row.message.role != .system {
                                         Button(NSLocalizedString("重新生成", comment: "")) { workspace.retryMessage(row.message) }
@@ -44,7 +46,13 @@ struct MacChatView: View {
                                         Button(NSLocalizedString("复制消息历史和提示词", comment: "")) { workspace.branchSession(at: row.message) }
                                     }
                                     .disabled(!workspace.canModifyCurrentHistory)
-                                    Button(NSLocalizedString("删除", comment: ""), role: .destructive) { deletingMessage = row.message }
+                                    if !row.versionOptions.isEmpty {
+                                        Button(NSLocalizedString("删除当前版本", comment: ""), role: .destructive) { prepareDeletion(row.message, kind: .currentVersion) }
+                                            .disabled(!workspace.canModifyCurrentHistory)
+                                        Button(NSLocalizedString("删除所有版本", comment: ""), role: .destructive) { prepareDeletion(row.message, kind: .allVersions) }
+                                            .disabled(!workspace.canModifyCurrentHistory)
+                                    }
+                                    Button(NSLocalizedString("删除", comment: ""), role: .destructive) { prepareDeletion(row.message, kind: .message) }
                                         .disabled(!workspace.canModifyCurrentHistory)
                                 }
                         }
@@ -83,8 +91,8 @@ struct MacChatView: View {
             case .failure(let error): workspace.errorMessage = error.localizedDescription
             }
         }
-        .sheet(item: $editingMessage) { message in
-            MacMessageEditor(message: message)
+        .sheet(item: $editingMessage) { target in
+            MacMessageEditor(message: target.message, sessionID: target.sessionID)
         }
         .confirmationDialog(NSLocalizedString("删除消息", comment: ""), isPresented: Binding(
             get: { deletingMessage != nil }, set: { if !$0 { deletingMessage = nil } }
@@ -93,7 +101,27 @@ struct MacChatView: View {
                 if let deletingMessage { workspace.deleteMessage(deletingMessage) }
                 deletingMessage = nil
             }
+        } message: {
+            switch deletingMessage?.kind {
+            case .allVersions: Text(NSLocalizedString("删除后将无法恢复这条消息的所有版本。", comment: ""))
+            case .currentVersion: Text(NSLocalizedString("删除后将无法恢复此版本的内容。", comment: ""))
+            default: EmptyView()
+            }
         }
+        .guideSettingsPageContext(
+            id: "mac-message-deletion", title: NSLocalizedString("删除消息", comment: ""),
+            documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
+            isActive: deletingMessage != nil,
+            settings: [
+                .readOnly("session_id", label: NSLocalizedString("对话", comment: ""), value: { .string(deletingMessage?.sessionID.uuidString ?? "") }),
+                .readOnly("operation", label: NSLocalizedString("删除", comment: ""), value: { .string(deletingMessage?.kind.rawValue ?? "") })
+            ]
+        )
+    }
+
+    private func prepareDeletion(_ message: ChatMessage, kind: MessageHistoryDeletionKind) {
+        guard let sessionID = workspace.currentSession?.id else { return }
+        deletingMessage = MacMessageDeletionTarget(message: message, sessionID: sessionID, kind: kind)
     }
 
     private var composer: some View {
@@ -232,11 +260,16 @@ private struct MacMessageEditor: View {
     @EnvironmentObject private var workspace: MacWorkspaceModel
     @Environment(\.dismiss) private var dismiss
     let message: ChatMessage
+    let sessionID: UUID
     @State private var content: String
     @State private var isSaving = false
     @State private var error: String?
 
-    init(message: ChatMessage) { self.message = message; _content = State(initialValue: message.content) }
+    init(message: ChatMessage, sessionID: UUID) {
+        self.message = message
+        self.sessionID = sessionID
+        _content = State(initialValue: message.content)
+    }
 
     var body: some View {
         VStack {
@@ -250,7 +283,7 @@ private struct MacMessageEditor: View {
                     isSaving = true
                     Task {
                         defer { isSaving = false }
-                        do { try await workspace.updateMessage(message, content: content); dismiss() }
+                        do { try await workspace.updateMessage(message, content: content, sessionID: sessionID); dismiss() }
                         catch { self.error = error.localizedDescription }
                     }
                 }
@@ -259,9 +292,10 @@ private struct MacMessageEditor: View {
             }
         }
         .padding()
+        .disabled(isSaving || workspace.isRestoringData)
         .guidePageContext(
             descriptor: GuidePageDescriptor(
-                id: GuidePageID(rawValue: "mac-message-editor-\(message.id)"),
+                id: GuidePageID(rawValue: "mac-message-editor-\(sessionID)-\(message.id)"),
                 title: NSLocalizedString("编辑消息", comment: ""),
                 documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")]
             ),
@@ -272,6 +306,7 @@ private struct MacMessageEditor: View {
             ]) }
         )
         .modifier(MacGuideInspector())
+        .interactiveDismissDisabled(isSaving)
         .frame(minWidth: 500, minHeight: 350)
     }
 }

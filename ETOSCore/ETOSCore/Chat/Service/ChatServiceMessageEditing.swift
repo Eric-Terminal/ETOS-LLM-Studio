@@ -4,8 +4,9 @@ import Combine
 extension ChatService {
     /// 编辑器保存是一次历史修改事务；后台准备关联记录，回到主线程时拒绝覆盖期间到达的新消息。
     @MainActor
-    public func updateEditedMessage(_ edited: ChatMessage, original: ChatMessage) async throws {
+    public func updateEditedMessage(_ edited: ChatMessage, original: ChatMessage, targetSessionID: UUID? = nil) async throws {
         guard let session = currentSessionSubject.value,
+              targetSessionID == nil || targetSessionID == session.id,
               messagesForSessionSubject.value.first(where: { $0.id == original.id }) == original else {
             throw MessageToolCallEditingError.messageChanged
         }

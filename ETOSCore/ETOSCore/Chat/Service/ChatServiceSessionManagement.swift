@@ -530,9 +530,9 @@ extension ChatService {
         }
     }
 
-    public func deleteMessage(_ message: ChatMessage) {
-        guard let currentSession = currentSessionSubject.value else { return }
-        var messages = messagesForSessionSubject.value
+    public func deleteMessage(_ message: ChatMessage, targetSessionID: UUID? = nil) {
+        guard let sessionID = targetSessionID ?? currentSessionSubject.value?.id else { return }
+        var messages = messagesSnapshot(for: sessionID)
         guard let messageIndex = messages.firstIndex(where: { $0.id == message.id }) else { return }
         let targetMessage = messages[messageIndex]
         let deletedMessages = [targetMessage]
@@ -546,11 +546,10 @@ extension ChatService {
         messages.remove(at: messageIndex)
         repairSelectedResponseAttempts(in: &messages, affectedBy: deletedMessages)
 
-        publishMessages(messages)
-        persistMessages(messages, for: currentSession.id)
+        persistAndPublishMessages(messages, for: sessionID)
         scheduleStoredAttachmentCleanup(
             for: deletedMessages,
-            excludingSessionIDs: [currentSession.id],
+            excludingSessionIDs: [sessionID],
             retainedMessages: messages
         )
         logger.info("已删除消息: \(targetMessage.id.uuidString)")
@@ -588,16 +587,15 @@ extension ChatService {
         logger.info("已批量删除选中消息: \(deletedMessages.count) 条。")
     }
 
-    public func deleteAllVersions(of message: ChatMessage) {
-        guard let currentSession = currentSessionSubject.value else { return }
-        var messages = messagesForSessionSubject.value
+    public func deleteAllVersions(of message: ChatMessage, targetSessionID: UUID? = nil) {
+        guard let sessionID = targetSessionID ?? currentSessionSubject.value?.id else { return }
+        var messages = messagesSnapshot(for: sessionID)
         guard let messageIndex = messages.firstIndex(where: { $0.id == message.id }) else { return }
         let targetMessage = messages[messageIndex]
 
-        if let groupID = ChatResponseAttemptSupport
-            .versionInfo(for: targetMessage, in: messages)?
-            .responseGroupID,
-           ChatResponseAttemptSupport.orderedAttemptIDs(for: groupID, in: messages).count > 1 {
+        // 确认期间其他版本可能已删除；最后一轮也要连同工具结果一起移除。
+        if let groupID = targetMessage.responseGroupID
+            ?? (messages.contains(where: { $0.responseGroupID == targetMessage.id }) ? targetMessage.id : nil) {
             let deletedMessages = messages.filter { $0.responseGroupID == groupID }
             guard !deletedMessages.isEmpty else { return }
             for deletedMessage in deletedMessages {
@@ -608,18 +606,17 @@ extension ChatService {
                 messages[anchorIndex].selectedResponseAttemptID = nil
             }
 
-            publishMessages(messages)
-            persistMessages(messages, for: currentSession.id)
+            persistAndPublishMessages(messages, for: sessionID)
             scheduleStoredAttachmentCleanup(
                 for: deletedMessages,
-                excludingSessionIDs: [currentSession.id],
+                excludingSessionIDs: [sessionID],
                 retainedMessages: messages
             )
             logger.info("已删除回复组的所有版本: \(groupID.uuidString)")
             return
         }
 
-        deleteMessage(targetMessage)
+        deleteMessage(targetMessage, targetSessionID: sessionID)
     }
 
     public func updateMessageContent(_ message: ChatMessage, with newContent: String) {
@@ -735,7 +732,7 @@ extension ChatService {
         }
     }
 
-    private func scheduleStoredAttachmentCleanup(
+    func scheduleStoredAttachmentCleanup(
         for messages: [ChatMessage],
         excludingSessionIDs: Set<UUID> = [],
         retainedMessages: [ChatMessage] = []

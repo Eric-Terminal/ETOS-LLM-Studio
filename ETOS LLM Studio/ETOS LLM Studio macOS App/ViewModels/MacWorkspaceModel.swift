@@ -398,7 +398,7 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     func retryMessage(_ message: ChatMessage, prefill: Bool = false) {
-        guard !isRestoringData, !isMutatingHistory, !isPreparingSend, !isGenerating,
+        guard canModifyCurrentHistory,
               selectedModelID != nil, AppLockManager.shared.state != .locked,
               let service, let session = currentSession else { return }
         let configuration = MacChatRequestConfiguration(AppConfigStore.shared, session: session)
@@ -411,7 +411,7 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     func selectVersion(_ index: Int, of message: ChatMessage) {
-        guard !isRestoringData, !isMutatingHistory, !isPreparingSend, !isGenerating,
+        guard canModifyCurrentHistory,
               let service, let sessionID = currentSession?.id else { return }
         isMutatingHistory = true
         Task { [weak self] in
@@ -425,7 +425,7 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     func branchSession(at message: ChatMessage? = nil, copyMessages: Bool = true, copyPrompts: Bool = true) {
-        guard !isRestoringData, !isMutatingHistory, !isPreparingSend, !isGenerating,
+        guard canModifyCurrentHistory,
               let service, let session = currentSession else { return }
         isMutatingHistory = true
         Task { [weak self] in
@@ -439,16 +439,27 @@ final class MacWorkspaceModel: ObservableObject {
         }
     }
 
-    func updateMessage(_ message: ChatMessage, content: String) async throws {
-        guard let service else { throw MessageToolCallEditingError.messageChanged }
+    func updateMessage(_ message: ChatMessage, content: String, sessionID: UUID) async throws {
+        guard canModifyCurrentHistory, currentSession?.id == sessionID, let service else { throw MessageToolCallEditingError.messageChanged }
+        isMutatingHistory = true
+        defer { isMutatingHistory = false; flushToolSupplements() }
         var edited = message
         edited.content = content
-        try await service.updateEditedMessage(edited, original: message)
+        try await service.updateEditedMessage(edited, original: message, targetSessionID: sessionID)
     }
 
-    func deleteMessage(_ message: ChatMessage) {
-        guard let service else { return }
-        Task.detached(priority: .userInitiated) { service.deleteMessage(message) }
+    func deleteMessage(_ target: MacMessageDeletionTarget) {
+        guard !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking,
+              !sendingSessionIDs.contains(target.sessionID), !runningSessionIDs.contains(target.sessionID),
+              AppLockManager.shared.state != .locked, let service else { return }
+        isMutatingHistory = true
+        Task {
+            defer { isMutatingHistory = false; flushToolSupplements() }
+            let deleted = await Task.detached(priority: .userInitiated) {
+                service.deleteHistoryMessage(target.message, sessionID: target.sessionID, kind: target.kind)
+            }.value
+            if !deleted { errorMessage = MessageToolCallEditingError.messageChanged.localizedDescription }
+        }
     }
 
     func importAttachments(_ urls: [URL]) async {
@@ -552,6 +563,18 @@ final class MacWorkspaceModel: ObservableObject {
         attachments.removeAll()
         conversationMemoryModel.reload()
     }
+}
+
+struct MacMessageDeletionTarget {
+    let message: ChatMessage
+    let sessionID: UUID
+    let kind: MessageHistoryDeletionKind
+}
+
+struct MacMessageEditTarget: Identifiable {
+    let message: ChatMessage
+    let sessionID: UUID
+    var id: String { "\(sessionID)-\(message.id)" }
 }
 
 struct MacComposerAttachment: Identifiable, Sendable {

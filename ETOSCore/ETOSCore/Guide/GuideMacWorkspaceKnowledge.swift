@@ -12,6 +12,8 @@ public enum GuideMacWorkspaceKnowledge {
 
             右键消息可重新生成；支持预填充的模型还可从助手正文续写。回复版本菜单切换整轮回复和关联工具结果，旧格式消息则切换正文版本。重试固定来源会话与模型，等待旧请求结束时切换会话不会改变目标。工具栏可复制整段历史和提示词或只复制提示词建立分支；右键消息可从该处建立分支并选择是否复制提示词。分支沿用会话首选模型，包含提示词时也保留会话系统提示词。
 
+            版本消息的右键菜单可删除当前版本或所有版本，确认框固定来源会话。整轮删除包含该版本的工具结果，并保留用户问题锚点；旧正文格式逐个移除正文版本。已经切换或修改的目标会拒绝旧确认。消息编辑器同样固定来源，不能把草稿写入后来切换到的另一会话。删除确认只向向导提供操作类型和来源 ID，不暴露消息正文或提供删除执行器。
+
             会话窗口分为分类侧栏、会话列表和聊天正文。侧栏按文件夹、标签或系统颜色筛选；文件夹使用完整路径，只显示直接归属的会话。搜索在所选分类内查找标题、提示词和消息正文，搜索与计数均在后台处理。右键会话可以移动文件夹或切换多个标签、颜色。侧栏加号创建文件夹或标签，右键分类可以编辑或删除；系统颜色不可改名或删除。编辑器和介绍页分别声明向导上下文，向导只能修改草稿，保存时核对原版本。删除需要用户手动确认：删除文件夹包含子文件夹，会话移回未分类；删除标签保留会话内容。删除确认期间向导仅能读取状态。
 
             工具栏的“临时对话”菜单明确选择允许使用记忆或隔离记忆；不依赖移动端的两秒内再次轻点。普通会话已有消息后不能开启；已开启的临时对话可在空闲时更换记忆模式。消息在显式“保存为会话”前不写入聊天数据库，重启后不会恢复。允许记忆仍遵循全局读写开关，隔离则同时关闭读取、写入与主动检索。编辑临时会话标题或提示词只更新运行期配置，不隐式关闭临时模式。核心只保留一个临时会话，新建会复用它；使用说明弹窗声明只读向导上下文。
@@ -35,6 +37,8 @@ public enum GuideMacWorkspaceKnowledge {
             Select a session in the Mac sidebar, choose a model and compose on the right. Command-N creates a session and Command-Return sends. Import attachments with the system file picker. Message and Markdown preparation runs in the background. Sessions can be switched during generation; ETOSCore still controls native tool approval. Right-click a message to copy, edit or delete it. Editing changes history without executing tool calls. Message content is hidden from the page guide. The system file picker has no app configuration guide.
 
             Right-click to regenerate a message, or continue assistant text with prefill when supported by the model. The version menu switches a whole response attempt and its tool results; legacy messages switch content versions. Retry retains its source session and model while waiting for the previous request to stop. The toolbar can branch with all history and prompts or with prompts only. A message menu can branch at that message, with or without prompts. Branches retain the preferred model, and copying prompts also preserves the session system prompt.
+
+            Versioned messages offer deletion of the current version or all versions. Confirmation retains the source session. Deleting an attempt includes its tool results and keeps the user-question anchor; legacy messages remove individual content versions. A changed target or a newly selected attempt invalidates the old confirmation. Message editors also retain their source and cannot write a draft into a different session after switching. The deletion guide exposes only operation type and source ID, without message text or a deletion executor.
 
             The workspace has a classification sidebar, a session list and the conversation. Filter by folder, tag or system color. Folders show full paths and only their directly assigned sessions. Search checks titles, prompts and message text within the selected scope; searching and counts run in the background. Right-click sessions to move them or toggle multiple tags and colors. The sidebar plus menu creates folders and tags; category menus edit or delete them. System colors cannot be renamed or deleted. Editors and introduction pages declare their own guide context. Guide proposals change drafts only, and Save checks the original version. Deletion requires manual confirmation: deleting a folder includes its subfolders and moves their sessions to Uncategorized; deleting a tag retains conversation content. The guide sees read-only state during deletion confirmation.
 
