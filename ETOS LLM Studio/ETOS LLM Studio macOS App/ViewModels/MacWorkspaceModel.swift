@@ -17,6 +17,7 @@ final class MacWorkspaceModel: ObservableObject {
     @Published private(set) var phase: Phase = .loading
     @Published private(set) var sessions: [ChatSession] = []
     @Published private(set) var currentSession: ChatSession?
+    @Published private(set) var temporaryChatMemoryMode: TemporaryChatMemoryMode?
     @Published private(set) var providers: [Provider] = []
     @Published private(set) var models: [RunnableModel] = []
     @Published private(set) var selectedModelID: String?
@@ -134,6 +135,7 @@ final class MacWorkspaceModel: ObservableObject {
                 self?.messages = []
             }
             self?.currentSession = session
+            self?.temporaryChatMemoryMode = service.temporaryChatMemoryMode(for: session?.id)
             self?.refreshToolInteractions()
         }.store(in: &subscriptions)
         service.providersSubject.receive(on: DispatchQueue.main).sink { [weak self] providers in
@@ -148,6 +150,11 @@ final class MacWorkspaceModel: ObservableObject {
             self?.runningSessionIDs = ids
             self?.flushToolSupplements()
         }.store(in: &subscriptions)
+        NotificationCenter.default.publisher(for: .temporaryChatStateDidChange, object: service)
+            .receive(on: DispatchQueue.main).sink { [weak self] _ in
+                guard let self else { return }
+                temporaryChatMemoryMode = service.temporaryChatMemoryMode(for: currentSession?.id)
+            }.store(in: &subscriptions)
         service.messagesForSessionSubject
             .map { [weak service] in (sessionID: service?.currentSessionSubject.value?.id, messages: $0) }
             .throttle(for: .milliseconds(60), scheduler: DispatchQueue.global(qos: .userInitiated), latest: true)
@@ -235,6 +242,44 @@ final class MacWorkspaceModel: ObservableObject {
         }
     }
 
+    func setTemporaryChat(memoryMode: TemporaryChatMemoryMode) {
+        guard canModifyCurrentHistory, let service, let sourceID = currentSession?.id else { return }
+        isMutatingHistory = true
+        Task {
+            defer { isMutatingHistory = false; flushToolSupplements() }
+            let failure = await Task.detached(priority: .userInitiated) { () -> String? in
+                guard service.currentSessionSubject.value?.id == sourceID else { return MessageToolCallEditingError.messageChanged.localizedDescription }
+                guard service.isTemporaryChatEnabled(for: sourceID) || service.messagesSnapshot(for: sourceID).isEmpty else {
+                    return NSLocalizedString("临时对话仅可在对话开始前开启。", comment: "")
+                }
+                // Core 会复用唯一的临时会话，不能改动另一会话仍在生成时使用的模式。
+                if let temporary = service.chatSessionsSubject.value.first(where: \.isTemporary),
+                   service.runningSessionIDsSubject.value.contains(temporary.id) { return MacMemoryWriteError.busy.localizedDescription }
+                service.enableTemporaryChat(memoryMode: memoryMode)
+                return nil
+            }.value
+            if let failure { errorMessage = failure }
+            else {
+                sessionLibrary.scope = .all
+                sessionLibrary.query = ""
+                AppConfigStore.shared.temporaryChatMemoryEnabled = memoryMode.isMemoryEnabled
+            }
+        }
+    }
+
+    func saveTemporaryChat() {
+        guard canModifyCurrentHistory, temporaryChatMemoryMode != nil, let service, let sessionID = currentSession?.id else { return }
+        isMutatingHistory = true
+        Task {
+            defer { isMutatingHistory = false; flushToolSupplements() }
+            let saved = await Task.detached(priority: .userInitiated) {
+                guard service.currentSessionSubject.value?.id == sessionID else { return false }
+                return service.saveCurrentTemporaryChat()
+            }.value
+            if !saved { errorMessage = MessageToolCallEditingError.messageChanged.localizedDescription }
+        }
+    }
+
     func deleteSession(_ session: ChatSession) {
         guard !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, let service else { return }
         isMutatingHistory = true
@@ -253,8 +298,8 @@ final class MacWorkspaceModel: ObservableObject {
                 throw MCPConfigurationWriteError.changedExternally
             }
             var saved = session
-            // 用户明确保存会话设置时，将尚未发送消息的空白会话保留为正式记录。
-            saved.isTemporary = false
+            // 普通空白会话可保存设置；明确开启的临时模式仍只更新运行期元数据。
+            saved.isTemporary = service.isTemporaryChatEnabled(for: saved.id)
             service.updateSession(saved)
         }.value
     }

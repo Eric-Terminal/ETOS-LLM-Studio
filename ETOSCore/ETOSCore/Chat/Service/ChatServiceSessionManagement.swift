@@ -674,7 +674,13 @@ extension ChatService {
     }
 
     public func updateSession(_ session: ChatSession) {
-        guard !session.isTemporary else { return }
+        var session = session
+        if isTemporaryChatEnabled(for: session.id) {
+            // 编辑标题、提示词等元数据不能隐式关闭临时模式；只有显式保存才允许落盘。
+            session.isTemporary = true
+        } else {
+            guard !session.isTemporary else { return }
+        }
         var currentSessions = chatSessionsSubject.value
         if let index = currentSessions.firstIndex(where: { $0.id == session.id }) {
             currentSessions[index] = session

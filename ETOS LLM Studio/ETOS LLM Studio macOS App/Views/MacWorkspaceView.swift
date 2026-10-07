@@ -19,6 +19,7 @@ struct MacWorkspaceView: View {
             MacChatView()
                 .navigationTitle(workspace.currentSession?.name ?? NSLocalizedString("新的对话", comment: ""))
                 .toolbar {
+                    ToolbarItem { MacTemporaryChatMenu() }
                     ToolbarItem(placement: .principal) {
                         Picker(NSLocalizedString("模型", comment: ""), selection: Binding(
                             get: { workspace.selectedModelID },

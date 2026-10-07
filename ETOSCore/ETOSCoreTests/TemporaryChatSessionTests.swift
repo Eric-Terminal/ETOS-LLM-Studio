@@ -167,4 +167,44 @@ struct TemporaryChatSessionTests {
     func temporaryChatMemoryPreferenceDefaultsToEnabled() {
         #expect(AppConfigKey.temporaryChatMemoryEnabled.defaultValue == .bool(true))
     }
+
+    @Test("临时会话编辑只更新运行期配置，显式保存才持久化标题和消息")
+    func editingTemporaryMetadataDoesNotPromoteSession() throws {
+        let service = ChatService()
+        service.enableTemporaryChat(memoryMode: .isolated)
+        var draft = try #require(service.currentSessionSubject.value)
+        defer { Persistence.deleteSessionArtifacts(sessionID: draft.id) }
+        let messages = [ChatMessage(role: .user, content: "仍在临时模式")]
+        service.updateMessages(messages, for: draft.id)
+        draft.name = "临时草稿标题"
+        draft.systemPrompt = "仅本次会话使用"
+        // 即使旧调用方试图提升元数据，也不能绕过核心的临时模式边界。
+        draft.isTemporary = false
+        service.updateSession(draft)
+        #expect(service.currentSessionSubject.value?.isTemporary == true)
+        #expect(service.currentSessionSubject.value?.systemPrompt == draft.systemPrompt)
+        #expect(service.temporaryChatMemoryMode(for: draft.id) == .isolated)
+        Persistence.flushPendingMessageWritesForSyncSnapshot()
+        #expect(Persistence.loadChatSessions().contains(where: { $0.id == draft.id }) == false)
+        #expect(Persistence.loadMessages(for: draft.id).isEmpty)
+        #expect(service.saveCurrentTemporaryChat())
+        Persistence.flushPendingMessageWritesForSyncSnapshot()
+        #expect(Persistence.loadChatSessions().first(where: { $0.id == draft.id })?.name == draft.name)
+        #expect(Persistence.loadMessages(for: draft.id) == messages)
+    }
+
+    @Test("明确切换临时记忆模式保留同一会话的运行期消息")
+    func explicitMemoryModeChangeKeepsTemporaryHistory() throws {
+        let service = ChatService()
+        service.enableTemporaryChat(memoryMode: .enabled)
+        let session = try #require(service.currentSessionSubject.value)
+        defer { Persistence.deleteSessionArtifacts(sessionID: session.id) }
+        let messages = [ChatMessage(role: .user, content: "切换模式前的内容")]
+        service.updateMessages(messages, for: session.id)
+        service.enableTemporaryChat(memoryMode: .isolated)
+        #expect(service.currentSessionSubject.value?.id == session.id)
+        #expect(service.temporaryChatMemoryMode(for: session.id) == .isolated)
+        #expect(service.messagesSnapshot(for: session.id) == messages)
+        #expect(Persistence.loadMessages(for: session.id).isEmpty)
+    }
 }

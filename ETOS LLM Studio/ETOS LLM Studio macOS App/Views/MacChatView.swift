@@ -69,6 +69,10 @@ struct MacChatView: View {
                 }
             }
             Divider()
+            if let mode = workspace.temporaryChatMemoryMode {
+                Label(mode.isMemoryEnabled ? NSLocalizedString("允许使用记忆", comment: "") : NSLocalizedString("隔离记忆上下文", comment: ""), systemImage: "clock")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             if let model = workspace.activeQuestionnaireModel {
                 MacQuestionnaireView(model: model)
             } else { composer }
