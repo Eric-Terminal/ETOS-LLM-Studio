@@ -23,12 +23,16 @@ struct MacSettingsView: View {
             NavigationStack {
                 List {
                     NavigationLink(NSLocalizedString("记忆", comment: "")) { MacMemorySettingsView(model: workspace.memoryModel) }
+                    NavigationLink(NSLocalizedString("跨对话记忆与画像", comment: "")) { MacConversationMemoryView(model: workspace.conversationMemoryModel) }
                 }
                 .navigationTitle(NSLocalizedString("上下文", comment: ""))
                 .guideSettingsPageContext(
                     id: "mac-context", title: NSLocalizedString("上下文", comment: ""),
                     documents: [GuideDocumentReference(id: "settings-memory", title: "Memory System")], isActive: selectedTab == .context,
-                    settings: [.readOnly("requires_navigation", label: NSLocalizedString("记忆", comment: ""), value: { .bool(true) })]
+                    settings: [
+                        .readOnly("requires_navigation", label: NSLocalizedString("记忆", comment: ""), value: { .bool(true) }),
+                        .readOnly("profile_requires_navigation", label: NSLocalizedString("跨对话记忆与画像", comment: ""), value: { .bool(true) })
+                    ]
                 )
             }
             .tabItem { Label(NSLocalizedString("上下文", comment: ""), systemImage: "brain.head.profile") }

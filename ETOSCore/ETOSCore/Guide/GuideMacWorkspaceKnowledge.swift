@@ -16,6 +16,8 @@ public enum GuideMacWorkspaceKnowledge {
 
             记忆的“导入与导出”可生成 Markdown 目录供阅读，或生成保留稳定 ID 与元数据的 .etosmemory 归档。导出后可分享或在 Finder 中显示；归档导入先预览新增、更新和冲突数量，用户手动确认才写入。核心会重新核对归档内容及本机条目，保留本机较新或同时间的冲突版本。传输页与确认页只向向导公开状态，不允许向导触发文件操作。
 
+            “跨对话记忆与画像”管理启用条件、摘要专用模型、触发轮次、最小间隔、注入摘要数及画像日更。可查看摘要全文、删除单条或清空摘要，并编辑画像和查看结构化事实。编辑器的向导提案只改变草稿，保存时保留事实；画像在后台更新或被清空后，旧草稿需要重新打开。向导不能执行删除或清空；这些操作通过原生确认。
+
             数据管理可以保存与移动端兼容的 .elsbackup 数据库或完整快照，也可以配置 S3/R2 上传、浏览远端快照并下载后手动恢复。密码和对象存储凭据只写不可读。恢复前会结束聊天请求并暂停 MCP 连接，恢复不能与云同步或备份任务交错。iCloud 首次同步由用户选择数据来源，输入确认词后才进行完整覆盖，并沿用核心的覆盖前安全快照；过期确认不能用于新的同步裁决。向导可提议修改开关和导出草稿，不能上传、下载、运行同步或确认覆盖。
 
             工具问答显示在来源会话的输入区，侧栏问号表示有待回答的问题。单选的自由文本替代已有选项，多选可以同时保留选项和补充文字；必答项完成后才可提交。切换会话保留本次已填内容，答案和取消通知排队返回原会话，不覆盖普通输入草稿。工具审批可拒绝、补充提示、允许一次或设置持续允许；强制审批不提供持续允许。已完成的 Widget 结果使用独立网页显示，内联内容菜单可复制代码或当前页面文字、保存 PNG 或 HTML；导出操作仍需用户手动发起。
@@ -31,6 +33,8 @@ public enum GuideMacWorkspaceKnowledge {
             Memory under Context searches active or archived items, selects an embedding model and configures retrieval. The editor saves drafts of content, kind, importance, confidence, entities and archive status. Stale drafts cannot overwrite changed or deleted items. Saving text and generating embeddings have separate outcomes; failed embeddings can be retried from Data Maintenance. Rebuilding all embeddings requires manual confirmation. The guide can only adjust concurrency or edit drafts.
 
             Memory Import and Export generates a readable Markdown directory or an .etosmemory archive preserving stable IDs and metadata. Share the result or reveal it in Finder. Import previews additions, updates and conflicts before manual confirmation. The core rechecks the archive and local items, retaining local versions with newer or equal timestamps. Transfer and confirmation pages expose read-only status to the guide, which cannot initiate file operations.
+
+            Cross-Session Memory and Profile controls activation, the summary model, round threshold, minimum interval, injected summary count and daily profile updates. Read full summaries, delete one or clear all, edit the profile and inspect structured facts. Editor proposals only change the draft; saving preserves facts. Drafts opened before a background profile update or deletion must be reopened. The guide cannot delete or clear data; these actions require native confirmation.
 
             Data Management saves mobile-compatible .elsbackup database or full snapshots. Configure S3/R2 uploads, browse remote snapshots, then download and manually restore. Passwords and storage credentials are write-only. Restore ends chat requests and suspends MCP connections; it cannot overlap cloud sync or backup tasks. Initial iCloud sync requires choosing a source and typing the confirmation phrase before replacement, with a safety snapshot created by the core. An old confirmation cannot resolve a newer conflict. The guide may propose switch or export-draft changes but cannot upload, download, run sync or confirm replacement.
 

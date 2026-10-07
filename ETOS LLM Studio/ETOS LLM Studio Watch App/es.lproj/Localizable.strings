@@ -7566,3 +7566,8 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "已选模型不可用" = "Modelo seleccionado no disponible";
 "无法保存记忆，请刷新列表后重试。" = "No se pudo guardar la memoria. Actualiza la lista e inténtalo de nuevo.";
 "记忆已在其他位置修改，请重新打开后再编辑。" = "Esta memoria se modificó en otro lugar. Vuelve a abrirla para editarla.";
+
+// Mac 跨对话画像编辑与版本提示
+"用户画像内容不能为空。" = "El contenido del perfil no puede estar vacío.";
+"用户画像已在其他位置修改，请重新打开后再编辑。" = "El perfil se modificó en otro lugar. Vuelve a abrirlo antes de editarlo.";
+"跨对话记忆会在后台整理会话摘要，并向后续对话提供最近摘要和用户画像。启用记忆及异步跨对话记忆后，摘要按轮次和最小间隔触发；画像可每天自动更新，也可手动编辑。编辑只改变草稿，保存时保留结构化事实；清空操作需单独确认。" = "La memoria entre conversaciones prepara resúmenes en segundo plano y aporta los resúmenes recientes y tu perfil a conversaciones posteriores. Al activar la memoria y la memoria asíncrona entre conversaciones, los resúmenes respetan el umbral de turnos y el intervalo mínimo. El perfil puede actualizarse a diario o editarse manualmente. Los cambios quedan como borrador hasta guardarlos y conservan los hechos estructurados. Borrar los datos requiere una confirmación adicional.";

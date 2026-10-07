@@ -7711,3 +7711,8 @@
 "已选模型不可用" = "Selected model unavailable";
 "无法保存记忆，请刷新列表后重试。" = "Could not save the memory. Refresh the list and try again.";
 "记忆已在其他位置修改，请重新打开后再编辑。" = "This memory was changed elsewhere. Reopen it before editing.";
+
+// Mac 跨对话画像编辑与版本提示
+"用户画像内容不能为空。" = "Profile content cannot be empty.";
+"用户画像已在其他位置修改，请重新打开后再编辑。" = "The profile was changed elsewhere. Reopen it before editing.";
+"跨对话记忆会在后台整理会话摘要，并向后续对话提供最近摘要和用户画像。启用记忆及异步跨对话记忆后，摘要按轮次和最小间隔触发；画像可每天自动更新，也可手动编辑。编辑只改变草稿，保存时保留结构化事实；清空操作需单独确认。" = "Cross-session memory prepares summaries in the background and provides recent summaries and your profile to later conversations. With memory and async cross-session memory enabled, summaries follow the round threshold and minimum interval. The profile can update daily or be edited manually. Edits remain a draft until saved and preserve structured facts. Clearing data requires separate confirmation.";

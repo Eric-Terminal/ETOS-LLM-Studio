@@ -164,6 +164,8 @@ public extension Notification.Name {
 public enum ConversationMemoryManager {
     private static let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ConversationMemory")
     private static let profileStore = ConversationUserProfileStore()
+    // 画像编辑的版本检查必须与自动更新、清空处于同一临界区，不能先读后写留下覆盖窗口。
+    private static let profileMutationLock = NSRecursiveLock()
     private static let stateReadQueue = DispatchQueue(
         label: "com.ETOS.LLM.Studio.conversation-memory.state-read",
         qos: .utility
@@ -217,7 +219,9 @@ public enum ConversationMemoryManager {
     }
 
     public static func loadUserProfile() -> ConversationUserProfile? {
-        profileStore.loadProfile()
+        profileMutationLock.lock()
+        defer { profileMutationLock.unlock() }
+        return profileStore.loadProfile()
     }
 
     static func loadUserProfile(from db: Database) throws -> ConversationUserProfile? {
@@ -234,6 +238,8 @@ public enum ConversationMemoryManager {
         sourceSessionID: UUID? = nil,
         needsLLMDedup: Bool = false
     ) throws {
+        profileMutationLock.lock()
+        defer { profileMutationLock.unlock() }
         guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             try clearUserProfile()
             return
@@ -251,6 +257,8 @@ public enum ConversationMemoryManager {
     }
 
     public static func saveUserProfile(_ profile: ConversationUserProfile) throws {
+        profileMutationLock.lock()
+        defer { profileMutationLock.unlock() }
         let trimmed = profile.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !profile.facts.isEmpty else {
             try clearUserProfile()
@@ -269,6 +277,8 @@ public enum ConversationMemoryManager {
     }
 
     public static func clearUserProfile() throws {
+        profileMutationLock.lock()
+        defer { profileMutationLock.unlock() }
         do {
             try profileStore.clearProfile()
             NotificationCenter.default.post(name: .conversationMemoryDidChange, object: nil)
@@ -276,6 +286,19 @@ public enum ConversationMemoryManager {
             logger.error("清理用户画像失败: \(error.localizedDescription)")
             throw error
         }
+    }
+
+    /// 保存用户打开编辑器时的版本；后台生成的新画像不能被旧草稿静默覆盖。
+    public static func saveUserProfileDraft(content: String, expectedProfile: ConversationUserProfile?) throws {
+        profileMutationLock.lock()
+        defer { profileMutationLock.unlock() }
+        guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ConversationProfileDraftError.emptyContent
+        }
+        guard loadUserProfile() == expectedProfile else {
+            throw ConversationProfileDraftError.changedExternally
+        }
+        try saveUserProfile(content: content)
     }
 
     public static func shouldUpdateUserProfile(existingProfile: ConversationUserProfile?, on now: Date = Date(), calendar: Calendar = .current) -> Bool {

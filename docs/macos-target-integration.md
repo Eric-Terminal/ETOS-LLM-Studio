@@ -34,5 +34,6 @@ Mac 根目录为 `Application Support/ETOS LLM Studio`，通过 `StorageUtility.
 6. 工具问答的必填、单选/多选、自由文本、跨会话排队及补充发送；Widget 的交互 DOM、复制、PNG/HTML 保存和链接。Core 已有 `ToolInteractionPresentationTests` 源码，Mac 有 `MacQuestionnaireModelTests` 源码；原生 UI 自动化与 WebKit 实机检查须在 target 接入后补做。
 7. 记忆草稿保存、并发编辑与已删除条目保护、重新嵌入进度及单条重试。`MemoryDraftWriteTests` 检查写入结果、旧版本与空白草稿；尚未运行。原生编辑器和数据库恢复期间的后台嵌入任务仍需集成验证。
 8. 记忆 Markdown 目录与 `.etosmemory` 归档导出、Finder 定位和分享、文件选择器授权、导入预览及冲突保留。核心继续使用既有 `MemoryGovernanceTests` 中的归档验证用例；本次未改动归档格式和导入策略，也未运行这些测试。Mac 文件面板和跨端往返需在 target 创建后验证。
+9. 跨对话摘要开关、专用模型、触发参数与画像编辑、事实查看和清空确认。`ConversationMemoryManagerTests` 补充空白草稿、并发保存、旧画像和已删除画像的版本保护，尚未运行；应验证自动更新时编辑器报错及切换页面后的向导失效。
 
-目前源码包含聊天、附件、会话草稿、提供商/模型/MCP 基础配置、快照备份恢复、S3/R2 与 iCloud 同步管理、工具问答与 Widget、记忆编辑、嵌入维护、归档传输和向导入口。完整功能对齐仍在继续，角色扮演、世界书、跨对话画像、Agent/浏览器、MCP 资源和提示词、高级模型配置等不能据此视为完成。
+目前源码包含聊天、附件、会话草稿、提供商/模型/MCP 基础配置、快照备份恢复、S3/R2 与 iCloud 同步管理、工具问答与 Widget、记忆编辑、嵌入维护、归档传输、跨对话摘要与画像和向导入口。完整功能对齐仍在继续，角色扮演、世界书、Agent/浏览器、MCP 资源和提示词、高级模型配置等不能据此视为完成。
