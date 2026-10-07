@@ -90,7 +90,8 @@ extension MemoryManager {
         }
         guard shouldSchedule else { return }
 
-        Task {
+        let task = operationBarrier.start(priority: .utility) { [weak self] in
+            guard let self else { return }
             defer {
                 autoRetryStateQueue.sync {
                     consistencyCheckScheduled = false
@@ -102,10 +103,13 @@ extension MemoryManager {
             }
             _ = await reconcilePendingEmbeddings()
         }
+        if task == nil { autoRetryStateQueue.sync { consistencyCheckScheduled = false } }
     }
 
     @discardableResult
     func reconcilePendingEmbeddings() async -> Int {
+        guard !Task.isCancelled, let operation = operationBarrier.begin() else { return 0 }
+        defer { operationBarrier.finish(operation) }
         refreshAutoReconcileStateIfModelChanged()
 
         let suspendedByHardError = autoRetryStateQueue.sync { autoReconcileSuspendedByHardError }
@@ -143,6 +147,7 @@ extension MemoryManager {
         )
 
         for memory in missingMemories {
+            guard !Task.isCancelled else { return processedMemories }
             let succeeded = await backfillEmbedding(for: memory)
             processedMemories += 1
             if !succeeded {
@@ -355,10 +360,8 @@ extension MemoryManager {
     func removeOrphanedVectorEntries(validMemoryIDs: Set<UUID>) {
         guard !similarityIndex.indexItems.isEmpty else { return }
         let orphanChunkIDs = similarityIndex.indexItems.compactMap { item -> String? in
-            guard let parentId = item.metadata["parentMemoryId"],
-                  let uuid = UUID(uuidString: parentId) else {
-                return nil
-            }
+            guard let uuid = item.metadata["parentMemoryId"].flatMap(UUID.init(uuidString:))
+                ?? UUID(uuidString: item.id) else { return item.id }
             return validMemoryIDs.contains(uuid) ? nil : item.id
         }
         guard !orphanChunkIDs.isEmpty else { return }
@@ -486,15 +489,16 @@ extension MemoryManager {
         var currentDelay = embeddingRetryPolicy.initialDelay
 
         while attempt < embeddingRetryPolicy.maxAttempts {
+            try Task.checkCancellation()
             attempt += 1
             do {
-                let embeddings = try await embeddingGenerator.generateEmbeddings(
-                    for: chunkTexts,
-                    preferredModelID: preferredModelID
-                )
+                let embeddings = try await operationBarrier.run { [embeddingGenerator] in
+                    try await embeddingGenerator.generateEmbeddings(for: chunkTexts, preferredModelID: preferredModelID)
+                }
                 try validateEmbeddings(embeddings, matches: chunkTexts)
                 return embeddings
             } catch {
+                if error is CancellationError { throw error }
                 if isHardError(error) {
                     logger.fault("遇到硬错误，停止重试：\(error.localizedDescription)")
                     throw error
@@ -508,7 +512,7 @@ extension MemoryManager {
 
                 if currentDelay > 0 {
                     let nanoseconds = UInt64(currentDelay * 1_000_000_000)
-                    try? await Task.sleep(nanoseconds: nanoseconds)
+                    try await Task.sleep(nanoseconds: nanoseconds)
                 } else {
                     await Task.yield()
                 }

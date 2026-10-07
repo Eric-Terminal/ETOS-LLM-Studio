@@ -29,6 +29,7 @@ public class MemoryManager {
     // MARK: - 单例
     
     private static weak var currentInstance: MemoryManager?
+    static func currentInstanceForSnapshotRestore() -> MemoryManager { currentInstance ?? shared }
     public static let shared = {
         let instance = MemoryManager()
         currentInstance = instance
@@ -77,6 +78,7 @@ public class MemoryManager {
     let persistenceQueue = DispatchQueue(label: "com.etos.memory.persistence.queue")
     let mutationQueue = DispatchQueue(label: "com.etos.memory.mutation.queue")
     let persistenceQueueSpecificKey = DispatchSpecificKey<UInt8>()
+    let operationBarrier = MemoryOperationBarrier()
     var initializationTask: Task<Void, Never>!
     var cachedMemories: [MemoryItem] = []
     let dateFormatter = ISO8601DateFormatter()
@@ -120,7 +122,7 @@ public class MemoryManager {
         self.persistenceQueue.setSpecific(key: persistenceQueueSpecificKey, value: 1)
         Self.currentInstance = self
         logger.info("MemoryManager 正在初始化...")
-        self.initializationTask = Task.detached(priority: .userInitiated) { [weak self] in
+        self.initializationTask = operationBarrier.start { [weak self] in
             guard let self else { return }
             await self.setup()
         }
@@ -143,7 +145,7 @@ public class MemoryManager {
         self.persistenceQueue.setSpecific(key: persistenceQueueSpecificKey, value: 1)
         self.similarityIndex = testIndex
         Self.currentInstance = self
-        self.initializationTask = Task.detached(priority: .userInitiated) { [weak self] in
+        self.initializationTask = operationBarrier.start { [weak self] in
             guard let self else { return }
             do {
                 let loadedItems = (try self.similarityIndex.loadIndex()) ?? self.similarityIndex.indexItems
@@ -177,12 +179,17 @@ public class MemoryManager {
 
     /// 快照恢复会替换底层数据库，恢复完成后需要重新加载原文记忆与向量索引。
     public func reloadFromPersistenceAfterSnapshotRestore() {
-        initializationTask.cancel()
+        guard let operation = operationBarrier.begin() else { return }
+        defer { operationBarrier.finish(operation) }
+        let previousInitialization = initializationTask!
+        previousInitialization.cancel()
         resetAllAutoRetryState()
-        initializationTask = Task.detached(priority: .userInitiated) { [weak self] in
-            guard let self else { return }
-            await self.setup()
-        }
+        if let task = operationBarrier.start(operation: { [weak self] in
+            // 恢复通知可能紧随核心重载到达，必须等上一轮真正退出后再替换索引。
+            await previousInitialization.value
+            guard let self, !Task.isCancelled else { return }
+            await self.setup(allowLegacyVectorMigration: false)
+        }) { initializationTask = task }
     }
 
     /// 返回当前内存中的记忆快照，按显示时间倒序排列。
@@ -190,15 +197,18 @@ public class MemoryManager {
         cachedMemories.sorted(by: { $0.displayDate > $1.displayDate })
     }
     
-    private func setup() async {
+    func setup(allowLegacyVectorMigration: Bool = true) async {
+        guard !Task.isCancelled else { return }
         MemoryStoragePaths.ensureRootDirectory(rootDirectory: storageRootDirectory)
         let nativeEmbeddings = NativeEmbeddings(language: NLLanguage.simplifiedChinese)
         let vectorStore = SQLiteVectorStore()
-        self.similarityIndex = await SimilarityIndex(
+        let index = await SimilarityIndex(
             name: MemoryStoragePaths.vectorStoreName,
             model: nativeEmbeddings,
             vectorStore: vectorStore
         )
+        guard !Task.isCancelled else { return }
+        self.similarityIndex = index
         
         do {
             let vectorDirectory = MemoryStoragePaths.vectorStoreDirectory(rootDirectory: storageRootDirectory)
@@ -214,7 +224,7 @@ public class MemoryManager {
         var rawMemories = rawStore.loadMemories()
             .sorted(by: { $0.createdAt > $1.createdAt })
 
-        if rawMemories.isEmpty, !self.similarityIndex.indexItems.isEmpty {
+        if allowLegacyVectorMigration, rawMemories.isEmpty, !self.similarityIndex.indexItems.isEmpty {
             rawMemories = self.similarityIndex.indexItems
                 .map { MemoryItem(from: $0) }
                 .sorted(by: { $0.createdAt > $1.createdAt })
@@ -227,6 +237,10 @@ public class MemoryManager {
         }
 
         cachedMemories = rawMemories
+        if !allowLegacyVectorMigration {
+            // 已恢复的数据库是原文来源，不能把旧索引当作待迁移的记忆重新导入。
+            removeOrphanedVectorEntries(validMemoryIDs: Set(rawMemories.map(\.id)))
+        }
         internalMemoriesPublisher.send(rawMemories)
         logger.info("  - 原文记忆初始化完成，当前条目: \(rawMemories.count)。")
         
@@ -244,7 +258,9 @@ public class MemoryManager {
     /// 返回已持久化原文的 ID；嵌入失败仍保留原文，并单独通过错误发布者通知。
     @discardableResult
     public func addMemory(_ request: MemoryWriteRequest) async -> UUID? {
-        await initializationTask.value
+        guard let operation = operationBarrier.begin() else { return nil }
+        defer { operationBarrier.finish(operation) }
+        guard await waitForOperationInitialization() else { return nil }
         let trimmed = request.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         
@@ -316,7 +332,9 @@ public class MemoryManager {
         _ restoredMemory: MemoryItem,
         context: MemoryMutationContext = MemoryMutationContext(origin: .sync)
     ) async -> Bool {
-        await initializationTask.value
+        guard let operation = operationBarrier.begin() else { return false }
+        defer { operationBarrier.finish(operation) }
+        guard await waitForOperationInitialization() else { return false }
         let trimmed = restoredMemory.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         let chunkTexts = chunker.chunk(text: trimmed)
@@ -365,7 +383,9 @@ public class MemoryManager {
         context: MemoryMutationContext = MemoryMutationContext(),
         expectedSnapshot: MemoryVersionSnapshot? = nil
     ) async -> Bool {
-        await initializationTask.value
+        guard let operation = operationBarrier.begin() else { return false }
+        defer { operationBarrier.finish(operation) }
+        guard await waitForOperationInitialization() else { return false }
         let trimmed = item.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             // 编辑草稿不能借空白正文删除；无预期版本的既有调用仍保留删除语义。
@@ -440,7 +460,9 @@ public class MemoryManager {
         _ items: [MemoryItem],
         context: MemoryMutationContext = MemoryMutationContext()
     ) async {
-        await initializationTask.value
+        guard let operationID = operationBarrier.begin() else { return }
+        defer { operationBarrier.finish(operationID) }
+        guard await waitForOperationInitialization() else { return }
         let idsToDelete = Set(items.map { $0.id })
         let existingItems = cachedMemories.filter { idsToDelete.contains($0.id) }
         guard !existingItems.isEmpty else { return }
@@ -474,7 +496,9 @@ public class MemoryManager {
         _ item: MemoryItem,
         context: MemoryMutationContext = MemoryMutationContext()
     ) async {
-        await initializationTask.value
+        guard let operation = operationBarrier.begin() else { return }
+        defer { operationBarrier.finish(operation) }
+        guard await waitForOperationInitialization() else { return }
         guard let existing = cachedMemories.first(where: { $0.id == item.id }), !existing.isArchived else { return }
         var archived = existing
         archived.isArchived = true
@@ -491,7 +515,9 @@ public class MemoryManager {
         _ item: MemoryItem,
         context: MemoryMutationContext = MemoryMutationContext()
     ) async {
-        await initializationTask.value
+        guard let operation = operationBarrier.begin() else { return }
+        defer { operationBarrier.finish(operation) }
+        guard await waitForOperationInitialization() else { return }
         guard let existing = cachedMemories.first(where: { $0.id == item.id }), existing.isArchived else { return }
         var restored = existing
         restored.isArchived = false
@@ -532,7 +558,9 @@ public class MemoryManager {
 
     @discardableResult
     public func saveTransferReceipt(_ receipt: MemoryTransferReceipt) -> Bool {
-        rawStore.saveTransferReceipt(receipt)
+        guard let operation = operationBarrier.begin() else { return false }
+        defer { operationBarrier.finish(operation) }
+        return rawStore.saveTransferReceipt(receipt)
     }
     
     /// 获取激活的记忆（不包括归档的），用于发送给模型。
@@ -596,7 +624,9 @@ public class MemoryManager {
         shouldResetVectorStore: Bool,
         itemProgressHandler: MemoryReembeddingItemProgressHandler?
     ) async throws -> [MemoryReembeddingItemResult] {
-        await initializationTask.value
+        guard let operation = operationBarrier.begin() else { throw CancellationError() }
+        defer { operationBarrier.finish(operation) }
+        guard await waitForOperationInitialization() else { throw CancellationError() }
         guard hasConfiguredEmbeddingModel() else {
             logger.warning("尚未选择嵌入模型，无法重新生成嵌入。")
             throw MemoryEmbeddingError.noAvailableModel
@@ -658,6 +688,7 @@ public class MemoryManager {
         var processedMemories = 0
         var failedMemories = 0
         var chunkCount = 0
+        var wasCancelled = false
 
         await withTaskGroup(of: PreparedMemoryReembedding.self) { group in
             var nextWorkItemIndex = 0
@@ -707,6 +738,7 @@ public class MemoryManager {
                     )
 
                 case .failure(let error):
+                    if error is CancellationError { wasCancelled = true }
                     failedMemories += 1
                     notifyEmbeddingErrorIfNeeded(error)
                     let message = error.localizedDescription
@@ -732,7 +764,7 @@ public class MemoryManager {
                 )
                 await itemProgressHandler?(itemResult)
 
-                if Task.isCancelled {
+                if Task.isCancelled || wasCancelled {
                     group.cancelAll()
                     continue
                 }
@@ -809,7 +841,9 @@ public class MemoryManager {
         imageAttachments: [ImageAttachment] = [],
         topK: Int
     ) async -> [ExplainedMemoryResult] {
-        await initializationTask.value
+        guard let operation = operationBarrier.begin() else { return [] }
+        defer { operationBarrier.finish(operation) }
+        guard await waitForOperationInitialization() else { return [] }
         guard topK > 0 else { return [] }
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !imageAttachments.isEmpty else { return [] }
@@ -817,13 +851,13 @@ public class MemoryManager {
         var semanticScores: [UUID: Double] = [:]
         if hasConfiguredEmbeddingModel(), !similarityIndex.indexItems.isEmpty {
             do {
-                let embeddings = try await embeddingGenerator.generateEmbeddings(
-                    for: [MemoryEmbeddingInput(
-                        text: trimmed,
-                        imageAttachments: imageAttachments
-                    )],
-                    preferredModelID: preferredEmbeddingModelIdentifier()
-                )
+                let preferredModelID = preferredEmbeddingModelIdentifier()
+                let embeddings = try await operationBarrier.run { [embeddingGenerator] in
+                    try await embeddingGenerator.generateEmbeddings(
+                        for: [MemoryEmbeddingInput(text: trimmed, imageAttachments: imageAttachments)],
+                        preferredModelID: preferredModelID
+                    )
+                }
                 if let queryEmbedding = embeddings.first,
                    similarityIndex.dimension == 0 || similarityIndex.dimension == queryEmbedding.count {
                     let candidateCount = min(max(topK * 8, 32), similarityIndex.indexItems.count)
@@ -858,7 +892,9 @@ public class MemoryManager {
         imageAttachments: [ImageAttachment] = [],
         topK: Int
     ) async -> [MemoryItem] {
-        await initializationTask.value
+        guard let operation = operationBarrier.begin() else { return [] }
+        defer { operationBarrier.finish(operation) }
+        guard await waitForOperationInitialization() else { return [] }
         guard topK > 0 else { return [] }
         
         guard hasConfiguredEmbeddingModel() else { return [] }
@@ -867,13 +903,13 @@ public class MemoryManager {
         guard !trimmed.isEmpty || !imageAttachments.isEmpty else { return [] }
         
         do {
-            let embeddings = try await embeddingGenerator.generateEmbeddings(
-                for: [MemoryEmbeddingInput(
-                    text: trimmed,
-                    imageAttachments: imageAttachments
-                )],
-                preferredModelID: preferredEmbeddingModelIdentifier()
-            )
+            let preferredModelID = preferredEmbeddingModelIdentifier()
+            let embeddings = try await operationBarrier.run { [embeddingGenerator] in
+                try await embeddingGenerator.generateEmbeddings(
+                    for: [MemoryEmbeddingInput(text: trimmed, imageAttachments: imageAttachments)],
+                    preferredModelID: preferredModelID
+                )
+            }
             guard let queryEmbedding = embeddings.first else { return [] }
             let totalChunks = similarityIndex.indexItems.count
             guard totalChunks > 0 else { return [] }
@@ -915,7 +951,9 @@ public class MemoryManager {
 
     /// 返回纯本地关键词检索结果及其真实排序分项。
     public func searchMemoriesByKeywordExplained(query: String, topK: Int) async -> [ExplainedMemoryResult] {
-        await initializationTask.value
+        guard let operation = operationBarrier.begin() else { return [] }
+        defer { operationBarrier.finish(operation) }
+        guard await waitForOperationInitialization() else { return [] }
         guard topK > 0 else { return [] }
 
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
