@@ -7838,3 +7838,10 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 
 "填写读取草稿" = "Rellenar borrador de lectura";
 "已更新草稿，请手动读取。" = "Borrador actualizado. Inicia la lectura manualmente.";
+
+/* Mac 角色资料管理 */
+"从文件导入" = "Importar archivo";
+"无法保存角色扮演资料。" = "No se pueden guardar los datos de rol.";
+"Mac 角色资料使用说明" = "Crea perfiles o importa archivos JSON, PNG y CHARX en la biblioteca de personajes. Las fotos necesitan los datos PNG originales; una conversión o captura puede perder los metadatos. El perfil, los saludos alternativos y las variables iniciales son borradores hasta que guardes en el editor del perfil. Se conservan las reglas regex, los scripts auxiliares, los libros de mundo integrados, los recursos y las extensiones desconocidas. Consulta la compatibilidad en los detalles. Las identidades son independientes de la memoria a largo plazo y tienen nombre, pronombres, descripción y avatar. Eliminar un personaje quita sus referencias en conversaciones y sus recursos. Reabre el editor si cambian los datos de origen. Las propuestas de la guía requieren confirmación nativa y solo modifican borradores; no ejecutan scripts ni envían mensajes.";
+
+"角色卡不存在或已被删除。" = "Esta tarjeta de personaje no existe o se ha eliminado.";

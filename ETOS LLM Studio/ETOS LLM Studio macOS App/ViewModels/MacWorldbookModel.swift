@@ -167,6 +167,7 @@ final class MacWorldbookModel: ObservableObject {
 
     private func perform<T: Sendable>(_ operation: @escaping @Sendable (ChatService) async throws -> T) async throws -> T {
         guard let service, let workspace, !isWorking, !workspace.isRestoringData, !workspace.isExportingSnapshot,
+              !workspace.roleplayModel.isWorking,
               !workspace.isMutatingHistory, !workspace.sessionLibrary.isWorking, AppLockManager.shared.state != .locked else {
             throw MacMemoryWriteError.busy
         }

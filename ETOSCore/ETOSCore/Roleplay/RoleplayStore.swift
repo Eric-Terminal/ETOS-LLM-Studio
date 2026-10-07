@@ -19,7 +19,7 @@ public final class RoleplayStore: @unchecked Sendable {
     static let variablesBlobKey = "roleplay_variables_v1"
     static let sharedVariablesBlobKey = "roleplay_shared_variables_v1"
 
-    private let queue = DispatchQueue(label: "com.ETOS.LLM.Studio.roleplay.store")
+    let queue = DispatchQueue(label: "com.ETOS.LLM.Studio.roleplay.store")
     private var cachedLibrary: RoleplayLibrarySnapshot?
     private var cachedVariables: [UUID: RoleplayVariableSnapshot]?
     private var cachedSharedVariables: RoleplaySharedVariableSnapshot?
@@ -72,7 +72,7 @@ public final class RoleplayStore: @unchecked Sendable {
     }
 
     public func upsertCharacter(_ character: RoleplayCharacter) {
-        queue.sync {
+        queue.sync { () -> Void in
             var library = loadLibraryUnlocked()
             var value = character
             value.updatedAt = Date()
@@ -86,29 +86,33 @@ public final class RoleplayStore: @unchecked Sendable {
         notifyChange(kind: Self.libraryChangeKind)
     }
 
-    public func deleteCharacter(id: UUID) {
-        let character = character(id: id)
-        let avatarFileName = character?.avatarFileName
-        queue.sync {
+    @discardableResult
+    public func deleteCharacter(id: UUID, expected: RoleplayCharacter? = nil) -> Bool {
+        let character: RoleplayCharacter? = queue.sync {
             var library = loadLibraryUnlocked()
+            guard let character = library.characters.first(where: { $0.id == id }),
+                  expected == nil || character == expected else { return nil }
             library.characters.removeAll { $0.id == id }
             for index in library.bindings.indices {
                 library.bindings[index].characterIDs.removeAll { $0 == id }
             }
-            saveLibraryUnlocked(library)
+            guard saveLibraryUnlocked(library) else { return nil }
             var shared = loadSharedVariablesUnlocked()
             shared.characters.removeValue(forKey: id)
             saveSharedVariablesUnlocked(shared)
+            return character
         }
-        if let avatarFileName {
+        guard let character else { return false }
+        if let avatarFileName = character.avatarFileName, !(character.assets ?? []).contains(where: { $0.localFileName == avatarFileName }) {
             Persistence.deleteImage(fileName: avatarFileName)
         }
-        RoleplayAssetStore.deleteFiles(for: character?.assets ?? [])
+        RoleplayAssetStore.deleteFiles(for: character.assets ?? [])
         notifyChange(kind: Self.libraryChangeKind)
+        return true
     }
 
     public func upsertPersona(_ persona: PersonaProfile) {
-        queue.sync {
+        queue.sync { () -> Void in
             var library = loadLibraryUnlocked()
             var value = persona
             value.updatedAt = Date()
@@ -122,10 +126,12 @@ public final class RoleplayStore: @unchecked Sendable {
         notifyChange(kind: Self.libraryChangeKind)
     }
 
-    public func deletePersona(id: UUID) {
-        let avatarFileName = persona(id: id)?.avatarFileName
-        queue.sync {
+    @discardableResult
+    public func deletePersona(id: UUID, expected: PersonaProfile? = nil) -> Bool {
+        let persona: PersonaProfile? = queue.sync {
             var library = loadLibraryUnlocked()
+            guard let persona = library.personas.first(where: { $0.id == id }),
+                  expected == nil || persona == expected else { return nil }
             library.personas.removeAll { $0.id == id }
             if library.preferredPersonaID == id {
                 library.preferredPersonaID = nil
@@ -133,19 +139,22 @@ public final class RoleplayStore: @unchecked Sendable {
             for index in library.bindings.indices where library.bindings[index].personaID == id {
                 library.bindings[index].personaID = nil
             }
-            saveLibraryUnlocked(library)
+            guard saveLibraryUnlocked(library) else { return nil }
             var shared = loadSharedVariablesUnlocked()
             shared.personas.removeValue(forKey: id)
             saveSharedVariablesUnlocked(shared)
+            return persona
         }
-        if let avatarFileName {
+        guard let persona else { return false }
+        if let avatarFileName = persona.avatarFileName {
             Persistence.deleteImage(fileName: avatarFileName)
         }
         notifyChange(kind: Self.libraryChangeKind)
+        return true
     }
 
     public func upsertBinding(_ binding: SessionRoleplayBinding) {
-        queue.sync {
+        queue.sync { () -> Void in
             var library = loadLibraryUnlocked()
             var value = binding
             value.characterIDs = deduplicated(value.characterIDs)
@@ -259,7 +268,7 @@ public final class RoleplayStore: @unchecked Sendable {
         }
     }
 
-    private func loadLibraryUnlocked() -> RoleplayLibrarySnapshot {
+    func loadLibraryUnlocked() -> RoleplayLibrarySnapshot {
         if let cachedLibrary { return cachedLibrary }
         let loaded = Persistence.loadAuxiliaryBlob(
             RoleplayLibrarySnapshot.self,
@@ -289,9 +298,11 @@ public final class RoleplayStore: @unchecked Sendable {
         return loaded
     }
 
-    private func saveLibraryUnlocked(_ library: RoleplayLibrarySnapshot) {
+    @discardableResult
+    func saveLibraryUnlocked(_ library: RoleplayLibrarySnapshot) -> Bool {
+        guard Persistence.saveAuxiliaryBlob(library, forKey: Self.libraryBlobKey) else { return false }
         cachedLibrary = library
-        _ = Persistence.saveAuxiliaryBlob(library, forKey: Self.libraryBlobKey)
+        return true
     }
 
     private func saveVariablesUnlocked(_ variables: [UUID: RoleplayVariableSnapshot]) {
@@ -309,7 +320,7 @@ public final class RoleplayStore: @unchecked Sendable {
         return ids.filter { seen.insert($0).inserted }
     }
 
-    private func notifyChange(kind: String) {
+    func notifyChange(kind: String) {
         WatchDatabaseSyncService.markDatabaseChanged(.config)
 
         // 酒馆脚本会在后台更新变量，通知必须回到主线程后再驱动 SwiftUI 状态。

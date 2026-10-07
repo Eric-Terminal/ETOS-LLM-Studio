@@ -25,15 +25,17 @@ struct MacSettingsView: View {
                     NavigationLink(NSLocalizedString("记忆", comment: "")) { MacMemorySettingsView(model: workspace.memoryModel) }
                     NavigationLink(NSLocalizedString("跨对话记忆与画像", comment: "")) { MacConversationMemoryView(model: workspace.conversationMemoryModel) }
                     NavigationLink(NSLocalizedString("世界书", comment: "")) { MacWorldbookListView(model: workspace.worldbookModel) }
+                    NavigationLink(NSLocalizedString("角色扮演与酒馆兼容", comment: "")) { MacRoleplayLibraryView(model: workspace.roleplayModel) }
                 }
                 .navigationTitle(NSLocalizedString("上下文", comment: ""))
                 .guideSettingsPageContext(
                     id: "mac-context", title: NSLocalizedString("上下文", comment: ""),
-                    documents: [GuideDocumentReference(id: "settings-memory", title: "Memory System"), GuideDocumentReference(id: "worldbooks", title: "Worldbooks")], isActive: selectedTab == .context,
+                    documents: [GuideDocumentReference(id: "settings-memory", title: "Memory System"), GuideDocumentReference(id: "worldbooks", title: "Worldbooks"), GuideDocumentReference(id: "roleplay", title: "Roleplay")], isActive: selectedTab == .context,
                     settings: [
                         .readOnly("requires_navigation", label: NSLocalizedString("记忆", comment: ""), value: { .bool(true) }),
                         .readOnly("profile_requires_navigation", label: NSLocalizedString("跨对话记忆与画像", comment: ""), value: { .bool(true) }),
-                        .readOnly("worldbooks_requires_navigation", label: NSLocalizedString("世界书", comment: ""), value: { .bool(true) })
+                        .readOnly("worldbooks_requires_navigation", label: NSLocalizedString("世界书", comment: ""), value: { .bool(true) }),
+                        .readOnly("roleplay_requires_navigation", label: NSLocalizedString("角色扮演与酒馆兼容", comment: ""), value: { .bool(true) })
                     ]
                 )
             }

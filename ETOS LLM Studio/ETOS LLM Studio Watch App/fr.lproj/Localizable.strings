@@ -7620,3 +7620,15 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 
 "填写读取草稿" = "Remplir le brouillon de lecture";
 "已更新草稿，请手动读取。" = "Brouillon mis à jour. Lancez la lecture manuellement.";
+
+/* Mac 角色资料管理 */
+"从文件导入" = "Importer un fichier";
+"无法保存角色扮演资料。" = "Impossible d’enregistrer les données de jeu de rôle.";
+"Mac 角色资料使用说明" = "Créez des profils ou importez des fichiers JSON, PNG et CHARX dans la bibliothèque de personnages. L’importation depuis Photos exige les données PNG originales ; une conversion ou une capture peut perdre les métadonnées. Les profils, salutations alternatives et variables initiales restent des brouillons jusqu’à leur enregistrement dans l’éditeur du profil. Les règles regex, scripts auxiliaires, livres de monde intégrés, ressources et extensions inconnues sont conservés. Consultez le rapport de compatibilité dans les détails. Les identités sont indépendantes de la mémoire à long terme et disposent d’un nom, de pronoms, d’une description et d’un avatar. Supprimer un personnage retire ses références dans les conversations et ses ressources. Rouvrez l’éditeur si les données sources changent. Les propositions du guide nécessitent une confirmation native et modifient uniquement les brouillons, sans exécuter de scripts ni envoyer de messages.";
+
+/* 共享角色资料文案 */
+"从文件选择" = "Choisir dans Fichiers";
+"从照片选择" = "Choisir dans Photos";
+"请选择 PNG 格式的角色卡图片。" = "Choisissez une image de carte de personnage au format PNG.";
+
+"角色卡不存在或已被删除。" = "Cette fiche de personnage n’existe pas ou a été supprimée.";

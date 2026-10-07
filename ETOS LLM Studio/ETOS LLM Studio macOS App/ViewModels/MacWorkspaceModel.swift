@@ -56,6 +56,7 @@ final class MacWorkspaceModel: ObservableObject {
     let conversationMemoryModel = MacConversationMemoryModel()
     let sessionLibrary = MacSessionLibraryModel()
     let worldbookModel = MacWorldbookModel()
+    let roleplayModel = MacRoleplayModel()
     private var questionnaires: [UUID: [MacQuestionnaireModel]] = [:]
     private var toolDrafts: [UUID: [AppToolInputDraftRequest]] = [:]
     private var pendingSupplements: [UUID: [String]] = [:]
@@ -103,6 +104,7 @@ final class MacWorkspaceModel: ObservableObject {
         bind(service)
         sessionLibrary.start(service: service, workspace: self)
         worldbookModel.start(service: service, workspace: self)
+        roleplayModel.start(service: service, workspace: self)
         sessionLibrary.$isWorking.dropFirst().sink { [weak self] working in
             self?.objectWillChange.send()
             if !working { Task { [weak self] in self?.flushToolSupplements() } }
@@ -525,7 +527,7 @@ final class MacWorkspaceModel: ObservableObject {
     func removeAttachment(_ id: UUID) { attachments.removeAll { $0.id == id } }
 
     func beginSnapshotExport() -> Bool {
-        guard !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, !worldbookModel.isWorking, !isExportingSnapshot, !SnapshotUploadManager.shared.isUploading else { return false }
+        guard !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, !worldbookModel.isWorking, !roleplayModel.isWorking, !isExportingSnapshot, !SnapshotUploadManager.shared.isUploading else { return false }
         isExportingSnapshot = true
         return true
     }
@@ -535,7 +537,7 @@ final class MacWorkspaceModel: ObservableObject {
     func restoreSnapshot(from url: URL, password: String?) async throws {
         let cloud = CloudSyncManager.shared
         let mcp = MCPManager.shared
-        guard !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, !worldbookModel.isWorking, !isExportingSnapshot, !memoryModel.isWorking, !conversationMemoryModel.isWorking, sendingSessionIDs.isEmpty,
+        guard !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, !worldbookModel.isWorking, !roleplayModel.isWorking, !isExportingSnapshot, !memoryModel.isWorking, !conversationMemoryModel.isWorking, sendingSessionIDs.isEmpty,
               !SnapshotUploadManager.shared.isUploading, !mcp.isBusy,
               let service, cloud.beginLocalDataRestore() else {
             throw NSError(domain: "ETOSMacSnapshot", code: 1, userInfo: [
@@ -570,7 +572,7 @@ final class MacWorkspaceModel: ObservableObject {
     func resolveCloudConflict(using resolution: CloudSyncInitialResolution, conflictID: UUID) async throws {
         let cloud = CloudSyncManager.shared
         let mcp = MCPManager.shared
-        guard !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, !worldbookModel.isWorking, !isExportingSnapshot, !memoryModel.isWorking, !conversationMemoryModel.isWorking, sendingSessionIDs.isEmpty,
+        guard !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, !worldbookModel.isWorking, !roleplayModel.isWorking, !isExportingSnapshot, !memoryModel.isWorking, !conversationMemoryModel.isWorking, sendingSessionIDs.isEmpty,
               !SnapshotUploadManager.shared.isUploading, !mcp.isBusy, let service,
               cloud.initialConflict?.id == conflictID else {
             throw NSError(domain: "ETOSMacSnapshot", code: 1, userInfo: [
@@ -601,11 +603,13 @@ final class MacWorkspaceModel: ObservableObject {
             service.reloadSessionStateFromPersistenceAfterMigration()
             MemoryManager.shared.reloadFromPersistenceAfterSnapshotRestore()
             WorldbookStore.shared.invalidateCache()
+            RoleplayStore.shared.invalidateCache()
         }.value
         draft = AppConfigStore.shared.chatComposerDraft
         attachments.removeAll()
         conversationMemoryModel.reload()
         worldbookModel.reloadAfterRestore()
+        roleplayModel.reloadAfterRestore()
     }
 }
 

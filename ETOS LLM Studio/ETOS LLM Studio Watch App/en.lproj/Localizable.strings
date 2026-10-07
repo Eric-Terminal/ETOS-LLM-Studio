@@ -7543,3 +7543,15 @@
 
 "填写读取草稿" = "Fill read request draft";
 "已更新草稿，请手动读取。" = "Draft updated. Start the read request manually.";
+
+/* Mac 角色资料管理 */
+"从文件导入" = "Import from file";
+"无法保存角色扮演资料。" = "Unable to save roleplay data.";
+"Mac 角色资料使用说明" = "Create character profiles or import JSON, PNG, and CHARX files in the character library. Photo imports require the original PNG data; conversion or screenshots may lose card metadata. Profile fields, alternate greetings, and initial variables remain drafts until you save from the profile editor. Regex rules, helper scripts, embedded worldbooks, assets, and unknown extensions are preserved. Check the compatibility report in character details. Personas are separate from long-term memory and have a name, pronouns, description, and avatar. Deleting a character removes conversation references to it and cleans up its assets. Reopen an editor if its source data changes. Guide proposals require native confirmation and modify drafts only; they do not execute scripts or send chat requests.";
+
+/* 共享角色资料文案 */
+"从文件选择" = "Choose from Files";
+"从照片选择" = "Choose from Photos";
+"请选择 PNG 格式的角色卡图片。" = "Choose a PNG character card image.";
+
+"角色卡不存在或已被删除。" = "This character card does not exist or has been deleted.";
