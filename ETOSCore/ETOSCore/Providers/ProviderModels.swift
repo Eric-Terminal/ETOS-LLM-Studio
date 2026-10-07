@@ -336,7 +336,7 @@ public struct Model: Codable, Identifiable, Hashable {
 
     public static let defaultCapabilities: [ModelCapability] = [.toolCalling]
 
-    public enum RequestBodyOverrideMode: String, Codable, Hashable {
+    public enum RequestBodyOverrideMode: String, Codable, Hashable, Sendable {
         case keyValue
         case expression
         case rawJSON

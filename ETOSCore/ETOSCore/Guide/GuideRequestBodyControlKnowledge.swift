@@ -9,6 +9,13 @@ public enum GuideRequestBodyControlKnowledge {
                 ? "ELS 提供名为“结构化控制”的能力，可以帮助用户自定义请求 Body；需要配置时，引导用户进入模型编辑页面。"
                 : "ELS provides Structured Controls to help users customize request bodies. Guide users to the model editor when they need to configure them."
         }
+        if page.id.rawValue.hasPrefix("mac-") {
+            return locale.language.languageCode?.identifier == "zh" ? """
+            Mac 入口为模型管理 → 提供商 → 模型配置 → 自定义 Body。根页是只读目录，新增、复制、导入、排序和拆分通过原生按钮完成；控制、选项和参数编辑器各自声明字段。参数页的 propose_mac_request_parameters 可替换用户提供的 parameters 对象，或设置 edit_mode 为 keyValue、expression、rawJSON；已有参数只写不可读，不得凭空补写未知秘密。该工具只改草稿，不发送请求。完成子页后仍需完成模型并保存提供商。当前有效参数预览使用控制默认值，不是包含消息和工具的完整请求，也不改变数据库中的当前聊天选择。实际可用工具和字段以当前页面声明为准；更改默认值不等于清除运行状态。上游参数仍需确认协议支持，关闭控制仅跳过叠加，不发送 false。
+            """ : """
+            On Mac, open Model Management → Provider → Model Configuration → Custom Body. The root is a read-only catalog for the guide; use native actions to create, copy, import, reorder or split controls. Control, option and parameter editors declare their own fields. propose_mac_request_parameters replaces a user-supplied parameters object or sets edit_mode to keyValue, expression or rawJSON. Existing parameters are write-only; never invent unknown credentials. It only changes a draft and sends no request. Finish child and model editors, then save the provider. The effective-parameter preview uses defaults, excludes messages/tools and does not change saved chat selections. Use only this page's declared tools and fields. Changing defaults does not clear runtime state. Check upstream support; disabling a control only skips its overlay and does not send false.
+            """
+        }
         if locale.language.languageCode?.identifier == "zh" {
             return """
             当用户问“调整/关闭思考、推理强度、预算、温度、联网搜索、响应格式或其他 API 请求参数”，先区分模型请求参数与显示设置。请求参数的可复用开关、档位和滑块属于“结构化控制”，入口为模型管理 → 提供商 → 模型信息 → 结构化控制。不要臆造独立的“思考开关”。先读 model-request-body；模型信息页可用 propose_model_request_body_controls 新增和修改，控制详情页则使用当前声明的字段工具。以本次工具列表为准，不在对应页面时引导用户进入，不要声称所有页面都能写。
@@ -46,6 +53,8 @@ public enum GuideRequestBodyControlKnowledge {
     private static let chineseDocument = """
     结构化控制不是仅用于思考的特殊功能，而是把任意 API 请求 JSON 包装成聊天时可快速切换的开关、选项组或滑块。路径：模型管理 → 提供商 → 模型信息 → 结构化控制。不要把“键值对/表达式/原始 JSON”三种自定义 Body 编辑方式与结构化控制混为一谈；它们是基础参数的编辑方式，控制项则在发送时叠加到基础参数上。
 
+    Mac 在模型配置的“自定义 Body”中编辑基础参数及控制定义。参数、控制、选项、导入目录和说明页各有向导上下文，所有完成按钮仅返回父级草稿，最终保存提供商才持久化。参数页的 propose_mac_request_parameters 只接受 parameters 对象和/或 edit_mode（keyValue、expression、rawJSON）；替换对象是完整替换，不是补丁。已有参数不可读，新提案预览脱敏，手动修改使旧版本提案失效。切换编辑方式先验证原稿，不能通过切换丢弃无效输入；表单不能表示的外部键会保留为 JSON。控制列表支持原生新增、复制、导入、上下移动和删除，详情可编辑默认值、选项、滑块粒度、端点颜色及最高档效果，可按数值排序或按嵌套路径拆分。导入与复制重新分配控制/选项 ID；拆分保留核心合并语义。Mac 默认参数预览不是完整请求，不读取消息、不调用网络、不写聊天运行状态。当前聊天快捷控制入口尚需桌面接入。
+
     优先级：全局默认参数 → 模型自定义 Body → 按列表顺序启用的结构化控制。同名对象递归合并，数组和标量由后者替换；后面的控制覆盖前面的同名参数。这里的 effective_request_body_overrides 是自定义 Body 与当前控制合成的覆盖参数，不是包括消息、工具等字段的整个 HTTP 请求。pending 的编辑草稿不一定等于已保存参数。
 
     toggle 的 enabled 决定控制是否参与处理，default_active 是无当前选择时的默认开关值。开关为关时只是跳过 payload，不会发送 false，也不会删除基础 Body 中的同名参数。若上游需要明确的禁用值，使用“开启/关闭”两个选项，各自写实际 payload。隐藏思考过程是显示设置；回传思考是历史传输设置；它们都不等同于让上游停止推理。
@@ -71,6 +80,8 @@ public enum GuideRequestBodyControlKnowledge {
 
     private static let englishDocument = """
     Structured Controls wrap arbitrary API request JSON into reusable chat switches, option groups or sliders, not just reasoning settings. Path: Model Management → Provider → Model Information → Structured Controls. Key/value, expression and raw JSON are three editors for the base custom Body, not structured controls themselves.
+
+    On Mac, Model Configuration → Custom Body edits base parameters and control definitions. Parameters, controls, options, import catalogs and introduction pages have separate guide contexts. Done returns to the parent draft; saving the provider persists changes. propose_mac_request_parameters accepts a parameters object and/or edit_mode (keyValue, expression, rawJSON). Object replacement is complete, not a patch. Existing parameters are unreadable, new proposal previews are redacted, and manual changes invalidate stale proposals. Switching modes validates the draft first; unsupported form keys retain their JSON representation. Native actions create, copy, import, move and delete controls. Details edit defaults, options, slider granularity, endpoint colors and maximum effects; numeric sorting and nested-path splitting reuse core behavior. Copy/import regenerate control and option IDs. The default-parameter preview excludes messages and performs no network or runtime-state writes. The Mac chat shortcut-control entry still needs integration.
 
     Precedence: global defaults → model custom Body → enabled controls in list order. Objects merge recursively; later arrays/scalars replace earlier values. effective_request_body_overrides combines the saved custom Body and current control state, not the entire HTTP request with messages/tools. Unsaved editor drafts may differ.
 

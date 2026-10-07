@@ -5,12 +5,9 @@ struct MacModelEditor: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var workspace: MacWorkspaceModel
     @State private var draft: Model
-    @State private var parametersJSON = ""
-    @State private var originalParametersJSON = ""
-    @State private var isBusy = true
-    @State private var error: String?
-    @State private var didPrepare = false
+    @State private var isBusy = false
     @State private var showsPricing = false
+    @State private var showsRequestBody = false
     @State private var saveTask: Task<Void, Never>?
     private let providerAPIFormat: String
     private let onSave: (Model) -> Void
@@ -86,14 +83,9 @@ struct MacModelEditor: View {
                     }
                 } header: { Text(NSLocalizedString("模型能力", comment: "")) }
                 Section {
-                    NavigationLink(NSLocalizedString("覆盖参数 JSON", comment: "")) {
-                        MacJSONDraftEditor(pageID: GuidePageID(rawValue: "mac-model-parameters-\(draft.id)"), title: NSLocalizedString("覆盖参数 JSON", comment: ""), kind: .object, text: $parametersJSON)
-                    }
-                } header: { Text(NSLocalizedString("覆盖参数 JSON", comment: "")) }
-                Section {
+                    Button(NSLocalizedString("自定义Body", comment: "")) { showsRequestBody = true }
                     Button(NSLocalizedString("价格设置", comment: "")) { showsPricing = true }
                 }
-                if let error { Text(error).font(.footnote).foregroundStyle(.red) }
             }
             .formStyle(.grouped)
             .disabled(isBusy || workspace.isRestoringData)
@@ -109,18 +101,10 @@ struct MacModelEditor: View {
                     draft.pricing = $0
                 }
             }
-            .task {
-                guard !didPrepare else { return }
-                didPrepare = true
-                let parameters = draft.overrideParameters
-                let text = await Task.detached {
-                    let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-                    return (try? encoder.encode(parameters)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
-                }.value
-                guard !Task.isCancelled else { didPrepare = false; return }
-                parametersJSON = text
-                originalParametersJSON = parametersJSON
-                isBusy = false
+            .sheet(isPresented: $showsRequestBody) {
+                MacRequestBodyEditor(model: draft, apiFormat: draft.effectiveAPIFormat(providerAPIFormat: providerAPIFormat)) { body in
+                    body.apply(to: &draft)
+                }
             }
             .guideSettingsPageContext(
                 id: GuidePageID(rawValue: "mac-model-\(draft.id)"), title: NSLocalizedString("模型配置", comment: ""),
@@ -173,31 +157,22 @@ struct MacModelEditor: View {
 
     private func save() {
         guard !isBusy, !workspace.isRestoringData else { return }
-        let text = parametersJSON
         let source = draft
-        let parametersChanged = text != originalParametersJSON
         let format = providerAPIFormat
         isBusy = true
         saveTask = Task {
             defer { isBusy = false }
-            do {
-                let updated = try await Task.detached {
-                    var result = source
-                    result.overrideParameters = try JSONDecoder().decode([String: JSONValue].self, from: Data(text.utf8))
-                    // 编辑协议后按核心规则移除不适用的 1 小时缓存档位，遍历价格配置留在后台。
-                    let pricing = result.pricing?.normalized(forAPIFormat: result.effectiveAPIFormat(providerAPIFormat: format))
-                    result.pricing = pricing?.isEffectivelyEmpty == true ? nil : pricing
-                    if parametersChanged {
-                        result.requestBodyOverrideMode = .rawJSON
-                        result.rawRequestBodyJSON = text
-                    }
-                    if result.displayName.isEmpty { result.displayName = result.modelName }
-                    return result
-                }.value
-                guard !Task.isCancelled, !workspace.isRestoringData, draft == source, parametersJSON == text else { return }
-                onSave(updated)
-                dismiss()
-            } catch { self.error = error.localizedDescription }
+            let updated = await Task.detached {
+                var result = source
+                // 编辑协议后按核心规则移除不适用的 1 小时缓存档位，遍历价格配置留在后台。
+                let pricing = result.pricing?.normalized(forAPIFormat: result.effectiveAPIFormat(providerAPIFormat: format))
+                result.pricing = pricing?.isEffectivelyEmpty == true ? nil : pricing
+                if result.displayName.isEmpty { result.displayName = result.modelName }
+                return result
+            }.value
+            guard !Task.isCancelled, !workspace.isRestoringData, draft == source else { return }
+            onSave(updated)
+            dismiss()
         }
     }
 }
