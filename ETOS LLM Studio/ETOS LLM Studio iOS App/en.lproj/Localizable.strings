@@ -7792,3 +7792,15 @@
 
 /* Mac 角色网页运行时 */
 "Mac 角色 HTML 与脚本运行说明" = "HTML rendering displays completed user and assistant message cards after applying display regex rules. The content menu copies source or page text and exports PNG or HTML. Enabled helper scripts run in the bound session and expose their visible buttons below the conversation. Variable changes update page state without restarting scripts; completed history or character changes reload the context. Switching sessions keeps scripts for conversations still generating. Closing the chat window, locking, restoring data or quitting stops page callbacks and cancels pending actions; restore and quit wait for submitted writes. Script sends preserve your unsent text and attachments. External links open in the browser. The guide can propose settings changes but cannot execute scripts.";
+
+/* Mac 模型协议与价格草稿 */
+"跟随提供商" = "Follow Provider";
+"价格须留空或填写有限的非负数。" = "Leave the price blank or enter a finite, nonnegative number.";
+"阶梯起始 Tokens 须填写非负整数。" = "Enter a nonnegative integer for the tier’s starting Tokens.";
+"时间须使用 00:00 到 23:59 的格式。" = "Enter a time from 00:00 to 23:59.";
+"每个价格时间段至少选择一个重复日。" = "Select at least one repeat day for each price period.";
+"阶梯留空的价格继承基础价格。" = "Blank tier prices inherit the base price.";
+"Mac 峰谷时间输入说明" = "Use 24-hour times such as 09:05. Equal start and end times mean all day; an end time before the start continues into the next day.";
+"Mac 峰谷价格继承说明" = "Blank prices inherit the applicable tier or base price. Turning off time-based pricing keeps the periods for later use.";
+"Mac 模型价格草稿使用说明" = "Prices are used for local cost estimates. Token prices are per 1M tokens; per-request pricing charges once for each model request. Blank base prices exclude that token category from estimates.\n\nTiers use input plus cache-write and cache-read tokens. Once a threshold is reached, its prices apply to the entire request. Scheduled prices override matching days and periods. Blank prices inherit the previous level; entries with no prices are removed when saved.\n\nDone returns prices to the model draft. Finish the model editor, then save the provider to apply them. Cancel discards this price draft. Invalid numbers or times must be corrected before completion. The guide changes drafts only.";
+"Mac 模型配置草稿使用说明" = "Each remote model can follow its provider’s API format or select a different format. Changing the model’s purpose restores its default input, output and capability settings. Existing request parameters remain in the draft.\n\nPrice Settings includes per-token, per-request, tiered and scheduled estimates. Anthropic supports separate five-minute and one-hour cache-write prices; selecting another protocol removes the one-hour prices when the model is saved.\n\nDone returns the model to the provider draft. Save the provider to apply changes. The guide updates drafts only; request JSON and credentials remain unreadable to it.";

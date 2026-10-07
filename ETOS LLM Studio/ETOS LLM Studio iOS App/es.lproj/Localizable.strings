@@ -7869,3 +7869,15 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 
 /* Mac 角色网页运行时 */
 "Mac 角色 HTML 与脚本运行说明" = "El renderizado HTML aplica las expresiones de visualización a los mensajes completos del usuario y del asistente y muestra sus tarjetas web. El menú copia código o texto y exporta PNG o HTML. Los scripts activos se ejecutan en la conversación vinculada y sus botones visibles aparecen debajo. Los cambios de variables actualizan el estado sin reiniciar scripts; los cambios del historial completo o del personaje recargan el contexto. Al cambiar de conversación se conservan los scripts de las que siguen generando. Cerrar la ventana, bloquear, restaurar o salir detiene las llamadas web y cancela acciones pendientes; restaurar y salir esperan las escrituras enviadas. Los envíos de scripts conservan tu texto y adjuntos sin enviar. Los enlaces externos se abren en el navegador. La guía propone ajustes, pero no ejecuta scripts.";
+
+/* Mac 模型协议与价格草稿 */
+"跟随提供商" = "Seguir al proveedor";
+"价格须留空或填写有限的非负数。" = "Deja el precio vacío o introduce un número finito no negativo.";
+"阶梯起始 Tokens 须填写非负整数。" = "El umbral de Tokens debe ser un entero no negativo.";
+"时间须使用 00:00 到 23:59 的格式。" = "Introduce una hora entre 00:00 y 23:59.";
+"每个价格时间段至少选择一个重复日。" = "Selecciona al menos un día para cada período de precios.";
+"阶梯留空的价格继承基础价格。" = "Los precios vacíos del tramo heredan el precio base.";
+"Mac 峰谷时间输入说明" = "Usa el formato de 24 horas, por ejemplo 09:05. Si inicio y fin coinciden, se aplica todo el día; si el fin es anterior, continúa hasta el día siguiente.";
+"Mac 峰谷价格继承说明" = "Los precios vacíos heredan el tramo aplicable o el precio base. Desactivar los precios por horario conserva los períodos.";
+"Mac 模型价格草稿使用说明" = "Los precios se usan para estimaciones locales. Las tarifas Token son por millón de tokens; la tarifa por solicitud se cuenta una vez por petición al modelo. Un precio base vacío excluye esa categoría de la estimación.\n\nLos tramos usan la suma de Tokens de entrada, creación y lectura de caché. Al alcanzar el umbral, el precio se aplica a toda la solicitud. Los horarios reemplazan los precios en los días y períodos coincidentes. Los precios vacíos heredan el nivel anterior; las entradas sin precios se eliminan al guardar.\n\nListo devuelve los precios al borrador del modelo. Finaliza el modelo y guarda el proveedor para aplicarlos. Cancelar descarta este borrador de precios. Corrige los números u horas no válidos antes de finalizar. La guía solo modifica borradores.";
+"Mac 模型配置草稿使用说明" = "Cada modelo remoto puede seguir el formato API del proveedor o elegir otro. Cambiar su uso restaura las entradas, salidas y capacidades predeterminadas para ese uso. Los parámetros de solicitud existentes se conservan en el borrador.\n\nLos precios admiten Tokens, solicitudes, tramos y horarios. Anthropic permite precios de creación de caché de cinco minutos y una hora; cambiar de protocolo elimina los de una hora al guardar el modelo.\n\nListo devuelve el modelo al borrador del proveedor. Guarda el proveedor para aplicar los cambios. La guía modifica borradores y no puede leer el JSON de solicitudes ni las credenciales.";

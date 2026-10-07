@@ -132,7 +132,7 @@ private struct MacProviderEditor: View {
                 }
             }
             .sheet(item: $modelToEdit) { model in
-                MacModelEditor(model: model) { updated in
+                MacModelEditor(model: model, providerAPIFormat: draft.apiFormat) { updated in
                     if let index = draft.models.firstIndex(where: { $0.id == updated.id }) { draft.models[index] = updated }
                     else { draft.models.append(updated) }
                 }
