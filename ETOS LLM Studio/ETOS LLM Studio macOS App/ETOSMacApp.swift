@@ -23,7 +23,7 @@ struct ETOSMacApp: App {
             CommandGroup(replacing: .newItem) {
                 Button(NSLocalizedString("新建对话", comment: "")) { workspace.newSession() }
                     .keyboardShortcut("n", modifiers: .command)
-                    .disabled(workspace.phase != .ready)
+                    .disabled(workspace.phase != .ready || workspace.isRestoringData)
             }
             CommandGroup(after: .pasteboard) {
                 Button(NSLocalizedString("停止生成", comment: "")) { workspace.stop() }

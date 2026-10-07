@@ -15,6 +15,7 @@ struct MCPMacStdioUsageTests {
     @Test("最后一个调用释放后退出，同时保留工具缓存")
     func concurrentCallsKeepProcessAlive() async throws {
         let manager = MCPManager.shared
+        await manager.waitForInitialLoadIfNeeded()
         let server = MCPServerConfiguration(
             displayName: "Mac 空闲策略回归",
             transport: .localStdio(configuration: .init(command: "/bin/cat", idlePolicy: .immediate))
@@ -48,8 +49,9 @@ struct MCPMacStdioUsageTests {
 
     @MainActor
     @Test("旧连接的释放不能影响新连接的使用次数")
-    func oldUsageCannotReleaseNewConnection() throws {
+    func oldUsageCannotReleaseNewConnection() async throws {
         let manager = MCPManager.shared
+        await manager.waitForInitialLoadIfNeeded()
         let server = MCPServerConfiguration(
             displayName: "Mac 连接身份回归",
             transport: .localStdio(configuration: .init(command: "/bin/cat"))

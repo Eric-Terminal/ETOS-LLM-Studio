@@ -28,6 +28,7 @@ Mac 根目录为 `Application Support/ETOS LLM Studio`，通过 `StorageUtility.
 1. 从移动端完整备份恢复未加密和加密数据库，核对会话、模型、密钥条目、MCP 环境引用和媒体相对路径；Mac 修改后的备份再回到移动端核对。
 2. MCP stdio 完整握手、工具目录和调用、超时与取消、stderr 分离、空闲退出和后台退出；使用本机实际安装路径检查 argv 和环境变量。
 3. 多会话生成、流式滚动、消息编辑关联结果、切换窗口和锁定后的审批、HTTP/证书原生弹窗、向导草稿确认及页面失效。
-4. ETOSCore 新增的 `MCPConfigurationPersistenceTests`、此前 Mac stdio/图片/存储目录测试；当前都只有测试源码，未执行。
+4. ETOSCore 新增的 `MCPConfigurationPersistenceTests`、`CloudSyncLocalRestoreTests`、此前 Mac stdio/图片/存储目录测试；当前都只有测试源码，未执行。
+5. 系统保存面板的文件权限、覆盖已有快照、加密快照导入、S3/R2 列表及取消下载、恢复时后台任务隔离、首次 iCloud 裁决及过期确认；iCloud 还需配置容器、签名和通知能力。
 
-目前源码包含聊天、附件、会话草稿、提供商/模型/MCP 基础配置和向导入口。完整功能对齐仍在继续，备份与同步管理、角色扮演、世界书、记忆管理、Agent/浏览器、工具交互及高级模型配置等不能据此视为完成。
+目前源码包含聊天、附件、会话草稿、提供商/模型/MCP 基础配置、快照备份恢复、S3/R2 与 iCloud 同步管理和向导入口。完整功能对齐仍在继续，角色扮演、世界书、记忆管理、Agent/浏览器、工具交互及高级模型配置等不能据此视为完成。

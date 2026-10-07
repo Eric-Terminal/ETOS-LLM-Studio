@@ -7544,3 +7544,14 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "Mac 的 stdio 服务器直接运行本机程序，需先自行安装依赖。配置保存后不会立即运行；连接时读取工具目录，加入聊天后由工具审批控制调用。" = "Les serveurs stdio sur Mac exécutent des programmes locaux. Installez d’abord leurs dépendances. Enregistrer ne les lance pas ; la connexion lit leur catalogue d’outils et les appels du chat suivent les règles d’approbation.";
 "stdio 使用 command、args、env 和 cwd；远程连接使用 endpoint。高级字段保留原有格式。已有环境变量引用保持不变，新增 env 值会在保存时转为数据库记录。" = "stdio utilise command, args, env et cwd ; les connexions distantes utilisent endpoint. Les champs avancés et les références d’environnement existantes sont conservés. Les nouvelles valeurs env sont enregistrées dans la base de données.";
 "添加提供商地址和 API Key 后，获取模型列表或手动添加模型。启用的聊天模型会出现在聊天窗口的模型选择器中。" = "Saisissez l’adresse du fournisseur et la clé API, puis récupérez les modèles ou ajoutez-les manuellement. Les modèles de chat activés apparaissent dans le sélecteur du chat.";
+
+/* macOS 快照管理 */
+"在 Finder 中显示" = "Afficher dans le Finder";
+"当前有数据或工具任务正在运行，请稍后重试。" = "Une opération de données ou un outil est en cours. Réessayez plus tard.";
+"数据库快照只包含聊天、配置与记忆数据库；完整快照还包含壁纸、附件、字体与记忆向量索引文件。" = "Les instantanés de bases de données contiennent les discussions, la configuration et la mémoire. Les instantanés complets incluent aussi les fonds d’écran, pièces jointes, polices et index vectoriels de mémoire.";
+"数据管理" = "Gestion des données";
+"正在创建快照…" = "Création de l’instantané…";
+"请先完整配置 S3/R2 地址、区域、存储桶和凭据。" = "Configurez d’abord l’adresse S3/R2, la région, le compartiment et les identifiants.";
+"请填写一致的快照密码和确认密码。" = "Saisissez un mot de passe pour l’instantané et une confirmation identique.";
+
+"上次同步" = "Dernière synchronisation";

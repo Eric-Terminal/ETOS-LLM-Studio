@@ -91,7 +91,8 @@ public final class CloudSyncManager: ObservableObject {
     private var hasActivatedRealtimeSync = false
     private var realtimeSyncCancellables: Set<AnyCancellable> = []
     private var pendingRealtimeSyncTask: Task<Void, Never>?
-    var isPerformingSync = false
+    @Published public internal(set) var isPerformingSync = false
+    var isRestoringLocalData = false
     var needsSyncAfterCurrentRun = false
     var isApplyingRemoteRecords = false
     var suppressRealtimeSyncUntil: Date?
@@ -210,6 +211,7 @@ public final class CloudSyncManager: ObservableObject {
         reason: String,
         delayNanoseconds: UInt64
     ) {
+        guard !isRestoringLocalData else { return }
         guard isEnabled else {
             cancelPendingRealtimeSync()
             return
@@ -239,6 +241,7 @@ public final class CloudSyncManager: ObservableObject {
     }
 
     public func performSync(options: SyncOptions, silent: Bool = false) async {
+        guard !isRestoringLocalData else { return }
         guard isEnabled else {
             if !silent {
                 state = .failed(NSLocalizedString("iCloud 同步已关闭。", comment: ""))
@@ -423,7 +426,7 @@ public final class CloudSyncManager: ObservableObject {
     @discardableResult
     public func performAutoSyncNowIfEnabled() async -> Bool {
         await AppConfigStore.shared.waitForPersistentStoreLoaded()
-        guard isEnabled else { return false }
+        guard !isRestoringLocalData, isEnabled else { return false }
         await ensureRemoteChangeSubscriptionIfEnabled()
         await performSync(options: .fullSync, silent: true)
         return lastSummary.hasAnyImportedChange
@@ -431,7 +434,7 @@ public final class CloudSyncManager: ObservableObject {
 
     public func ensureRemoteChangeSubscriptionIfEnabled() async {
         await AppConfigStore.shared.waitForPersistentStoreLoaded()
-        guard isEnabled else { return }
+        guard !isRestoringLocalData, isEnabled else { return }
         do {
             try await transport.subscribeToChanges()
         } catch {
@@ -876,7 +879,7 @@ public final class CloudSyncManager: ObservableObject {
             .store(in: &realtimeSyncCancellables)
     }
 
-    private func cancelPendingRealtimeSync() {
+    func cancelPendingRealtimeSync() {
         pendingRealtimeSyncTask?.cancel()
         pendingRealtimeSyncTask = nil
         needsSyncAfterCurrentRun = false

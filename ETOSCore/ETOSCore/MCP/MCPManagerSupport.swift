@@ -485,7 +485,7 @@ extension MCPManager {
     }
 
     func startConfigObservationIfNeeded() {
-        guard configObservationCancellable == nil else { return }
+        guard !isRestoringDatabase, configObservationCancellable == nil else { return }
         configObservationCancellable = MCPServerStore.observeConfigurationSignature(
             onError: { [weak self] error in
                 Task { @MainActor [weak self] in
@@ -576,18 +576,19 @@ extension MCPManager {
     }
 
     func persistResumptionToken(for serverID: UUID) {
-        guard let transport = streamingTransports[serverID] as? MCPResumptionControllableTransport else {
+        guard !isRestoringDatabase, let client = clients[serverID],
+              let transport = streamingTransports[serverID] as? MCPResumptionControllableTransport else {
             return
         }
         Task { [weak self] in
             let token = await transport.currentResumptionToken()
-            guard let self else { return }
+            guard let self, !self.isRestoringDatabase, self.clients[serverID] === client else { return }
             self.persistResumptionToken(token, for: serverID)
         }
     }
 
     func persistResumptionToken(_ token: String?, for serverID: UUID) {
-        guard let index = servers.firstIndex(where: { $0.id == serverID }) else { return }
+        guard !isRestoringDatabase, let index = servers.firstIndex(where: { $0.id == serverID }) else { return }
         var server = servers[index]
         let previous = server.streamResumptionToken
         server.setResumptionToken(token)

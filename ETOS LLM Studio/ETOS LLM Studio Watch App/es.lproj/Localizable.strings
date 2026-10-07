@@ -7544,3 +7544,14 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "Mac 的 stdio 服务器直接运行本机程序，需先自行安装依赖。配置保存后不会立即运行；连接时读取工具目录，加入聊天后由工具审批控制调用。" = "Los servidores stdio de Mac ejecutan programas locales. Instala antes sus dependencias. Guardar no los inicia; al conectar se obtiene su catálogo y las llamadas del chat siguen las reglas de aprobación.";
 "stdio 使用 command、args、env 和 cwd；远程连接使用 endpoint。高级字段保留原有格式。已有环境变量引用保持不变，新增 env 值会在保存时转为数据库记录。" = "stdio usa command, args, env y cwd; las conexiones remotas usan endpoint. Se conservan los campos avanzados y las referencias de entorno. Los nuevos valores env se guardan como registros de base de datos.";
 "添加提供商地址和 API Key 后，获取模型列表或手动添加模型。启用的聊天模型会出现在聊天窗口的模型选择器中。" = "Introduce la dirección del proveedor y la clave API, luego obtén la lista o añade modelos manualmente. Los modelos de chat activos aparecen en el selector del chat.";
+
+/* macOS 快照管理 */
+"在 Finder 中显示" = "Mostrar en Finder";
+"当前有数据或工具任务正在运行，请稍后重试。" = "Hay una operación de datos o herramientas en curso. Inténtalo más tarde.";
+"数据库快照只包含聊天、配置与记忆数据库；完整快照还包含壁纸、附件、字体与记忆向量索引文件。" = "Las instantáneas de bases de datos contienen chats, configuración y memoria. Las completas incluyen también fondos, adjuntos, fuentes e índices vectoriales de memoria.";
+"数据管理" = "Gestión de datos";
+"正在创建快照…" = "Creando instantánea…";
+"请先完整配置 S3/R2 地址、区域、存储桶和凭据。" = "Configura primero el endpoint, la región, el bucket y las credenciales de S3/R2.";
+"请填写一致的快照密码和确认密码。" = "Introduce una contraseña para la instantánea y una confirmación idéntica.";
+
+"上次同步" = "Última sincronización";

@@ -2,7 +2,8 @@ import ETOSCore
 import SwiftUI
 
 struct MacSettingsView: View {
-    private enum Tab: Hashable { case general, providers, mcp, security }
+    private enum Tab: Hashable { case general, providers, mcp, data, security }
+    @EnvironmentObject private var workspace: MacWorkspaceModel
     @ObservedObject private var configuration = AppConfigStore.shared
     @ObservedObject private var appLock = AppLockManager.shared
     @State private var selectedTab = Tab.general
@@ -20,6 +21,20 @@ struct MacSettingsView: View {
                 .tabItem { Label(NSLocalizedString("MCP 工具", comment: ""), systemImage: "puzzlepiece.extension") }
                 .tag(Tab.mcp)
             NavigationStack {
+                List {
+                    NavigationLink(NSLocalizedString("快照备份", comment: "")) { MacBackupRestoreView() }
+                    NavigationLink(NSLocalizedString("iCloud 漫游同步", comment: "")) { MacCloudSyncView() }
+                }
+                .navigationTitle(NSLocalizedString("数据管理", comment: ""))
+                .guideSettingsPageContext(
+                    id: "mac-data", title: NSLocalizedString("数据管理", comment: ""),
+                    documents: SnapshotBackupGuideSupport.documents + [GuideDocumentReference(id: "settings-sync", title: "Sync Settings")], isActive: selectedTab == .data,
+                    settings: [.readOnly("restoring", label: NSLocalizedString("正在恢复快照…", comment: ""), value: { .bool(workspace.isRestoringData) })]
+                )
+            }
+            .tabItem { Label(NSLocalizedString("数据管理", comment: ""), systemImage: "externaldrive") }
+            .tag(Tab.data)
+            NavigationStack {
                 AppLockSettingsView()
                     .guidePageContext(
                         descriptor: GuidePageDescriptor(
@@ -35,6 +50,7 @@ struct MacSettingsView: View {
             .tabItem { Label(NSLocalizedString("安全", comment: ""), systemImage: "lock.shield") }
             .tag(Tab.security)
         }
+        .disabled(workspace.isRestoringData)
         .frame(minWidth: 680, minHeight: 580)
         .toolbar {
             Button { showsGuide.toggle() } label: {

@@ -25,6 +25,8 @@ final class MacWorkspaceModel: ObservableObject {
     @Published private(set) var runningSessionIDs: Set<UUID> = []
     @Published private var sendingSessionIDs: Set<UUID> = []
     @Published private(set) var isImportingAttachments = false
+    @Published private(set) var isRestoringData = false
+    @Published private(set) var isExportingSnapshot = false
     @Published private(set) var attachments: [MacComposerAttachment] = []
     @Published private(set) var recoveryRequest: Persistence.LaunchRecoveryRequest?
     @Published var errorMessage: String?
@@ -55,7 +57,7 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     var canSend: Bool {
-        phase == .ready && currentSession != nil && selectedModelID != nil && !isGenerating && !isPreparingSend
+        phase == .ready && !isRestoringData && currentSession != nil && selectedModelID != nil && !isGenerating && !isPreparingSend
             && !isImportingAttachments && (!draft.isEmpty || !attachments.isEmpty)
     }
 
@@ -84,7 +86,7 @@ final class MacWorkspaceModel: ObservableObject {
         draft = configuration.chatComposerDraft
         phase = .ready
         AppLockManager.shared.refreshState()
-        await MCPManager.shared.reloadServersInBackground()
+        await MCPManager.shared.waitForInitialLoadIfNeeded()
         MCPManager.shared.connectSelectedServersIfNeeded()
         CloudSyncManager.shared.performAutoSyncIfEnabled()
         Task.detached(priority: .utility) {
@@ -173,7 +175,7 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     func newSession() {
-        guard let service else { return }
+        guard !isRestoringData, AppLockManager.shared.state != .locked, let service else { return }
         Task.detached(priority: .userInitiated) { service.createNewSession() }
     }
 
@@ -269,6 +271,85 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     func removeAttachment(_ id: UUID) { attachments.removeAll { $0.id == id } }
+
+    func beginSnapshotExport() -> Bool {
+        guard !isRestoringData, !isExportingSnapshot, !SnapshotUploadManager.shared.isUploading else { return false }
+        isExportingSnapshot = true
+        return true
+    }
+
+    func endSnapshotExport() { isExportingSnapshot = false }
+
+    func restoreSnapshot(from url: URL, password: String?) async throws {
+        let cloud = CloudSyncManager.shared
+        let mcp = MCPManager.shared
+        guard !isRestoringData, !isExportingSnapshot, sendingSessionIDs.isEmpty,
+              !SnapshotUploadManager.shared.isUploading, !mcp.isBusy,
+              let service, cloud.beginLocalDataRestore() else {
+            throw NSError(domain: "ETOSMacSnapshot", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: NSLocalizedString("当前有数据或工具任务正在运行，请稍后重试。", comment: "")
+            ])
+        }
+        isRestoringData = true
+        var didRestore = false
+        defer {
+            cloud.endLocalDataRestore(didRestore: didRestore)
+            isRestoringData = false
+        }
+        for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
+        await mcp.prepareForDatabaseRestore()
+        do {
+            await AppConfigStore.shared.flushPendingWrites()
+            await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
+            try await Task.detached(priority: .userInitiated) {
+                try SnapshotRestoreService.restoreSnapshot(from: url, password: password)
+            }.value
+            didRestore = true
+            await refreshRestoredData(service)
+            await mcp.finishDatabaseRestore()
+            AppLockManager.shared.refreshState()
+        } catch {
+            await mcp.finishDatabaseRestore()
+            throw error
+        }
+    }
+
+    func resolveCloudConflict(using resolution: CloudSyncInitialResolution, conflictID: UUID) async throws {
+        let cloud = CloudSyncManager.shared
+        let mcp = MCPManager.shared
+        guard !isRestoringData, !isExportingSnapshot, sendingSessionIDs.isEmpty,
+              !SnapshotUploadManager.shared.isUploading, !mcp.isBusy, let service,
+              cloud.initialConflict?.id == conflictID else {
+            throw NSError(domain: "ETOSMacSnapshot", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: NSLocalizedString("当前有数据或工具任务正在运行，请稍后重试。", comment: "")
+            ])
+        }
+        isRestoringData = true
+        defer { isRestoringData = false }
+        for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
+        await mcp.prepareForDatabaseRestore()
+        await AppConfigStore.shared.flushPendingWrites()
+        await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
+        // 异步清理期间裁决可能已失效，核心再次核对 ID 后才允许覆盖。
+        await cloud.resolveInitialConflict(using: resolution, expectedConflictID: conflictID)
+        await refreshRestoredData(service)
+        await mcp.finishDatabaseRestore()
+        AppLockManager.shared.refreshState()
+        if case .failed(let reason) = cloud.state {
+            throw NSError(domain: "ETOSMacCloudSync", code: 1, userInfo: [NSLocalizedDescriptionKey: reason])
+        }
+    }
+
+    private func refreshRestoredData(_ service: ChatService) async {
+        await AppConfigStore.shared.reloadFromPersistentStoreAndWait()
+        await Task.detached(priority: .userInitiated) {
+            service.reloadLocalModelsAndAppConfigBackedModelState()
+            service.reloadSessionStateFromPersistenceAfterMigration()
+            MemoryManager.shared.reloadFromPersistenceAfterSnapshotRestore()
+        }.value
+        draft = AppConfigStore.shared.chatComposerDraft
+        attachments.removeAll()
+    }
 }
 
 struct MacComposerAttachment: Identifiable, Sendable {

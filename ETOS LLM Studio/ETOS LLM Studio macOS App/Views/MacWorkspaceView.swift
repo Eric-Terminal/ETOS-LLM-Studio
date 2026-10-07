@@ -67,6 +67,7 @@ struct MacWorkspaceView: View {
                     }
                 }
         }
+        .disabled(workspace.isRestoringData)
         .sheet(item: $sessionToEdit) { session in
             MacSessionEditor(session: session)
         }

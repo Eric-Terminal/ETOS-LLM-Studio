@@ -61,6 +61,14 @@ actor MCPConfigurationPersistenceWorker {
 
     init(appToolDefaults: [MCPServerConfiguration]) { self.appToolDefaults = appToolDefaults }
 
+    func drain() {}
+
+    func saveMetadata(_ cache: MCPServerMetadataCache, server: MCPServerConfiguration) -> Bool {
+        guard MCPServerStore.loadServers().first(where: { $0.id == server.id })?.transport == server.transport else { return false }
+        MCPServerStore.saveMetadata(cache, for: server.id)
+        return true
+    }
+
     func load() -> MCPConfigurationPersistenceResult {
         revision += 1
         return MCPConfigurationPersistenceResult(revision: revision, snapshot: .load(appToolDefaults: appToolDefaults))
@@ -106,29 +114,65 @@ actor MCPConfigurationPersistenceWorker {
 }
 
 extension MCPManager {
+    public func waitForInitialLoadIfNeeded() async {
+        await initialLoadTask?.value
+    }
+
     public func reloadServersInBackground() async {
+        guard !isRestoringDatabase else { return }
         applyBackgroundStoreResult(await configurationPersistenceWorker.load())
     }
 
     public func saveServerInBackground(_ server: MCPServerConfiguration, replacing original: MCPServerConfiguration?) async throws {
+        guard !isRestoringDatabase else { throw MCPConfigurationWriteError.changedExternally }
         let result = try await configurationPersistenceWorker.save(server, replacing: original)
         applyBackgroundStoreResult(result)
     }
 
     public func deleteServerInBackground(_ server: MCPServerConfiguration) async throws {
+        guard !isRestoringDatabase else { throw MCPConfigurationWriteError.changedExternally }
         let result = try await configurationPersistenceWorker.delete(server)
         applyBackgroundStoreResult(result)
     }
 
     public func setChatToolsEnabledInBackground(_ enabled: Bool) async throws {
+        guard !isRestoringDatabase else { throw MCPConfigurationWriteError.changedExternally }
         applyBackgroundStoreResult(try await configurationPersistenceWorker.setChatToolsEnabled(enabled))
         if chatToolsEnabled { connectSelectedServersIfNeeded() }
     }
 
     func applyBackgroundStoreResult(_ result: MCPConfigurationPersistenceResult) {
         // 数据库任务的完成顺序与主执行器恢复顺序不一定一致；旧结果不能回退界面。
-        guard result.revision > backgroundStoreRevision else { return }
+        guard !isRestoringDatabase, result.revision > backgroundStoreRevision else { return }
         backgroundStoreRevision = result.revision
         applyStoreSnapshot(result.snapshot)
+    }
+
+    public func prepareForDatabaseRestore() async {
+        isRestoringDatabase = true
+        configObservationCancellable?.cancel()
+        configObservationCancellable = nil
+        cancelAllAutoConnectRetries(resetAttempts: true)
+        let connections = Array(inFlightConnections.values)
+        connections.forEach { $0.cancel() }
+        inFlightConnections.removeAll()
+        inFlightConnectionTokens.removeAll()
+        for server in servers {
+            cancelTrackedToolCalls(for: server.id, reason: NSLocalizedString("服务器已断开", comment: ""))
+            removeLocalStdioInstances(for: server.id)
+            let client = removeConnectionArtifacts(for: server.id)
+            await client?.disconnect()
+        }
+        for connection in connections { _ = await connection.result }
+        await configurationPersistenceWorker.drain()
+        serverStatuses.removeAll()
+        rebuildAggregates()
+    }
+
+    public func finishDatabaseRestore() async {
+        isRestoringDatabase = false
+        await reloadServersInBackground()
+        startConfigObservationIfNeeded()
+        connectSelectedServersIfNeeded()
     }
 }

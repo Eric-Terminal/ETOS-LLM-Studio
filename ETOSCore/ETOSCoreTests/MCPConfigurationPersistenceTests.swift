@@ -53,6 +53,8 @@ struct MCPConfigurationPersistenceTests {
         changed.transport = .localStdio(configuration: .init(command: "/usr/bin/env", arguments: ["node", "server.js"]))
         let changeResult = try await worker.save(changed, replacing: renamed)
         #expect(changeResult.snapshot.metadata[draft.id] == nil)
+        let savedStaleMetadata = await worker.saveMetadata(metadata, server: renamed)
+        #expect(!savedStaleMetadata)
         #expect(MCPServerStore.loadMetadata(for: draft.id) == nil)
     }
 }

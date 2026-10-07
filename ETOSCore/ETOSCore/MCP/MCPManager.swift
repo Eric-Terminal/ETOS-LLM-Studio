@@ -112,6 +112,9 @@ public final class MCPManager: ObservableObject {
     var configObservationCancellable: AnyDatabaseCancellable?
     var configSnapshotSignature: String = ""
     var backgroundStoreRevision: UInt64 = 0
+    var isRestoringDatabase = false
+    var initialLoadTask: Task<Void, Never>?
+    var inFlightConnectionTokens: [UUID: UUID] = [:]
     lazy var configurationPersistenceWorker = MCPConfigurationPersistenceWorker(
         appToolDefaults: MCPBuiltInAppToolServer.categories.map { MCPBuiltInAppToolServer.defaultConfiguration(for: $0) }
     )
@@ -148,7 +151,7 @@ public final class MCPManager: ObservableObject {
         )
         #endif
         #if os(macOS)
-        Task { [weak self] in
+        initialLoadTask = Task { [weak self] in
             await self?.reloadServersInBackground()
             self?.startConfigObservationIfNeeded()
             self?.connectSelectedServersIfNeeded()
@@ -187,6 +190,7 @@ public final class MCPManager: ObservableObject {
     // MARK: - Server Management
 
     public func reloadServers() {
+        guard !isRestoringDatabase else { return }
         applyStoreSnapshot(MCPManagerStoreSnapshot.load(
             appToolDefaults: MCPBuiltInAppToolServer.categories.map { MCPBuiltInAppToolServer.defaultConfiguration(for: $0) }
         ))
@@ -488,6 +492,7 @@ public final class MCPManager: ObservableObject {
         keepReadyStateDuringHandshake: Bool = false,
         refreshMetadataIfCacheMissing: Bool = false
     ) async throws -> MCPClient {
+        guard !isRestoringDatabase else { throw CancellationError() }
         if let client = clients[server.id], case .ready = status(for: server).connectionState {
             return client
         }
@@ -506,16 +511,16 @@ public final class MCPManager: ObservableObject {
                 refreshMetadataIfCacheMissing: refreshMetadataIfCacheMissing
             )
         }
+        let token = UUID()
+        inFlightConnectionTokens[server.id] = token
         inFlightConnections[server.id] = task
-
-        do {
-            let client = try await task.value
-            inFlightConnections[server.id] = nil
-            return client
-        } catch {
-            inFlightConnections[server.id] = nil
-            throw error
+        defer {
+            if inFlightConnectionTokens[server.id] == token {
+                inFlightConnections[server.id] = nil
+                inFlightConnectionTokens[server.id] = nil
+            }
         }
+        return try await task.value
     }
 
     func ensureClientReady(serverID: UUID, refreshMetadataIfCacheMissing: Bool = false) async throws -> MCPClient {
@@ -538,6 +543,7 @@ public final class MCPManager: ObservableObject {
         keepReadyStateDuringHandshake: Bool,
         refreshMetadataIfCacheMissing: Bool
     ) async throws -> MCPClient {
+        let connectionToken = inFlightConnectionTokens[server.id]
         let macUsage = beginMacStdioUse(serverID: server.id)
         defer { endMacStdioUse(serverID: server.id, usage: macUsage) }
         if retryOnFailure {
@@ -617,6 +623,8 @@ public final class MCPManager: ObservableObject {
                 message: NSLocalizedString("已恢复流式重连令牌。", comment: "MCP governance stream resumption token restored")
             )
         }
+        try Task.checkCancellation()
+        guard !isRestoringDatabase, inFlightConnectionTokens[server.id] == connectionToken else { throw CancellationError() }
         let relay = MCPServerNotificationRelay(serverID: server.id, manager: self)
         notificationRelays[server.id] = relay
         transportBundle.streamControl?.notificationDelegate = relay
@@ -652,9 +660,12 @@ public final class MCPManager: ObservableObject {
                 timeout: handshakeTimeout,
                 capabilities: clientCapabilitiesForCurrentHandlers()
             )
+            try Task.checkCancellation()
+            guard !isRestoringDatabase, clients[server.id] === client else { throw CancellationError() }
             if let configurableTransport = transportBundle.streamControl as? MCPProtocolVersionConfigurableTransport {
                 await configurableTransport.updateProtocolVersion(client.negotiatedProtocolVersion)
             }
+            guard !isRestoringDatabase, clients[server.id] === client else { throw CancellationError() }
             mcpManagerLogger.info("MCP 初始化成功：\(server.displayName, privacy: .public)，server=\(info.name, privacy: .public) \(info.version ?? "unknown", privacy: .public)")
 
             let shouldSelectForChat = !preserveSelection && !status(for: server).isSelectedForChat
@@ -691,14 +702,20 @@ public final class MCPManager: ObservableObject {
             if shouldRefreshMetadata {
                 await refreshMetadata(for: server.id, client: client, serverInfo: info)
             }
-
+            try Task.checkCancellation()
+            guard !isRestoringDatabase, clients[server.id] === client else { throw CancellationError() }
             persistResumptionToken(for: server.id)
 
             return client
         } catch {
+            guard clients[server.id] === client else {
+                await client.disconnect()
+                throw error
+            }
             mcpManagerLogger.error("MCP 初始化失败：\(server.displayName, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
             let failedClient = removeConnectionArtifacts(for: server.id)
             await failedClient?.disconnect()
+            guard inFlightConnectionTokens[server.id] == connectionToken else { throw error }
             if Task.isCancelled || isAutoConnectSuppressed(server.id) {
                 if servers.contains(where: { $0.id == server.id }) {
                     updateStatus(for: server.id) {

@@ -262,9 +262,14 @@ extension AppConfigStore {
 
     public func reloadFromPersistentStore() {
         Task(priority: .utility) { [weak self] in
-            let snapshot = await AppConfigPersistenceWorker.shared.loadSnapshot(includeLocalOnly: true)
-            self?.applyPersistentStoreSnapshot(snapshot, preservingLocalBootstrapChanges: false)
+            await self?.reloadFromPersistentStoreAndWait()
         }
+    }
+
+    /// 数据库替换后，调用方必须等新快照应用完成再开放编辑，不能复用首次加载标记。
+    public func reloadFromPersistentStoreAndWait() async {
+        let snapshot = await AppConfigPersistenceWorker.shared.loadSnapshot(includeLocalOnly: true)
+        applyPersistentStoreSnapshot(snapshot, preservingLocalBootstrapChanges: false)
     }
 
     public func waitForPersistentStoreLoaded() async {

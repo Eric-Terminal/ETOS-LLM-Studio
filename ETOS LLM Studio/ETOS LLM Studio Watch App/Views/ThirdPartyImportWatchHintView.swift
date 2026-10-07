@@ -180,6 +180,7 @@ struct ThirdPartyImportWatchHintView: View {
                 SnapshotImportRestoreView(fileURL: request.fileURL) {
                     snapshotRestoreRequest = nil
                 }
+                .watchGuideEntry()
             }
         }
         .onChange(of: selectedSource) { _, _ in

@@ -7467,3 +7467,14 @@
 "Mac 的 stdio 服务器直接运行本机程序，需先自行安装依赖。配置保存后不会立即运行；连接时读取工具目录，加入聊天后由工具审批控制调用。" = "Mac stdio servers run local programs. Install their dependencies first. Saving a configuration does not launch it; connecting reads its tool catalog, and chat calls follow tool approval rules.";
 "stdio 使用 command、args、env 和 cwd；远程连接使用 endpoint。高级字段保留原有格式。已有环境变量引用保持不变，新增 env 值会在保存时转为数据库记录。" = "stdio uses command, args, env and cwd; remote connections use endpoint. Advanced fields retain their format. Existing environment references stay intact; new env values become database records on save.";
 "添加提供商地址和 API Key 后，获取模型列表或手动添加模型。启用的聊天模型会出现在聊天窗口的模型选择器中。" = "Enter the provider address and API key, then fetch the model list or add models manually. Enabled chat models appear in the chat window’s model picker.";
+
+/* macOS 快照管理 */
+"在 Finder 中显示" = "Show in Finder";
+"当前有数据或工具任务正在运行，请稍后重试。" = "A data or tool operation is in progress. Please try again later.";
+"数据库快照只包含聊天、配置与记忆数据库；完整快照还包含壁纸、附件、字体与记忆向量索引文件。" = "Database snapshots contain chat, configuration and memory databases. Full snapshots also include wallpapers, attachments, fonts and memory vector indexes.";
+"数据管理" = "Data Management";
+"正在创建快照…" = "Creating snapshot…";
+"请先完整配置 S3/R2 地址、区域、存储桶和凭据。" = "Configure the S3/R2 endpoint, region, bucket and credentials first.";
+"请填写一致的快照密码和确认密码。" = "Enter a snapshot password and a matching confirmation.";
+
+"上次同步" = "Last sync";
