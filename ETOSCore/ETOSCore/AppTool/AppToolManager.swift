@@ -12,7 +12,13 @@ import os.log
 
 @MainActor
 public final class AppToolManager: ObservableObject {
-    public static let shared = AppToolManager()
+    private static var sharedInstance: AppToolManager?
+    public static var shared: AppToolManager {
+        if let sharedInstance { return sharedInstance }
+        let manager = AppToolManager(state: AppToolInitialState.load(registerNewDefaults: true))
+        sharedInstance = manager
+        return manager
+    }
     // 注意：这里必须使用系统合成的 objectWillChange，
     // 否则工具中心里的总开关、启用态与审批策略不会稳定自动刷新。
 
@@ -34,49 +40,39 @@ public final class AppToolManager: ObservableObject {
     @Published var toolApprovalPolicies: [String: AppToolApprovalPolicy]
     @Published public internal(set) var customJSTools: [AppToolCustomJSTool]
 
-    private init(defaults: UserDefaults = .standard) {
-        chatToolsEnabled = AppConfigStore.boolValue(
-            for: .appToolsChatToolsEnabled,
-            legacyUserDefaultsKey: Self.chatToolsEnabledUserDefaultsKey,
-            userDefaults: defaults,
-            defaultValue: true
-        )
-        let allDefaultIDs = Set(Self.defaultEnabledToolKinds.map(\.rawValue))
-        // 只对"从未见过"的默认工具（版本升级新增）强制启用，已知工具尊重用户自行关闭的设置
-        let knownDefaultIDs = Set(AppConfigStore.stringArrayValue(
-            for: .appToolsKnownDefaultToolIDs,
-            legacyUserDefaultsKey: Self.knownDefaultToolIDsUserDefaultsKey,
-            userDefaults: defaults,
-            defaultValue: []
-        ) ?? [])
-        let newDefaultIDs = allDefaultIDs.subtracting(knownDefaultIDs)
-        if let storedIDs = AppConfigStore.stringArrayValue(
-            for: .appToolsEnabledToolIDs,
-            legacyUserDefaultsKey: Self.enabledToolIDsUserDefaultsKey,
-            userDefaults: defaults
-        ) {
-            var migratedIDs = Set(storedIDs.filter { AppToolKind(rawValue: $0) != nil })
-            migratedIDs.formUnion(newDefaultIDs)
-            enabledToolIDs = migratedIDs
-            AppConfigStore.persistStringArray(Array(migratedIDs).sorted(), for: .appToolsEnabledToolIDs)
-        } else {
-            enabledToolIDs = allDefaultIDs
-            AppConfigStore.persistStringArray(Array(allDefaultIDs).sorted(), for: .appToolsEnabledToolIDs)
-        }
-        // 标记当前所有默认工具为"已知"，下次启动不再重复强制启用
-        AppConfigStore.persistStringArray(Array(allDefaultIDs).sorted(), for: .appToolsKnownDefaultToolIDs)
-        let storedPolicyRawValues = AppConfigStore.stringDictionaryValue(
-            for: .appToolsToolApprovalPolicies,
-            legacyUserDefaultsKey: Self.toolApprovalPoliciesUserDefaultsKey,
-            userDefaults: defaults
-        )
-        toolApprovalPolicies = storedPolicyRawValues.reduce(into: [String: AppToolApprovalPolicy]()) { result, pair in
-            guard let kind = AppToolKind(rawValue: pair.key) else { return }
-            guard kind.requiresApproval else { return }
-            guard let policy = AppToolApprovalPolicy(rawValue: pair.value), policy != .askEveryTime else { return }
-            result[pair.key] = policy
-        }
-        customJSTools = Self.loadCustomJSToolsFromDisk()
+    let settingsWorker = AppToolSettingsWorker()
+    private var settingsRevision: UInt64 = 0
+
+    private init(state: AppToolInitialState) {
+        chatToolsEnabled = state.chatToolsEnabled
+        enabledToolIDs = state.enabledToolIDs
+        toolApprovalPolicies = state.approvalPolicies
+        customJSTools = state.customJSTools
+    }
+
+    /// 桌面启动先准备磁盘目录和旧配置迁移，视图只取得已经加载的管理器。
+    public static func prepareSharedInBackground() async -> AppToolManager {
+        if let sharedInstance { return sharedInstance }
+        let state = await Task.detached(priority: .userInitiated) { AppToolInitialState.load(registerNewDefaults: true) }.value
+        if let sharedInstance { return sharedInstance }
+        let manager = AppToolManager(state: state)
+        sharedInstance = manager
+        return manager
+    }
+
+    func applySettings(_ result: AppToolSettingsResult) {
+        guard result.revision > settingsRevision else { return }
+        settingsRevision = result.revision
+        enabledToolIDs = result.enabledToolIDs
+    }
+
+    public func reloadInBackground() async {
+        let state = await Task.detached(priority: .utility) { AppToolInitialState.load(registerNewDefaults: false) }.value
+        guard !Task.isCancelled else { return }
+        chatToolsEnabled = state.chatToolsEnabled
+        enabledToolIDs = state.enabledToolIDs
+        toolApprovalPolicies = state.approvalPolicies
+        customJSTools = state.customJSTools
     }
 
     public nonisolated static func isAppToolName(_ name: String) -> Bool {

@@ -218,6 +218,12 @@ extension AppConfigStore {
     ) -> Bool {
         let normalizedValue = normalizedAppConfigValue(value, for: key)
         guard persist(normalizedValue, for: key) else { return false }
+        publishPersistedValue(normalizedValue, for: key, quickSync: quickSync)
+        return true
+    }
+
+    /// 已在数据库事务内提交的局部修改仍需更新缓存，并沿用原有同步通知。
+    nonisolated static func publishPersistedValue(_ normalizedValue: AppConfigValue, for key: AppConfigKey, quickSync: Bool = true) {
         snapshotCache.set(normalizedValue.anyValue, for: key)
         if shouldTouchWatchConfigDatabase(for: key) {
             WatchDatabaseSyncService.markDatabaseChanged(.config)
@@ -237,7 +243,6 @@ extension AppConfigStore {
                 CloudSyncManager.shared.scheduleRealtimeSyncIfEnabled(reason: "appConfig.\(key.rawValue)")
             }
         }
-        return true
     }
 
     public func flushPendingWrites() async {
