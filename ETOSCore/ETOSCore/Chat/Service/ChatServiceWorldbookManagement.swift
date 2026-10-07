@@ -18,8 +18,17 @@ extension ChatService {
         worldbookStore.upsertWorldbook(worldbook)
     }
 
-    public func deleteWorldbook(id: UUID) {
-        worldbookStore.deleteWorldbook(id: id)
+    public func saveWorldbookDraft(_ draft: Worldbook, replacing original: Worldbook?) throws {
+        try worldbookStore.saveDraft(draft, replacing: original)
+    }
+
+    public func reorderWorldbookDraft(_ orderedIDs: [UUID], replacing originals: [Worldbook]) throws {
+        try worldbookStore.reorderDraft(orderedIDs, replacing: originals)
+    }
+
+    @discardableResult
+    public func deleteWorldbook(id: UUID, expected: Worldbook? = nil) -> Bool {
+        guard worldbookStore.deleteWorldbook(id: id, expected: expected) else { return false }
 
         // 清理会话绑定中的孤立引用。
         var sessions = chatSessionsSubject.value
@@ -38,6 +47,7 @@ extension ChatService {
             }
             Persistence.saveChatSessions(sessions)
         }
+        return true
     }
 
     @discardableResult

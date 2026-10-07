@@ -9,6 +9,7 @@ struct MacWorkspaceView: View {
     @ObservedObject private var appLock = AppLockManager.shared
     @State private var sessionToEdit: ChatSession?
     @State private var sessionToDelete: ChatSession?
+    @State private var sessionToBind: ChatSession?
 
     var body: some View {
         NavigationSplitView {
@@ -20,6 +21,11 @@ struct MacWorkspaceView: View {
                 .navigationTitle(workspace.currentSession?.name ?? NSLocalizedString("新的对话", comment: ""))
                 .toolbar {
                     ToolbarItem { MacTemporaryChatMenu() }
+                    if configuration.modelPickerWorldbookShortcutEnabled {
+                        Button { sessionToBind = workspace.currentSession } label: {
+                            Label(NSLocalizedString("绑定世界书", comment: ""), systemImage: "books.vertical")
+                        }
+                    }
                     ToolbarItem(placement: .principal) {
                         Picker(NSLocalizedString("全局模型", comment: ""), selection: Binding(
                             get: { workspace.selectedModelID },
@@ -54,6 +60,7 @@ struct MacWorkspaceView: View {
         .sheet(item: $sessionToEdit) { session in
             MacSessionEditor(session: session)
         }
+        .sheet(item: $sessionToBind) { MacWorldbookBindingView(model: workspace.worldbookModel, session: $0) }
         .sheet(item: Binding(
             get: { appLock.state == .locked ? nil : permissions.activeRequest },
             set: { _ in }

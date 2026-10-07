@@ -26,6 +26,10 @@ public enum GuideMacWorkspaceKnowledge {
 
             上下文中的记忆页可搜索激活或归档条目、选择嵌入模型并调整检索设置。记忆编辑器保存内容、分类、重要度、置信度、实体及归档草稿；已有条目在其他位置变化或被删除后，旧草稿不能覆盖。原文保存成功与嵌入生成成功分别处理，嵌入失败可以从数据维护页重试。全部重新嵌入必须由用户确认；向导仅能修改并发配置或编辑草稿。
 
+            上下文中的世界书页支持新增、搜索正文与关键词、JSON/PNG 文件或 URL 导入、原生文件导出、删除和拖动排序。详情展示共享正文条目，基础信息、默认扫描与注入预算、条目关键词/逻辑/概率/位置/分组/定时效果/递归规则均在独立草稿编辑器保存。条目拖动同时更新注入优先级；搜索期间不能重排整本书。保存时由核心存储队列比较原版本，防止旧窗口覆盖已修改或已删除内容，导入写盘失败不会报告成功。
+
+            世界书绑定页固定来源会话，显示停用状态、条目计数和角色提供的书籍。取消手动选择不移除角色来源，绑定不改变三个上下文隔离开关；必须手动保存。向导在各编辑器只改草稿，条件字段随开关与插入位置更新。列表、详情、删除确认和教程是只读上下文；URL 对向导只写不可读，下载和文件操作必须手动发起。导入、导出、排序和写入与 Mac 的快照恢复互斥，恢复后清除旧目录缓存再读取数据库。
+
             记忆的“导入与导出”可生成 Markdown 目录供阅读，或生成保留稳定 ID 与元数据的 .etosmemory 归档。导出后可分享或在 Finder 中显示；归档导入先预览新增、更新和冲突数量，用户手动确认才写入。核心会重新核对归档内容及本机条目，保留本机较新或同时间的冲突版本。传输页与确认页只向向导公开状态，不允许向导触发文件操作。
 
             “跨对话记忆与画像”管理启用条件、摘要专用模型、触发轮次、最小间隔、注入摘要数及画像日更。可查看摘要全文、删除单条或清空摘要，并编辑画像和查看结构化事实。编辑器的向导提案只改变草稿，保存时保留事实；画像在后台更新或被清空后，旧草稿需要重新打开。向导不能执行删除或清空；这些操作通过原生确认。
@@ -55,6 +59,10 @@ public enum GuideMacWorkspaceKnowledge {
             Settings contains General, Model Management, MCP Tools, Context, Data Management and Security. Provider, model, session and MCP editors keep drafts: confirming a guide proposal changes the draft, and Save commits it. Completing a model editor returns to the provider draft, which must also be saved. Returning from a JSON subpage does not save. Existing headers, request bodies and keys are unreadable to the guide; proposals may replace them with JSON objects the user supplies. A stale MCP draft cannot overwrite a configuration changed elsewhere. MCP detail and tool settings save directly after confirmation. Switching the foreground window, page or protocol, or locking the app invalidates old page proposals.
 
             Memory under Context searches active or archived items, selects an embedding model and configures retrieval. The editor saves drafts of content, kind, importance, confidence, entities and archive status. Stale drafts cannot overwrite changed or deleted items. Saving text and generating embeddings have separate outcomes; failed embeddings can be retried from Data Maintenance. Rebuilding all embeddings requires manual confirmation. The guide can only adjust concurrency or edit drafts.
+
+            Worldbooks under Context supports creation, text/keyword search, JSON/PNG file or URL imports, native file export, deletion and drag reordering. Details display shared entries. Separate draft editors save basic information, scan/injection budgets and entry keywords, logic, probability, placement, grouping, timed effects and recursion rules. Reordering entries also updates injection priority; book reordering is disabled during search. The core store compares the original version within its serial queue, preventing stale windows from overwriting changed or deleted content. Failed import writes are not reported as successful.
+
+            Worldbook bindings retain their source conversation and display disabled books, entry counts and role-provided sources. Removing a manual selection does not remove a role source or change context isolation switches. Bindings require Save. Guide proposals modify editor drafts only, with conditional fields following switches and placement. Lists, details, deletion confirmations and tutorials expose read-only context. URLs are write-only to the guide; downloads and file operations remain manual. Imports, exports, reordering and writes cannot overlap Mac snapshot restoration, which clears the old catalog cache before reloading the database.
 
             Memory Import and Export generates a readable Markdown directory or an .etosmemory archive preserving stable IDs and metadata. Share the result or reveal it in Finder. Import previews additions, updates and conflicts before manual confirmation. The core rechecks the archive and local items, retaining local versions with newer or equal timestamps. Transfer and confirmation pages expose read-only status to the guide, which cannot initiate file operations.
 

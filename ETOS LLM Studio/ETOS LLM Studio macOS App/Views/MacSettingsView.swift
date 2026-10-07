@@ -24,14 +24,16 @@ struct MacSettingsView: View {
                 List {
                     NavigationLink(NSLocalizedString("记忆", comment: "")) { MacMemorySettingsView(model: workspace.memoryModel) }
                     NavigationLink(NSLocalizedString("跨对话记忆与画像", comment: "")) { MacConversationMemoryView(model: workspace.conversationMemoryModel) }
+                    NavigationLink(NSLocalizedString("世界书", comment: "")) { MacWorldbookListView(model: workspace.worldbookModel) }
                 }
                 .navigationTitle(NSLocalizedString("上下文", comment: ""))
                 .guideSettingsPageContext(
                     id: "mac-context", title: NSLocalizedString("上下文", comment: ""),
-                    documents: [GuideDocumentReference(id: "settings-memory", title: "Memory System")], isActive: selectedTab == .context,
+                    documents: [GuideDocumentReference(id: "settings-memory", title: "Memory System"), GuideDocumentReference(id: "worldbooks", title: "Worldbooks")], isActive: selectedTab == .context,
                     settings: [
                         .readOnly("requires_navigation", label: NSLocalizedString("记忆", comment: ""), value: { .bool(true) }),
-                        .readOnly("profile_requires_navigation", label: NSLocalizedString("跨对话记忆与画像", comment: ""), value: { .bool(true) })
+                        .readOnly("profile_requires_navigation", label: NSLocalizedString("跨对话记忆与画像", comment: ""), value: { .bool(true) }),
+                        .readOnly("worldbooks_requires_navigation", label: NSLocalizedString("世界书", comment: ""), value: { .bool(true) })
                     ]
                 )
             }
@@ -78,6 +80,7 @@ struct MacSettingsView: View {
             MacGuideView().inspectorColumnWidth(min: 300, ideal: 360, max: 500)
         }
         .overlay { if appLock.state == .locked { AppLockOverlayView() } }
+        .networkConnectionApprovalHost()
         .onChange(of: configuration.appLanguage) { _, language in
             AppLanguageRuntime.apply(rawValue: language)
         }
