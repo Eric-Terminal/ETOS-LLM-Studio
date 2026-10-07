@@ -73,12 +73,19 @@ public final class LocalModelStore: ObservableObject, @unchecked Sendable {
 
     public func setProviderEnabled(_ isEnabled: Bool) {
         AppConfigStore.persistSynchronously(.bool(isEnabled), for: .localModelsEnabled)
-        Task { @MainActor in
+        DispatchQueue.main.async {
             if AppConfigStore.shared.localModelsEnabled != isEnabled {
                 AppConfigStore.shared.localModelsEnabled = isEnabled
             }
         }
         notifyProviderChanged()
+    }
+
+    /// 文件任务返回后，先排空它已经提交的 UI 更新，再等待 AppConfig 的数据库写入。
+    public func waitForPendingUIUpdates() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
     }
 
     public func fileURL(for record: LocalModelRecord) -> URL {
@@ -437,10 +444,12 @@ public final class LocalModelStore: ObservableObject, @unchecked Sendable {
         linkNewSpeechCompanion(record, in: &nextRecords)
         try persistModels(nextRecords)
         records = nextRecords
+        publishModels(notifyProvider: false)
         if !isProviderEnabled {
             setProviderEnabled(true)
+        } else {
+            notifyProviderChanged()
         }
-        publishModels()
         return record
     }
 
@@ -635,17 +644,13 @@ public final class LocalModelStore: ObservableObject, @unchecked Sendable {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.objectWillChange.send()
-            if notifyProvider {
-                NotificationCenter.default.post(name: .localModelStoreDidChange, object: nil)
-            }
         }
+        // 提供商监听器包含数据库读写，必须在调用方的存储任务内完成，不能搬到 UI 队列。
+        if notifyProvider { notifyProviderChanged() }
     }
 
     private func notifyProviderChanged() {
-        DispatchQueue.main.async { [weak self] in
-            guard self != nil else { return }
-            NotificationCenter.default.post(name: .localModelStoreDidChange, object: nil)
-        }
+        NotificationCenter.default.post(name: .localModelStoreDidChange, object: nil)
     }
 
     private func metadataURL() -> URL {

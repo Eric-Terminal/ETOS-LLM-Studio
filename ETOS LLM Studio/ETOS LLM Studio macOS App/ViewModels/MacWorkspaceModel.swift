@@ -25,6 +25,7 @@ final class MacWorkspaceModel: ObservableObject {
     @Published private(set) var selectedModelID: String?
     @Published private(set) var selectedModelSupportsPrefill = false
     @Published private(set) var selectedModelSupportsRewrite = false
+    @Published private(set) var selectedModelIsLocal = false
     @Published private(set) var messages: [MacMessagePresentation] = []
     @Published private(set) var runningSessionIDs: Set<UUID> = []
     @Published private(set) var activeQuestionnaireModel: MacQuestionnaireModel?
@@ -60,6 +61,7 @@ final class MacWorkspaceModel: ObservableObject {
     let roleplayRuntime = MacRoleplayRuntime()
     let requestControls = MacRequestRuntimeModel()
     let modelTests = MacModelConnectivityTasks()
+    let localModels = MacLocalModelLibraryModel()
     private var roleplayHostVisible = false
     private var roleplayLifecycleRevision = UUID()
     private var isClosingRoleplay = false
@@ -90,6 +92,11 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     var canRunModelTests: Bool {
+        phase == .ready && !isRestoringData && !isExportingSnapshot && !isClosingRoleplay
+            && AppLockManager.shared.state != .locked
+    }
+
+    var canManageLocalModels: Bool {
         phase == .ready && !isRestoringData && !isExportingSnapshot && !isClosingRoleplay
             && AppLockManager.shared.state != .locked
     }
@@ -229,7 +236,7 @@ final class MacWorkspaceModel: ObservableObject {
             refreshToolInteractions()
         }.store(in: &subscriptions)
         AppLockManager.shared.$state.receive(on: DispatchQueue.main).sink { [weak self] state in
-            if state == .locked { self?.suspendRoleplayPresentation(); self?.requestControls.suspend(); self?.modelTests.cancelAll() }
+            if state == .locked { self?.suspendRoleplayPresentation(); self?.requestControls.suspend(); self?.modelTests.cancelAll(); self?.localModels.suspend() }
             else { self?.resumeRoleplayPresentation(); self?.resumeRequestControls(); self?.flushToolSupplements() }
         }.store(in: &subscriptions)
         for name in [RoleplayStore.didChangeNotification, RoleplayDisplayedMessageBridge.didChangeNotification,
@@ -291,7 +298,13 @@ final class MacWorkspaceModel: ObservableObject {
         for task in rewriteTasks.values { task.cancel() }
         suspendRoleplayPresentation()
         requestControls.suspend()
+        localModels.suspend()
         await modelTests.cancelAndWait()
+        // KV 清理可能等待正在推理的上下文；先取消生成，退出不能排在清理锁后面等待。
+        if let service {
+            for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
+        }
+        await localModels.waitForPendingWrites()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()
@@ -362,6 +375,7 @@ final class MacWorkspaceModel: ObservableObject {
         effectiveModelName = effectiveModel?.model.displayName
         selectedModelSupportsPrefill = effectiveModel?.canRequestAssistantPrefill == true
         selectedModelSupportsRewrite = effectiveModel?.model.isChatModel == true
+        selectedModelIsLocal = LocalModelProviderBridge.isLocalRunnableModel(effectiveModel)
         requestControls.select(effectiveModel, sessionID: currentSession?.id, force: forceRequestControls)
     }
 
@@ -694,6 +708,7 @@ final class MacWorkspaceModel: ObservableObject {
         guard !isRestoringData, !isMutatingHistory, !roleplayRuntime.isBusy, !sessionLibrary.isWorking, !worldbookModel.isWorking, !roleplayModel.isWorking, !isExportingSnapshot, !SnapshotUploadManager.shared.isUploading else { return false }
         isExportingSnapshot = true
         modelTests.cancelAll()
+        localModels.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
         return true
@@ -704,6 +719,7 @@ final class MacWorkspaceModel: ObservableObject {
     private func resumeRequestControls() {
         guard phase == .ready, !isRestoringData, !isExportingSnapshot, !isClosingRoleplay, AppLockManager.shared.state != .locked else { return }
         requestControls.resume()
+        localModels.resume()
     }
 
     func restoreSnapshot(from url: URL, password: String?) async throws {
@@ -718,6 +734,7 @@ final class MacWorkspaceModel: ObservableObject {
         }
         isRestoringData = true
         modelTests.cancelAll()
+        localModels.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
         discardToolInteractions()
@@ -729,10 +746,11 @@ final class MacWorkspaceModel: ObservableObject {
             resumeRequestControls()
         }
         await modelTests.cancelAndWait()
+        for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
+        await localModels.waitForPendingWrites()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()
-        for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
         await mcp.prepareForDatabaseRestore()
         do {
             await AppConfigStore.shared.flushPendingWrites()
@@ -762,15 +780,17 @@ final class MacWorkspaceModel: ObservableObject {
         }
         isRestoringData = true
         modelTests.cancelAll()
+        localModels.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
         discardToolInteractions()
         defer { isRestoringData = false; resumeRoleplayPresentation(); resumeRequestControls() }
         await modelTests.cancelAndWait()
+        for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
+        await localModels.waitForPendingWrites()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()
-        for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
         await mcp.prepareForDatabaseRestore()
         await AppConfigStore.shared.flushPendingWrites()
         await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()

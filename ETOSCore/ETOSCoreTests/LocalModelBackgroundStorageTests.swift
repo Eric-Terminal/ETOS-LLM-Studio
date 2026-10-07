@@ -238,6 +238,26 @@ struct LocalModelBackgroundStorageTests {
         }
         withExtendedLifetime(subscription) {}
     }
+
+    @Test("等待 UI 更新后才能认为存储任务完整收尾")
+    @MainActor
+    func waitsForQueuedUIUpdates() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try fixture.record()
+        await fixture.store.waitForPendingUIUpdates()
+        var didPublish = false
+        let subscription = fixture.store.objectWillChange.sink { didPublish = true }
+        await Task.detached {
+            var draft = original
+            draft.displayName = "已提交"
+            fixture.store.update(draft)
+        }.value
+        await fixture.store.waitForPendingUIUpdates()
+        #expect(didPublish)
+        #expect(fixture.store.models.first?.displayName == "已提交")
+        withExtendedLifetime(subscription) {}
+    }
 }
 
 private struct Fixture: Sendable {

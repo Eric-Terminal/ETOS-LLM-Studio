@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 
 struct MacChatView: View {
     @EnvironmentObject private var workspace: MacWorkspaceModel
+    @ObservedObject private var configuration = AppConfigStore.shared
     @State private var importing = false
     @State private var followsLatest = true
     @State private var editingMessage: MacMessageEditTarget?
@@ -86,6 +87,9 @@ struct MacChatView: View {
             }
             Divider()
             MacRoleplayScriptHost(runtime: workspace.roleplayRuntime).padding(.horizontal)
+            if configuration.localModelPerformanceMonitorEnabled && workspace.selectedModelIsLocal && workspace.canManageLocalModels {
+                MacLocalResourceUsageView()
+            }
             if let mode = workspace.temporaryChatMemoryMode {
                 Label(mode.isMemoryEnabled ? NSLocalizedString("允许使用记忆", comment: "") : NSLocalizedString("隔离记忆上下文", comment: ""), systemImage: "clock")
                     .font(.caption).foregroundStyle(.secondary)

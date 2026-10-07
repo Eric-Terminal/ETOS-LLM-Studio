@@ -11,6 +11,11 @@ struct MacProviderListView: View {
         List {
             Section {
                 MacSettingsIntroCard(id: "providers", title: NSLocalizedString("使用说明", comment: ""), details: NSLocalizedString("添加提供商地址和 API Key 后，获取模型列表或手动添加模型。启用的聊天模型会出现在聊天窗口的模型选择器中。", comment: ""), documentID: "provider-model-basics")
+                NavigationLink {
+                    MacLocalModelLibraryView(isActive: isActive, library: workspace.localModels)
+                } label: {
+                    Label(NSLocalizedString("本地模型", comment: ""), systemImage: "internaldrive")
+                }
             }
             ForEach(workspace.providers) { provider in
                 Button { editingProvider = provider } label: {

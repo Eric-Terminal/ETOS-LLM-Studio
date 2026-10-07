@@ -7645,3 +7645,25 @@
 "Mac 模型连通性检查使用说明" = "Provider tests check enabled chat, embedding and image models in this draft, with one non-streaming request per chat model. Single-model chat tests check non-streaming, streaming and tool calls in sequence; embedding and image tests use their respective endpoints. Tool tests validate the returned call without executing any tool.\n\nStart sends real requests using the current provider and model drafts, keys, headers and control defaults. Tests may incur charges. They do not save configuration or chat history; normal diagnostic and usage records still apply. Batch concurrency is saved separately as you edit it.\n\nCancel or close to stop. An in-flight request must finish cancelling before another run can start; cancelled returns do not count as available or unavailable. Locking or external configuration changes close the page. Backup, restore and quit wait for registered requests. The guide can propose an idle batch concurrency change, but cannot start tests or read responses, error details or credentials.";
 
 "本地模型已被修改或删除，请重新打开后再试。" = "The local model was changed or deleted. Reopen it and try again.";
+
+"%@：请输入范围内的有效数字，或留空使用默认值。" = "%@: Enter a valid number within the allowed range, or leave blank for the default.";
+
+"将删除模型权重及不再使用的 mmproj 和 LoRA 文件。此操作不可撤销。" = "The model weights and unused mmproj and LoRA files will be deleted. This cannot be undone.";
+
+"应用到草稿" = "Apply to Draft";
+
+"请选择模型权重；mmproj 投影器可与权重一起导入。" = "Select model weights. You can import an mmproj projector alongside them.";
+
+"采样链请使用不重复的代码 edskypmxta；留空恢复默认。" = "Use codes from edskypmxta without duplicates for the sampler chain. Leave blank to restore the default.";
+
+"参数导入不读取任意路径文件，请改用 Grammar 文本。" = "Argument import does not read files from arbitrary paths. Use Grammar text instead.";
+
+"Mac 本地模型管理使用说明" = "Import GGUF weights and optionally a matching mmproj. When importing several weights, the projector attaches only to the first. Enable the provider and model to select it in chat. Library switches save automatically; detail changes require Save.\n\nBlank numbers keep defaults; seed -1 means random. Speech models can use a compatible decoder and optional VAD. LoRA must match the base architecture; scale 1 applies its original effect, while 0 keeps it attached without changing output. Newly selected mmproj and LoRA files are copied on Save. Cancel discards the draft. Reopen details if another change or deletion makes the original outdated.\n\nFor CLI arguments, parse the preview, apply it to the draft, then save the model. Unsupported options are not applied. Adjust the sampler chain with presets, move/add/remove controls, or the codes shown in each row. Codes cannot repeat; blank restores the default. Done returns the chain to the detail draft.\n\nModel caching reduces reloads. Conversation KV caching speeds up consecutive text turns and uses extra memory. Resource monitoring samples only while a local-model chat window is in the foreground. CPU shows process usage; Metal shows allocated memory, not GPU utilization. Lock, backup, restore and quit stop new file operations and allow started writes to finish. Deleting weights requires confirmation and cannot be undone.";
+
+"减少重复加载；关闭后释放缓存。" = "Reduces reloading. Turning off releases the cache.";
+
+"已开启" = "On";
+
+"请选择与基础模型架构匹配的 LoRA GGUF。强度 1 使用原始效果，0 保留挂载但不改变输出。" = "Choose a LoRA GGUF compatible with the base model architecture. Scale 1 uses its original effect; 0 keeps it attached without changing output.";
+
+"选择 LoRA" = "Select LoRA";

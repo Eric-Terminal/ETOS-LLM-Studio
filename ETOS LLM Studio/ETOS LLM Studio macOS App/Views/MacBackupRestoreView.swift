@@ -120,6 +120,7 @@ struct MacBackupRestoreView: View {
             defer { workspace.endSnapshotExport() }
             do {
                 await workspace.modelTests.cancelAndWait()
+                await workspace.localModels.waitForPendingWrites()
                 await workspace.requestControls.waitForPendingWrites()
                 await configuration.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
