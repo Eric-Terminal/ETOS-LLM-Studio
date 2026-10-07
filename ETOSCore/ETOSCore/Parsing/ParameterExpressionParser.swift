@@ -64,16 +64,24 @@ public enum ParameterExpressionParser {
             throw ParserError.emptyExpression
         }
         
-        guard let equalIndex = cleaned.firstIndex(of: "=") else {
-            throw ParserError.missingAssignmentOperator
+        let rawKey: String
+        let valuePortion: Substring
+        if cleaned.first == "\"" || cleaned.first == "'" {
+            let input = cleaned[...]
+            var cursor = input.startIndex
+            rawKey = try parseQuotedString(input, index: &cursor)
+            skipSeparators(input, index: &cursor)
+            guard cursor < input.endIndex, input[cursor] == "=" else { throw ParserError.missingAssignmentOperator }
+            valuePortion = input[input.index(after: cursor)...]
+        } else {
+            guard let equalIndex = cleaned.firstIndex(of: "=") else { throw ParserError.missingAssignmentOperator }
+            rawKey = cleaned[..<equalIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            valuePortion = cleaned[cleaned.index(after: equalIndex)...]
         }
-        
-        let rawKey = cleaned[..<equalIndex].trimmingCharacters(in: .whitespacesAndNewlines)
-        let valuePortion = cleaned[cleaned.index(after: equalIndex)...]
         let trimmedValue = valuePortion.trimmingCharacters(in: .whitespacesAndNewlines)
         let rawValue: Substring = trimmedValue[...]
         
-        guard !rawKey.isEmpty else {
+        guard !rawKey.isEmpty || cleaned.first == "\"" || cleaned.first == "'" else {
             throw ParserError.invalidKey
         }
         
@@ -105,14 +113,14 @@ public enum ParameterExpressionParser {
     public static func serialize(parameters: [String: JSONValue]) -> [String] {
         parameters
             .sorted(by: { $0.key < $1.key })
-            .map { "\($0.key)=\(serializeValue($0.value))" }
+            .map { "\(serializeKey($0.key))=\(serializeValue($0.value))" }
     }
 
     /// 生成只保留键与容器结构的输入草稿，标量值留空等待用户填写。
     public static func serializeTemplate(parameters: [String: JSONValue]) -> [String] {
         parameters
             .sorted(by: { $0.key < $1.key })
-            .map { "\($0.key)=\(serializeTemplateValue($0.value))" }
+            .map { "\(serializeKey($0.key))=\(serializeTemplateValue($0.value))" }
     }
 
     /// 将单个值转换为仅保留容器层级的空白输入草稿。
@@ -121,7 +129,7 @@ public enum ParameterExpressionParser {
         case .dictionary(let dictionary):
             let pairs = dictionary
                 .sorted(by: { $0.key < $1.key })
-                .map { "\($0.key)=\(serializeTemplateValue($0.value))" }
+                .map { "\(serializeKey($0.key))=\(serializeTemplateValue($0.value))" }
                 .joined(separator: ", ")
             return "{\(pairs)}"
         case .array(let array):
@@ -290,6 +298,7 @@ public enum ParameterExpressionParser {
         } else if let intValue = Int(raw) {
             return .int(intValue)
         } else if let doubleValue = Double(raw) {
+            guard doubleValue.isFinite else { throw ParserError.invalidValue(raw) }
             return .double(doubleValue)
         } else {
             return .string(unquote(raw))
@@ -328,6 +337,9 @@ public enum ParameterExpressionParser {
     }
     
     private static func parseKey(_ text: Substring, index: inout Substring.Index) throws -> String {
+        if index < text.endIndex, text[index] == "\"" || text[index] == "'" {
+            return try parseQuotedString(text, index: &index)
+        }
         let start = index
         while index < text.endIndex {
             let character = text[index]
@@ -397,7 +409,7 @@ public enum ParameterExpressionParser {
         case .dictionary(let dictionary):
             let pairs = dictionary
                 .sorted(by: { $0.key < $1.key })
-                .map { "\($0.key)=\(serializeValue($0.value))" }
+                .map { "\(serializeKey($0.key))=\(serializeValue($0.value))" }
                 .joined(separator: ", ")
             return "{\(pairs)}"
         case .array(let array):
@@ -419,10 +431,13 @@ public enum ParameterExpressionParser {
             Int(value) != nil ||
             Double(value) != nil ||
             value.rangeOfCharacter(from: unsafeCharacters) != nil ||
-            value.contains(" ") {
+            value.rangeOfCharacter(from: .whitespacesAndNewlines) != nil {
             let escaped = value
                 .replacingOccurrences(of: "\\", with: "\\\\")
                 .replacingOccurrences(of: "\"", with: "\\\"")
+                .replacingOccurrences(of: "\n", with: "\\n")
+                .replacingOccurrences(of: "\r", with: "\\r")
+                .replacingOccurrences(of: "\t", with: "\\t")
             return "\"\(escaped)\""
         } else {
             return value
@@ -430,26 +445,19 @@ public enum ParameterExpressionParser {
     }
     
     private static func serializeDouble(_ value: Double) -> String {
-        let rounded = value.rounded()
-        if abs(rounded - value) < 1e-9,
-           rounded >= Double(Int.min),
-           rounded <= Double(Int.max) {
-            return String(Int(rounded))
-        }
-        
-        var string = String(value)
-        if string.contains("e") || string.contains("E") {
-            return string
-        }
-        if string.contains(".") {
-            while string.last == "0" {
-                string.removeLast()
-            }
-            if string.last == "." {
-                string.removeLast()
-            }
-        }
-        return string
+        // 保持浮点往返精度；接近整数的微小值也不能四舍五入，Int 上边界不能强制转换。
+        String(value)
+    }
+
+    private static func serializeKey(_ key: String) -> String {
+        let delimiters = CharacterSet(charactersIn: "=,{}[]\"'").union(.whitespacesAndNewlines)
+        guard key.isEmpty || key.rangeOfCharacter(from: delimiters) != nil else { return key }
+        let escaped = key.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\r")
+            .replacingOccurrences(of: "\t", with: "\\t")
+        return "\"\(escaped)\""
     }
     
     private static func unquote(_ raw: String) -> String {
