@@ -7853,3 +7853,15 @@
 "自动删除只作用于以后删除的会话；本地 MCP 的独立工作区仍需手动处理。" = "Automatic deletion applies only to conversations deleted afterward. Standalone local MCP workspaces still require manual cleanup.";
 "还没有 Linux 工作区。" = "There are no Linux workspaces yet.";
 "随会话自动删除" = "Delete with Conversation";
+
+// macOS Linux 配置管理
+"Linux 配置内容无效，请检查输入。" = "Invalid Linux configuration. Check your input.";
+"已存在同名环境变量。" = "An environment variable with this name already exists.";
+"值已隐藏" = "Value hidden";
+"修改终端快捷栏" = "Change Terminal Shortcuts";
+"恢复默认会替换当前快捷栏，不会向终端发送按键。" = "Restoring defaults replaces the current shortcuts without sending keys to the terminal.";
+"删除后该组合将从快捷栏移除。" = "This combination will be removed from the shortcut bar.";
+"确认" = "Confirm";
+"Mac Linux 环境变量使用说明" = "Add a variable or open an existing one to edit its name, value, note and enabled state, then choose Save. Names must be unique ignoring case. Values and notes retain spaces and line breaks. Delete requires confirmation.\n\nValues are hidden initially; Show Value reveals the draft on this page. Saved variables apply to newly created Linux processes, terminals and Linux MCP processes, without changing running processes or shell startup files. The guide cannot read values or reveal them; confirmed proposals update the draft, which still requires Save.";
+"Mac Linux 命令规则使用说明" = "The command-safety switch saves immediately. Add or open a rule to edit its name, pattern, match method, scope, action and enabled state, then choose Save. Regex validation runs in the background. Use the context menu to move rules; deletion requires confirmation.\n\nDeny takes precedence over confirmation, then warning. List order breaks ties for the same action. Rules inspect command text; they are not a shell sandbox and do not restrict interactive terminal input. Guide proposals can change the switch or editor drafts after confirmation; they cannot save or delete rules or execute commands.";
+"Mac Linux 快捷键使用说明" = "Add or open a shortcut, select its keys and choose Save. Modifiers combine with ordinary or navigation keys; modifiers alone cannot be saved. Use the context menu to move or delete a combination. Restoring defaults replaces the list after confirmation. An empty list hides the terminal shortcut bar.\n\nEditing only changes configuration. Keys are sent only when you press a saved shortcut in a terminal. Moves save immediately; combination editors keep drafts. The guide may propose draft keys after confirmation, but cannot save, delete, restore defaults or send input.";

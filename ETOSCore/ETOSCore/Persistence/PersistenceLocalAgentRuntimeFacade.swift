@@ -227,6 +227,7 @@ public extension Persistence {
         do {
             guard let store = activeAuxiliaryStore(kind: .config) else { return false }
             try store.saveLocalLinuxEnvironmentVariable(variable)
+            NotificationCenter.default.post(name: .localLinuxConfigurationDidChange, object: nil)
             WatchDatabaseSyncService.markDatabaseChanged(.config)
             return true
         } catch {
@@ -240,6 +241,7 @@ public extension Persistence {
         do {
             guard let store = activeAuxiliaryStore(kind: .config) else { return false }
             try store.deleteLocalLinuxEnvironmentVariable(id: id)
+            NotificationCenter.default.post(name: .localLinuxConfigurationDidChange, object: nil)
             WatchDatabaseSyncService.markDatabaseChanged(.config)
             return true
         } catch {
@@ -287,6 +289,7 @@ public extension Persistence {
         do {
             guard let store = activeAuxiliaryStore(kind: .config) else { return false }
             try store.saveLocalLinuxCommandRule(rule)
+            NotificationCenter.default.post(name: .localLinuxConfigurationDidChange, object: nil)
             WatchDatabaseSyncService.markDatabaseChanged(.config)
             return true
         } catch {
@@ -300,6 +303,7 @@ public extension Persistence {
         do {
             guard let store = activeAuxiliaryStore(kind: .config) else { return false }
             try store.deleteLocalLinuxCommandRule(id: id)
+            NotificationCenter.default.post(name: .localLinuxConfigurationDidChange, object: nil)
             WatchDatabaseSyncService.markDatabaseChanged(.config)
             return true
         } catch {

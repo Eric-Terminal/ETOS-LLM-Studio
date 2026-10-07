@@ -33,6 +33,12 @@ struct MacLinuxSettingsView: View {
             Section {
                 Toggle(NSLocalizedString("发送给模型前隐藏环境变量值", comment: ""), isOn: $configuration.localLinuxEnvironmentPrivacyEnabled)
                 Toggle(NSLocalizedString("启用命令安全策略", comment: ""), isOn: $configuration.localLinuxCommandSafetyEnabled)
+                NavigationLink { MacLinuxEnvironmentView(isActive: isActive, runtime: model) }
+                    label: { Label(NSLocalizedString("环境变量", comment: ""), systemImage: "key") }
+                NavigationLink { MacLinuxRulesView(isActive: isActive, runtime: model) }
+                    label: { Label(NSLocalizedString("命令规则", comment: ""), systemImage: "checklist") }
+                NavigationLink { MacLinuxShortcutsView(isActive: isActive, runtime: model) }
+                    label: { Label(NSLocalizedString("终端快捷键", comment: ""), systemImage: "keyboard") }
                 NavigationLink {
                     MacAgentPromptsView(isActive: isActive, model: workspace.agentPrompts)
                 } label: { Label(NSLocalizedString("Agent 提示词", comment: ""), systemImage: "text.bubble") }

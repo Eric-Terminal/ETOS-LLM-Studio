@@ -3,6 +3,18 @@ import Testing
 @testable import ETOSCore
 
 struct GuideMacLinuxKnowledgeTests {
+    @Test("配置指引明确值的只写权限、规则优先顺序和快捷栏草稿边界")
+    func configurationGuidance() {
+        let chinese = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "zh-Hans"))
+        #expect(chinese.content.contains("值只写不可读"))
+        #expect(chinese.content.contains("拒绝优先于确认，确认优先于警告"))
+        #expect(chinese.content.contains("列表顺序只决定同类命中的先后"))
+        #expect(chinese.content.contains("配置不会向终端发送按键"))
+        let english = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "en"))
+        #expect(english.content.contains("complete original encoding"))
+        #expect(english.content.contains("Modifier-only combinations cannot be saved"))
+    }
+
     @Test("工作区与挂载指引区分草稿、目录授权和删除范围")
     func workspaceAndMountGuidance() {
         let chinese = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "zh-Hans"))

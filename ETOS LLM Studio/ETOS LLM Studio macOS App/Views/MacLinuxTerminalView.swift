@@ -1,3 +1,4 @@
+import Combine
 import ETOSCore
 import SwiftUI
 
@@ -83,6 +84,7 @@ struct MacLinuxTerminalView: View {
         .onChange(of: runtime.epoch) { _, _ in endingTerminal = false; model.leave(); open() }
         .onChange(of: configuration.appLanguage) { _, _ in model.reloadMetadata() }
         .onChange(of: configuration.localLinuxTerminalShortcutIDs) { _, _ in model.reloadMetadata() }
+        .onReceive(NotificationCenter.default.publisher(for: .localLinuxConfigurationDidChange).receive(on: DispatchQueue.main)) { _ in model.reloadMetadata() }
         .confirmationDialog(NSLocalizedString("结束终端", comment: ""), isPresented: $endingTerminal, titleVisibility: .visible) {
             Button(NSLocalizedString("结束终端", comment: ""), role: .destructive) { if active { model.endTerminal() } }
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
