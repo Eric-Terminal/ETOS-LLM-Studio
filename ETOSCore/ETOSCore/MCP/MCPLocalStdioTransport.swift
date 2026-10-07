@@ -630,7 +630,8 @@ public actor MCPLocalStdioTransport: Transport, MCPSDKTransportControl {
             modelURL: outputURLs.model,
             redactionValues: frozenRedactionValues ?? environmentSnapshot.redactionValues,
             privacyEnabled: AppConfigStore.boolValue(for: .localLinuxEnvironmentPrivacyEnabled),
-            modelByteLimit: UInt64(AppConfigStore.integerValue(for: .localLinuxOutputPreviewBytes))
+            modelByteLimit: UInt64(AppConfigStore.integerValue(for: .localLinuxOutputPreviewBytes)),
+            rawOutputChanged: { [jobID = job.id] in LocalLinuxJobNotifications.outputChanged(jobID: jobID) }
         )
         self.collector = collector
         router.setCollector(collector)

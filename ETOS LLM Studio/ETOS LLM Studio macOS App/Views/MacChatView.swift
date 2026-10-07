@@ -15,6 +15,7 @@ struct MacChatView: View {
     @State private var deletingMessage: MacMessageDeletionTarget?
     @State private var showsRequestControls = false
     @State private var showsBrowser = false
+    @State private var linuxJobsTarget: MacLinuxJobsTarget?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -102,8 +103,9 @@ struct MacChatView: View {
             } else { composer }
         }
         .onAppear { isVisible = true; workspace.setRoleplayHostVisible(true) }
-        .onDisappear { isVisible = false; importing = false; showsBrowser = false; workspace.setRoleplayHostVisible(false) }
-        .onChange(of: workspace.currentSession?.id) { _, _ in showsBrowser = false }
+        .onDisappear { isVisible = false; importing = false; showsBrowser = false; linuxJobsTarget = nil; workspace.setRoleplayHostVisible(false) }
+        .onChange(of: workspace.currentSession?.id) { _, _ in showsBrowser = false; linuxJobsTarget = nil }
+        .onChange(of: workspace.linux.epoch) { _, _ in linuxJobsTarget = nil }
         .onChange(of: workspace.incomingDocuments.contextID) { _, _ in importing = false; importContext = nil }
         .dropDestination(for: URL.self) { urls, _ in
             guard isVisible, workspace.canManageLocalModels else { return false }
@@ -122,7 +124,7 @@ struct MacChatView: View {
             documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace"),
                         GuideDocumentReference(id: "local-models", title: "Local Models")],
             isActive: isVisible && workspace.canManageLocalModels && !importing && editingMessage == nil
-                && rewritingMessage == nil && deletingMessage == nil && !showsRequestControls && !showsBrowser,
+                && rewritingMessage == nil && deletingMessage == nil && !showsRequestControls && !showsBrowser && linuxJobsTarget == nil,
             settings: [
                 .readOnly("attachment_count", label: NSLocalizedString("附件", comment: ""), value: { .int(workspace.attachments.count) }),
                 .readOnly("importing_files", label: NSLocalizedString("处理中", comment: ""), value: { .bool(workspace.isImportingAttachments) }),
@@ -135,6 +137,12 @@ struct MacChatView: View {
         }
         .sheet(item: $rewritingMessage) { MacMessageRewriteView(target: $0) }
         .sheet(isPresented: $showsRequestControls) { MacRequestRuntimeView(model: workspace.requestControls) }
+        .sheet(item: $linuxJobsTarget) { target in
+            NavigationStack {
+                MacLinuxJobsView(isActive: isVisible && workspace.canManageLocalModels, runtime: workspace.linux, sessionID: target.sessionID)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("关闭", comment: "")) { linuxJobsTarget = nil } } }
+            }.frame(minWidth: 620, minHeight: 480)
+        }
         .sheet(isPresented: $showsBrowser) {
             NavigationStack {
                 MacBrowserView(sessionID: workspace.currentSession?.id, isTemporary: workspace.temporaryChatMemoryMode != nil,
@@ -211,6 +219,10 @@ struct MacChatView: View {
                 .disabled(workspace.effectiveModelName == nil || !workspace.canEditRequestControls)
                 Button { showsBrowser = true } label: { Label(NSLocalizedString("浏览器", comment: ""), systemImage: "safari") }
                     .disabled(workspace.currentSession == nil || !workspace.canManageLocalModels || workspace.browser.isSuspended)
+                Button {
+                    if let sessionID = workspace.currentSession?.id { linuxJobsTarget = MacLinuxJobsTarget(sessionID: sessionID) }
+                } label: { Label(NSLocalizedString("任务与终端", comment: ""), systemImage: "list.bullet.rectangle") }
+                    .disabled(workspace.currentSession == nil || !workspace.canManageLocalModels || workspace.linux.isSuspended)
                 Spacer()
                 if workspace.isGenerating || workspace.isPreparingSend {
                     Button { workspace.stop() } label: {
@@ -228,6 +240,11 @@ struct MacChatView: View {
         }
         .padding()
     }
+}
+
+private struct MacLinuxJobsTarget: Identifiable {
+    let id = UUID()
+    let sessionID: UUID
 }
 
 private struct MacMessageRow: View {

@@ -15,7 +15,8 @@ struct MacLinuxSettingsView: View {
         Form {
             Section {
                 MacSettingsIntroCard(id: "linux-settings", title: NSLocalizedString("使用说明", comment: ""),
-                    details: NSLocalizedString("Mac 本地 Linux 使用说明", comment: ""), documentID: "macos-workspace", isActive: active)
+                    details: NSLocalizedString("Mac 本地 Linux 使用说明", comment: ""), documentID: "macos-workspace",
+                    isActive: isActive && workspace.canManageLocalModels && !model.isSuspended)
                 Picker(NSLocalizedString("默认终端 Shell", comment: ""), selection: $configuration.localLinuxDefaultShellPath) {
                     ForEach(model.shellPaths, id: \.self) { shell in Text(shell).tag(shell) }
                 }
@@ -40,7 +41,7 @@ struct MacLinuxSettingsView: View {
             }
         }
         .formStyle(.grouped).navigationTitle(NSLocalizedString("配置", comment: ""))
-        .disabled(!active || model.isWorking)
+        .disabled(!isActive || !workspace.canManageLocalModels || model.isSuspended || model.isWorking)
         .onAppear { visible = true; if active { model.observe() } }.onDisappear { visible = false }
         .onChange(of: active) { _, value in if value { model.observe() } }
         .guideSettingsPageContext(

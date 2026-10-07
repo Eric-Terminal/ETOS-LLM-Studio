@@ -18,13 +18,17 @@ struct MacLinuxView: View {
             Form {
                 Section {
                     MacSettingsIntroCard(id: "linux", title: NSLocalizedString("使用说明", comment: ""),
-                        details: NSLocalizedString("Mac 本地 Linux 使用说明", comment: ""), documentID: "macos-workspace", isActive: active)
+                        details: NSLocalizedString("Mac 本地 Linux 使用说明", comment: ""), documentID: "macos-workspace",
+                        isActive: isActive && workspace.canManageLocalModels && !model.isSuspended && confirmation == nil)
                     Toggle(NSLocalizedString("启用本地 Linux", comment: ""), isOn: $configuration.localLinuxEnabled)
                         .disabled(!model.canOperate)
                     NavigationLink {
                         MacLinuxTerminalView(isActive: isActive, runtime: model)
                     } label: { Label(NSLocalizedString("打开用户终端", comment: ""), systemImage: "terminal") }
                     .disabled(!configuration.localLinuxEnabled || !model.canOperate)
+                    NavigationLink {
+                        MacLinuxJobsView(isActive: isActive, runtime: model)
+                    } label: { Label(NSLocalizedString("任务与终端", comment: ""), systemImage: "list.bullet.rectangle") }
                     NavigationLink {
                         MacLinuxSettingsView(isActive: isActive, model: model)
                     } label: { Label(NSLocalizedString("配置", comment: ""), systemImage: "slider.horizontal.3") }
@@ -93,6 +97,7 @@ struct MacLinuxView: View {
             settings: tab == 0 ? [
                 .bool("enabled", label: NSLocalizedString("启用本地 Linux", comment: ""), get: { configuration.localLinuxEnabled }, set: { configuration.localLinuxEnabled = $0 }),
                 .readOnly("phase", label: NSLocalizedString("运行时", comment: ""), value: { .string(model.snapshot.phase.rawValue) }),
+                .readOnly("jobs_require_navigation", label: NSLocalizedString("任务与终端", comment: ""), value: { .bool(true) }),
                 .readOnly("terminal_count", label: NSLocalizedString("终端", comment: ""), value: { .int(model.snapshot.activeTerminalCount) }),
                 .readOnly("job_count", label: NSLocalizedString("命令与浏览器任务", comment: ""), value: { .int(model.snapshot.activeJobCount) }),
                 .readOnly("mcp_count", label: NSLocalizedString("本地 MCP", comment: ""), value: { .int(model.snapshot.activeMCPProcessCount) })

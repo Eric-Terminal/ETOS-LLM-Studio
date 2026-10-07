@@ -154,6 +154,7 @@ final class MacWorkspaceModel: ObservableObject {
         roleplayRuntime.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
         requestControls.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
         browser.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
+        linux.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
         incomingDocuments.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
         configuration.$appLanguage.dropFirst().sink { [weak self] _ in self?.requestControls.reload() }.store(in: &subscriptions)
         sessionLibrary.$isWorking.dropFirst().sink { [weak self] working in

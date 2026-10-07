@@ -75,7 +75,7 @@ struct MacLinuxTerminalView: View {
             if let error = model.error { Text(error).font(.footnote).foregroundStyle(.secondary).textSelection(.enabled).padding() }
         }
         .navigationTitle(NSLocalizedString("终端", comment: ""))
-        .disabled(!active)
+        .disabled(!isActive || !workspace.canManageLocalModels || runtime.isSuspended)
         .onAppear { visible = true; open() }
         .onDisappear { visible = false; endingTerminal = false; model.leave() }
         .onChange(of: active) { _, value in if value { open() } else { endingTerminal = false; model.leave() } }

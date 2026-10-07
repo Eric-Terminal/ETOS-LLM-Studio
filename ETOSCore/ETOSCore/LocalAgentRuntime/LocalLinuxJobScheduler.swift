@@ -350,7 +350,8 @@ public actor LocalLinuxJobScheduler {
                 modelURL: urls.model,
                 redactionValues: environment.redactionValues,
                 privacyEnabled: AppConfigStore.boolValue(for: .localLinuxEnvironmentPrivacyEnabled),
-                modelByteLimit: UInt64(AppConfigStore.integerValue(for: .localLinuxOutputPreviewBytes))
+                modelByteLimit: UInt64(AppConfigStore.integerValue(for: .localLinuxOutputPreviewBytes)),
+                rawOutputChanged: { [jobID = job.id] in LocalLinuxJobNotifications.outputChanged(jobID: jobID) }
             )
             let mountIDs: [UUID]
             if let context {
@@ -518,7 +519,8 @@ public actor LocalLinuxJobScheduler {
                 modelByteLimit: UInt64(AppConfigStore.integerValue(for: .localLinuxOutputPreviewBytes)),
                 terminalColumns: Int(columns),
                 terminalRows: Int(rows),
-                terminalResponseHandler: { terminalResponseRelay.enqueue($0) }
+                terminalResponseHandler: { terminalResponseRelay.enqueue($0) },
+                rawOutputChanged: { [jobID = job.id] in LocalLinuxJobNotifications.outputChanged(jobID: jobID) }
             )
             let mountIDs: [UUID]
             if let context {

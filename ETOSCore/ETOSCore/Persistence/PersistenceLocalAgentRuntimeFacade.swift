@@ -168,6 +168,7 @@ public extension Persistence {
         do {
             guard let store = activeGRDBStore() else { return false }
             try store.saveLocalLinuxJob(job)
+            LocalLinuxJobNotifications.recordsChanged(jobID: job.id)
             return true
         } catch {
             logger.error("保存 Linux 任务失败：\(error.localizedDescription)")
@@ -177,7 +178,9 @@ public extension Persistence {
 
     @discardableResult
     static func markActiveLocalLinuxJobsInterrupted() -> Int {
-        (try? activeGRDBStore()?.markActiveLocalLinuxJobsInterrupted(at: Date())) ?? 0
+        let count = (try? activeGRDBStore()?.markActiveLocalLinuxJobsInterrupted(at: Date())) ?? 0
+        if count > 0 { LocalLinuxJobNotifications.recordsChanged() }
+        return count
     }
 
     @discardableResult
@@ -185,6 +188,7 @@ public extension Persistence {
         do {
             guard let store = activeGRDBStore() else { return false }
             try store.saveLocalLinuxDiagnostic(diagnostic)
+            LocalLinuxJobNotifications.recordsChanged(jobID: diagnostic.jobID)
             return true
         } catch {
             logger.error("保存 Linux 诊断失败：\(error.localizedDescription)")
