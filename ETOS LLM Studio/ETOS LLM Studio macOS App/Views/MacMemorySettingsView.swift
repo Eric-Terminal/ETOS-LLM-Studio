@@ -32,6 +32,7 @@ struct MacMemorySettingsView: View {
             .disabled(model.isWorking)
             Section {
                 NavigationLink(NSLocalizedString("数据维护", comment: "")) { MacMemoryMaintenanceView(model: model) }
+                NavigationLink(NSLocalizedString("导入与导出", comment: "")) { MacMemoryTransferView(model: model) }
                 Button(NSLocalizedString("添加记忆", comment: "")) { editor = MacMemoryEditorItem(row: nil) }
                     .disabled(!model.isLoaded || model.isWorking)
             }

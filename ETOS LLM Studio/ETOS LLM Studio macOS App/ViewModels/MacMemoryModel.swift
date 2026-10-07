@@ -162,6 +162,16 @@ final class MacMemoryModel: ObservableObject {
         guard let item = memories.first(where: { $0.id == id }) else { return }
         await reembed(item)
     }
+
+    /// 归档操作与手动编辑、重新嵌入共用占用状态，数据库恢复也检查这份状态。
+    func performTransfer<T: Sendable>(_ operation: @escaping @Sendable (MemoryTransferService) async throws -> T) async throws -> T {
+        guard let manager, !isWorking else { throw MacMemoryWriteError.busy }
+        isWorking = true
+        defer { isWorking = false }
+        return try await Task.detached(priority: .userInitiated) {
+            try await operation(MemoryTransferService(memoryManager: manager))
+        }.value
+    }
 }
 
 enum MacMemoryWriteError: LocalizedError {
