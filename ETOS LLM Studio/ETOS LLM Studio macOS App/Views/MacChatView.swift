@@ -8,6 +8,7 @@ struct MacChatView: View {
     @State private var importing = false
     @State private var followsLatest = true
     @State private var editingMessage: MacMessageEditTarget?
+    @State private var rewritingMessage: MacMessageEditTarget?
     @State private var deletingMessage: MacMessageDeletionTarget?
 
     var body: some View {
@@ -46,6 +47,12 @@ struct MacChatView: View {
                                         Button(NSLocalizedString("复制消息历史和提示词", comment: "")) { workspace.branchSession(at: row.message) }
                                     }
                                     .disabled(!workspace.canModifyCurrentHistory)
+                                    if row.canRewrite {
+                                        Button(NSLocalizedString("重写回复", comment: "")) {
+                                            if let sessionID = workspace.currentSession?.id { rewritingMessage = MacMessageEditTarget(message: row.message, sessionID: sessionID) }
+                                        }
+                                        .disabled(!workspace.canModifyCurrentHistory || !workspace.selectedModelSupportsRewrite)
+                                    }
                                     if !row.versionOptions.isEmpty {
                                         Button(NSLocalizedString("删除当前版本", comment: ""), role: .destructive) { prepareDeletion(row.message, kind: .currentVersion) }
                                             .disabled(!workspace.canModifyCurrentHistory)
@@ -94,6 +101,7 @@ struct MacChatView: View {
         .sheet(item: $editingMessage) { target in
             MacMessageEditor(message: target.message, sessionID: target.sessionID)
         }
+        .sheet(item: $rewritingMessage) { MacMessageRewriteView(target: $0) }
         .confirmationDialog(NSLocalizedString("删除消息", comment: ""), isPresented: Binding(
             get: { deletingMessage != nil }, set: { if !$0 { deletingMessage = nil } }
         ), titleVisibility: .visible) {

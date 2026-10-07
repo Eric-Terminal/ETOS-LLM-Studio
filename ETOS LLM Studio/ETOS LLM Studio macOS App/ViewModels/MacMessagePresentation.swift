@@ -30,6 +30,7 @@ struct MacMessagePresentation: Identifiable {
     let versionOptions: [VersionOption]
     let versionIndex: Int
     let versionLabel: String
+    let canRewrite: Bool
     var id: UUID { message.id }
 
     static func prepare(_ message: ChatMessage, markdown: Bool, versionInfo: ChatResponseAttemptVersionInfo? = nil) -> MacMessagePresentation {
@@ -70,7 +71,8 @@ struct MacMessagePresentation: Identifiable {
                 VersionOption(id: $0, title: String(format: NSLocalizedString("版本 %d", comment: ""), $0 + 1))
             } : [],
             versionIndex: index,
-            versionLabel: String(format: NSLocalizedString("切换版本 (%d/%d)", comment: ""), index + 1, count)
+            versionLabel: String(format: NSLocalizedString("切换版本 (%d/%d)", comment: ""), index + 1, count),
+            canRewrite: message.role == .assistant && !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         )
     }
 }

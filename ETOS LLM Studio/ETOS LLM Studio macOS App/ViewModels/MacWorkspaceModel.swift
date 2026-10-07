@@ -22,6 +22,7 @@ final class MacWorkspaceModel: ObservableObject {
     @Published private(set) var models: [RunnableModel] = []
     @Published private(set) var selectedModelID: String?
     @Published private(set) var selectedModelSupportsPrefill = false
+    @Published private(set) var selectedModelSupportsRewrite = false
     @Published private(set) var messages: [MacMessagePresentation] = []
     @Published private(set) var runningSessionIDs: Set<UUID> = []
     @Published private(set) var activeQuestionnaireModel: MacQuestionnaireModel?
@@ -55,6 +56,7 @@ final class MacWorkspaceModel: ObservableObject {
     private var questionnaires: [UUID: [MacQuestionnaireModel]] = [:]
     private var toolDrafts: [UUID: [AppToolInputDraftRequest]] = [:]
     private var pendingSupplements: [UUID: [String]] = [:]
+    private var rewriteTasks: [UUID: Task<Void, Never>] = [:]
 
     var isPreparingSend: Bool {
         currentSession.map { sendingSessionIDs.contains($0.id) } ?? false
@@ -145,6 +147,7 @@ final class MacWorkspaceModel: ObservableObject {
         service.selectedModelSubject.receive(on: DispatchQueue.main).sink { [weak self] model in
             self?.selectedModelID = model?.id
             self?.selectedModelSupportsPrefill = model?.canRequestAssistantPrefill == true
+            self?.selectedModelSupportsRewrite = model?.model.isChatModel == true
         }.store(in: &subscriptions)
         service.runningSessionIDsSubject.receive(on: DispatchQueue.main).sink { [weak self] ids in
             self?.runningSessionIDs = ids
@@ -394,7 +397,28 @@ final class MacWorkspaceModel: ObservableObject {
 
     func stop() {
         guard let service, let sessionID = currentSession?.id else { return }
+        rewriteTasks[sessionID]?.cancel()
         Task { await service.cancelRequest(for: sessionID) }
+    }
+
+    @discardableResult
+    func rewriteMessage(_ request: MacMessageRewriteRequest) -> Bool {
+        guard canModifyCurrentHistory, currentSession?.id == request.sessionID,
+              let service, let model = service.selectedModelSubject.value, model.model.isChatModel else { return false }
+        let temperature = AppConfigStore.shared.aiTemperature
+        sendingSessionIDs.insert(request.sessionID)
+        rewriteTasks[request.sessionID] = Task { [weak self] in
+            do {
+                try await service.rewriteMessage(request.message, instruction: request.instruction, aiTemperature: temperature,
+                                                 sessionID: request.sessionID, referenceVersions: request.references,
+                                                 selectionTarget: request.selection, runnableModel: model, expectedMessage: request.message)
+            } catch is CancellationError {
+            } catch { self?.errorMessage = error.localizedDescription }
+            self?.rewriteTasks.removeValue(forKey: request.sessionID)
+            self?.sendingSessionIDs.remove(request.sessionID)
+            self?.flushToolSupplements()
+        }
+        return true
     }
 
     func retryMessage(_ message: ChatMessage, prefill: Bool = false) {
@@ -571,7 +595,7 @@ struct MacMessageDeletionTarget {
     let kind: MessageHistoryDeletionKind
 }
 
-struct MacMessageEditTarget: Identifiable {
+struct MacMessageEditTarget: Identifiable, Sendable {
     let message: ChatMessage
     let sessionID: UUID
     var id: String { "\(sessionID)-\(message.id)" }
