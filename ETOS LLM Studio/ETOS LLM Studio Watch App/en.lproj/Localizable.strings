@@ -7790,3 +7790,11 @@
 
 // Mac 外部目录挂载
 "外部目录尚未在本机准备好。请先在 Finder 中打开该目录，等待 iCloud 或文件提供者下载完成后重试。" = "The external folder is not ready on this Mac. Open it in Finder, wait for iCloud or the file provider to finish downloading, then try again.";
+
+// Mac 本地 Linux 与终端
+"准备本地 Linux" = "Prepare Local Linux";
+"重启本地 Linux" = "Restart Local Linux";
+"Mac Linux 重启确认" = "Running Linux tasks and terminals will end. Home, Shared and workspaces will be preserved.";
+"Mac Linux 终端空状态" = "Select a terminal or choose New Terminal. Output appears here when available.";
+"Mac 本地 Linux 使用说明" = "Enable Local Linux to make its tools available. The switch does not start Linux. Prepare installs the bundled system when needed and starts it; opening a terminal page alone does not create a process. Mac MCP stdio uses native Mac programs separately from this Linux environment.\n\nSettings save automatically using the same database keys as iPhone and Apple Watch. The default shell affects new terminals. A timeout of 0 has no time limit. Output limits and environment redaction apply to the model’s copy; raw logs and the user terminal retain their contents.\n\nRestart ends Linux tasks and terminals. Reset can preserve Home, Shared and workspaces, or delete them if you enable the separate option. Review the confirmation before proceeding. Locking, backing up, restoring or quitting ends Linux activity and waits for cleanup. Unlocking does not restart commands. The guide can propose settings for confirmation, but cannot prepare, restart, reset or execute commands.";
+"Mac Linux 终端使用说明" = "Choose New Terminal from the terminal menu to start the default shell, or select an existing terminal. Type a line and press Return to send it with a newline. The shortcut bar sends the saved key sequences, including navigation and control keys. Copy uses the displayed screen text.\n\nSending input to an Agent terminal takes control; Return Input to Agent releases it. Interrupt stops the foreground program, while End Terminal closes the session after confirmation. Leaving this page keeps the terminal running. Locking, backing up, restoring or quitting ends Linux activity; commands are not replayed afterward.\n\nThe guide sees only terminal IDs, counts and control status. It cannot read output or typed text, send input, create processes or end them.";

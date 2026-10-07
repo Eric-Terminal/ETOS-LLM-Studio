@@ -95,6 +95,8 @@ public actor LocalLinuxRuntimeController {
 
     @discardableResult
     public func refreshInstalledState() async -> LocalLinuxRuntimeSnapshot {
+        guard let activity = try? LocalLinuxActivityBarrier.shared.begin() else { return snapshotValue }
+        defer { activity.finish() }
         // 页面刷新不能把进行中的安装或维护覆盖成“已安装”，否则会放行新的操作。
         guard preparationTask == nil, maintenanceTask == nil else { return snapshotValue }
         await recoverPersistedJobsIfNeeded()
@@ -156,7 +158,10 @@ public actor LocalLinuxRuntimeController {
     }
 
     public func ensureReady(trigger: LocalLinuxRuntimeTrigger) async throws -> LocalLinuxRuntimeSnapshot {
+        let activity = try LocalLinuxActivityBarrier.shared.begin()
+        defer { activity.finish() }
         while let maintenanceTask { _ = try await maintenanceTask.value }
+        try activity.checkCancellation()
         if let preparationTask { return try await preparationTask.value }
 
         // 在第一次挂起前登记任务；actor 在 await 期间仍允许其他启动请求进入。
@@ -238,6 +243,8 @@ public actor LocalLinuxRuntimeController {
 
     @discardableResult
     public func restartRuntime() async throws -> LocalLinuxRuntimeSnapshot {
+        let activity = try LocalLinuxActivityBarrier.shared.begin()
+        defer { activity.finish() }
         guard AppConfigStore.boolValue(for: .localLinuxEnabled) else {
             throw LocalLinuxRuntimeError.featureDisabled
         }
@@ -246,7 +253,32 @@ public actor LocalLinuxRuntimeController {
 
     @discardableResult
     public func deleteSystem(deleteUserData: Bool) async throws -> LocalLinuxRuntimeSnapshot {
-        try await performMaintenance(.deleteSystem(deleteUserData: deleteUserData))
+        let activity = try LocalLinuxActivityBarrier.shared.begin()
+        defer { activity.finish() }
+        return try await performMaintenance(.deleteSystem(deleteUserData: deleteUserData))
+    }
+
+    /// 调用方已暂停入口并等待作业收尾；停止内核后才可以替换数据库和挂载记录。
+    public func stopForHostDataOperation() async throws {
+        precondition(LocalLinuxActivityBarrier.shared.isSuspended)
+        if let maintenanceTask { _ = try? await maintenanceTask.value }
+        try await stopRuntimeForMaintenance()
+        // 恢复的数据库可能包含其他设备的运行态；下一次读取时重新收敛为已中断。
+        didRecoverPersistedJobs = false
+        let integrity = await storage.systemIntegrity()
+        let phase: LocalLinuxRuntimePhase
+        switch integrity {
+        case .notInstalled: phase = .notInstalled
+        case .installed: phase = .installed
+        case .damaged: phase = .degraded
+        }
+        updateSnapshot(phase: AppConfigStore.boolValue(for: .localLinuxEnabled) ? phase : .disabled, progress: nil, error: nil)
+    }
+
+    /// 数据库替换完成后、重新开放执行入口前，先清理导入的运行态和旧租约计数。
+    public func prepareForHostResume() async {
+        precondition(LocalLinuxActivityBarrier.shared.isSuspended)
+        await recoverPersistedJobsIfNeeded()
     }
 
     private enum MaintenanceOperation {
@@ -323,6 +355,7 @@ public actor LocalLinuxRuntimeController {
     }
 
     private func performPreparation(trigger: LocalLinuxRuntimeTrigger) async throws -> LocalLinuxRuntimeSnapshot {
+        guard !LocalLinuxActivityBarrier.shared.isSuspended else { throw CancellationError() }
         _ = trigger
         guard AppConfigStore.boolValue(for: .localLinuxEnabled) else {
             throw LocalLinuxRuntimeError.featureDisabled

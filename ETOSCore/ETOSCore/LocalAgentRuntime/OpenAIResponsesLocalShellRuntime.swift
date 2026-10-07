@@ -39,6 +39,8 @@ public actor OpenAIResponsesLocalShellRuntime {
     }
 
     public func toolDefinition(for context: AgentRuntimeContext) async throws -> InternalToolDefinition {
+        let activity = try LocalLinuxActivityBarrier.shared.begin()
+        defer { activity.finish() }
         guard let runID = context.runID else {
             throw LocalLinuxRuntimeError.runtimeUnavailable(
                 NSLocalizedString("Agent Run 缺少运行标识。", comment: "Missing local Agent run identifier")
@@ -49,6 +51,7 @@ public actor OpenAIResponsesLocalShellRuntime {
             environment = existing
         } else {
             environment = try await prepareEnvironment(context: context)
+            try activity.checkCancellation()
             environments[runID] = environment
         }
 

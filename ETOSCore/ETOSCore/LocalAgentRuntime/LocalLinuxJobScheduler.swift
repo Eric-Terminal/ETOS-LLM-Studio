@@ -22,6 +22,7 @@ public actor LocalLinuxJobScheduler {
     }
 
     private struct ActiveTerminal {
+        let activity: LocalLinuxActivityLease
         var job: LocalLinuxJob
         let session: iSHAppleBridgeTerminalSession
         let collector: LocalLinuxOutputCollector
@@ -273,6 +274,8 @@ public actor LocalLinuxJobScheduler {
         approval: LocalLinuxCommandApproval = LocalLinuxCommandApproval(),
         toolCallID: String? = nil
     ) async throws -> LocalLinuxJob {
+        let activity = try LocalLinuxActivityBarrier.shared.begin()
+        defer { activity.finish() }
         await registerRuntimeCancellationIfNeeded()
         guard kind == .run || kind == .shell || kind == .recipe || kind == .localMCP else {
             throw LocalLinuxRuntimeError.runtimeUnavailable(
@@ -364,6 +367,7 @@ public actor LocalLinuxJobScheduler {
             throw error
         }
         do {
+            try activity.checkCancellation()
             let session = try await bridge.startCommand(
                 requestID: requestID,
                 request: resolvedRequest
@@ -386,6 +390,7 @@ public actor LocalLinuxJobScheduler {
                 diagnosticTask: diagnosticTask,
                 workspace: workspace
             )
+            if (try? activity.checkCancellation()) == nil { try? session.cancel() }
             await publishActivityCounts()
             let result = await session.result()
             return await finishCommand(jobID: job.id, result: result, runtimeSnapshot: runtimeSnapshot)
@@ -420,6 +425,9 @@ public actor LocalLinuxJobScheduler {
         shellPathOverride: String? = nil,
         toolCallID: String? = nil
     ) async throws -> LocalLinuxJob {
+        let activity = try LocalLinuxActivityBarrier.shared.begin()
+        var transferredActivity = false
+        defer { if !transferredActivity { activity.finish() } }
         await registerRuntimeCancellationIfNeeded()
         let runtimeSnapshot = try await runtime.ensureReady(trigger: .userTerminal)
         let baseEnvironment: LocalLinuxEnvironmentSnapshot
@@ -527,6 +535,7 @@ public actor LocalLinuxJobScheduler {
             throw error
         }
         do {
+            try activity.checkCancellation()
             let session = try await bridge.startTerminal(request: terminalRequest) { data, dropped in
                 collector.append(stream: .terminal, data: data)
                 if dropped != 0 {
@@ -554,6 +563,7 @@ public actor LocalLinuxJobScheduler {
                 }
             )
             activeTerminals[job.id] = ActiveTerminal(
+                activity: activity,
                 job: job,
                 session: session,
                 collector: collector,
@@ -562,6 +572,8 @@ public actor LocalLinuxJobScheduler {
                 inputOwner: inputOwner,
                 workspace: workspace
             )
+            transferredActivity = true
+            if (try? activity.checkCancellation()) == nil { try? session.cancel() }
             await publishActivityCounts()
             Task { [weak self] in
                 do {
@@ -593,9 +605,12 @@ public actor LocalLinuxJobScheduler {
         }
     }
 
-    public func claimTerminalInput(jobID: UUID, owner: LocalLinuxTerminalInputOwner) throws {
+    public func claimTerminalInput(jobID: UUID, owner: LocalLinuxTerminalInputOwner) async throws {
+        try activeTerminals[jobID]?.activity.checkCancellation()
         guard activeTerminals[jobID] != nil else { throw LocalLinuxRuntimeError.jobNotFound(jobID) }
+        guard activeTerminals[jobID]?.inputOwner != owner else { return }
         activeTerminals[jobID]?.inputOwner = owner
+        await publishActivityCounts()
     }
 
     public func sendTerminalInput(
@@ -605,11 +620,13 @@ public actor LocalLinuxJobScheduler {
     ) async throws {
         guard let terminal = activeTerminals[jobID] else { throw LocalLinuxRuntimeError.jobNotFound(jobID) }
         guard terminal.inputOwner == owner else { throw LocalLinuxRuntimeError.terminalInputOwned }
+        try terminal.activity.checkCancellation()
         try await terminal.session.send(data)
     }
 
     public func resizeTerminal(jobID: UUID, columns: UInt16, rows: UInt16) throws {
         guard let terminal = activeTerminals[jobID] else { throw LocalLinuxRuntimeError.jobNotFound(jobID) }
+        try terminal.activity.checkCancellation()
         try terminal.session.resize(columns: columns, rows: rows)
         terminal.collector.resizeTerminalPreview(columns: Int(columns), rows: Int(rows))
     }
@@ -617,6 +634,7 @@ public actor LocalLinuxJobScheduler {
     public func finishTerminalInput(jobID: UUID, owner: LocalLinuxTerminalInputOwner) throws {
         guard let terminal = activeTerminals[jobID] else { throw LocalLinuxRuntimeError.jobNotFound(jobID) }
         guard terminal.inputOwner == owner else { throw LocalLinuxRuntimeError.terminalInputOwned }
+        try terminal.activity.checkCancellation()
         try terminal.session.finishInput()
     }
 
@@ -806,7 +824,7 @@ public actor LocalLinuxJobScheduler {
             runtime: runtimeSnapshot
         )
         _ = Persistence.saveLocalLinuxJob(active.job)
-        storage.scheduleWorkspaceSizeRefresh(active.workspace)
+        await storage.scheduleWorkspaceSizeRefresh(active.workspace)
         await verifyCriticalSystemPathsAfterGuestTask()
         await publishActivityCounts()
         return active.job
@@ -818,6 +836,7 @@ public actor LocalLinuxJobScheduler {
         runtimeSnapshot: LocalLinuxRuntimeSnapshot
     ) async {
         guard var active = activeTerminals.removeValue(forKey: jobID) else { return }
+        defer { active.activity.finish() }
         active.mountLeases.forEach { $0.release() }
         active.diagnosticTask.cancel()
         await active.diagnosticTask.value
@@ -850,7 +869,7 @@ public actor LocalLinuxJobScheduler {
         )
         _ = Persistence.saveLocalLinuxJob(active.job)
         active.collector.finishTerminalUpdates()
-        storage.scheduleWorkspaceSizeRefresh(active.workspace)
+        await storage.scheduleWorkspaceSizeRefresh(active.workspace)
         await verifyCriticalSystemPathsAfterGuestTask()
         await publishActivityCounts()
     }
@@ -861,6 +880,7 @@ public actor LocalLinuxJobScheduler {
         runtimeSnapshot: LocalLinuxRuntimeSnapshot
     ) async {
         guard var active = activeTerminals.removeValue(forKey: jobID) else { return }
+        defer { active.activity.finish() }
         active.mountLeases.forEach { $0.release() }
         active.diagnosticTask.cancel()
         await active.diagnosticTask.value
@@ -889,7 +909,7 @@ public actor LocalLinuxJobScheduler {
         )
         _ = Persistence.saveLocalLinuxJob(active.job)
         active.collector.finishTerminalUpdates()
-        storage.scheduleWorkspaceSizeRefresh(active.workspace)
+        await storage.scheduleWorkspaceSizeRefresh(active.workspace)
         await verifyCriticalSystemPathsAfterGuestTask()
         await publishActivityCounts()
     }

@@ -103,6 +103,7 @@ public actor LocalLinuxMountManager {
     private let bridge: any LocalLinuxMountBridge
     private var mutatingMountIDs: Set<UUID> = []
     private var scopedResources: [UUID: LocalLinuxDirectoryAccess] = [:]
+    private var runtimeGeneration = UUID()
     private struct TransientSkillMount {
         let id: UUID
         let canonicalHostPath: String
@@ -362,8 +363,8 @@ public actor LocalLinuxMountManager {
                 let bridgeLease = try await bridge.acquireMountLease(id: id)
                 incrementPersistedLeaseCount(id: id)
                 leases.append(
-                    LocalLinuxMountLease(bridgeLease: bridgeLease) { [weak self] releasedID in
-                        Task { await self?.decrementPersistedLeaseCount(id: releasedID) }
+                    LocalLinuxMountLease(bridgeLease: bridgeLease) { [weak self, runtimeGeneration] releasedID in
+                        Task { await self?.decrementPersistedLeaseCount(id: releasedID, generation: runtimeGeneration) }
                     }
                 )
             }
@@ -458,6 +459,7 @@ public actor LocalLinuxMountManager {
     }
 
     public func runtimeDidStop() {
+        runtimeGeneration = UUID()
         scopedResources.removeAll()
         transientSkillMounts.removeAll()
         resetStaleLeaseCountsAfterLaunch()
@@ -471,7 +473,9 @@ public actor LocalLinuxMountManager {
         _ = Persistence.updateLocalLinuxMountLeaseCount(id: id, delta: 1)
     }
 
-    private func decrementPersistedLeaseCount(id: UUID) {
+    private func decrementPersistedLeaseCount(id: UUID, generation: UUID) {
+        // release 的 actor 回调可能迟到；停止前的租约不能减少恢复数据库后的计数。
+        guard generation == runtimeGeneration else { return }
         _ = Persistence.updateLocalLinuxMountLeaseCount(id: id, delta: -1)
     }
 

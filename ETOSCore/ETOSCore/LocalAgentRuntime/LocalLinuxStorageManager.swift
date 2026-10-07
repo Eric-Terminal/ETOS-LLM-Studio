@@ -568,14 +568,16 @@ public actor LocalLinuxStorageManager {
         )
     }
 
-    nonisolated func scheduleWorkspaceSizeRefresh(_ workspace: LocalAgentWorkspace) {
+    nonisolated func scheduleWorkspaceSizeRefresh(_ workspace: LocalAgentWorkspace) async {
         // Shell/PTY 即使失败也可能已经写入 Shared；同步不依赖工作区统计能否落库。
         ETOSSharedWorkspaceFiles.notifyChange()
         guard let directory = try? hostURL(for: workspace),
               let persist = Persistence.makeLocalAgentWorkspaceSizeWriter() else { return }
-        Task { [workspaceSizeRefresher] in
-            await workspaceSizeRefresher.schedule(workspace, directory: directory, persist: persist)
-        }
+        await workspaceSizeRefresher.schedule(workspace, directory: directory, persist: persist)
+    }
+
+    public func waitForWorkspaceSizeRefreshes() async {
+        await workspaceSizeRefresher.waitForIdle()
     }
 
     public func refreshWorkspaceSize(_ workspace: LocalAgentWorkspace) async throws -> LocalAgentWorkspace {
