@@ -5,7 +5,14 @@ struct MacRequestParameterRow: Identifiable, Equatable, Sendable {
     let id: UUID
     var key: String
     var value: String
-    init(key: String = "", value: String = "") { id = UUID(); self.key = key; self.value = value }
+    private let suggestionKey: String?
+    private let suggestionValue: String?
+    var isUneditedSuggestion: Bool { suggestionKey == key && suggestionValue == value }
+
+    init(key: String = "", value: String = "", isSuggestion: Bool = false) {
+        id = UUID(); self.key = key; self.value = value
+        suggestionKey = isSuggestion ? key : nil; suggestionValue = isSuggestion ? value : nil
+    }
 }
 
 /// 三种编辑方式共用核心解析器；转换失败时保留原稿，不能借切换方式清空错误输入。
@@ -15,6 +22,25 @@ struct MacRequestParameterDraft: Equatable, Sendable {
     var text: String
 
     init() { mode = .rawJSON; rows = []; text = "{}" }
+
+    /// 建议只携带字段结构；原始标量（包括令牌和其他选项的值）不会进入编辑文本。
+    static func suggestion(parameters: [String: JSONValue], mode: Model.RequestBodyOverrideMode) -> MacRequestParameterDraft {
+        var result = MacRequestParameterDraft()
+        result.mode = mode
+        if mode == .keyValue, parameters.keys.contains(where: { $0.isEmpty || $0 != $0.trimmingCharacters(in: .whitespacesAndNewlines) }) {
+            result.mode = .rawJSON
+        }
+        switch result.mode {
+        case .keyValue:
+            result.rows = parameters.sorted { $0.key < $1.key }.map { .init(key: $0.key, value: ParameterExpressionParser.serializeTemplateValue($0.value), isSuggestion: true) }
+        case .expression:
+            result.rows = ParameterExpressionParser.serializeTemplate(parameters: parameters).map { .init(value: $0) }
+        case .rawJSON: break
+        @unknown default: result.mode = .rawJSON
+        }
+        result.text = ParameterExpressionParser.serializeRawJSONTemplate(parameters: parameters)
+        return result
+    }
 
     init(parameters: [String: JSONValue], mode: Model.RequestBodyOverrideMode, rawJSON: String? = nil) {
         self.mode = mode
@@ -34,6 +60,7 @@ struct MacRequestParameterDraft: Equatable, Sendable {
     func parameters() throws -> [String: JSONValue] {
         if mode == .rawJSON { return try ParameterExpressionParser.parseRawJSONObject(text) }
         let expressions: [ParameterExpressionParser.ParsedExpression] = try rows.compactMap { row in
+            if mode == .keyValue, row.isUneditedSuggestion { return nil }
             let value = row.value.trimmingCharacters(in: .whitespacesAndNewlines)
             if mode == .expression { return value.isEmpty ? nil : try ParameterExpressionParser.parse(value) }
             let key = row.key.trimmingCharacters(in: .whitespacesAndNewlines)

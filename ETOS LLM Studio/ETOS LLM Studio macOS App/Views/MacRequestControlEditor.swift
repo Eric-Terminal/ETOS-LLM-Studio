@@ -8,6 +8,8 @@ struct MacRequestControlEditor: View {
     @State private var draft: MacRequestControlDraft
     @State private var editsPayload = false
     @State private var editingOption: ModelRequestBodyControlOption?
+    @State private var suggestions = MacRequestControlSuggestions()
+    @State private var editingSuggestion: [String: JSONValue]?
     @State private var prepared: ModelRequestBodyControl?
     @State private var preparedDraft: MacRequestControlDraft?
     @State private var optionIDs: [String] = []
@@ -48,7 +50,10 @@ struct MacRequestControlEditor: View {
                             ForEach(draft.control.options) { Text($0.title).tag($0.id) }
                         }
                         ForEach(draft.control.options) { option in
-                            Button(option.title) { editingOption = option }.buttonStyle(.borderless)
+                            Button(option.title) {
+                                editingSuggestion = suggestions.payloads[option.id]
+                                editingOption = option
+                            }.buttonStyle(.borderless).disabled(busy)
                                 .contextMenu {
                                     Button(NSLocalizedString("上移", comment: "")) { moveOption(option.id, by: -1) }
                                     Button(NSLocalizedString("下移", comment: "")) { moveOption(option.id, by: 1) }
@@ -59,7 +64,7 @@ struct MacRequestControlEditor: View {
                                     }
                                 }
                         }
-                        Button(NSLocalizedString("添加", comment: "")) { editingOption = .init(title: NSLocalizedString("选项", comment: "")) }
+                        Button(NSLocalizedString("添加", comment: "")) { addOption() }.disabled(busy)
                         if canSort { Button(NSLocalizedString("按数值从小到大排序", comment: "")) { transform(split: false) } }
                     } header: { Text(NSLocalizedString("选项列表", comment: "")) }
                     Section {
@@ -103,7 +108,10 @@ struct MacRequestControlEditor: View {
             }
         }
         .sheet(item: $editingOption) { option in
-            MacRequestOptionEditor(pageID: GuidePageID(rawValue: "\(pageID.rawValue)-option-\(option.id)"), option: option, mode: mode) { value in
+            MacRequestOptionEditor(pageID: GuidePageID(rawValue: "\(pageID.rawValue)-option-\(option.id)"), option: option, mode: mode,
+                                   suggestedParameters: editingSuggestion) { value, consumed in
+                if consumed || !value.payload.isEmpty { suggestions.payloads.removeValue(forKey: value.id) }
+                else if let editingSuggestion { suggestions.payloads[value.id] = editingSuggestion }
                 if let index = draft.control.options.firstIndex(where: { $0.id == value.id }) { draft.control.options[index] = value }
                 else { draft.control.options.append(value) }
             }
@@ -149,19 +157,21 @@ struct MacRequestControlEditor: View {
     private func refresh() {
         preparation?.cancel()
         revision = UUID()
-        let token = revision, source = draft
+        let token = revision, source = draft, currentSuggestions = suggestions
         busy = true; prepared = nil; preparedDraft = nil; canSplit = false; canSort = false
         preparation = Task {
-            let result = await Task.detached { Result { () -> (ModelRequestBodyControl, Bool, Bool, [String]) in
+            let result = await Task.detached { Result { () -> (ModelRequestBodyControl, Bool, Bool, [String], MacRequestControlSuggestions) in
                 let control = try source.prepared()
                 let slider = ModelRequestBodyControlSliderDescriptor(control: control)
+                var suggestions = currentSuggestions
+                suggestions.refresh(for: control)
                 return (control, ModelRequestBodyControlSplitter.canSplit(control), slider?.mode == .continuousNumeric,
-                        control.options.map(\.id))
+                        control.options.map(\.id), suggestions)
             } }.value
             guard !Task.isCancelled, revision == token else { return }
             busy = false
             switch result {
-            case .success(let value): prepared = value.0; preparedDraft = source; canSplit = value.1; canSort = value.2; optionIDs = value.3; error = nil
+            case .success(let value): prepared = value.0; preparedDraft = source; canSplit = value.1; canSort = value.2; optionIDs = value.3; suggestions = value.4; error = nil
             case .failure(let failure): error = failure.localizedDescription
             }
         }
@@ -170,6 +180,19 @@ struct MacRequestControlEditor: View {
     private func moveOption(_ id: String, by delta: Int) {
         guard let index = draft.control.options.firstIndex(where: { $0.id == id }), draft.control.options.indices.contains(index + delta) else { return }
         draft.control.options.swapAt(index, index + delta)
+    }
+
+    private func addOption() {
+        guard !busy, !workspace.isRestoringData else { return }
+        let source = draft.control, current = suggestions, token = revision
+        busy = true
+        preparation = Task {
+            let suggestion = await Task.detached { source.payloadSuggestionForAppendingOption(existingSuggestions: current.payloads) }.value
+            guard !Task.isCancelled, token == revision, !workspace.isRestoringData else { return }
+            busy = false
+            editingSuggestion = suggestion
+            editingOption = .init(title: NSLocalizedString("选项", comment: ""))
+        }
     }
 
     private func transform(split: Bool) {
@@ -195,14 +218,17 @@ struct MacRequestControlEditor: View {
 private struct MacRequestOptionEditor: View {
     let pageID: GuidePageID
     let mode: Model.RequestBodyOverrideMode
-    let onSave: (ModelRequestBodyControlOption) -> Void
+    let suggestedParameters: [String: JSONValue]?
+    let onSave: (ModelRequestBodyControlOption, Bool) -> Void
     @State private var option: ModelRequestBodyControlOption
     @State private var editsPayload = false
+    @State private var consumedSuggestion = false
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var workspace: MacWorkspaceModel
 
-    init(pageID: GuidePageID, option: ModelRequestBodyControlOption, mode: Model.RequestBodyOverrideMode, onSave: @escaping (ModelRequestBodyControlOption) -> Void) {
-        self.pageID = pageID; self.mode = mode; self.onSave = onSave
+    init(pageID: GuidePageID, option: ModelRequestBodyControlOption, mode: Model.RequestBodyOverrideMode,
+         suggestedParameters: [String: JSONValue]?, onSave: @escaping (ModelRequestBodyControlOption, Bool) -> Void) {
+        self.pageID = pageID; self.mode = mode; self.suggestedParameters = suggestedParameters; self.onSave = onSave
         _option = State(initialValue: option)
     }
 
@@ -217,20 +243,23 @@ private struct MacRequestOptionEditor: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("取消", comment: "")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(NSLocalizedString("完成", comment: "")) { onSave(option); dismiss() }.disabled(option.title.isEmpty || workspace.isRestoringData)
+                    Button(NSLocalizedString("完成", comment: "")) { onSave(option, consumedSuggestion); dismiss() }.disabled(option.title.isEmpty || workspace.isRestoringData)
                 }
             }
             .guideSettingsPageContext(id: pageID, title: NSLocalizedString("选项", comment: ""),
                 documents: [GuideDocumentReference(id: "model-request-body", title: "Request Body Controls")], settings: [
                     .readOnly("editing_mode", label: NSLocalizedString("应用方式", comment: ""), value: { .string("control_draft_until_done") }),
                     .readOnly("option_id", label: NSLocalizedString("选项 ID", comment: ""), value: { .string(option.id) }),
+                    .readOnly("suggestion_available", label: NSLocalizedString("参数结构建议", comment: ""), value: { .bool(!consumedSuggestion && option.payload.isEmpty && suggestedParameters != nil) }),
                     .string("title", label: NSLocalizedString("显示名称", comment: ""), allowsEmpty: false, get: { option.title }, set: { option.title = $0 })
                 ])
         }
         .modifier(MacGuideInspector())
         .frame(minWidth: 460, minHeight: 300)
         .sheet(isPresented: $editsPayload) {
-            MacRequestParameterEditor(pageID: GuidePageID(rawValue: "\(pageID.rawValue)-payload"), parameters: option.payload, mode: mode) { values, _, _ in option.payload = values }
+            MacRequestParameterEditor(pageID: GuidePageID(rawValue: "\(pageID.rawValue)-payload"), parameters: option.payload, mode: mode,
+                                      suggestedParameters: consumedSuggestion ? nil : suggestedParameters,
+                                      onSuggestionConsumed: { consumedSuggestion = true }) { values, _, _ in option.payload = values }
         }
         .onChange(of: workspace.isRestoringData) { _, restoring in if restoring { dismiss() } }
     }

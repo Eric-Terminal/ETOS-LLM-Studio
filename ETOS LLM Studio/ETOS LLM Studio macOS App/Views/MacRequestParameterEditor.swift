@@ -6,6 +6,8 @@ struct MacRequestParameterEditor: View {
     let parameters: [String: JSONValue]
     let mode: Model.RequestBodyOverrideMode
     var rawJSON: String? = nil
+    var suggestedParameters: [String: JSONValue]? = nil
+    var onSuggestionConsumed: () -> Void = {}
     let onSave: ([String: JSONValue], Model.RequestBodyOverrideMode, String) -> Void
     @StateObject private var model = MacRequestParameterModel()
     @EnvironmentObject private var workspace: MacWorkspaceModel
@@ -46,6 +48,11 @@ struct MacRequestParameterEditor: View {
                     }
                     Section { Button(NSLocalizedString("添加", comment: "")) { model.draft.rows.append(.init()) } }
                 }
+                if model.isShowingSuggestion {
+                    Section {
+                        Text(NSLocalizedString("仅显示上一项的字段结构，未编辑的建议不会保存。", comment: "")).font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
                 if let error = model.error { Text(error).font(.footnote).foregroundStyle(.red) }
                 Section {
                     MacSettingsIntroCard(id: pageID.rawValue, title: NSLocalizedString("使用说明", comment: ""),
@@ -60,6 +67,7 @@ struct MacRequestParameterEditor: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(NSLocalizedString("完成", comment: "")) {
                         guard let values = model.parameters, !model.busy, !workspace.isRestoringData else { return }
+                        if model.hasConsumedSuggestion { onSuggestionConsumed() }
                         onSave(values, model.draft.mode, model.preview)
                         dismiss()
                     }.disabled(model.busy || model.parameters == nil || workspace.isRestoringData)
@@ -73,7 +81,8 @@ struct MacRequestParameterEditor: View {
                     "edit_mode": GuideSnapshotField(label: NSLocalizedString("编辑方式", comment: ""), value: .string(model.draft.mode.rawValue)),
                     "editing_mode": GuideSnapshotField(label: NSLocalizedString("应用方式", comment: ""), value: .string("parent_draft_until_save"), access: .readOnly),
                     "valid": GuideSnapshotField(label: NSLocalizedString("配置有效", comment: ""), value: .bool(model.parameters != nil), access: .readOnly),
-                    "revision": GuideSnapshotField(label: NSLocalizedString("版本", comment: ""), value: .string(model.revision.uuidString), access: .readOnly)
+                    "revision": GuideSnapshotField(label: NSLocalizedString("版本", comment: ""), value: .string(model.revision.uuidString), access: .readOnly),
+                    "suggestion_visible": GuideSnapshotField(label: NSLocalizedString("参数结构建议", comment: ""), value: .bool(model.isShowingSuggestion), access: .readOnly)
                 ]) }, buildProposal: { call, _ in
                     guard call.toolName == Self.tool.name else { throw GuideError.unsupportedTool(call.toolName) }
                     let revision = model.revision
@@ -118,7 +127,7 @@ struct MacRequestParameterEditor: View {
         }
         .modifier(MacGuideInspector())
         .frame(minWidth: 540, minHeight: 560)
-        .task { await model.load(parameters: parameters, mode: mode, rawJSON: rawJSON) }
+        .task { await model.load(parameters: parameters, mode: mode, rawJSON: rawJSON, suggestion: suggestedParameters) }
         .onDisappear { model.cancel() }
         .onReceive(AppConfigStore.shared.$appLanguage.dropFirst()) { _ in if model.ready { model.refresh() } }
         .onChange(of: workspace.isRestoringData) { _, restoring in if restoring { dismiss() } }
