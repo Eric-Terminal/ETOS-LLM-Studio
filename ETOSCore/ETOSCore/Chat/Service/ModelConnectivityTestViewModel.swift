@@ -15,6 +15,7 @@ public final class ModelConnectivityTestViewModel: ObservableObject {
 
     @Published public private(set) var results: [ModelConnectivityTestResult]
     @Published public private(set) var isRunning = false
+    @Published public private(set) var isCancelling = false
     @Published public private(set) var completedCount = 0
     @Published public var concurrencyLimit: Int {
         didSet {
@@ -34,15 +35,19 @@ public final class ModelConnectivityTestViewModel: ObservableObject {
     private let candidates: [RunnableModel]
     private var testTask: Task<Void, Never>?
 
-    public init(
+    public convenience init(
         provider: Provider,
         service: ChatService = .shared,
         appConfig: AppConfigStore? = nil
     ) {
+        self.init(candidates: service.connectivityTestCandidates(for: provider), service: service, appConfig: appConfig)
+    }
+
+    public init(candidates: [RunnableModel], service: ChatService = .shared, appConfig: AppConfigStore? = nil) {
         let resolvedAppConfig = appConfig ?? AppConfigStore.shared
         self.service = service
         self.appConfig = resolvedAppConfig
-        self.candidates = service.connectivityTestCandidates(for: provider)
+        self.candidates = candidates
         self.results = candidates.map { ModelConnectivityTestResult(runnableModel: $0) }
         self.concurrencyLimit = Self.normalizedConcurrencyLimit(resolvedAppConfig.modelConnectivityTestConcurrencyLimit)
         if resolvedAppConfig.modelConnectivityTestConcurrencyLimit != self.concurrencyLimit {
@@ -90,13 +95,23 @@ public final class ModelConnectivityTestViewModel: ObservableObject {
     }
 
     public func cancel() {
+        guard testTask != nil else { return }
+        isCancelling = true
         testTask?.cancel()
-        testTask = nil
-        isRunning = false
+    }
+
+    /// 保留任务句柄直到子请求与用量记录结束，恢复数据库前可等待实际收尾。
+    public func cancelAndWait() async {
+        let task = testTask
+        cancel()
+        await task?.value
     }
 
     private func runTests(concurrencyLimit: Int) async {
         defer {
+            for index in results.indices where results[index].status == .testing { results[index].status = .pending }
+            testTask = nil
+            isCancelling = false
             isRunning = false
         }
 
@@ -120,15 +135,12 @@ public final class ModelConnectivityTestViewModel: ObservableObject {
             while activeTaskCount > 0 {
                 guard let testResult = await group.next() else { break }
                 activeTaskCount -= 1
-                updateResult(candidateID: testResult.id) { result in
-                    result = testResult
-                }
-                completedCount += 1
-
                 if Task.isCancelled {
                     group.cancelAll()
                     continue
                 }
+                updateResult(candidateID: testResult.id) { result in result = testResult }
+                completedCount += 1
 
                 if nextCandidateIndex < candidates.count {
                     let candidate = candidates[nextCandidateIndex]
@@ -165,6 +177,7 @@ public final class ModelConnectivityTestViewModel: ObservableObject {
 public final class SingleModelConnectivityTestViewModel: ObservableObject {
     @Published public private(set) var results: [SingleModelConnectivityTestResult]
     @Published public private(set) var isRunning = false
+    @Published public private(set) var isCancelling = false
     @Published public private(set) var completedCount = 0
 
     public let runnableModel: RunnableModel
@@ -172,14 +185,18 @@ public final class SingleModelConnectivityTestViewModel: ObservableObject {
     private let service: ChatService
     private var testTask: Task<Void, Never>?
 
-    public init(
+    public convenience init(
         provider: Provider,
         model: Model,
         service: ChatService = .shared
     ) {
-        self.runnableModel = RunnableModel(provider: provider, model: model)
+        self.init(runnableModel: RunnableModel(provider: provider, model: model), service: service)
+    }
+
+    public init(runnableModel: RunnableModel, service: ChatService = .shared) {
+        self.runnableModel = runnableModel
         self.service = service
-        self.results = Self.makeInitialResults(for: model.kind)
+        self.results = Self.makeInitialResults(for: runnableModel.model.kind)
     }
 
     deinit {
@@ -208,9 +225,15 @@ public final class SingleModelConnectivityTestViewModel: ObservableObject {
     }
 
     public func cancel() {
+        guard testTask != nil else { return }
+        isCancelling = true
         testTask?.cancel()
-        testTask = nil
-        isRunning = false
+    }
+
+    public func cancelAndWait() async {
+        let task = testTask
+        cancel()
+        await task?.value
     }
 
     private static func makeInitialResults(for kind: ModelKind) -> [SingleModelConnectivityTestResult] {
@@ -232,6 +255,9 @@ public final class SingleModelConnectivityTestViewModel: ObservableObject {
 
     private func runTests() async {
         defer {
+            for index in results.indices where results[index].status == .testing { results[index].status = .pending }
+            testTask = nil
+            isCancelling = false
             isRunning = false
         }
 
@@ -263,6 +289,7 @@ public final class SingleModelConnectivityTestViewModel: ObservableObject {
             testResult = await service.testSingleModelImageGenerationConnectivity(for: runnableModel)
         }
 
+        guard !Task.isCancelled else { return }
         updateResult(kind) { result in
             result = testResult
         }
