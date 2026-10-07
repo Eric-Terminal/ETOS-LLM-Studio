@@ -6,16 +6,16 @@
 
 import Foundation
 
+private enum ShortcutURLRoute: String, Sendable {
+    case importRoute = "import"
+    case callback = "callback"
+    case templateStatus = "template-status"
+}
+
 @MainActor
 public final class ShortcutURLRouter {
     public static let shared = ShortcutURLRouter()
     nonisolated public static let appScheme = "etosllmstudio"
-
-    private enum Route: String {
-        case importRoute = "import"
-        case callback = "callback"
-        case templateStatus = "template-status"
-    }
 
     private init() {}
 
@@ -24,11 +24,11 @@ public final class ShortcutURLRouter {
         guard let scheme = url.scheme?.lowercased(), scheme == Self.appScheme else {
             return false
         }
-        guard let route = resolveRoute(from: url) else {
+        guard let route = Self.resolveRoute(from: url) else {
             return false
         }
 
-        let normalizedURL = normalizedShortcutURL(for: route, original: url)
+        let normalizedURL = Self.normalizedShortcutURL(for: route, original: url)
         switch route {
         case .importRoute:
             _ = await ShortcutToolManager.shared.importFromClipboard(triggerURL: normalizedURL)
@@ -40,7 +40,13 @@ public final class ShortcutURLRouter {
         }
     }
 
-    private func resolveRoute(from url: URL) -> Route? {
+    public nonisolated static func normalizedCompletionURL(_ url: URL) -> URL? {
+        guard url.scheme?.lowercased() == appScheme,
+              let route = resolveRoute(from: url), route != .importRoute else { return nil }
+        return normalizedShortcutURL(for: route, original: url)
+    }
+
+    private nonisolated static func resolveRoute(from url: URL) -> ShortcutURLRoute? {
         let host = url.host?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let pathComponents = url.path
             .split(separator: "/")
@@ -48,7 +54,7 @@ public final class ShortcutURLRouter {
         let acceptedShortcutHosts: Set<String> = ["shortcut", "shortcuts"]
 
         if let host, acceptedShortcutHosts.contains(host) {
-            return pathComponents.first.flatMap(Route.init(rawValue:))
+            return pathComponents.first.flatMap(ShortcutURLRoute.init(rawValue:))
         }
 
         if host == nil || host?.isEmpty == true {
@@ -56,17 +62,17 @@ public final class ShortcutURLRouter {
                   acceptedShortcutHosts.contains(pathComponents[0]) else {
                 return nil
             }
-            return Route(rawValue: pathComponents[1])
+            return ShortcutURLRoute(rawValue: pathComponents[1])
         }
 
         if let host, pathComponents.isEmpty {
-            return Route(rawValue: host)
+            return ShortcutURLRoute(rawValue: host)
         }
 
         return nil
     }
 
-    private func normalizedShortcutURL(for route: Route, original url: URL) -> URL {
+    private nonisolated static func normalizedShortcutURL(for route: ShortcutURLRoute, original url: URL) -> URL {
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             return url
         }

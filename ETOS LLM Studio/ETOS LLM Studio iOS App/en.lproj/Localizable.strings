@@ -7890,3 +7890,10 @@
 "导入期间会话已切换，请重新选择附件。" = "The conversation changed during import. Please select the attachments again.";
 
 "已导入 %d 个本地模型，可在模型管理中查看。" = "Imported %d local models. You can review them in model management.";
+// Mac 工具中心与快捷指令配置。
+"Mac 工具中心使用说明" = "Choose a tool source to configure it. MCP can connect to remote servers or run local programs over stdio. Install the required dependencies before using a local program. Shortcuts settings manage existing tool definitions; the matching shortcuts must be installed on this Mac.\n\nSaving, connecting and adding tools to chat are separate actions. An enabled tool still depends on its source switch, this conversation’s tool isolation and approval policy. Enabling a tool does not run it; the model may request a call when you describe a task in chat.\n\nThe page guide explains the current page and proposes configuration changes. Confirming a proposal does not connect servers, run commands or execute shortcuts.";
+"Mac 快捷指令工具使用说明" = "Manage Shortcut tools already stored in the database. Syncing or restoring their configuration does not install system shortcuts. First install shortcuts with matching names in the Shortcuts app on this Mac.\n\nThe main switch saves automatically and controls whether this group is offered to the chat model. Open a tool to edit its enabled state, run mode and custom description, then click Save. An empty custom description uses the existing generated description. Search and Show Enabled Only filter the list without changing configuration.\n\nDirect First and Bridge First determine which method is tried first; failure tries the other method. Bridging requires the matching bridge shortcut on this Mac. Conversation tool isolation still excludes these tools from chat.\n\nEnabling a tool does not run it. Model calls follow the normal chat approval flow. The page guide can propose configuration changes but cannot run shortcuts or read the clipboard. Guide changes in a detail editor also require Save.";
+"已导入工具" = "Imported Tools";
+"快捷指令名称" = "Shortcut Name";
+"无法保存快捷指令配置。" = "Unable to save the Shortcut configuration.";
+"自动生成描述" = "Generated Description";

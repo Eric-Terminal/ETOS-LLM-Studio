@@ -6,6 +6,7 @@ struct MacSettingsIntroCard: View {
     let title: String
     let details: String
     let documentID: String
+    var isActive = true
 
     var body: some View {
         NavigationLink {
@@ -19,6 +20,7 @@ struct MacSettingsIntroCard: View {
             .guideSettingsPageContext(
                 id: GuidePageID(rawValue: "mac-introduction-\(id)"), title: title,
                 documents: [GuideDocumentReference(id: documentID, title: title)],
+                isActive: isActive,
                 settings: [.readOnly("read_only", label: NSLocalizedString("使用说明", comment: ""), value: { .bool(true) })]
             )
         } label: {

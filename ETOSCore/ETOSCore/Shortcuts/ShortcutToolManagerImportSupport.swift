@@ -11,6 +11,8 @@ import Combine
 import os.log
 #if os(iOS)
 import UIKit
+#elseif os(macOS)
+import AppKit
 #elseif os(watchOS)
 import WatchKit
 #endif
@@ -454,6 +456,9 @@ extension ShortcutToolManager {
             return nil
         }
         return UIPasteboard.general.string
+        #elseif os(macOS)
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return nil }
+        return NSPasteboard.general.string(forType: .string)
         #else
         return nil
         #endif
@@ -472,6 +477,13 @@ extension ShortcutToolManager {
         #elseif os(watchOS)
         WKApplication.shared().openSystemURL(url)
         return true
+        #elseif os(macOS)
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return false }
+        return await withCheckedContinuation { continuation in
+            NSWorkspace.shared.open(url, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                continuation.resume(returning: error == nil)
+            }
+        }
         #else
         return false
         #endif

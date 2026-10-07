@@ -2,7 +2,7 @@ import ETOSCore
 import SwiftUI
 
 struct MacSettingsView: View {
-    private enum Tab: Hashable { case general, providers, mcp, context, data, security }
+    private enum Tab: Hashable { case general, providers, tools, context, data, security }
     @EnvironmentObject private var workspace: MacWorkspaceModel
     @ObservedObject private var configuration = AppConfigStore.shared
     @ObservedObject private var appLock = AppLockManager.shared
@@ -17,9 +17,9 @@ struct MacSettingsView: View {
             NavigationStack { MacProviderListView(isActive: selectedTab == .providers) }
                 .tabItem { Label(NSLocalizedString("模型管理", comment: ""), systemImage: "shippingbox") }
                 .tag(Tab.providers)
-            NavigationStack { MacMCPListView(isActive: selectedTab == .mcp) }
-                .tabItem { Label(NSLocalizedString("MCP 工具", comment: ""), systemImage: "puzzlepiece.extension") }
-                .tag(Tab.mcp)
+            NavigationStack { MacToolCenterView(isActive: selectedTab == .tools) }
+                .tabItem { Label(NSLocalizedString("工具中心", comment: ""), systemImage: "wrench.and.screwdriver") }
+                .tag(Tab.tools)
             NavigationStack {
                 List {
                     NavigationLink(NSLocalizedString("记忆", comment: "")) { MacMemorySettingsView(model: workspace.memoryModel) }

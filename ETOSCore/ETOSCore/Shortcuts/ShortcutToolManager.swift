@@ -15,7 +15,13 @@ import WatchKit
 
 @MainActor
 public final class ShortcutToolManager: ObservableObject {
-    public static let shared = ShortcutToolManager()
+    private static var sharedInstance: ShortcutToolManager?
+    public static var shared: ShortcutToolManager {
+        if let sharedInstance { return sharedInstance }
+        let manager = ShortcutToolManager(initialState: loadInitialState())
+        sharedInstance = manager
+        return manager
+    }
     // 注意：这里必须使用系统合成的 objectWillChange，
     // 否则快捷指令导入进度、工具列表与启用状态不会稳定自动刷新。
 
@@ -58,6 +64,8 @@ public final class ShortcutToolManager: ObservableObject {
     @Published public private(set) var chatToolsEnabled: Bool
 
     var routedTools: [String: ShortcutToolDefinition] = [:]
+    let backgroundPersistence = ShortcutToolPersistenceWorker()
+    private var backgroundRevision: UInt64 = 0
     var pendingExecutions: [String: PendingExecution] = [:]
     var importCancellationRequested = false
 
@@ -70,13 +78,45 @@ public final class ShortcutToolManager: ObservableObject {
         var timeoutTask: Task<Void, Never>?
     }
 
-    private init() {
-        chatToolsEnabled = AppConfigStore.boolValue(
-            for: .shortcutChatToolsEnabled,
-            legacyUserDefaultsKey: Self.chatToolsEnabledUserDefaultsKey,
-            defaultValue: true
+    private init(initialState: ShortcutToolInitialState) {
+        chatToolsEnabled = initialState.chatToolsEnabled
+        tools = initialState.tools
+        routedTools = initialState.routes
+    }
+
+    func applyBackgroundState(_ result: ShortcutToolPersistenceResult) {
+        guard result.revision > backgroundRevision else { return }
+        backgroundRevision = result.revision
+        chatToolsEnabled = result.state.chatToolsEnabled
+        tools = result.state.tools
+        routedTools = result.state.routes
+    }
+
+    /// 桌面在展示工具配置前预热，磁盘加载与工具别名计算不进入主线程。
+    public static func prepareSharedInBackground() async -> ShortcutToolManager {
+        if let sharedInstance { return sharedInstance }
+        let initialState = await Task.detached(priority: .userInitiated) { loadInitialState() }.value
+        if let sharedInstance { return sharedInstance }
+        let manager = ShortcutToolManager(initialState: initialState)
+        sharedInstance = manager
+        return manager
+    }
+
+    nonisolated private static func loadInitialState() -> ShortcutToolInitialState {
+        ShortcutToolInitialState(
+            chatToolsEnabled: AppConfigStore.boolValue(for: .shortcutChatToolsEnabled,
+                                                     legacyUserDefaultsKey: chatToolsEnabledUserDefaultsKey, defaultValue: true),
+            tools: ShortcutToolStore.loadTools()
         )
-        reloadFromDisk()
+    }
+
+    /// 外部回调只能结束已有运行；冷启动的过期 URL 不应隐式初始化存储或导入剪贴板。
+    @discardableResult
+    public static func handleCompletionIfInitialized(_ url: URL) -> Bool {
+        guard let normalized = ShortcutURLRouter.normalizedCompletionURL(url) else { return false }
+        guard let sharedInstance else { return true }
+        if normalized.path == "/callback" { return sharedInstance.handleCallbackURL(normalized) }
+        return sharedInstance.handleOfficialTemplateStatusURL(normalized)
     }
 
     public nonisolated static func isShortcutToolName(_ name: String) -> Bool {

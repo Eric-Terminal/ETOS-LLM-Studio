@@ -61,6 +61,8 @@ final class MacWorkspaceModel: ObservableObject {
     let requestControls = MacRequestRuntimeModel()
     let modelTests = MacModelConnectivityTasks()
     let localModels = MacLocalModelLibraryModel()
+    let shortcutTools = MacShortcutToolsModel()
+    private(set) var externalOpenRevision = UUID()
     lazy var incomingDocuments = MacIncomingDocumentsModel(
         library: localModels,
         applyAttachments: { [weak self] attachments in
@@ -133,6 +135,7 @@ final class MacWorkspaceModel: ObservableObject {
         let configuration = AppConfigStore.shared
         await configuration.waitForPersistentStoreLoaded()
         AppLanguageRuntime.apply(rawValue: configuration.appLanguage)
+        await shortcutTools.start()
         let service = await Task.detached(priority: .userInitiated) { ChatService.shared }.value
         self.service = service
         bind(service)
@@ -252,6 +255,7 @@ final class MacWorkspaceModel: ObservableObject {
             if state == .locked {
                 guard let self else { return }
                 suspendRoleplayPresentation(); requestControls.suspend(); modelTests.cancelAll(); localModels.suspend()
+                shortcutTools.suspend()
                 incomingDocuments.suspend(acceptNewFiles: !isRestoringData && !isExportingSnapshot && !isClosingRoleplay)
             }
             else { self?.resumeRoleplayPresentation(); self?.resumeRequestControls(); self?.flushToolSupplements() }
@@ -310,12 +314,14 @@ final class MacWorkspaceModel: ObservableObject {
 
     func prepareForTermination() async {
         isClosingRoleplay = true
+        externalOpenRevision = UUID()
         // 退出时不能让等待控件落盘的发送任务随后发出新请求。
         for task in sendTasks.values { task.cancel() }
         for task in rewriteTasks.values { task.cancel() }
         suspendRoleplayPresentation()
         requestControls.suspend()
         localModels.suspend()
+        shortcutTools.suspend()
         incomingDocuments.suspend()
         await modelTests.cancelAndWait()
         // KV 清理可能等待正在推理的上下文；先取消生成，退出不能排在清理锁后面等待。
@@ -323,6 +329,7 @@ final class MacWorkspaceModel: ObservableObject {
             for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
         }
         await localModels.waitForPendingWrites()
+        await shortcutTools.waitForPendingWrites()
         await incomingDocuments.waitForPendingOperations()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
@@ -723,8 +730,10 @@ final class MacWorkspaceModel: ObservableObject {
     func beginSnapshotExport() -> Bool {
         guard !isRestoringData, !isMutatingHistory, !roleplayRuntime.isBusy, !sessionLibrary.isWorking, !worldbookModel.isWorking, !roleplayModel.isWorking, !isExportingSnapshot, !SnapshotUploadManager.shared.isUploading else { return false }
         isExportingSnapshot = true
+        externalOpenRevision = UUID()
         modelTests.cancelAll()
         localModels.suspend()
+        shortcutTools.suspend()
         incomingDocuments.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
@@ -741,6 +750,7 @@ final class MacWorkspaceModel: ObservableObject {
         }
         requestControls.resume()
         localModels.resume()
+        shortcutTools.resume()
         incomingDocuments.resume(sessionID: currentSession?.id)
     }
 
@@ -755,8 +765,10 @@ final class MacWorkspaceModel: ObservableObject {
             ])
         }
         isRestoringData = true
+        externalOpenRevision = UUID()
         modelTests.cancelAll()
         localModels.suspend()
+        shortcutTools.suspend()
         incomingDocuments.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
@@ -771,6 +783,7 @@ final class MacWorkspaceModel: ObservableObject {
         await modelTests.cancelAndWait()
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
         await localModels.waitForPendingWrites()
+        await shortcutTools.waitForPendingWrites()
         await incomingDocuments.waitForPendingOperations()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
@@ -803,8 +816,10 @@ final class MacWorkspaceModel: ObservableObject {
             ])
         }
         isRestoringData = true
+        externalOpenRevision = UUID()
         modelTests.cancelAll()
         localModels.suspend()
+        shortcutTools.suspend()
         incomingDocuments.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
@@ -813,6 +828,7 @@ final class MacWorkspaceModel: ObservableObject {
         await modelTests.cancelAndWait()
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
         await localModels.waitForPendingWrites()
+        await shortcutTools.waitForPendingWrites()
         await incomingDocuments.waitForPendingOperations()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
@@ -832,6 +848,8 @@ final class MacWorkspaceModel: ObservableObject {
 
     private func refreshRestoredData(_ service: ChatService) async {
         await AppConfigStore.shared.reloadFromPersistentStoreAndWait()
+        // 解除恢复屏障前更新工具路由，下一轮聊天不能读取旧数据库的快捷指令。
+        await ShortcutToolManager.shared.reloadToolsInBackground()
         await Task.detached(priority: .userInitiated) {
             service.reloadLocalModelsAndAppConfigBackedModelState()
             service.reloadSessionStateFromPersistenceAfterMigration()
