@@ -13,11 +13,12 @@ public enum ShortcutToolSettingsWriteError: LocalizedError, Equatable {
 
 extension ShortcutToolStore {
     public static func saveSettingsDraft(
-        original: ShortcutToolDefinition, isEnabled: Bool, runMode: ShortcutRunModeHint, userDescription: String
+        original: ShortcutToolDefinition, isEnabled: Bool, runMode: ShortcutRunModeHint, userDescription: String,
+        generatedDescription: String? = nil
     ) throws -> [ShortcutToolDefinition] {
         let result = Persistence.withConfigDatabaseWrite { db in
             try saveSettingsDraft(original: original, isEnabled: isEnabled, runMode: runMode,
-                                  userDescription: userDescription, in: db)
+                                  userDescription: userDescription, generatedDescription: generatedDescription, in: db)
         }
         guard let result else { throw ShortcutToolSettingsWriteError.persistenceFailed }
         guard let tools = result else { throw ShortcutToolSettingsWriteError.changedExternally }
@@ -29,16 +30,16 @@ extension ShortcutToolStore {
     /// 比较和更新共用事务，不替换整个目录，其他工具与未知元数据原样保留。
     static func saveSettingsDraft(
         original: ShortcutToolDefinition, isEnabled: Bool, runMode: ShortcutRunModeHint,
-        userDescription: String, in db: Database
+        userDescription: String, generatedDescription: String? = nil, in db: Database
     ) throws -> [ShortcutToolDefinition]? {
         guard try loadTools(from: db).first(where: { $0.id == original.id }) == original else { return nil }
         let description = userDescription == (original.userDescription ?? "")
             ? original.userDescription : userDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         try db.execute(sql: """
             UPDATE shortcut_tools
-            SET is_enabled = ?, run_mode_hint = ?, user_description = ?, updated_at = ?
+            SET is_enabled = ?, run_mode_hint = ?, user_description = ?, generated_description = ?, updated_at = ?
             WHERE id = ?
-            """, arguments: [isEnabled ? 1 : 0, runMode.rawValue, description,
+            """, arguments: [isEnabled ? 1 : 0, runMode.rawValue, description, generatedDescription ?? original.generatedDescription,
                              Date().timeIntervalSince1970, original.id.uuidString])
         return try loadTools(from: db)
     }
@@ -55,10 +56,11 @@ actor ShortcutToolPersistenceWorker {
     func load() -> ShortcutToolPersistenceResult { snapshot(tools: ShortcutToolStore.loadTools()) }
 
     func saveSettings(
-        original: ShortcutToolDefinition, isEnabled: Bool, runMode: ShortcutRunModeHint, userDescription: String
+        original: ShortcutToolDefinition, isEnabled: Bool, runMode: ShortcutRunModeHint, userDescription: String,
+        generatedDescription: String? = nil
     ) throws -> ShortcutToolPersistenceResult {
         let tools = try ShortcutToolStore.saveSettingsDraft(original: original, isEnabled: isEnabled,
-                                                          runMode: runMode, userDescription: userDescription)
+                                                          runMode: runMode, userDescription: userDescription, generatedDescription: generatedDescription)
         return snapshot(tools: tools)
     }
 
@@ -69,7 +71,7 @@ actor ShortcutToolPersistenceWorker {
         return load()
     }
 
-    private func snapshot(tools: [ShortcutToolDefinition]) -> ShortcutToolPersistenceResult {
+    func snapshot(tools: [ShortcutToolDefinition]) -> ShortcutToolPersistenceResult {
         revision &+= 1
         return ShortcutToolPersistenceResult(revision: revision, state: ShortcutToolInitialState(
             chatToolsEnabled: AppConfigStore.boolValue(for: .shortcutChatToolsEnabled, defaultValue: true), tools: tools
@@ -86,10 +88,11 @@ extension ShortcutToolManager {
     }
 
     public func saveSettingsInBackground(
-        original: ShortcutToolDefinition, isEnabled: Bool, runMode: ShortcutRunModeHint, userDescription: String
+        original: ShortcutToolDefinition, isEnabled: Bool, runMode: ShortcutRunModeHint, userDescription: String,
+        generatedDescription: String? = nil
     ) async throws {
         let result = try await backgroundPersistence.saveSettings(original: original, isEnabled: isEnabled,
-                                                                 runMode: runMode, userDescription: userDescription)
+                                                                 runMode: runMode, userDescription: userDescription, generatedDescription: generatedDescription)
         applyBackgroundState(result)
     }
 

@@ -515,6 +515,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var providerDetailGroupByMainstream: Bool { didSet { write(.providerDetailGroupByMainstream, providerDetailGroupByMainstream) } }
     @Published public var backgroundCropTarget: String { didSet { write(.backgroundCropTarget, backgroundCropTarget) } }
     @Published public var shortcutBridgeShortcutName: String { didSet { write(.shortcutBridgeShortcutName, shortcutBridgeShortcutName) } }
+    @Published public var shortcutOfficialImportShortcutName: String { didSet { write(.shortcutOfficialImportShortcutName, shortcutOfficialImportShortcutName) } }
 
     @Published public var openAITailContextUsesSystemRole: Bool { didSet { write(.openAITailContextUsesSystemRole, openAITailContextUsesSystemRole) } }
     @Published public var includeSystemTimeInPrompt: Bool { didSet { write(.includeSystemTimeInPrompt, includeSystemTimeInPrompt) } }
@@ -802,6 +803,7 @@ public final class AppConfigStore: ObservableObject {
         providerDetailGroupByMainstream = Self.boolValue(.providerDetailGroupByMainstream, userDefaults: userDefaults)
         backgroundCropTarget = Self.textValue(.backgroundCropTarget, userDefaults: userDefaults)
         shortcutBridgeShortcutName = Self.textValue(.shortcutBridgeShortcutName, userDefaults: userDefaults)
+        shortcutOfficialImportShortcutName = Self.textValue(.shortcutOfficialImportShortcutName, userDefaults: userDefaults)
 
         openAITailContextUsesSystemRole = Self.boolValue(.openAITailContextUsesSystemRole, userDefaults: userDefaults)
         includeSystemTimeInPrompt = Self.boolValue(.includeSystemTimeInPrompt, userDefaults: userDefaults)

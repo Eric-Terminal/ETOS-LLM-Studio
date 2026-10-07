@@ -31,9 +31,8 @@ public final class ShortcutToolManager: ObservableObject {
     public nonisolated static let officialImportShortcutDefaultName = "ELS Export"
     private nonisolated static let chatToolsEnabledUserDefaultsKey = "shortcut.chatToolsEnabled"
 
-    let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ShortcutToolManager")
+    nonisolated let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ShortcutToolManager")
     let executionTimeoutSeconds: UInt64 = 45
-    let officialImportShortcutNameUserDefaultsKey = "shortcut.officialImportShortcutName"
 
     @Published public internal(set) var tools: [ShortcutToolDefinition] = []
     @Published public private(set) var lastImportSummary: ShortcutImportSummary?
@@ -157,18 +156,14 @@ public final class ShortcutToolManager: ObservableObject {
 
     public var officialImportShortcutName: String {
         get {
-            let value = AppConfigStore.textValue(
-                for: .shortcutOfficialImportShortcutName,
-                legacyUserDefaultsKey: officialImportShortcutNameUserDefaultsKey,
-                defaultValue: Self.officialImportShortcutDefaultName
-            )
+            let value = AppConfigStore.shared.shortcutOfficialImportShortcutName
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             return value.isEmpty ? Self.officialImportShortcutDefaultName : value
         }
         set {
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
             let next = trimmed.isEmpty ? Self.officialImportShortcutDefaultName : trimmed
-            AppConfigStore.persistSynchronously(.text(next), for: .shortcutOfficialImportShortcutName)
+            AppConfigStore.shared.shortcutOfficialImportShortcutName = next
             objectWillChange.send()
         }
     }
@@ -309,7 +304,7 @@ public final class ShortcutToolManager: ObservableObject {
                 throw ShortcutToolError.invalidManifest
             }
 
-            let importedPayloads = try decodeImportPayloads(from: data)
+            let importedPayloads = try Self.decodeImportPayloads(from: data)
             logger.info("导入清单解析完成，共 \(importedPayloads.count) 项。")
             importProgressTotal = max(importedPayloads.count, 1)
             try ensureImportNotCancelled()

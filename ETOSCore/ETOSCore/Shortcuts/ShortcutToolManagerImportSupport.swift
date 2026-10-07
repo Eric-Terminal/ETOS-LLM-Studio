@@ -19,6 +19,10 @@ import WatchKit
 
 extension ShortcutToolManager {
     func buildOfficialImportRunShortcutURL() -> URL? {
+        Self.buildOfficialImportRunShortcutURL(shortcutName: officialImportShortcutName)
+    }
+
+    public nonisolated static func buildOfficialImportRunShortcutURL(shortcutName: String) -> URL? {
         var successComponents = URLComponents()
         successComponents.scheme = ShortcutURLRouter.appScheme
         successComponents.host = "shortcuts"
@@ -27,6 +31,11 @@ extension ShortcutToolManager {
             URLQueryItem(name: "source", value: "clipboard"),
             URLQueryItem(name: "from", value: "official_template")
         ]
+        #if os(macOS)
+        // 桌面回调只报告完成；用户返回预览页后手动读取剪贴板、确认导入。
+        successComponents.path = "/template-status"
+        successComponents.queryItems = [URLQueryItem(name: "status", value: "success")]
+        #endif
 
         var errorComponents = URLComponents()
         errorComponents.scheme = ShortcutURLRouter.appScheme
@@ -53,7 +62,7 @@ extension ShortcutToolManager {
         components.host = "x-callback-url"
         components.path = "/run-shortcut"
         components.queryItems = [
-            URLQueryItem(name: "name", value: officialImportShortcutName),
+            URLQueryItem(name: "name", value: shortcutName),
             URLQueryItem(name: "input", value: "text"),
             URLQueryItem(name: "text", value: JSONValue.dictionary(payload).prettyPrintedCompact()),
             URLQueryItem(name: "x-success", value: successURL),
@@ -145,7 +154,7 @@ extension ShortcutToolManager {
         }
     }
 
-    func decodeImportPayloads(from data: Data) throws -> [ShortcutToolImportPayload] {
+    nonisolated static func decodeImportPayloads(from data: Data) throws -> [ShortcutToolImportPayload] {
         let decoder = JSONDecoder()
 
         if let manifest = try? decoder.decode(ShortcutToolManifest.self, from: data) {
@@ -187,7 +196,7 @@ extension ShortcutToolManager {
         throw ShortcutToolError.invalidManifest
     }
 
-    func enrichToolWithDeepScanIfNeeded(_ tool: ShortcutToolDefinition) async -> ShortcutToolDefinition {
+    nonisolated func enrichToolWithDeepScanIfNeeded(_ tool: ShortcutToolDefinition) async -> ShortcutToolDefinition {
         guard tool.metadata["importMode"]?.stringValue == "deep" else {
             return tool
         }
@@ -217,12 +226,13 @@ extension ShortcutToolManager {
         return next
     }
 
-    func fetchShortcutWorkflowSummary(fromICloudLink link: String) async -> String? {
-        if importCancellationRequested {
+    nonisolated func fetchShortcutWorkflowSummary(fromICloudLink link: String) async -> String? {
+        let cancelled = await MainActor.run { self.importCancellationRequested }
+        if cancelled || Task.isCancelled {
             logger.info("导入已取消，跳过 iCloud 深度解析。")
             return nil
         }
-        guard let shortcutID = parseShortcutID(fromICloudLink: link) else { return nil }
+        guard let shortcutID = Self.parseShortcutID(fromICloudLink: link) else { return nil }
         guard let recordURL = URL(string: "https://www.icloud.com/shortcuts/api/records/\(shortcutID)") else {
             return nil
         }
@@ -232,7 +242,8 @@ extension ShortcutToolManager {
             request.timeoutInterval = 20
             let (recordData, recordResponse) = try await NetworkSessionConfiguration.shared.securedData(for: request)
             guard isSuccessStatusCode(recordResponse) else { return nil }
-            if importCancellationRequested {
+            let cancelled = await MainActor.run { self.importCancellationRequested }
+            if cancelled || Task.isCancelled {
                 logger.info("导入已取消，停止后续 iCloud 下载解析。")
                 return nil
             }
@@ -246,10 +257,10 @@ extension ShortcutToolManager {
         }
     }
 
-    func parseShortcutID(fromICloudLink link: String) -> String? {
+    nonisolated static func parseShortcutID(fromICloudLink link: String) -> String? {
         guard let url = URL(string: link),
               let host = url.host?.lowercased(),
-              host.contains("icloud.com") else {
+              (host == "icloud.com" || host == "www.icloud.com") else {
             return nil
         }
         let components = url.pathComponents.filter { $0 != "/" }
@@ -262,7 +273,7 @@ extension ShortcutToolManager {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    func extractShortcutDataFromRecordPayload(_ data: Data) async throws -> Data? {
+    nonisolated func extractShortcutDataFromRecordPayload(_ data: Data) async throws -> Data? {
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let fields = root["fields"] as? [String: Any] else {
             return nil
@@ -286,7 +297,7 @@ extension ShortcutToolManager {
         return isSuccessStatusCode(downloadResponse) ? downloadData : nil
     }
 
-    func nestedValue(_ dictionary: [String: Any], keyPath: [String]) -> Any? {
+    nonisolated func nestedValue(_ dictionary: [String: Any], keyPath: [String]) -> Any? {
         var current: Any = dictionary
         for key in keyPath {
             guard let currentDict = current as? [String: Any],
@@ -298,7 +309,7 @@ extension ShortcutToolManager {
         return current
     }
 
-    func summarizeShortcutPlist(_ data: Data) -> String? {
+    nonisolated func summarizeShortcutPlist(_ data: Data) -> String? {
         guard let object = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil),
               let root = object as? [String: Any] else {
             return nil
@@ -344,13 +355,13 @@ extension ShortcutToolManager {
         return fragments.joined(separator: NSLocalizedString("；", comment: "Localized clause separator"))
     }
 
-    func normalizeActionIdentifier(_ identifier: String) -> String {
+    nonisolated func normalizeActionIdentifier(_ identifier: String) -> String {
         let tail = identifier.split(separator: ".").last.map(String.init) ?? identifier
         let replaced = tail.replacingOccurrences(of: "_", with: " ")
         return replaced.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    func isSuccessStatusCode(_ response: URLResponse) -> Bool {
+    nonisolated func isSuccessStatusCode(_ response: URLResponse) -> Bool {
         guard let http = response as? HTTPURLResponse else { return false }
         return (200..<300).contains(http.statusCode)
     }
@@ -371,7 +382,7 @@ extension ShortcutToolManager {
         rebuildRouting()
     }
 
-    func makeGeneratedDescription(from payload: ShortcutToolImportPayload) -> String {
+    nonisolated func makeGeneratedDescription(from payload: ShortcutToolImportPayload) -> String {
         var parts: [String] = []
 
         if let type = payload.metadata["category"]?.stringValue, !type.isEmpty {
@@ -396,7 +407,7 @@ extension ShortcutToolManager {
         )
     }
 
-    func makeGeneratedDescription(for tool: ShortcutToolDefinition) -> String {
+    nonisolated func makeGeneratedDescription(for tool: ShortcutToolDefinition) -> String {
         makeGeneratedDescription(
             from: ShortcutToolImportPayload(
                 name: tool.name,

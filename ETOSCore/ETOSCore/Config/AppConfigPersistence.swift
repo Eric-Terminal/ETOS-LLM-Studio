@@ -384,7 +384,6 @@ extension AppConfigStore {
              .shortcutChatToolsEnabled,
              .messageRegexRules,
              .customChatSlashCommands,
-             .shortcutOfficialImportShortcutName,
              .configLoaderDownloadOnceCompleted,
              .configLoaderToolCapabilityMigrated,
              .feedbackAPIBaseURL,
@@ -541,6 +540,7 @@ extension AppConfigStore {
         case .providerDetailGroupByMainstream: return .bool(providerDetailGroupByMainstream)
         case .backgroundCropTarget: return .text(backgroundCropTarget)
         case .shortcutBridgeShortcutName: return .text(shortcutBridgeShortcutName)
+        case .shortcutOfficialImportShortcutName: return .text(shortcutOfficialImportShortcutName)
 
         case .openAITailContextUsesSystemRole: return .bool(openAITailContextUsesSystemRole)
         case .includeSystemTimeInPrompt: return .bool(includeSystemTimeInPrompt)

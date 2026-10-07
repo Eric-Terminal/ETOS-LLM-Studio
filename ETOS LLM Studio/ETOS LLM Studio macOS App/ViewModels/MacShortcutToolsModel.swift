@@ -1,6 +1,7 @@
 import Combine
 import ETOSCore
 import Foundation
+import AppKit
 
 struct MacShortcutToolRow: Identifiable, Sendable {
     let tool: ShortcutToolDefinition
@@ -18,6 +19,10 @@ final class MacShortcutToolsModel: ObservableObject {
     @Published private(set) var chatToolsEnabled = false
     @Published private(set) var isLoaded = false
     @Published private(set) var isWorking = false
+    @Published private(set) var isPreparing = false
+    @Published private(set) var isLaunchingOfficial = false
+    @Published private(set) var progress: ShortcutPreparationProgress?
+    @Published private(set) var officialStatus: String?
     @Published private(set) var isSuspended = false
     @Published private(set) var epoch = UUID()
     @Published var query = "" { didSet { refresh() } }
@@ -28,10 +33,12 @@ final class MacShortcutToolsModel: ObservableObject {
     private var presentationTask: Task<Void, Never>?
     private var reloadTask: Task<Void, Never>?
     private var writeTask: Task<Void, Error>?
+    private var importTask: Task<MacShortcutImportPreview, Error>?
+    private var descriptionTask: Task<String, Error>?
     private var presentationID = UUID()
     private var sessionIsolated = false
 
-    var canWrite: Bool { isLoaded && !isWorking && !isSuspended && AppLockManager.shared.state != .locked }
+    var canWrite: Bool { isLoaded && !isWorking && !isPreparing && !isLaunchingOfficial && !isSuspended && AppLockManager.shared.state != .locked }
 
     func start() async {
         guard manager == nil else { refresh(); return }
@@ -47,6 +54,7 @@ final class MacShortcutToolsModel: ObservableObject {
     func refresh() {
         guard let manager, !isSuspended else { return }
         chatToolsEnabled = manager.chatToolsEnabled
+        officialStatus = manager.lastOfficialTemplateStatusMessage
         let tools = manager.tools, enabled = manager.chatToolsEnabled, isolated = sessionIsolated
         let query = query, enabledOnly = enabledOnly
         presentationTask?.cancel(); presentationID = UUID()
@@ -88,24 +96,87 @@ final class MacShortcutToolsModel: ObservableObject {
     }
 
     func save(_ original: ShortcutToolDefinition, enabled: Bool, runMode: ShortcutRunModeHint,
-              description: String, expectedEpoch: UUID) async throws {
+              description: String, generatedDescription: String? = nil, expectedEpoch: UUID) async throws {
         try await perform(expectedEpoch: expectedEpoch) {
-            try await $0.saveSettingsInBackground(original: original, isEnabled: enabled, runMode: runMode, userDescription: description)
+            try await $0.saveSettingsInBackground(original: original, isEnabled: enabled, runMode: runMode,
+                                                 userDescription: description, generatedDescription: generatedDescription)
         }
     }
 
-    private func perform(expectedEpoch: UUID, action: @escaping @MainActor (ShortcutToolManager) async throws -> Void) async throws {
+    func delete(_ original: ShortcutToolDefinition, expectedEpoch: UUID) async throws {
+        try await perform(expectedEpoch: expectedEpoch) { try await $0.deleteToolInBackground(original) }
+    }
+
+    func install(_ preview: MacShortcutImportPreview, expectedEpoch: UUID) async throws -> ShortcutImportSummary {
+        try await perform(expectedEpoch: expectedEpoch) { try await $0.importPreparedInBackground(preview.source) }
+    }
+
+    private func perform<T: Sendable>(expectedEpoch: UUID, action: @escaping @MainActor (ShortcutToolManager) async throws -> T) async throws -> T {
         guard canWrite, epoch == expectedEpoch, let manager else { throw MacMemoryWriteError.busy }
         isWorking = true
         let task = Task { try await action(manager) }
-        writeTask = task
+        writeTask = Task { _ = try await task.value }
         defer { isWorking = false; writeTask = nil; refresh() }
-        try await task.value
+        return try await task.value
+    }
+
+    func prepare(_ source: MacShortcutImportSource, expectedEpoch: UUID) async throws -> MacShortcutImportPreview {
+        guard canWrite, epoch == expectedEpoch, let manager else { throw MacMemoryWriteError.busy }
+        isPreparing = true; progress = nil
+        let task = Task { [weak self] in
+            let data = try await Task.detached(priority: .utility) { try source.readData() }.value
+            try Task.checkCancellation()
+            guard self?.epoch == expectedEpoch, self?.isSuspended == false,
+                  AppLockManager.shared.state != .locked else { throw CancellationError() }
+            let preview = try await manager.prepareImportInBackground(data: data) { [weak self] update in
+                await MainActor.run { [weak self] in
+                    guard let self, !self.isSuspended, self.epoch == expectedEpoch else { return }
+                    self.progress = update
+                }
+            }
+            try Task.checkCancellation()
+            return await Task.detached(priority: .utility) { MacShortcutImportPreview(preview) }.value
+        }
+        importTask = task
+        defer { isPreparing = false; progress = nil; importTask = nil }
+        let result = try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+        guard !task.isCancelled, !Task.isCancelled, epoch == expectedEpoch, !isSuspended,
+              AppLockManager.shared.state != .locked else { throw CancellationError() }
+        return result
+    }
+
+    func generateDescription(for tool: ShortcutToolDefinition, expectedEpoch: UUID) async throws -> String {
+        guard canWrite, epoch == expectedEpoch, let manager else { throw MacMemoryWriteError.busy }
+        isPreparing = true
+        let task = Task { try await manager.prepareDescriptionInBackground(for: tool) }
+        descriptionTask = task
+        defer { isPreparing = false; descriptionTask = nil }
+        let result = try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+        guard !task.isCancelled, !Task.isCancelled, epoch == expectedEpoch, !isSuspended,
+              AppLockManager.shared.state != .locked else { throw CancellationError() }
+        return result
+    }
+
+    func cancelPreparation() { importTask?.cancel(); descriptionTask?.cancel() }
+
+    func launchOfficial(name: String, expectedEpoch: UUID) async throws {
+        guard canWrite, epoch == expectedEpoch else { throw MacMemoryWriteError.busy }
+        isLaunchingOfficial = true
+        defer { isLaunchingOfficial = false }
+        let url = await Task.detached(priority: .utility) {
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            return ShortcutToolManager.buildOfficialImportRunShortcutURL(
+                shortcutName: trimmed.isEmpty ? ShortcutToolManager.officialImportShortcutDefaultName : trimmed)
+        }.value
+        guard !Task.isCancelled, !isSuspended, epoch == expectedEpoch, AppLockManager.shared.state != .locked else { throw CancellationError() }
+        guard let url, NSWorkspace.shared.open(url) else { throw ShortcutToolError.cannotOpenShortcutApp }
+        officialStatus = NSLocalizedString("已拉起快捷指令，请在授权后返回应用继续导入。", comment: "")
     }
 
     func suspend() {
         isSuspended = true; epoch = UUID()
         presentationTask?.cancel(); reloadTask?.cancel(); presentationID = UUID()
+        cancelPreparation()
     }
 
     func resume() {
@@ -123,6 +194,8 @@ final class MacShortcutToolsModel: ObservableObject {
 
     func waitForPendingWrites() async {
         _ = try? await writeTask?.value
+        _ = try? await importTask?.value
+        _ = try? await descriptionTask?.value
         await reloadTask?.value
         await presentationTask?.value
     }
