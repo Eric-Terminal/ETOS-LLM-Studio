@@ -100,7 +100,7 @@ public extension View {
         executeReadTool: @escaping @MainActor @Sendable (InternalToolCall) async throws -> String = { call in
             throw GuideError.unsupportedTool(call.toolName)
         },
-        buildProposal: @escaping @MainActor @Sendable (InternalToolCall, GuidePageSnapshot) throws -> GuideActionProposal = { _, _ in
+        buildProposal: @escaping GuideContextCoordinator.ProposalBuilder = { _, _ in
             throw GuideError.invalidToolArguments
         },
         execute: @escaping @MainActor @Sendable (GuideActionProposal) async throws -> GuideActionExecution = { _ in
