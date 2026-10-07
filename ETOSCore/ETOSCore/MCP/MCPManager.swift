@@ -110,7 +110,11 @@ public final class MCPManager: ObservableObject {
     var trackedToolCallTokenKeys: [UUID: String] = [:]
     var progressTimestampsByToken: [String: Date] = [:]
     var configObservationCancellable: AnyDatabaseCancellable?
-    var configSnapshotSignature: String = MCPServerStore.configurationSnapshotSignature()
+    var configSnapshotSignature: String = ""
+    var backgroundStoreRevision: UInt64 = 0
+    lazy var configurationPersistenceWorker = MCPConfigurationPersistenceWorker(
+        appToolDefaults: MCPBuiltInAppToolServer.categories.map { MCPBuiltInAppToolServer.defaultConfiguration(for: $0) }
+    )
     var autoConnectRetryTasks: [UUID: Task<Void, Never>] = [:]
     var autoConnectRetryAttempts: [UUID: Int] = [:]
     var autoConnectFailureNotifiedAt: [UUID: Date] = [:]
@@ -128,6 +132,11 @@ public final class MCPManager: ObservableObject {
     let governanceLogLimit = 1200
 
     private init() {
+        #if os(macOS)
+        // 启动只使用内存默认值，数据库偏好随后台目录快照一次性应用。
+        chatToolsEnabled = false
+        toolCallTitleEnabled = true
+        #else
         chatToolsEnabled = AppConfigStore.boolValue(
             for: .mcpChatToolsEnabled,
             legacyUserDefaultsKey: Self.chatToolsEnabledUserDefaultsKey,
@@ -137,9 +146,18 @@ public final class MCPManager: ObservableObject {
             for: .mcpToolCallTitleEnabled,
             defaultValue: true
         )
+        #endif
+        #if os(macOS)
+        Task { [weak self] in
+            await self?.reloadServersInBackground()
+            self?.startConfigObservationIfNeeded()
+            self?.connectSelectedServersIfNeeded()
+        }
+        #else
         reloadServers()
         startConfigObservationIfNeeded()
         connectSelectedServersIfNeeded()
+        #endif
     }
 
     deinit {
@@ -169,35 +187,34 @@ public final class MCPManager: ObservableObject {
     // MARK: - Server Management
 
     public func reloadServers() {
+        applyStoreSnapshot(MCPManagerStoreSnapshot.load(
+            appToolDefaults: MCPBuiltInAppToolServer.categories.map { MCPBuiltInAppToolServer.defaultConfiguration(for: $0) }
+        ))
+    }
+
+    func applyStoreSnapshot(_ snapshot: MCPManagerStoreSnapshot) {
+        #if os(macOS)
+        chatToolsEnabled = snapshot.chatToolsEnabled
+        toolCallTitleEnabled = snapshot.toolCallTitleEnabled
+        if !chatToolsEnabled { cancelAllAutoConnectRetries(resetAttempts: true) }
+        #endif
         let previousServersByID = Dictionary(uniqueKeysWithValues: servers.map { ($0.id, $0) })
-        let storedServers = MCPServerStore.loadServers()
-        let deletedBuiltInServerIDs = MCPServerStore.deletedBuiltInServerIDs()
-        let preparedSearchServers = MCPBuiltInSearchServer.prepareServersForManager(
-            storedServers,
-            deletedBuiltInServerIDs: deletedBuiltInServerIDs
-        )
-        let preparedAppToolServers = MCPBuiltInAppToolServer.prepareServersForManager(
-            preparedSearchServers.servers,
-            deletedBuiltInServerIDs: deletedBuiltInServerIDs
-        )
-        let preparedPersonalDataServers = MCPBuiltInPersonalDataServer.prepareServersForManager(
-            preparedAppToolServers.servers,
-            deletedBuiltInServerIDs: deletedBuiltInServerIDs
-        )
-        for serverToDelete in preparedAppToolServers.serversToDelete {
-            MCPServerStore.delete(serverToDelete)
-        }
-        let serversToPersist = [preparedSearchServers.serverToPersist, preparedPersonalDataServers.serverToPersist].compactMap { $0 } + preparedAppToolServers.serversToPersist
-        for serverToPersist in serversToPersist {
-            MCPServerStore.save(serverToPersist)
-        }
-        servers = preparedPersonalDataServers.servers
+        servers = snapshot.servers
         let currentServersByID = Dictionary(uniqueKeysWithValues: servers.map { ($0.id, $0) })
         for (serverID, previous) in previousServersByID
         where currentServersByID[serverID] != previous {
             removeLocalStdioInstances(for: serverID)
+            if let current = currentServersByID[serverID], current.transport != previous.transport {
+                // 配置观察和手动保存统一撤销旧连接；先应用快照，再异步关闭客户端。
+                inFlightConnections[serverID]?.cancel()
+                inFlightConnections[serverID] = nil
+                cancelTrackedToolCalls(for: serverID, reason: NSLocalizedString("服务器已断开", comment: ""))
+                let client = removeConnectionArtifacts(for: serverID)
+                Task { await client?.disconnect() }
+                serverStatuses[serverID] = nil
+            }
         }
-        configSnapshotSignature = MCPServerStore.configurationSnapshotSignature()
+        configSnapshotSignature = snapshot.signature
         let serverIDs = Set(servers.map { $0.id })
         autoConnectSuppressedServerIDs = autoConnectSuppressedServerIDs.intersection(serverIDs)
         let removedIDs = Set(autoConnectRetryTasks.keys).subtracting(serverIDs)
@@ -230,23 +247,23 @@ public final class MCPManager: ObservableObject {
             status.isSelectedForChat = server.isSelectedForChat
             if case .idle = status.connectionState {
                 if status.tools.isEmpty {
-                    status.tools = MCPServerStore.loadTools(for: server.id)
+                    status.tools = snapshot.metadata[server.id]?.tools ?? []
                 }
 
                 if status.info == nil {
-                    status.info = MCPServerStore.loadServerInfo(for: server.id)
+                    status.info = snapshot.metadata[server.id]?.info
                 }
                 if status.resources.isEmpty {
-                    status.resources = MCPServerStore.loadResources(for: server.id)
+                    status.resources = snapshot.metadata[server.id]?.resources ?? []
                 }
                 if status.resourceTemplates.isEmpty {
-                    status.resourceTemplates = MCPServerStore.loadResourceTemplates(for: server.id)
+                    status.resourceTemplates = snapshot.metadata[server.id]?.resourceTemplates ?? []
                 }
                 if status.prompts.isEmpty {
-                    status.prompts = MCPServerStore.loadPrompts(for: server.id)
+                    status.prompts = snapshot.metadata[server.id]?.prompts ?? []
                 }
                 if status.roots.isEmpty {
-                    status.roots = MCPServerStore.loadRoots(for: server.id)
+                    status.roots = snapshot.metadata[server.id]?.roots ?? []
                 }
 
                 let hasMetadataCache = status.info != nil ||
@@ -256,7 +273,7 @@ public final class MCPManager: ObservableObject {
                     !status.prompts.isEmpty ||
                     !status.roots.isEmpty
                 if hasMetadataCache {
-                    status.metadataCachedAt = MCPServerStore.loadMetadataCachedAt(for: server.id) ?? status.metadataCachedAt ?? Date()
+                    status.metadataCachedAt = snapshot.metadata[server.id]?.cachedAt ?? status.metadataCachedAt ?? Date()
                     // 首次加载时，只有聊天暴露总开关开启，才乐观恢复 ready 并等待后台握手校验。
                     if existingStatus == nil, chatToolsEnabled, server.isSelectedForChat {
                         status.connectionState = .ready

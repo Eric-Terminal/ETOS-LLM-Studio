@@ -143,17 +143,33 @@ public enum MCPBuiltInAppToolServer {
         serversToPersist: [MCPServerConfiguration],
         serversToDelete: [MCPServerConfiguration]
     ) {
+        prepareServersForManager(
+            storedServers,
+            deletedBuiltInServerIDs: deletedBuiltInServerIDs,
+            defaults: categories.map { defaultConfiguration(for: $0) }
+        )
+    }
+
+    /// 默认权限在主执行器从工具目录取快照，数据库合并只依赖值类型，可在后台运行。
+    static func prepareServersForManager(
+        _ storedServers: [MCPServerConfiguration],
+        deletedBuiltInServerIDs: Set<UUID>,
+        defaults: [MCPServerConfiguration]
+    ) -> (
+        servers: [MCPServerConfiguration],
+        serversToPersist: [MCPServerConfiguration],
+        serversToDelete: [MCPServerConfiguration]
+    ) {
         let serversToDelete = storedServers.filter(isObsoleteBuiltInAppToolServer)
         var servers = storedServers.filter { !isObsoleteBuiltInAppToolServer($0) }
         var serversToPersist: [MCPServerConfiguration] = []
 
-        for category in categories {
-            let defaultServer = defaultConfiguration(for: category)
+        for defaultServer in defaults {
             if let index = servers.firstIndex(where: { $0.id == defaultServer.id }) {
                 var server = servers[index]
                 var shouldPersist = false
-                if server.transport != .builtInAppTool(category: category) {
-                    server.transport = .builtInAppTool(category: category)
+                if server.transport != defaultServer.transport {
+                    server.transport = defaultServer.transport
                     shouldPersist = true
                 }
                 if server.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

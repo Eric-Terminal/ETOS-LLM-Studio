@@ -72,6 +72,7 @@ public actor GuideKnowledgeService {
 
 public enum GuideDocumentCatalog {
     public static let documents: [GuideDocument] = [
+        GuideMacWorkspaceKnowledge.document(),
         GuideDocument(
             id: "message-tool-call-editing",
             title: "消息工具调用 JSON 编辑",
@@ -202,7 +203,7 @@ public enum GuideDocumentCatalog {
 
             页面向导的专属工具与 MCP 完全隔离，不会出现在 MCP 列表或普通聊天的工具定义中。页面还可以显式声明自己的只读或变更工具，由所属页面负责校验和执行；服务端不会用固定工具名单阻止这些自定义能力。
 
-            本地 stdio 需要本地 Linux 运行环境；远程服务器按其传输协议填写地址与认证信息。涉及副作用的工具仍受工具审批策略控制。
+            iOS/watchOS 的本地 stdio 需要本地 Linux 运行环境；macOS 的 stdio 直接启动本机程序，通过 stdin/stdout 通信，需要先安装相应依赖。远程服务器按其传输协议填写地址与认证信息。涉及副作用的工具仍受工具审批策略控制。
             """
         ),
         GuideDocument(

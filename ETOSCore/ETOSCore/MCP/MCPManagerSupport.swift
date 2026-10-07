@@ -519,7 +519,11 @@ extension MCPManager {
             category: .lifecycle,
             message: NSLocalizedString("检测到 MCP 配置数据库变化，自动刷新。", comment: "MCP governance config database changed")
         )
+        #if os(macOS)
+        Task { [weak self] in await self?.reloadServersInBackground() }
+        #else
         reloadServers()
+        #endif
     }
 
     func latestProgressTimestamp(for tokenKey: String) -> Date? {

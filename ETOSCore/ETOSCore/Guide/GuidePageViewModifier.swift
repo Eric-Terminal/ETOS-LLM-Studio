@@ -19,11 +19,24 @@ private struct GuidePageContextModifier: ViewModifier {
     let execute: GuideContextCoordinator.ProposalExecutor
 
     @State private var token: GuideContextCoordinator.RegistrationToken?
+    #if os(macOS)
+    @Environment(\.controlActiveState) private var windowActivity
+    @ObservedObject private var appLock = AppLockManager.shared
+    #endif
+
+    private var isContextActive: Bool {
+        #if os(macOS)
+        // 多窗口共享向导协调器，只有当前前台且已解锁的窗口能够提供操作上下文。
+        isActive && windowActivity == .key && appLock.state != .locked
+        #else
+        isActive
+        #endif
+    }
 
     func body(content: Content) -> some View {
         content
             .onAppear {
-                guard isActive else { return }
+                guard isContextActive else { return }
                 if let token {
                     GuideContextCoordinator.shared.activate(token)
                 } else {
@@ -54,7 +67,7 @@ private struct GuidePageContextModifier: ViewModifier {
                     execute: execute
                 )
             }
-            .onChange(of: isActive) { _, active in
+            .onChange(of: isContextActive) { _, active in
                 if active {
                     if let token {
                         GuideContextCoordinator.shared.activate(token)
