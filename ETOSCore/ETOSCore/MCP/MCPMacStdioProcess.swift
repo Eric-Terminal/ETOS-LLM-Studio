@@ -19,6 +19,8 @@ final class MCPMacStdioProcess: @unchecked Sendable {
     private var diagnostics: DispatchIO?
     private var decoder = MCPStdioMessageDecoder()
     private var closed = false
+    private var terminationRequested = false
+    private var stopWaiters: [CheckedContinuation<Void, Never>] = []
 
     init() {
         let pair = AsyncThrowingStream<Data, Error>.makeStream(bufferingPolicy: .bufferingOldest(256))
@@ -57,10 +59,16 @@ final class MCPMacStdioProcess: @unchecked Sendable {
                     task.terminationHandler = { [weak self] task in
                         guard let self else { return }
                         let exitCode = task.terminationStatus
-                        // 先让 stdout 已写入的尾帧排空。子进程派生的后台程序可能
-                        // 保留管道端点，不能因此让已经退出的 MCP 永远显示为连接中。
-                        queue.asyncAfter(deadline: .now() + 1) { [weak self] in
-                            self?.finish(error: MCPLocalStdioError.processExited(exitCode: exitCode, linuxError: 0))
+                        queue.async { [weak self] in
+                            guard let self else { return }
+                            if closed {
+                                finish(error: nil)
+                            } else {
+                                // 自然退出时先排空尾帧；显式断开的等待者则在退出事件立即恢复。
+                                queue.asyncAfter(deadline: .now() + 1) { [weak self] in
+                                    self?.finish(error: MCPLocalStdioError.processExited(exitCode: exitCode, linuxError: 0))
+                                }
+                            }
                         }
                     }
                     process = task
@@ -113,8 +121,8 @@ final class MCPMacStdioProcess: @unchecked Sendable {
     func stop() async {
         await withCheckedContinuation { result in
             queue.async { [self] in
+                stopWaiters.append(result)
                 finish(error: nil)
-                result.resume()
             }
         }
     }
@@ -166,23 +174,31 @@ final class MCPMacStdioProcess: @unchecked Sendable {
     }
 
     private func finish(error: Error?) {
-        guard !closed else { return }
-        closed = true
-        continuation.finish(throwing: error)
-        input?.close(flags: .stop)
-        output?.close(flags: .stop)
-        diagnostics?.close(flags: .stop)
-        input = nil
-        output = nil
-        diagnostics = nil
+        if !closed {
+            closed = true
+            continuation.finish(throwing: error)
+            input?.close(flags: .stop)
+            output?.close(flags: .stop)
+            diagnostics?.close(flags: .stop)
+            input = nil
+            output = nil
+            diagnostics = nil
+        }
         if let process, process.isRunning {
-            process.terminate()
-            // 给服务端清理机会；忽略 SIGTERM 的进程也不能在断开后永久留存。
-            queue.asyncAfter(deadline: .now() + 2) {
-                if process.isRunning { Darwin.kill(process.processIdentifier, SIGKILL) }
+            if !terminationRequested {
+                terminationRequested = true
+                process.terminate()
+                // 保留 Process 直到退出事件，避免 stop 返回后应用退出导致强制清理尚未执行。
+                queue.asyncAfter(deadline: .now() + 2) {
+                    if process.isRunning { Darwin.kill(process.processIdentifier, SIGKILL) }
+                }
             }
+            return
         }
         process = nil
+        let waiters = stopWaiters
+        stopWaiters.removeAll()
+        waiters.forEach { $0.resume() }
     }
 
     static func workingDirectory(_ path: String) -> URL {

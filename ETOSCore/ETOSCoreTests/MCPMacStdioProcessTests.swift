@@ -5,6 +5,7 @@
 // ============================================================================
 
 #if os(macOS)
+import Darwin
 import Foundation
 import Testing
 @testable import ETOSCore
@@ -58,6 +59,28 @@ struct MCPMacStdioProcessTests {
             )
         }
         await process.stop()
+    }
+
+    @Test("并发断开等待忽略 SIGTERM 的子进程真正退出，重复断开不会挂起")
+    func stopWaitsForProcessExit() async throws {
+        let configuration = MCPLocalStdioConfiguration(
+            command: "/bin/sh",
+            // exec 保留同一个 PID 和忽略信号的规则，不额外派生待清理的测试子进程。
+            arguments: ["-c", "trap '' TERM; printf '{\"pid\":%d}\\n' \"$$\"; exec /bin/sleep 60"]
+        )
+        try await withProcess(configuration) { process in
+            struct ProcessID: Decodable { let pid: Int32 }
+            var iterator = process.stream.makeAsyncIterator()
+            let bytes = try #require(try await iterator.next())
+            let pid = try JSONDecoder().decode(ProcessID.self, from: bytes).pid
+            async let first: Void = process.stop()
+            async let second: Void = process.stop()
+            _ = await (first, second)
+            let status = Darwin.kill(pid, 0)
+            let failure = errno
+            #expect(status == -1 && failure == ESRCH)
+            await process.stop()
+        }
     }
 
     @Test("旧数据库默认目录在 Mac 指向用户主目录且不改写配置")
