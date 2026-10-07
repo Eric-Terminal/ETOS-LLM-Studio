@@ -71,6 +71,8 @@ private struct MacProviderEditor: View {
     @State private var isBusy = false
     @State private var error: String?
     @State private var didPrepare = false
+    @State private var testSource: MacModelConnectivitySource?
+    @State private var testPreparation: Task<Void, Never>?
 
     init(provider: Provider, original: Provider?) {
         self.original = original
@@ -114,6 +116,14 @@ private struct MacProviderEditor: View {
                     }
                     Button(NSLocalizedString("获取模型列表", comment: "")) { fetchModels() }
                         .disabled(isBusy)
+                    if !LocalModelProviderBridge.isLocalProvider(draft) {
+                        Button(NSLocalizedString("模型测试", comment: "")) {
+                            testPreparation = Task {
+                                do { testSource = try await prepareTestSource(model: nil) }
+                                catch { if !Task.isCancelled { self.error = error.localizedDescription } }
+                            }
+                        }.disabled(!workspace.canRunModelTests)
+                    }
                 } header: { Text(NSLocalizedString("模型", comment: "")) }
                 Section {
                     NavigationLink(NSLocalizedString("请求头 JSON", comment: "")) {
@@ -123,6 +133,7 @@ private struct MacProviderEditor: View {
                 if let error { Text(error).font(.footnote).foregroundStyle(.red) }
             }
             .formStyle(.grouped)
+            .disabled(isBusy || !didPrepare || workspace.isRestoringData)
             .navigationTitle(NSLocalizedString("提供商配置", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("取消", comment: "")) { dismiss() } }
@@ -132,36 +143,56 @@ private struct MacProviderEditor: View {
                 }
             }
             .sheet(item: $modelToEdit) { model in
-                MacModelEditor(model: model, providerAPIFormat: draft.apiFormat) { updated in
+                MacModelEditor(model: model, providerAPIFormat: draft.apiFormat, supportsConnectivityTest: !LocalModelProviderBridge.isLocalProvider(draft), prepareTestSource: { model in
+                    try await prepareTestSource(model: model)
+                }) { updated in
                     if let index = draft.models.firstIndex(where: { $0.id == updated.id }) { draft.models[index] = updated }
                     else { draft.models.append(updated) }
                 }
             }
+            .sheet(item: $testSource) { MacModelConnectivityTestView(source: $0) }
             .task {
                 guard !didPrepare else { return }
-                didPrepare = true
                 let values = draft.headerOverrides
-                headers = await Task.detached {
+                let prepared = await Task.detached {
                     let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
                     return (try? encoder.encode(values)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
                 }.value
+                guard !Task.isCancelled else { return }
+                headers = prepared; didPrepare = true
             }
             .guideSettingsPageContext(
                 id: GuidePageID(rawValue: "mac-provider-\(draft.id)"), title: NSLocalizedString("提供商配置", comment: ""),
                 documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
                 settings: [
-                    .readOnly("editing_mode", label: NSLocalizedString("编辑方式", comment: ""), value: { .string("draft_until_save") }),
+                    .readOnly("editing_mode", label: NSLocalizedString("编辑方式", comment: ""), value: { .string("draft_until_save") })
+                ] + (isBusy || !didPrepare || workspace.isRestoringData ? [] : [
                     .string("name", label: NSLocalizedString("名称", comment: ""), get: { draft.name }, set: { draft.name = $0 }),
                     .string("base_url", label: NSLocalizedString("API 地址", comment: ""), get: { draft.baseURL }, set: { draft.baseURL = $0 }),
                     .string("api_format", label: NSLocalizedString("API 格式", comment: ""), allowedValues: ["openai-compatible", "openai-responses", "anthropic", "gemini"], get: { draft.apiFormat }, set: { draft.apiFormat = $0 }),
                     .string("chat_endpoint", label: NSLocalizedString("聊天端点后缀", comment: ""), get: { draft.chatEndpointPath }, set: { draft.chatEndpointPath = $0 }),
                     .bool("multi_key", label: NSLocalizedString("多 Key 模式", comment: ""), get: { keys.draft.multiKeyEnabled }, set: { keys.draft.multiKeyEnabled = $0 }),
                     .writeOnlyString("api_keys", label: NSLocalizedString("API Key", comment: ""), isConfigured: { keys.keyCount > 0 }, set: { keys.replaceKeys(from: $0) })
-                ]
+                ])
             )
         }
         .modifier(MacGuideInspector())
         .frame(minWidth: 560, minHeight: 600)
+        .onDisappear { testPreparation?.cancel() }
+        .onChange(of: workspace.isRestoringData) { _, restoring in if restoring { testPreparation?.cancel(); dismiss() } }
+    }
+
+    private func prepareTestSource(model: Model?) async throws -> MacModelConnectivitySource {
+        guard !isBusy, didPrepare, workspace.canRunModelTests, !LocalModelProviderBridge.isLocalProvider(draft) else { throw GuideError.pageChanged }
+        isBusy = true
+        defer { isBusy = false }
+        var provider = draft
+        keys.apply(to: &provider)
+        let text = headers, source = provider
+        let prepared = try await Task.detached { try MacModelConnectivitySource.preparedProvider(source, headers: text) }.value
+        try Task.checkCancellation()
+        guard workspace.canRunModelTests else { throw GuideError.pageChanged }
+        return MacModelConnectivitySource(provider: prepared, originalProvider: original, model: model)
     }
 
     private func fetchModels() {

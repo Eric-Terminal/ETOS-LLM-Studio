@@ -59,6 +59,7 @@ final class MacWorkspaceModel: ObservableObject {
     let roleplayModel = MacRoleplayModel()
     let roleplayRuntime = MacRoleplayRuntime()
     let requestControls = MacRequestRuntimeModel()
+    let modelTests = MacModelConnectivityTasks()
     private var roleplayHostVisible = false
     private var roleplayLifecycleRevision = UUID()
     private var isClosingRoleplay = false
@@ -86,6 +87,11 @@ final class MacWorkspaceModel: ObservableObject {
     var canEditRequestControls: Bool {
         phase == .ready && !isRestoringData && !isExportingSnapshot && !isClosingRoleplay && !isPreparingSend
             && !requestControls.isSuspended && AppLockManager.shared.state != .locked
+    }
+
+    var canRunModelTests: Bool {
+        phase == .ready && !isRestoringData && !isExportingSnapshot && !isClosingRoleplay
+            && AppLockManager.shared.state != .locked
     }
 
     var canModifyCurrentHistory: Bool {
@@ -223,7 +229,7 @@ final class MacWorkspaceModel: ObservableObject {
             refreshToolInteractions()
         }.store(in: &subscriptions)
         AppLockManager.shared.$state.receive(on: DispatchQueue.main).sink { [weak self] state in
-            if state == .locked { self?.suspendRoleplayPresentation(); self?.requestControls.suspend() }
+            if state == .locked { self?.suspendRoleplayPresentation(); self?.requestControls.suspend(); self?.modelTests.cancelAll() }
             else { self?.resumeRoleplayPresentation(); self?.resumeRequestControls(); self?.flushToolSupplements() }
         }.store(in: &subscriptions)
         for name in [RoleplayStore.didChangeNotification, RoleplayDisplayedMessageBridge.didChangeNotification,
@@ -285,6 +291,7 @@ final class MacWorkspaceModel: ObservableObject {
         for task in rewriteTasks.values { task.cancel() }
         suspendRoleplayPresentation()
         requestControls.suspend()
+        await modelTests.cancelAndWait()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()
@@ -686,6 +693,7 @@ final class MacWorkspaceModel: ObservableObject {
     func beginSnapshotExport() -> Bool {
         guard !isRestoringData, !isMutatingHistory, !roleplayRuntime.isBusy, !sessionLibrary.isWorking, !worldbookModel.isWorking, !roleplayModel.isWorking, !isExportingSnapshot, !SnapshotUploadManager.shared.isUploading else { return false }
         isExportingSnapshot = true
+        modelTests.cancelAll()
         suspendRoleplayPresentation()
         requestControls.suspend()
         return true
@@ -709,6 +717,7 @@ final class MacWorkspaceModel: ObservableObject {
             ])
         }
         isRestoringData = true
+        modelTests.cancelAll()
         suspendRoleplayPresentation()
         requestControls.suspend()
         discardToolInteractions()
@@ -719,6 +728,7 @@ final class MacWorkspaceModel: ObservableObject {
             resumeRoleplayPresentation()
             resumeRequestControls()
         }
+        await modelTests.cancelAndWait()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()
@@ -751,10 +761,12 @@ final class MacWorkspaceModel: ObservableObject {
             ])
         }
         isRestoringData = true
+        modelTests.cancelAll()
         suspendRoleplayPresentation()
         requestControls.suspend()
         discardToolInteractions()
         defer { isRestoringData = false; resumeRoleplayPresentation(); resumeRequestControls() }
+        await modelTests.cancelAndWait()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()

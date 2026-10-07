@@ -8,13 +8,19 @@ struct MacModelEditor: View {
     @State private var isBusy = false
     @State private var showsPricing = false
     @State private var showsRequestBody = false
+    @State private var testSource: MacModelConnectivitySource?
+    @State private var testError: String?
     @State private var saveTask: Task<Void, Never>?
     private let providerAPIFormat: String
+    private let supportsConnectivityTest: Bool
+    private let prepareTestSource: (Model) async throws -> MacModelConnectivitySource
     private let onSave: (Model) -> Void
 
-    init(model: Model, providerAPIFormat: String, onSave: @escaping (Model) -> Void) {
+    init(model: Model, providerAPIFormat: String, supportsConnectivityTest: Bool, prepareTestSource: @escaping (Model) async throws -> MacModelConnectivitySource, onSave: @escaping (Model) -> Void) {
         _draft = State(initialValue: model)
         self.providerAPIFormat = providerAPIFormat
+        self.supportsConnectivityTest = supportsConnectivityTest
+        self.prepareTestSource = prepareTestSource
         self.onSave = onSave
     }
 
@@ -86,6 +92,13 @@ struct MacModelEditor: View {
                     Button(NSLocalizedString("自定义Body", comment: "")) { showsRequestBody = true }
                     Button(NSLocalizedString("价格设置", comment: "")) { showsPricing = true }
                 }
+                if supportsConnectivityTest && draft.kind.supportsConnectivityTest {
+                    Section {
+                        Button(NSLocalizedString("模型测试", comment: "")) { prepareTest() }
+                            .disabled(!workspace.canRunModelTests || draft.modelName.isEmpty)
+                        if let testError { Text(testError).font(.footnote).foregroundStyle(.red) }
+                    }
+                }
             }
             .formStyle(.grouped)
             .disabled(isBusy || workspace.isRestoringData)
@@ -106,6 +119,7 @@ struct MacModelEditor: View {
                     body.apply(to: &draft)
                 }
             }
+            .sheet(item: $testSource) { MacModelConnectivityTestView(source: $0) }
             .guideSettingsPageContext(
                 id: GuidePageID(rawValue: "mac-model-\(draft.id)"), title: NSLocalizedString("模型配置", comment: ""),
                 documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
@@ -152,6 +166,20 @@ struct MacModelEditor: View {
                 draft.capabilities.removeAll { $0 == capability }
                 if enabled { draft.capabilities.append(capability) }
             })
+        }
+    }
+
+    private func prepareTest() {
+        guard !isBusy, workspace.canRunModelTests else { return }
+        let source = draft
+        isBusy = true; testError = nil
+        saveTask = Task {
+            defer { isBusy = false }
+            do {
+                let prepared = try await prepareTestSource(source)
+                guard !Task.isCancelled, workspace.canRunModelTests, draft == source else { return }
+                testSource = prepared
+            } catch { if !Task.isCancelled { testError = error.localizedDescription } }
         }
     }
 

@@ -13,6 +13,7 @@ struct ModelConnectivityTestView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: ModelConnectivityTestViewModel
     private let providerName: String
+    private let providerID: UUID
     private let numberFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
@@ -22,6 +23,7 @@ struct ModelConnectivityTestView: View {
 
     init(provider: Provider) {
         self.providerName = provider.name
+        providerID = provider.id
         _viewModel = StateObject(wrappedValue: ModelConnectivityTestViewModel(provider: provider))
     }
 
@@ -60,6 +62,16 @@ struct ModelConnectivityTestView: View {
                 .disabled(viewModel.isRunning || viewModel.results.isEmpty)
             }
         }
+        .onDisappear { viewModel.cancel() }
+        .guideSettingsPageContext(id: GuidePageID(rawValue: "model-tests-\(providerID)"), title: NSLocalizedString("模型测试", comment: ""),
+            documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")], settings: [
+                .readOnly("running", label: NSLocalizedString("测试中", comment: ""), value: { .bool(viewModel.isRunning) }),
+                .readOnly("completed", label: NSLocalizedString("测试结果", comment: ""), value: { .int(viewModel.completedCount) }),
+                .readOnly("manual_start", label: NSLocalizedString("开始测试", comment: ""), value: { .bool(true) })
+            ] + (viewModel.isRunning ? [] : [
+                .integer("concurrency", label: NSLocalizedString("并发数量", comment: ""), range: 1...Int.max,
+                    get: { viewModel.concurrencyLimit }, set: { viewModel.concurrencyLimit = $0 })
+            ]))
     }
 
     private var summaryRow: some View {
@@ -202,6 +214,12 @@ struct SingleModelConnectivityTestView: View {
         .onDisappear {
             viewModel.cancel()
         }
+        .guideSettingsPageContext(id: GuidePageID(rawValue: "model-test-single-\(viewModel.runnableModel.id)"), title: NSLocalizedString("模型测试", comment: ""),
+            documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")], settings: [
+                .readOnly("running", label: NSLocalizedString("测试中", comment: ""), value: { .bool(viewModel.isRunning) }),
+                .readOnly("completed", label: NSLocalizedString("测试结果", comment: ""), value: { .int(viewModel.completedCount) }),
+                .readOnly("manual_start", label: NSLocalizedString("开始测试", comment: ""), value: { .bool(true) })
+            ])
     }
 
     private func resultRow(_ result: SingleModelConnectivityTestResult) -> some View {

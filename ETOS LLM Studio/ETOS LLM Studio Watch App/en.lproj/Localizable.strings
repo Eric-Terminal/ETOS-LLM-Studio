@@ -7631,3 +7631,15 @@
 "Mac 聊天请求体示例使用说明" = "This page shows the current model draft’s chat body: base parameters are combined with control defaults and passed through the protocol adapter. <message> represents a sample message. Explicit custom parameters and adapter defaults remain.\n\nIt excludes the current conversation, attachments, global sampling configuration and enabled tools. It reads no provider credentials, changes no chat selections and adds no request log. It is not the actual pending request and does not verify upstream support.\n\nKnown sensitive fields are redacted. This page is read-only; copy the example or return to edit parameters and controls. Finish the parent drafts and save the provider to apply changes. The page guide cannot read the example body.";
 
 "无法生成聊天请求体示例。" = "Unable to generate a sample chat request body.";
+
+"取消测试" = "Cancel Test";
+
+"正在取消测试…" = "Cancelling tests…";
+
+"并发数量须为正整数。" = "Concurrency must be a positive integer.";
+
+"没有可测试的已添加模型。" = "No enabled models are available to test.";
+
+"测试会使用当前草稿发送真实请求，可能产生费用；配置不会自动保存。" = "Tests send real requests using the current draft and may incur charges. Configuration is not saved automatically.";
+
+"Mac 模型连通性检查使用说明" = "Provider tests check enabled chat, embedding and image models in this draft, with one non-streaming request per chat model. Single-model chat tests check non-streaming, streaming and tool calls in sequence; embedding and image tests use their respective endpoints. Tool tests validate the returned call without executing any tool.\n\nStart sends real requests using the current provider and model drafts, keys, headers and control defaults. Tests may incur charges. They do not save configuration or chat history; normal diagnostic and usage records still apply. Batch concurrency is saved separately as you edit it.\n\nCancel or close to stop. An in-flight request must finish cancelling before another run can start; cancelled returns do not count as available or unavailable. Locking or external configuration changes close the page. Backup, restore and quit wait for registered requests. The guide can propose an idle batch concurrency change, but cannot start tests or read responses, error details or credentials.";
