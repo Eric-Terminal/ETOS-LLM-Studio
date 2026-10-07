@@ -24,15 +24,12 @@ public actor LocalAgentPromptStore {
     }
 
     public func bootstrap() {
-        let profiles = Persistence.loadLocalAgentPromptProfiles()
-        guard !profiles.contains(where: { $0.id == Self.builtInProfileID }) else { return }
-        let profile = LocalAgentPromptProfile(
-            id: Self.builtInProfileID,
-            title: Self.defaultTitle,
-            content: Self.defaultContent,
-            isBuiltIn: true
-        )
-        _ = Persistence.saveLocalAgentPromptProfile(profile)
+        // 聊天准备和管理页面可以同时打开；默认项只能在事务内补建，不能覆盖编辑结果。
+        guard let database = Persistence.activeAuxiliaryStore(kind: .config) else { return }
+        if (try? database.write({ try LocalAgentPromptLibraryStore.ensureBuiltIn(in: $0) })) == true {
+            WatchDatabaseSyncService.markDatabaseChanged(.config)
+            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+        }
     }
 
     public func profiles() -> [LocalAgentPromptProfile] {

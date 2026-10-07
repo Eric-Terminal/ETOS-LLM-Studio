@@ -7855,3 +7855,12 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "新建标签页" = "Nueva pestaña";
 "没有打开的标签页" = "No hay pestañas abiertas";
 "重新载入" = "Recargar";
+
+// Mac Agent 操作说明管理
+"无法修改这条 Agent 提示词。" = "No se puede modificar esta instrucción del agente.";
+"选用提示词" = "Usar instrucción";
+"仅用于 Agent 的 Linux 操作说明，不替代会话提示词。" = "Complementa las instrucciones del agente para Linux; conserva las instrucciones de la conversación.";
+"删除提示词？" = "¿Eliminar esta instrucción?";
+"删除后无法撤销；选用项被删除时恢复默认提示词。" = "La eliminación no se puede deshacer. Si eliminas la instrucción seleccionada, se restablece la selección predeterminada.";
+"替换当前草稿，保存后生效。" = "Sustituye el borrador actual. Guarda para aplicar.";
+"Mac Agent 提示词使用说明" = "Guarda aquí instrucciones habituales para las tareas Linux del agente. Añade una instrucción o pulsa una entrada para editar su nombre, contenido y estado. Los cambios son borradores hasta guardarlos. Las instrucciones nuevas deben seleccionarse manualmente. «Usar instrucción» guarda la selección de inmediato; el contenido vacío no añade instrucciones personalizadas.\n\nEstas instrucciones complementan el contexto Linux del agente sin sustituir la personalidad ni las instrucciones del sistema de la conversación. No cambian el modo ni inician Linux. La ejecución requiere un entorno compatible en el dispositivo. Los perfiles usan la base de datos existente y pueden compartirse mediante la sincronización de configuración.\n\nAl desactivar o eliminar la instrucción seleccionada, las futuras ejecuciones usan la predeterminada. La entrada integrada no se puede eliminar. Restablecer sustituye el borrador actual y requiere guardarlo. Si otra página modificó el original, vuelve a abrirlo antes de editarlo.\n\nEl asistente ve el catálogo sin los textos y puede proponer una selección que debes confirmar. En el editor solo modifica borradores. Guardar, restablecer y eliminar son acciones manuales; no ejecuta comandos Linux.";

@@ -7855,3 +7855,12 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "新建标签页" = "Nouvel onglet";
 "没有打开的标签页" = "Aucun onglet ouvert";
 "重新载入" = "Recharger";
+
+// Mac Agent 操作说明管理
+"无法修改这条 Agent 提示词。" = "Cette instruction Agent ne peut pas être modifiée.";
+"选用提示词" = "Utiliser cette instruction";
+"仅用于 Agent 的 Linux 操作说明，不替代会话提示词。" = "Complète uniquement les instructions Linux de l’Agent ; les instructions de conversation sont conservées.";
+"删除提示词？" = "Supprimer cette instruction ?";
+"删除后无法撤销；选用项被删除时恢复默认提示词。" = "La suppression est irréversible. Supprimer l’instruction sélectionnée rétablit la sélection par défaut.";
+"替换当前草稿，保存后生效。" = "Remplace le brouillon actuel. Enregistrez pour appliquer.";
+"Mac Agent 提示词使用说明" = "Enregistrez ici les instructions courantes pour les tâches Linux de l’Agent. Ajoutez une instruction ou cliquez sur une entrée pour modifier son nom, son contenu et son activation. Les changements restent des brouillons jusqu’à l’enregistrement. Une nouvelle instruction doit encore être sélectionnée manuellement. « Utiliser cette instruction » enregistre immédiatement la sélection ; un contenu vide n’ajoute aucune instruction personnalisée.\n\nCes instructions complètent le contexte Linux de l’Agent sans remplacer les personnages ni les instructions système de la conversation. Elles ne changent pas le mode et ne démarrent pas Linux. L’exécution nécessite un environnement compatible sur l’appareil. Les profils utilisent la base existante et peuvent être partagés par synchronisation de la configuration.\n\nDésactiver ou supprimer l’instruction sélectionnée rétablit les instructions par défaut pour les prochaines exécutions. L’entrée intégrée ne peut pas être supprimée. La réinitialisation remplace le brouillon et nécessite un enregistrement. Si une autre page a modifié l’original, rouvrez-le avant de le modifier.\n\nLe guide voit le catalogue sans le corps des instructions et peut proposer une sélection à confirmer. Dans l’éditeur, il modifie uniquement les brouillons. Enregistrer, réinitialiser et supprimer restent des actions manuelles ; le guide n’exécute pas de commandes Linux.";

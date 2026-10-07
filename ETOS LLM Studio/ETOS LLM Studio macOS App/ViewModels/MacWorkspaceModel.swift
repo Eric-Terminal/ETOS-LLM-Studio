@@ -66,6 +66,7 @@ final class MacWorkspaceModel: ObservableObject {
     let toolApproval = MacToolApprovalModel()
     let skills = MacSkillsModel()
     let browser = MacBrowserModel()
+    let agentPrompts = MacAgentPromptModel()
     private(set) var externalOpenRevision = UUID()
     lazy var incomingDocuments = MacIncomingDocumentsModel(
         library: localModels,
@@ -265,7 +266,7 @@ final class MacWorkspaceModel: ObservableObject {
                 suspendRoleplayPresentation(); requestControls.suspend(); modelTests.cancelAll(); localModels.suspend()
                 shortcutTools.suspend()
                 builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-                browser.suspend()
+                browser.suspend(); agentPrompts.suspend()
                 incomingDocuments.suspend(acceptNewFiles: !isRestoringData && !isExportingSnapshot && !isClosingRoleplay)
             }
             else { self?.resumeRoleplayPresentation(); self?.resumeRequestControls(); self?.flushToolSupplements() }
@@ -333,7 +334,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.suspend()
         shortcutTools.suspend()
         builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-        browser.suspend()
+        browser.suspend(); agentPrompts.suspend()
         incomingDocuments.suspend()
         await modelTests.cancelAndWait()
         // KV 清理可能等待正在推理的上下文；先取消生成，退出不能排在清理锁后面等待。
@@ -343,7 +344,7 @@ final class MacWorkspaceModel: ObservableObject {
         await localModels.waitForPendingWrites()
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
-        await browser.waitForPendingOperations()
+        await browser.waitForPendingOperations(); await agentPrompts.waitForPendingWrites()
         await incomingDocuments.waitForPendingOperations()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
@@ -749,7 +750,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.suspend()
         shortcutTools.suspend()
         builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-        browser.suspend()
+        browser.suspend(); agentPrompts.suspend()
         incomingDocuments.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
@@ -768,7 +769,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.resume()
         shortcutTools.resume()
         builtInTools.resume(); toolApproval.resume(); skills.resume()
-        browser.resume()
+        browser.resume(); agentPrompts.resume()
         incomingDocuments.resume(sessionID: currentSession?.id)
     }
 
@@ -788,7 +789,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.suspend()
         shortcutTools.suspend()
         builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-        browser.suspend()
+        browser.suspend(); agentPrompts.suspend()
         incomingDocuments.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
@@ -805,7 +806,7 @@ final class MacWorkspaceModel: ObservableObject {
         await localModels.waitForPendingWrites()
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
-        await browser.waitForPendingOperations()
+        await browser.waitForPendingOperations(); await agentPrompts.waitForPendingWrites()
         await incomingDocuments.waitForPendingOperations()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
@@ -843,7 +844,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.suspend()
         shortcutTools.suspend()
         builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-        browser.suspend()
+        browser.suspend(); agentPrompts.suspend()
         incomingDocuments.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
@@ -854,7 +855,7 @@ final class MacWorkspaceModel: ObservableObject {
         await localModels.waitForPendingWrites()
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
-        await browser.waitForPendingOperations()
+        await browser.waitForPendingOperations(); await agentPrompts.waitForPendingWrites()
         await incomingDocuments.waitForPendingOperations()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value

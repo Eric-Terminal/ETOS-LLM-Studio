@@ -7778,3 +7778,12 @@
 "新建标签页" = "New Tab";
 "没有打开的标签页" = "No Open Tabs";
 "重新载入" = "Reload";
+
+// Mac Agent 操作说明管理
+"无法修改这条 Agent 提示词。" = "This Agent prompt cannot be changed.";
+"选用提示词" = "Use Prompt";
+"仅用于 Agent 的 Linux 操作说明，不替代会话提示词。" = "Only supplements Agent instructions for Linux; session prompts are preserved.";
+"删除提示词？" = "Delete this prompt?";
+"删除后无法撤销；选用项被删除时恢复默认提示词。" = "Deletion cannot be undone. Deleting the selected prompt restores the default selection.";
+"替换当前草稿，保存后生效。" = "Replaces the current draft. Save to apply.";
+"Mac Agent 提示词使用说明" = "Save frequently used instructions for Agent Linux tasks here. Add a prompt or click an entry to edit its name, content and enabled state. Changes remain drafts until Save. A new prompt still needs to be selected manually. Use Prompt saves the selection immediately; empty content adds no custom instructions.\n\nThese instructions supplement Agent Linux context without replacing session personas or system prompts. They do not change chat mode or start Linux. Linux execution requires a supported environment on the device. Profiles use the existing database and can be shared through configuration sync.\n\nDisabling or deleting the selected prompt makes future Agent runs use the default instructions. The built-in entry cannot be deleted. Reset Default Prompt replaces the current draft and still requires Save. If another page changed the original, reopen it before editing to avoid overwriting that change.\n\nThe guide can view the catalog without prompt bodies and propose a selection for confirmation. In the editor it only changes drafts. Save, reset and deletion remain manual actions; the guide cannot run Linux commands.";

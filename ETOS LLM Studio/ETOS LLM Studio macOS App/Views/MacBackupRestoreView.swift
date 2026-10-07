@@ -126,6 +126,7 @@ struct MacBackupRestoreView: View {
                 await workspace.toolApproval.waitForPendingWrites()
                 await workspace.skills.waitForPendingWrites()
                 await workspace.browser.waitForPendingOperations()
+                await workspace.agentPrompts.waitForPendingWrites()
                 await workspace.incomingDocuments.waitForPendingOperations()
                 await workspace.requestControls.waitForPendingWrites()
                 await configuration.flushPendingWrites()
