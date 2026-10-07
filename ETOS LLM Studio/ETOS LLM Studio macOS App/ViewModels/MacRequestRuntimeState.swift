@@ -67,6 +67,8 @@ struct MacRequestRuntimeRow: Identifiable, Sendable {
     let defaultSelectionTitle: String
     let options: [Option]
     let slider: ModelRequestBodyControlSliderDescriptor?
+    let palette: RequestBodySliderPalette
+    let usesRainbowAtMaximum: Bool
     let position: Double
     let valueLabel: String
 }
@@ -88,6 +90,7 @@ struct MacRequestRuntimePresentation: Sendable {
                 defaultOptionID: control.defaultOptionID ?? "",
                 defaultSelectionTitle: defaultTitle.map { String(format: NSLocalizedString("跟随默认（%@）", comment: ""), $0) } ?? NSLocalizedString("跟随默认", comment: ""),
                 options: control.options.map { .init(id: $0.id, title: $0.title) }, slider: slider,
+                palette: RequestBodySliderPalette.resolved(for: control), usesRainbowAtMaximum: control.usesRainbowAtMaximum,
                 position: position, valueLabel: slider?.displayValue(at: position) ?? "")
         }
         preview = ParameterExpressionParser.serializeRawJSONObject(parameters: ModelRequestBodyControlCompiler.effectiveOverrideParameters(
@@ -98,6 +101,7 @@ struct MacRequestRuntimePresentation: Sendable {
             "active": .bool(row.active), "option_id": .string(row.selectedOptionID),
             "default_option_id": .string(row.defaultOptionID),
             "slider_enabled": .bool(row.slider != nil), "position": .double(row.position),
+            "rainbow_at_maximum": .bool(row.usesRainbowAtMaximum),
             "options": .array(row.options.map { .dictionary(["id": .string($0.id), "title": .string($0.title)]) })
         ]) })
     }

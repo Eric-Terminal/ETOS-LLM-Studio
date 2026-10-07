@@ -196,7 +196,7 @@ private struct MacMessageRow: View {
         VStack(alignment: .leading) {
             HStack {
                 Text(row.roleTitle).font(.caption).foregroundStyle(.secondary)
-                if row.message.isReceivingStream { ProgressView().controlSize(.mini) }
+                if row.activity.isActive { ProgressView().controlSize(.mini) }
                 Spacer()
                 if !row.versionOptions.isEmpty {
                     Menu {
@@ -213,11 +213,10 @@ private struct MacMessageRow: View {
                     .disabled(!workspace.canModifyCurrentHistory)
                 }
             }
-            if let reasoning = row.reasoning, !reasoning.isEmpty {
-                DisclosureGroup(NSLocalizedString("思考过程", comment: "")) {
-                    Text(reasoning).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
-                }
+            if row.activity.hasReasoning, let reasoning = row.reasoning {
+                MacMessageReasoningView(activity: row.activity, reasoning: reasoning)
             }
+            MacMessageWaitingView(activity: row.activity)
             if let widget = row.widget {
                 MacToolWidgetView(widget: widget, messageID: row.id)
             } else {

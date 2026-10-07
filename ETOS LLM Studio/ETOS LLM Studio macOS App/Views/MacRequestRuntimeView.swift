@@ -121,6 +121,7 @@ struct MacRequestRuntimeView: View {
 private struct MacRequestRuntimeSlider: View {
     let row: MacRequestRuntimeRow
     let commit: (Double) -> Void
+    @Environment(\.scenePhase) private var scenePhase
     @State private var position: Double
     @State private var label: String
     @State private var isDragging = false
@@ -132,12 +133,19 @@ private struct MacRequestRuntimeSlider: View {
     }
 
     var body: some View {
+        let color = row.palette.color(at: position)
+        let rainbow = row.usesRainbowAtMaximum && row.slider?.isMaximumPosition(position) == true
         VStack(alignment: .leading) {
-            LabeledContent(row.title, value: label).font(.callout)
+            LabeledContent(row.title) {
+                if rainbow, scenePhase == .active {
+                    FlowingRainbowForeground(startingColor: row.palette.color(at: 1)) { Text(label).monospacedDigit() }
+                } else { Text(label).monospacedDigit().foregroundStyle(color) }
+            }.font(.callout)
             Slider(value: $position, in: 0...1, step: row.slider?.crownStep ?? 1, onEditingChanged: { editing in
                 isDragging = editing
                 if !editing { submit() }
             }) { Text(row.title) }
+            .tint(color)
             .accessibilityValue(label)
         }
         .onChange(of: position) { _, _ in if !isDragging { submit() } }

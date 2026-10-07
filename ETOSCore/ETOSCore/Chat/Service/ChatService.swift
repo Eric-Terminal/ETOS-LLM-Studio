@@ -475,6 +475,14 @@ public class ChatService {
         }
     }
 
+    /// 展示层只标记尚未结束的真实请求，不能从最后一条历史回复猜测等待状态。
+    public func activeResponseMessageID(for sessionID: UUID) -> UUID? {
+        withRequestStateLock {
+            guard let context = requestContextBySessionID[sessionID], !context.hasFinishedResponse else { return nil }
+            return context.loadingMessageID
+        }
+    }
+
     func conversationRunIDs(for sessionID: UUID) -> (runID: UUID, rootRunID: UUID)? {
         withRequestStateLock {
             guard let context = requestContextBySessionID[sessionID],

@@ -31,11 +31,13 @@ struct MacMessagePresentation: Identifiable {
     let versionIndex: Int
     let versionLabel: String
     let canRewrite: Bool
+    let activity: MacMessageActivity
     let roleplayDocuments: [RoleplayPreparedDocument]
     var id: UUID { message.id }
 
     static func prepare(_ message: ChatMessage, markdown: Bool, versionInfo: ChatResponseAttemptVersionInfo? = nil,
-                        renderedContent: String? = nil, roleplayDocuments: [RoleplayPreparedDocument] = []) -> MacMessagePresentation {
+                        renderedContent: String? = nil, roleplayDocuments: [RoleplayPreparedDocument] = [],
+                        activeResponseID: UUID? = nil) -> MacMessagePresentation {
         let text = renderedContent ?? message.content
         let content: AttributedString
         if markdown, message.role == .assistant,
@@ -76,6 +78,7 @@ struct MacMessagePresentation: Identifiable {
             versionIndex: index,
             versionLabel: String(format: NSLocalizedString("切换版本 (%d/%d)", comment: ""), index + 1, count),
             canRewrite: message.role == .assistant && !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            activity: MacMessageActivity(message: message, activeResponseID: activeResponseID),
             roleplayDocuments: roleplayDocuments
         )
     }
@@ -88,7 +91,8 @@ actor MacMessagePresentationStore {
     private let versionIndex = ChatResponseAttemptIndexWorker()
 
     func prepare(_ messages: [ChatMessage], markdown: Bool, language: String, sessionID: UUID? = nil,
-                 roleplay: RoleplayPresentationSnapshot? = nil, rules: [MessageRegexRule] = []) async throws -> [MacMessagePresentation] {
+                 roleplay: RoleplayPresentationSnapshot? = nil, rules: [MessageRegexRule] = [],
+                 activeResponseID: UUID? = nil) async throws -> [MacMessagePresentation] {
         let versions = await versionIndex.prepare(messages: messages, sessionID: sessionID).entries
         try Task.checkCancellation()
         if usesMarkdown != markdown || self.language != language || roleplay != nil || !rules.isEmpty {
@@ -100,14 +104,16 @@ actor MacMessagePresentationStore {
         let result = try ChatResponseAttemptSupport.visibleMessages(from: messages).map { message in
             try Task.checkCancellation()
             let row: MacMessagePresentation
-            if let previous = cache[message.id], previous.message == message, previous.versionInfo == versions[message.id] {
+            if let previous = cache[message.id], previous.message == message, previous.versionInfo == versions[message.id],
+               previous.activity.isCurrentResponse == (message.id == activeResponseID) {
                 row = previous
             } else {
                 let visual = roleplay?.visualContent(message, rules: rules) ?? ChatService.visualMessage(from: message, rules: rules).content
                 let extraction = roleplay?.extraction(for: message, content: visual)
                 let documents = extraction.map { roleplay?.documents(for: message, extraction: $0) ?? [] } ?? []
                 row = MacMessagePresentation.prepare(message, markdown: markdown, versionInfo: versions[message.id],
-                                                     renderedContent: extraction?.remainingText ?? visual, roleplayDocuments: documents)
+                                                     renderedContent: extraction?.remainingText ?? visual, roleplayDocuments: documents,
+                                                     activeResponseID: activeResponseID)
             }
             updated[message.id] = row
             return row
@@ -121,7 +127,8 @@ actor MacMessagePresentationStore {
         let worldbooks = service.loadWorldbooks()
         let context = sessionID.map { RoleplayPresentationSnapshot(sessionID: $0, messages: messages, worldbooks: worldbooks) }
         let rows = try await prepare(messages, markdown: markdown, language: language, sessionID: sessionID,
-                                     roleplay: context, rules: MessageRegexRuleStore.currentRules())
+                                     roleplay: context, rules: MessageRegexRuleStore.currentRules(),
+                                     activeResponseID: sessionID.flatMap { service.activeResponseMessageID(for: $0) })
         var scripts: [RoleplayPreparedDocument] = []
         for id in scriptSessionIDs {
             try Task.checkCancellation()
