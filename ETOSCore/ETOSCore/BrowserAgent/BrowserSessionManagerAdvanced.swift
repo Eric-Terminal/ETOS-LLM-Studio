@@ -8,9 +8,8 @@
 
 import Foundation
 
-#if canImport(WebKit) && canImport(UIKit) && !os(watchOS)
+#if canImport(WebKit) && (canImport(UIKit) || os(macOS)) && !os(watchOS)
 import WebKit
-import UIKit
 
 @MainActor
 public extension BrowserSessionManager {
@@ -50,12 +49,15 @@ public extension BrowserSessionManager {
                 NSLocalizedString("元素查找没有返回可解析的数据。", comment: "Browser Agent invalid element search")
             )
         }
-        let revision = (object["domRevision"] as? NSNumber)?.intValue ?? 0
-        return BrowserAgentElementCollection(
-            elements: BrowserDOMResultParser.elements(object["elements"], fallbackRevision: revision),
-            domRevision: revision,
-            wasTruncated: object["wasTruncated"] as? Bool ?? false
-        )
+        let payload = BrowserDOMPayload(object)
+        return await Task.detached(priority: .utility) {
+            let revision = (payload.object["domRevision"] as? NSNumber)?.intValue ?? 0
+            return BrowserAgentElementCollection(
+                elements: BrowserDOMResultParser.elements(payload.object["elements"], fallbackRevision: revision),
+                domRevision: revision,
+                wasTruncated: payload.object["wasTruncated"] as? Bool ?? false
+            )
+        }.value
     }
 
     func hover(
@@ -85,7 +87,8 @@ public extension BrowserSessionManager {
                 NSLocalizedString("正文提取没有返回可解析的数据。", comment: "Browser Agent invalid readable content")
             )
         }
-        return BrowserDOMResultParser.readable(object)
+        let payload = BrowserDOMPayload(object)
+        return await Task.detached(priority: .utility) { BrowserDOMResultParser.readable(payload.object) }.value
     }
 
     func getBackbone(
@@ -226,6 +229,10 @@ public extension BrowserSessionManager {
         profile: BrowserAgentUserAgentProfile
     ) async throws -> BrowserAgentTabSummary {
         let webView = try await preparedWebView(sessionID: sessionID, tabID: tabID)
+        #if os(macOS)
+        // macOS 没有 preferredContentMode，移动模式仅覆盖公开 User-Agent，不伪称移动设备环境。
+        webView.customUserAgent = BrowserWebPlatform.userAgent(for: profile)
+        #else
         switch profile {
         case .mobileSafari:
             webView.customUserAgent = nil
@@ -237,6 +244,7 @@ public extension BrowserSessionManager {
             webView.customUserAgent = nil
             webView.configuration.defaultWebpagePreferences.preferredContentMode = .recommended
         }
+        #endif
         if webView.url != nil { webView.reload() }
         return try recordOverrides(
             sessionID: sessionID,
@@ -271,6 +279,8 @@ public extension BrowserSessionManager {
             )
             controller.addUserScript(script)
             webView.frame.size = CGSize(width: width, height: height)
+        } else if reset {
+            webView.frame.size = BrowserWebPlatform.defaultViewport
         }
         if webView.url != nil { webView.reload() }
         return try recordOverrides(

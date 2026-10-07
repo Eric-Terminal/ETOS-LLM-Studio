@@ -25,6 +25,10 @@ struct MacToolCenterView: View {
                 NavigationLink {
                     MacSkillsView(isActive: isActive, model: workspace.skills)
                 } label: { Label(NSLocalizedString("Agent Skills", comment: ""), systemImage: "books.vertical") }
+                NavigationLink {
+                    MacBrowserView(sessionID: workspace.currentSession?.id, isTemporary: workspace.temporaryChatMemoryMode != nil,
+                                   isActive: isActive && workspace.canManageLocalModels, model: workspace.browser)
+                } label: { Label(NSLocalizedString("浏览器", comment: ""), systemImage: "safari") }
             }
             Section {
                 NavigationLink {
@@ -43,6 +47,7 @@ struct MacToolCenterView: View {
                 .readOnly("mcp_requires_navigation", label: NSLocalizedString("MCP 工具", comment: ""), value: { .bool(true) }),
                 .readOnly("shortcuts_requires_navigation", label: NSLocalizedString("快捷指令工具", comment: ""), value: { .bool(true) }),
                 .readOnly("skills_requires_navigation", label: NSLocalizedString("Agent Skills", comment: ""), value: { .bool(true) }),
+                .readOnly("browser_requires_navigation", label: NSLocalizedString("浏览器", comment: ""), value: { .bool(true) }),
                 .readOnly("approval_requires_navigation", label: NSLocalizedString("审批自动化", comment: ""), value: { .bool(true) })
             ]
         )

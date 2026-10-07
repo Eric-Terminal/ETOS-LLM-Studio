@@ -3,13 +3,13 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 没有 UIKit WebKit、且不是 watchOS 运行时探测路径的平台使用明确失败实现。
+// 没有受支持的公开 WebKit、且不是 watchOS 运行时探测路径的平台使用明确失败实现。
 // ============================================================================
 
 import Combine
 import Foundation
 
-#if !os(watchOS) && !(canImport(WebKit) && canImport(UIKit))
+#if !os(watchOS) && !(canImport(WebKit) && (canImport(UIKit) || os(macOS)))
 
 @MainActor
 public final class BrowserSessionManager: ObservableObject {

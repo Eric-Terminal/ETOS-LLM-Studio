@@ -8,6 +8,12 @@
 
 import Foundation
 
+/// WebKit 返回的独占 Foundation 值交给后台解析；转移后主线程不再读取或修改其内部对象。
+struct BrowserDOMPayload: @unchecked Sendable {
+    let object: [String: Any]
+    init(_ object: [String: Any]) { self.object = object }
+}
+
 enum BrowserDOMResultParser {
     static func snapshot(_ object: [String: Any]) throws -> BrowserAgentSnapshot {
         let revision = integer(object["domRevision"]) ?? 0

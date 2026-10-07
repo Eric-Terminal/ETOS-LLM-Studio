@@ -7891,7 +7891,7 @@
 
 "已导入 %d 个本地模型，可在模型管理中查看。" = "Imported %d local models. You can review them in model management.";
 // Mac 工具中心与快捷指令配置。
-"Mac 工具中心使用说明" = "Choose a tool source to configure it. MCP can connect to remote servers or run local programs over stdio. Install the required dependencies before using a local program. Shortcuts settings manage existing tool definitions; the matching shortcuts must be installed on this Mac.\n\nSaving, connecting and adding tools to chat are separate actions. An enabled tool still depends on its source switch, this conversation’s tool isolation and approval policy. Enabling a tool does not run it; the model may request a call when you describe a task in chat.\n\nThe page guide explains the current page and proposes configuration changes. Confirming a proposal does not connect servers, run commands or execute shortcuts.";
+"Mac 工具中心使用说明" = "Choose a tool source to configure it. MCP can connect to remote servers or run local programs over stdio. Install the required dependencies before using a local program. Shortcuts settings manage existing tool definitions; the matching shortcuts must be installed on this Mac.\n\nSaving, connecting and adding tools to chat are separate actions. An enabled tool still depends on its source switch, this conversation’s tool isolation and approval policy. Enabling a tool does not run it; the model may request a call when you describe a task in chat.\n\nThe page guide explains the current page and proposes configuration changes. Confirming a proposal does not connect servers, run commands or execute shortcuts.\n\nBrowser opens this chat’s tabs on the Mac for manual browsing, taking control and returning it to Agent. Browser settings control login persistence for new tabs. The page guide cannot navigate, read pages or execute browser tools.";
 "Mac 快捷指令工具使用说明" = "Manage Shortcut tools already stored in the database. Syncing or restoring their configuration does not install system shortcuts. First install shortcuts with matching names in the Shortcuts app on this Mac.\n\nThe main switch saves automatically and controls whether this group is offered to the chat model. Open a tool to edit its enabled state, run mode and custom description, then click Save. An empty custom description uses the existing generated description. Search and Show Enabled Only filter the list without changing configuration.\n\nDirect First and Bridge First determine which method is tried first; failure tries the other method. Bridging requires the matching bridge shortcut on this Mac. Conversation tool isolation still excludes these tools from chat.\n\nEnabling a tool does not run it. Model calls follow the normal chat approval flow. The page guide can propose configuration changes but cannot run shortcuts or read the clipboard. Guide changes in a detail editor also require Save.\n\nClick Import to preview a manifest from the clipboard, pasted JSON or a file, then confirm to add tools with new names. Import and Run Settings manages official import and bridge names. Details can regenerate descriptions, which require Save; custom descriptions take priority. Right-click deletion removes configuration without deleting the system shortcut.";
 "已导入工具" = "Imported Tools";
 "快捷指令名称" = "Shortcut Name";
@@ -7919,3 +7919,58 @@
 "快捷指令名称自动保存；导出后返回导入页读取清单。" = "Shortcut names save automatically. Return here after exporting to read the manifest.";
 "生成结果保留为草稿，保存后生效；自定义描述优先。" = "Generated descriptions remain drafts until saved. Custom descriptions take priority.";
 "预览会读取分享链接并使用当前模型生成描述，不会运行快捷指令。" = "Preview reads sharing links and uses the current model to generate descriptions. It does not run shortcuts.";
+
+// Mac 浏览器与共享高级动作说明
+"Agent 正在操作网页" = "Agent is interacting with the page";
+"交还给 Agent" = "Return control to Agent";
+"接管" = "Take Control";
+"用户正在控制浏览器" = "You are controlling the browser";
+"正在刷新页面快照" = "Refreshing the page snapshot";
+"正在把页面交还给 Agent" = "Returning page control to Agent";
+"浏览器操作已完成" = "Browser action completed";
+"空闲" = "Idle";
+"临时对话使用临时网站数据，不保存浏览器偏好。" = "Temporary chats use temporary website data and do not save browser preferences.";
+"无法保存配置。" = "Could not save the configuration.";
+"%@ 需要 element_id，或为已有会话兼容提供非负 element_index。" = "%@ requires element_id, or a nonnegative element_index for existing sessions.";
+"使用 element_id 时必须同时提供 dom_revision。" = "Include dom_revision when using element_id.";
+"页面元素已不存在，请重新定位。" = "The element no longer exists. Locate it again.";
+"页面结构已变化（请求版本 %@，当前版本 %d）；请重新调用 find_elements 或 snapshot。" = "The page changed (requested revision %@, current %d). Call find_elements or snapshot again.";
+"type 需要 text。" = "type requires text.";
+"set_user_agent 需要 user_agent。" = "set_user_agent requires user_agent.";
+"scroll_and_collect 需要 item_selector。" = "scroll_and_collect requires item_selector.";
+"视口宽高必须成对提供，范围分别为 320...1920 与 320...2160。" = "Provide viewport width and height together, in ranges 320...1920 and 320...2160.";
+"元素查找没有返回可解析的数据。" = "Element lookup returned unreadable data.";
+"页面信息没有返回可解析的数据。" = "Page information returned unreadable data.";
+"正文提取没有返回可解析的数据。" = "Content extraction returned unreadable data.";
+"滚动收集没有返回可解析的数据。" = "Scroll collection returned unreadable data.";
+"无法读取网页截图像素。" = "Could not read screenshot pixels.";
+"无法读取完整页面尺寸。" = "Could not read the full page dimensions.";
+"没有可拼接的网页截图。" = "No screenshot tiles are available.";
+"无法创建全页截图画布。" = "Could not create the full-page screenshot canvas.";
+"无法生成全页截图。" = "Could not create the full-page screenshot.";
+"无法创建 PNG 编码器。" = "Could not create the PNG encoder.";
+"无法编码全页截图。" = "Could not encode the full-page screenshot.";
+"全页截图超过输出预算。" = "The full-page screenshot exceeds the output limit.";
+"本机会话获取；可在设置中启用 iPhone 委托。" = "Local session fetch; enable iPhone delegation in Settings.";
+"本机直接下载；可在设置中启用 iPhone 委托。" = "Local direct download; enable iPhone delegation in Settings.";
+"watchOS 本机 WebKit bridge 不提供可取消的异步 DOM 等待；可明确委托给 iPhone。" = "The watchOS WebKit bridge cannot cancel asynchronous DOM waits. Explicitly delegate to iPhone.";
+"watchOS 本机 WebKit bridge 不提供可靠视口覆盖；可明确委托给 iPhone。" = "The watchOS WebKit bridge cannot reliably override the viewport. Explicitly delegate to iPhone.";
+"watchOS 本机 WebKit bridge 不提供稳定滚动收集；可明确委托给 iPhone。" = "The watchOS WebKit bridge cannot reliably scroll and collect. Explicitly delegate to iPhone.";
+"控制当前聊天会话隔离的浏览器：管理标签页、导航、读取与定位页面、等待动态内容、交互、当前会话下载和全页截图。先调用 capabilities 获取准确能力；不提供任何 Cookie 工具，也不会在不支持时伪装成功。" = "Control the browser isolated to this chat: manage tabs, navigate, read and locate page content, wait for dynamic content, interact, download with the current session and capture full pages. Call capabilities first. No Cookie tools are provided; unsupported actions fail explicitly.";
+"find_elements 或 snapshot 返回的稳定元素 ID。" = "Stable element ID returned by find_elements or snapshot.";
+"元素结果对应的 DOM revision；页面变化后必须重新定位。" = "DOM revision of the element result; locate again after page changes.";
+"可选 CSS selector，用于限定读取、查找或收集范围。" = "Optional CSS selector limiting reading, lookup or collection.";
+"open_tab、navigate、fetch 或 download 的 URL。" = "URL for open_tab, navigate, fetch or download.";
+"mobile_safari、desktop_safari 或 reset。" = "mobile_safari, desktop_safari or reset.";
+"截图时是否捕获完整滚动页面，默认 false。" = "Capture the full scrollable page; default false.";
+"视口宽度，320 到 1920；必须与高度同时提供。" = "Viewport width, 320 to 1920; also provide height.";
+"视口高度，320 到 2160；必须与宽度同时提供。" = "Viewport height, 320 to 2160; also provide width.";
+"重置当前标签页的视口或 User-Agent 覆盖。" = "Reset viewport or User-Agent overrides for the current tab.";
+"语义 DOM 最大深度，默认 5，最大 12。" = "Maximum semantic DOM depth; default 5, limit 12.";
+"语义 DOM 最大节点数，默认 300，最大 1000。" = "Maximum semantic DOM nodes; default 300, limit 1000.";
+"滚动收集次数，默认 5，最大 20。" = "Number of collection scrolls; default 5, limit 20.";
+"scroll_and_collect 的项目 selector。" = "Item selector for scroll_and_collect.";
+"可选项目内 selector 或属性名，用于去重。" = "Optional selector within each item or attribute name for deduplication.";
+"等待超时秒数，最大 30。" = "Wait timeout in seconds, up to 30.";
+"DOM 无变化的安静窗口秒数，默认 0.5。" = "Seconds with no DOM changes; default 0.5.";
+"Mac 浏览器使用说明" = "The browser belongs to the current chat, with separate tabs for each session. Enter an http/https URL, domain or search text. Use the plus button for a new tab and right-click a tab to close it. Pages run in WebKit on this Mac, without iPhone delegation.\n\nOpening an idle browser takes control. While Agent is working, you can observe or click Take Control to cancel its browser task and stop loading. Agent cannot type or click while you control the browser. Returning control or closing the page refreshes the snapshot and releases control; it does not start a new chat request. Addresses, page content and Cookies are hidden from the settings guide.\n\nWith Keep Website Login State off, new tabs in the same session share temporary website data, isolated from other sessions. Turning it on uses this app’s shared persistent website data on this Mac, separate from Safari. Changes affect new tabs and new Agent Runs only. Regular chats save this preference in the existing database. Temporary chats use temporary data without saving the preference. Database sync does not transfer WebKit Cookies or pages.\n\nBrowser tools use normal chat routing and approvals. Cross-domain actions, scripts, screenshots and downloads retain their approval requirements. The model can read pages, locate elements, wait for content, change viewport size, download and capture screenshots. Mac mobile mode changes only the User-Agent; it does not emulate phone hardware. Locking, backup, restore and exit suspend operations and wait for cleanup; restoring the database closes old tabs. The guide can explain status or change the login preference after native confirmation, but cannot browse, search, submit forms, read pages, capture screenshots, download or run scripts.";

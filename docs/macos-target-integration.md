@@ -7,6 +7,7 @@
 - 在现有 workspace 内新增 macOS App target，使用 SwiftUI 生命周期，入口为 `ETOS LLM Studio/ETOS LLM Studio macOS App/ETOSMacApp.swift`。添加该目录全部 Swift 文件；不要同时加入移动端的 `@main` 入口或整个移动端 Views 目录。
 - Mac 最低系统与 ETOSCore 的现有配置保持一致：macOS 26.0。语言模式先与核心保持 Swift 5；默认 actor 隔离使用 `nonisolated`，界面模型已显式标注 `@MainActor`。不要照搬移动端 target 的 `SWIFT_DEFAULT_ACTOR_ISOLATION=MainActor`，否则后台展示数据的静态方法会变成主执行器隔离。
 - 添加 workspace 内的 ETOSCore framework target 依赖与嵌入签名。ETOSCore 使用同步文件夹，新加入的 Core Swift 文件仍需确认 Target Membership；Mac App 文件夹需要单独绑定新 target。
+- Mac 浏览器需要 WebKit/AppKit；共享 Core 的公开 WKWebView 分支已包含 macOS，不能再把 `BrowserSessionManagerUnavailable` 加入条件配置来代替实际实现。`BrowserMacRuntimeTests` 只在 macOS + WebKit 下编译，需要原生 Mac 测试目标验证。
 - 复用既有第三方依赖版本，不创建 `Package.swift`。重点核实 SQLCipher、llama.cpp、iSH runtime 的 macOS 架构切片及链接条件；不能把 iOS 模拟器产物当作原生 macOS 产物。
 - Mac App 的 `PRODUCT_MODULE_NAME` 使用 `ETOS_LLM_Studio_macOS_App`；新增相应的 macOS 单元测试 target，加入 `ETOS LLM Studio/ETOS LLM Studio macOS AppTests` 中的测试源码。该测试目录不加入 App target。
 
@@ -110,4 +111,12 @@ Mac 根目录为 `Application Support/ETOS LLM Studio`，通过 `StorageUtility.
 
    新增 `ShortcutToolImportPersistenceTests` 九个与 `MacShortcutImportPreviewTests` 两个测试源码用例，覆盖三类清单、分享域名校验、重复与无效统计、最新目录冲突、未知元数据保留、批量与删除回滚、过期描述/删除、平台完成 URL、后台预览和向导隐私、文本/文件输入。未执行编译、测试、真实网络描述生成或系统快捷指令。授权及工具链就绪后需验证目标接入、跨端数据库往返、系统文件权限、剪贴板读取、deep/模型取消、描述草稿与外部修改、原生删除、官方安装/导出/回调、锁定与备份恢复收尾、向导切页失效和语言切换。共享 Core 的旧同步导入与工具运行入口仍需后续运行检查，本项不表示全部历史主线程 I/O 或执行取消行为已经改造。
 
-目前源码包含聊天、附件、会话草稿、文件夹/标签/颜色分类与正文搜索、提供商/模型/MCP 基础配置、模型独立协议与完整价格草稿、请求参数与结构化控制编辑、聊天控制运行态及有效覆盖参数预览、滑块配色与请求思考反馈、MCP 资源/提示词读取、快捷指令配置/导入/描述生成、内置工具及审批设置、Skills 管理与导入、快照备份恢复、S3/R2 与 iCloud 同步管理、工具问答与 Widget、记忆编辑、嵌入维护、归档传输、跨对话摘要与画像、世界书管理/会话绑定、角色与身份资料管理、角色正则/脚本编辑、宏和分层变量编辑、角色 HTML/脚本承载及向导入口。完整功能对齐仍在继续，Agent/浏览器、工具中心其余入口、其余高级配置及平台能力等不能据此视为完成。
+42. Mac 聊天输入区和工具中心新增浏览器入口，提供会话标签、地址与 Google 搜索、前进/后退/重载/停止、新建和右键关闭标签、观察 Agent 与用户接管/交还。共享 Core 的公开 WebKit 实现现在覆盖 iOS 与 macOS，Mac 不再落入不可用占位分支，仍使用既有工具协议、任务表和敏感操作审批。Cookie、下载重定向、DOM 高级动作及截图分支同步接入 Mac；截图使用 AppKit 像素和显示缩放，PNG 编码、拼接与文件元数据读取移至后台。快照、元素列表和正文解析也在后台处理。Mac 移动模式通过公开 User-Agent 覆盖选择网站布局，桌面/重置采用原生 WebKit 标识，不宣称模拟手机硬件；视口覆盖在原生承载页保留尺寸。
+
+   浏览器标签由 Core 按聊天会话持有，界面借用同一个 WKWebView。控制转移与导航有版本标识，迟到的交还或旧导航清理不能释放新控制权或移除新的域名守卫。关闭界面取消手动导航，保留原标签并交还控制；锁定、备份、恢复及退出封闭新入口、停止加载，执行器取消任务并等待最终状态写库。工作区等待导航、偏好写入和执行器收尾，恢复数据库清除旧标签引用。已在 WebKit 内开始的脚本与动态网页取消行为仍须运行验证；没有把静态检查当作完整 WebKit 生命周期证明。
+
+   设置页沿用 `browser_agent_session_preferences`，普通会话偏好后台自动保存，比较原值并拒绝已删除会话；不使用旧门面自动补建会话。临时对话仅使用临时数据且不保存偏好。会话临时数据在本会话标签间共享，持久 profile 在本 App 的本机标签间共享，与 Safari 分开；改变偏好不改变旧标签，WebKit Cookie 和页面不随数据库同步。根页、设置与介绍声明独立向导，根页只读且不含网页地址/标题/正文、搜索词和 Cookie；设置页仅可提案修改登录偏好，确认后直接保存。向导不调用浏览器工具或网页操作。
+
+   新增 `BrowserSessionPreferencesTests` 三个事务用例、`BrowserMacRuntimeTests` 三个原生 WebKit 用例及 `MacBrowserAddressTests` 三个地址处理用例，共九个测试源码；覆盖偏好比较/失败回滚/不复活会话、原生能力与网站数据隔离、暂停和旧标签清理、搜索参数编码及协议限制。双端八语言表补齐 53 个新及原高级浏览器缺失键，向导知识与介绍同步维护。未编译、未运行测试、未打开实际网页、未执行下载或截图；工具链和授权就绪后验证原生 target、WebKit UI/键盘接管、同会话/跨会话 Cookie、工具审批、全页截图方向/预算、下载重定向、关闭/锁定/恢复期间取消、数据库往返、提案切页失效和语言切换。AppKit 图像转换依据 [Apple NSImage 接口](https://developer.apple.com/documentation/appkit/nsimage)，仍需真实显示比例验证。
+
+目前源码包含聊天、附件、会话草稿、文件夹/标签/颜色分类与正文搜索、提供商/模型/MCP 基础配置、模型独立协议与完整价格草稿、请求参数与结构化控制编辑、聊天控制运行态及有效覆盖参数预览、滑块配色与请求思考反馈、MCP 资源/提示词读取、快捷指令配置/导入/描述生成、内置工具及审批设置、Skills 管理与导入、本机会话浏览器、快照备份恢复、S3/R2 与 iCloud 同步管理、工具问答与 Widget、记忆编辑、嵌入维护、归档传输、跨对话摘要与画像、世界书管理/会话绑定、角色与身份资料管理、角色正则/脚本编辑、宏和分层变量编辑、角色 HTML/脚本承载及向导入口。完整功能对齐仍在继续，Agent/Linux 工作区、工具中心其余入口、其余高级配置及平台能力等不能据此视为完成，浏览器与其他新 Mac 功能还需工程接入及运行验证。

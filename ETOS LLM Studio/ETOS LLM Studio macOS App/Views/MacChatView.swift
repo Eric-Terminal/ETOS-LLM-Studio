@@ -14,6 +14,7 @@ struct MacChatView: View {
     @State private var rewritingMessage: MacMessageEditTarget?
     @State private var deletingMessage: MacMessageDeletionTarget?
     @State private var showsRequestControls = false
+    @State private var showsBrowser = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -101,7 +102,8 @@ struct MacChatView: View {
             } else { composer }
         }
         .onAppear { isVisible = true; workspace.setRoleplayHostVisible(true) }
-        .onDisappear { isVisible = false; importing = false; workspace.setRoleplayHostVisible(false) }
+        .onDisappear { isVisible = false; importing = false; showsBrowser = false; workspace.setRoleplayHostVisible(false) }
+        .onChange(of: workspace.currentSession?.id) { _, _ in showsBrowser = false }
         .onChange(of: workspace.incomingDocuments.contextID) { _, _ in importing = false; importContext = nil }
         .dropDestination(for: URL.self) { urls, _ in
             guard isVisible, workspace.canManageLocalModels else { return false }
@@ -120,7 +122,7 @@ struct MacChatView: View {
             documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace"),
                         GuideDocumentReference(id: "local-models", title: "Local Models")],
             isActive: isVisible && workspace.canManageLocalModels && !importing && editingMessage == nil
-                && rewritingMessage == nil && deletingMessage == nil && !showsRequestControls,
+                && rewritingMessage == nil && deletingMessage == nil && !showsRequestControls && !showsBrowser,
             settings: [
                 .readOnly("attachment_count", label: NSLocalizedString("附件", comment: ""), value: { .int(workspace.attachments.count) }),
                 .readOnly("importing_files", label: NSLocalizedString("处理中", comment: ""), value: { .bool(workspace.isImportingAttachments) }),
@@ -133,6 +135,12 @@ struct MacChatView: View {
         }
         .sheet(item: $rewritingMessage) { MacMessageRewriteView(target: $0) }
         .sheet(isPresented: $showsRequestControls) { MacRequestRuntimeView(model: workspace.requestControls) }
+        .sheet(isPresented: $showsBrowser) {
+            NavigationStack {
+                MacBrowserView(sessionID: workspace.currentSession?.id, isTemporary: workspace.temporaryChatMemoryMode != nil,
+                               isActive: isVisible && workspace.canManageLocalModels, model: workspace.browser)
+            }
+        }
         .confirmationDialog(NSLocalizedString("删除消息", comment: ""), isPresented: Binding(
             get: { deletingMessage != nil }, set: { if !$0 { deletingMessage = nil } }
         ), titleVisibility: .visible) {
@@ -201,6 +209,8 @@ struct MacChatView: View {
                     Label(NSLocalizedString("聊天控制", comment: ""), systemImage: "slider.horizontal.3")
                 }
                 .disabled(workspace.effectiveModelName == nil || !workspace.canEditRequestControls)
+                Button { showsBrowser = true } label: { Label(NSLocalizedString("浏览器", comment: ""), systemImage: "safari") }
+                    .disabled(workspace.currentSession == nil || !workspace.canManageLocalModels || workspace.browser.isSuspended)
                 Spacer()
                 if workspace.isGenerating || workspace.isPreparingSend {
                     Button { workspace.stop() } label: {

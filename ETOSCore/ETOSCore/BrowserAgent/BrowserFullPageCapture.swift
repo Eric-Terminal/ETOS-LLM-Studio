@@ -7,9 +7,13 @@
 // ============================================================================
 
 import Foundation
-#if canImport(WebKit) && canImport(UIKit) && !os(watchOS)
+#if canImport(WebKit) && (canImport(UIKit) || os(macOS)) && !os(watchOS)
 import WebKit
+#if os(macOS)
+import AppKit
+#else
 import UIKit
+#endif
 import ImageIO
 import UniformTypeIdentifiers
 
@@ -38,25 +42,39 @@ enum BrowserFullPageCapture {
     ) async throws -> BrowserAgentScreenshotResult {
         if !fullPage {
             let image = try await webView.takeSnapshot(configuration: nil)
-            guard let data = image.pngData() else {
+            #if os(macOS)
+            let pixels = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            #else
+            let pixels = image.cgImage
+            #endif
+            guard let pixels else {
                 throw BrowserAgentError.unsupported(
                     NSLocalizedString("无法编码网页截图。", comment: "Browser Agent screenshot encoding unavailable")
                 )
             }
-            let destination = try await write(data, sessionID: sessionID)
+            let chunk = Chunk(image: pixels, cssHeight: CGFloat(pixels.height))
+            let encoded = try await Task.detached(priority: .utility) {
+                try stitch(chunks: [chunk], scale: 1, maximumBytes: maximumOutputBytes)
+            }.value
+            try Task.checkCancellation()
+            let uri = try await write(encoded.data, sessionID: sessionID)
             return BrowserAgentScreenshotResult(
-                uri: try BrowserAgentStorage.appURI(for: destination),
-                width: Int(image.size.width * image.scale),
-                height: Int(image.size.height * image.scale),
+                uri: uri,
+                width: encoded.width,
+                height: encoded.height,
                 fullPage: false,
-                wasTruncated: false
+                wasTruncated: encoded.wasTruncated
             )
         }
 
         let metrics = try await pageMetrics(webView)
         let viewportWidth = max(webView.bounds.width, 1)
         let viewportHeight = max(webView.bounds.height, 1)
+        #if os(macOS)
+        let scale = max(webView.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 1, 1)
+        #else
         let scale = max(webView.window?.screen.scale ?? UIScreen.main.scale, 1)
+        #endif
         let pixelLimitedHeight = CGFloat(Self.maximumPixels) / (viewportWidth * scale * scale)
         let captureHeight = min(metrics.scrollHeight, Self.maximumCSSHeight, pixelLimitedHeight)
         let requestedWasTruncated = captureHeight < metrics.scrollHeight
@@ -80,7 +98,12 @@ enum BrowserFullPageCapture {
             let configuration = WKSnapshotConfiguration()
             configuration.rect = CGRect(x: 0, y: 0, width: viewportWidth, height: viewportHeight)
             let image = try await webView.takeSnapshot(configuration: configuration)
-            guard let cgImage = image.cgImage else {
+            #if os(macOS)
+            let pixels = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            #else
+            let pixels = image.cgImage
+            #endif
+            guard let cgImage = pixels else {
                 throw BrowserAgentError.unsupported(
                     NSLocalizedString("无法读取网页截图像素。", comment: "Browser Agent screenshot pixels unavailable")
                 )
@@ -92,12 +115,14 @@ enum BrowserFullPageCapture {
         _ = try? await webView.evaluateJavaScript("window.scrollTo(\(metrics.scrollX), \(metrics.scrollY)); true")
         restoredScrollPosition = true
 
+        let capturedChunks = chunks
         let encoded = try await Task.detached(priority: .utility) {
-            try stitch(chunks: chunks, scale: scale, maximumBytes: maximumOutputBytes)
+            try stitch(chunks: capturedChunks, scale: scale, maximumBytes: maximumOutputBytes)
         }.value
-        let destination = try await write(encoded.data, sessionID: sessionID)
+        try Task.checkCancellation()
+        let uri = try await write(encoded.data, sessionID: sessionID)
         return BrowserAgentScreenshotResult(
-            uri: try BrowserAgentStorage.appURI(for: destination),
+            uri: uri,
             width: encoded.width,
             height: encoded.height,
             fullPage: true,
@@ -210,19 +235,17 @@ enum BrowserFullPageCapture {
         )
     }
 
-    private static func write(_ data: Data, sessionID: UUID) async throws -> URL {
-        let filename = "browser-\(ISO8601DateFormatter().string(from: Date())).png"
-        let destination = try await Task.detached(priority: .utility) {
-            try BrowserAgentStorage.destinationURL(
+    private static func write(_ data: Data, sessionID: UUID) async throws -> String {
+        try await Task.detached(priority: .utility) {
+            let filename = "browser-\(ISO8601DateFormatter().string(from: Date())).png"
+            let destination = try BrowserAgentStorage.destinationURL(
                 sessionID: sessionID,
                 directoryName: "Screenshots",
                 proposedFilename: filename
             )
-        }.value
-        try await Task.detached(priority: .utility) {
             try data.write(to: destination, options: .atomic)
+            return try BrowserAgentStorage.appURI(for: destination)
         }.value
-        return destination
     }
 }
 #endif

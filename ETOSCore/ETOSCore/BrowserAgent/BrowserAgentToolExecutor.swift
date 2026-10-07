@@ -49,6 +49,9 @@ public actor BrowserAgentToolExecutor {
     private let executorDeviceID: String
     private var activeJobs: [UUID: ActiveBrowserJob] = [:]
     private var suspensionInterruptedJobIDs: Set<UUID> = []
+    private var isSuspendedForDataOperation = false
+    private var finishingJobCount = 0
+    private var idleWaiters: [CheckedContinuation<Void, Never>] = []
 
     public init(
         scheduler: LocalLinuxJobScheduler = .shared,
@@ -68,6 +71,11 @@ public actor BrowserAgentToolExecutor {
         selectedMCPServerIDs: [UUID],
         allowCompanionDelegation: Bool = true
     ) async throws -> String {
+        guard !isSuspendedForDataOperation else { throw CancellationError() }
+        #if canImport(WebKit) && (canImport(UIKit) || os(macOS)) && !os(watchOS)
+        guard await BrowserSessionManager.shared.isSuspended == false else { throw CancellationError() }
+        guard !isSuspendedForDataOperation else { throw CancellationError() }
+        #endif
         guard BrowserAgentToolDefinitions.contains(toolName) else {
             throw BrowserAgentError.invalidArguments(
                 NSLocalizedString("未知的浏览器工具。", comment: "Unknown Browser Agent tool")
@@ -100,6 +108,11 @@ public actor BrowserAgentToolExecutor {
         let dataProfile = conversationRun?.requestConfiguration.browserDataProfile
             ?? Persistence.browserAgentDataProfile(sessionID: sessionID)
         let requestID = await scheduler.reserveRequestID()
+        try Task.checkCancellation()
+        #if canImport(WebKit) && (canImport(UIKit) || os(macOS)) && !os(watchOS)
+        guard await BrowserSessionManager.shared.isSuspended == false else { throw CancellationError() }
+        #endif
+        guard !isSuspendedForDataOperation else { throw CancellationError() }
         var job = LocalLinuxJob(
             requestID: requestID,
             kind: .browser,
@@ -178,6 +191,16 @@ public actor BrowserAgentToolExecutor {
         activeJobs.values.forEach { $0.task.cancel() }
     }
 
+    /// 不只等待 WebKit 返回，还等待任务的最终状态落库，避免迟到写入恢复后的数据库。
+    public func suspendAndWait() async {
+        isSuspendedForDataOperation = true
+        cancelAll()
+        guard !activeJobs.isEmpty || finishingJobCount > 0 else { return }
+        await withCheckedContinuation { idleWaiters.append($0) }
+    }
+
+    public func resumeAfterDataOperation() { isSuspendedForDataOperation = false }
+
     public func interruptForSystemSuspension() -> Set<UUID> {
         let jobs = Array(activeJobs.values)
         suspensionInterruptedJobIDs.formUnion(jobs.map(\.job.id))
@@ -214,6 +237,12 @@ public actor BrowserAgentToolExecutor {
                 toolCallID: toolCallID,
                 manager: manager
             )
+            try Task.checkCancellation()
+            guard !isSuspendedForDataOperation else { throw CancellationError() }
+            if tracksControl, await manager.isUserControlling(sessionID: sessionID) { throw BrowserAgentError.userTakeover }
+            #if canImport(WebKit) && (canImport(UIKit) || os(macOS)) && !os(watchOS)
+            guard await manager.isSuspended == false else { throw CancellationError() }
+            #endif
             let result = try await performAction(
                 arguments,
                 sessionID: sessionID,
@@ -426,7 +455,7 @@ public actor BrowserAgentToolExecutor {
                 allowedAgentNavigationHosts: allowedNavigationHosts
             )])
         case .screenshot:
-            #if canImport(WebKit) && canImport(UIKit) && !os(watchOS)
+            #if canImport(WebKit) && (canImport(UIKit) || os(macOS)) && !os(watchOS)
             return encode(["screenshot": .dictionary(jsonObject(
                 try await manager.screenshot(
                     sessionID: sessionID,
@@ -440,7 +469,7 @@ public actor BrowserAgentToolExecutor {
             )
             #endif
         case .fetch:
-            #if canImport(WebKit) && canImport(UIKit) && !os(watchOS)
+            #if canImport(WebKit) && (canImport(UIKit) || os(macOS)) && !os(watchOS)
             let result = try await manager.fetch(
                 sessionID: sessionID,
                 tabID: tabID,
@@ -454,7 +483,7 @@ public actor BrowserAgentToolExecutor {
             )
             #endif
         case .download:
-            #if canImport(WebKit) && canImport(UIKit) && !os(watchOS)
+            #if canImport(WebKit) && (canImport(UIKit) || os(macOS)) && !os(watchOS)
             let result = try await manager.download(
                 sessionID: sessionID,
                 tabID: tabID,
@@ -679,12 +708,19 @@ public actor BrowserAgentToolExecutor {
         exitCode: Int32?
     ) async {
         guard var active = activeJobs.removeValue(forKey: jobID) else { return }
+        finishingJobCount += 1
         active.job.state = state
         active.job.completionReason = reason
         active.job.exitCode = exitCode
         active.job.finishedAt = Date()
         _ = Persistence.saveLocalLinuxJob(active.job)
         await scheduler.refreshActivityCounts()
+        finishingJobCount -= 1
+        if activeJobs.isEmpty && finishingJobCount == 0 {
+            let waiters = idleWaiters
+            idleWaiters.removeAll()
+            waiters.forEach { $0.resume() }
+        }
     }
 
     private func tabID(_ rawValue: String?) throws -> UUID? {
