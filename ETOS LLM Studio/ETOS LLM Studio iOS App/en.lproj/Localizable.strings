@@ -7768,3 +7768,11 @@
 "Mac 角色资料使用说明" = "Create character profiles or import JSON, PNG, and CHARX files in the character library. Photo imports require the original PNG data; conversion or screenshots may lose card metadata. Profile fields, alternate greetings, and initial variables remain drafts until you save from the profile editor. Regex rules, helper scripts, embedded worldbooks, assets, and unknown extensions are preserved. Check the compatibility report in character details. Personas are separate from long-term memory and have a name, pronouns, description, and avatar. Deleting a character removes conversation references to it and cleans up its assets. Reopen an editor if its source data changes. Guide proposals require native confirmation and modify drafts only; they do not execute scripts or send chat requests.";
 
 "角色卡不存在或已被删除。" = "This character card does not exist or has been deleted.";
+
+/* Mac 会话角色绑定 */
+"会话角色绑定" = "Session Roleplay Binding";
+"解除角色扮演绑定" = "Remove Roleplay Binding";
+"已选身份不可用" = "Selected persona unavailable";
+"已选开场白不可用" = "Selected greeting unavailable";
+"解除绑定会清除当前会话的角色扮演变量，保留聊天消息与角色资料。" = "Removing the binding clears this session’s roleplay variables and keeps messages and profiles.";
+"Mac 会话角色绑定使用说明" = "Choose a character, persona and greeting, then Save. Changes apply to the session that opened this page; saving is unavailable during generation. Empty sessions receive a greeting. A lone automatic greeting can be replaced; existing conversations are kept. The persona also becomes the default for new bindings. Additional characters remain when the primary character is unchanged; additional worldbooks are always retained. Manage worldbooks and context isolation on their own pages. Removing the binding clears session variables while keeping messages, profiles and shared variables. The guide only edits drafts; Save is still required. HTML/helper-script switches sync with configuration; roleplay HTML/script interaction is not yet available on Mac.";

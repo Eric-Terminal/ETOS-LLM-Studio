@@ -7632,3 +7632,11 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "请选择 PNG 格式的角色卡图片。" = "Choisissez une image de carte de personnage au format PNG.";
 
 "角色卡不存在或已被删除。" = "Cette fiche de personnage n’existe pas ou a été supprimée.";
+
+/* Mac 会话角色绑定 */
+"会话角色绑定" = "Association de jeu de rôle";
+"解除角色扮演绑定" = "Supprimer l’association de jeu de rôle";
+"已选身份不可用" = "Persona sélectionné indisponible";
+"已选开场白不可用" = "Message d’accueil sélectionné indisponible";
+"解除绑定会清除当前会话的角色扮演变量，保留聊天消息与角色资料。" = "La suppression de l’association efface les variables de jeu de rôle de cette conversation et conserve les messages et les profils.";
+"Mac 会话角色绑定使用说明" = "Choisissez un personnage, un persona et un message d’accueil, puis enregistrez. Les changements concernent la conversation ayant ouvert cette page ; l’enregistrement est bloqué pendant la génération. Une conversation vide reçoit un message d’accueil. Un unique accueil automatique peut être remplacé ; les conversations existantes sont conservées. Le persona devient aussi le choix par défaut des nouvelles associations. Les personnages supplémentaires restent si le personnage principal ne change pas ; les livres de monde supplémentaires sont toujours conservés. Gérez les livres de monde et l’isolation du contexte sur leurs pages respectives. Supprimer l’association efface les variables de la conversation, mais conserve messages, profils et variables partagées. Le guide ne modifie que le brouillon ; il faut encore enregistrer. Les réglages HTML/scripts sont synchronisés ; les interactions HTML et scripts de jeu de rôle ne sont pas encore disponibles sur Mac.";

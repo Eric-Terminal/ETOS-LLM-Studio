@@ -10,6 +10,7 @@ struct MacWorkspaceView: View {
     @State private var sessionToEdit: ChatSession?
     @State private var sessionToDelete: ChatSession?
     @State private var sessionToBind: ChatSession?
+    @State private var sessionToRoleplay: ChatSession?
 
     var body: some View {
         NavigationSplitView {
@@ -21,6 +22,10 @@ struct MacWorkspaceView: View {
                 .navigationTitle(workspace.currentSession?.name ?? NSLocalizedString("新的对话", comment: ""))
                 .toolbar {
                     ToolbarItem { MacTemporaryChatMenu() }
+                    Button { sessionToRoleplay = workspace.currentSession } label: {
+                        Label(NSLocalizedString("会话角色绑定", comment: ""), systemImage: "person.text.rectangle")
+                    }
+                    .disabled(workspace.currentSession == nil)
                     if configuration.modelPickerWorldbookShortcutEnabled {
                         Button { sessionToBind = workspace.currentSession } label: {
                             Label(NSLocalizedString("绑定世界书", comment: ""), systemImage: "books.vertical")
@@ -61,6 +66,7 @@ struct MacWorkspaceView: View {
             MacSessionEditor(session: session)
         }
         .sheet(item: $sessionToBind) { MacWorldbookBindingView(model: workspace.worldbookModel, session: $0) }
+        .sheet(item: $sessionToRoleplay) { MacRoleplayBindingView(session: $0) }
         .sheet(item: Binding(
             get: { appLock.state == .locked ? nil : permissions.activeRequest },
             set: { _ in }

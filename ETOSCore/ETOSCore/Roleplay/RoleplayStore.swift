@@ -170,16 +170,21 @@ public final class RoleplayStore: @unchecked Sendable {
         notifyChange(kind: Self.libraryChangeKind)
     }
 
-    public func removeBinding(sessionID: UUID) {
-        queue.sync {
+    @discardableResult
+    public func removeBinding(sessionID: UUID, expected: SessionRoleplayBinding? = nil) -> Bool {
+        let removed = queue.sync {
             var library = loadLibraryUnlocked()
+            guard expected == nil || library.bindings.first(where: { $0.sessionID == sessionID }) == expected else { return false }
             library.bindings.removeAll { $0.sessionID == sessionID }
-            saveLibraryUnlocked(library)
+            guard saveLibraryUnlocked(library) else { return false }
             var variables = loadVariablesUnlocked()
             variables.removeValue(forKey: sessionID)
             saveVariablesUnlocked(variables)
+            return true
         }
+        guard removed else { return false }
         notifyChange(kind: Self.libraryChangeKind)
+        return true
     }
 
     public func variableSnapshot(sessionID: UUID) -> RoleplayVariableSnapshot {

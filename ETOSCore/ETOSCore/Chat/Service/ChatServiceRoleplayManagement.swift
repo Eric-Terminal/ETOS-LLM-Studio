@@ -106,7 +106,25 @@ extension ChatService {
         helperScriptsEnabled: Bool = true,
         seedGreetingIfEmpty: Bool = true
     ) {
-        let previousBinding = roleplayStore.binding(sessionID: sessionID)
+        let draft = SessionRoleplayBinding(
+            sessionID: sessionID, characterIDs: characterIDs, personaID: personaID,
+            additionalWorldbookIDs: additionalWorldbookIDs, selectedGreetingIndex: selectedGreetingIndex,
+            htmlRenderingEnabled: htmlRenderingEnabled, helperScriptsEnabled: helperScriptsEnabled
+        )
+        do {
+            try saveRoleplayBindingDraft(draft, replacing: roleplayStore.binding(sessionID: sessionID), seedGreetingIfEmpty: seedGreetingIfEmpty)
+        } catch { logger.error("无法保存会话角色绑定：\(error.localizedDescription)") }
+    }
+
+    public func saveRoleplayBindingDraft(
+        _ draft: SessionRoleplayBinding,
+        replacing previousBinding: SessionRoleplayBinding?,
+        seedGreetingIfEmpty: Bool = true
+    ) throws {
+        let sessionID = draft.sessionID
+        let characterIDs = draft.characterIDs
+        let personaID = draft.personaID
+        let selectedGreetingIndex = draft.selectedGreetingIndex
         let selectedCharacter = characterIDs.first.flatMap { roleplayStore.character(id: $0) }
         let greetings = selectedCharacter.map { [$0.firstMessage] + $0.alternateGreetings } ?? []
         let normalizedGreetingIndex = greetings.isEmpty
@@ -116,14 +134,8 @@ extension ChatService {
         let greetingSelectionChanged = previousBinding.map {
             $0.characterIDs != characterIDs || $0.selectedGreetingIndex != normalizedGreetingIndex
         } ?? false
-        let canReplaceSeededGreeting = seedGreetingIfEmpty
-            && greetingSelectionChanged
-            && messages.count == 1
-            && messages[0].role == .assistant
-        let shouldSeedGreeting = seedGreetingIfEmpty && (messages.isEmpty || canReplaceSeededGreeting)
         let inferredSeededGreetingMessageID: UUID? = {
             guard previousBinding?.seededGreetingMessageID == nil,
-                  !greetingSelectionChanged,
                   let firstMessage = messages.first,
                   firstMessage.role == .assistant,
                   let previousBinding,
@@ -141,26 +153,33 @@ extension ChatService {
             ).trimmingCharacters(in: .whitespacesAndNewlines)
             return firstMessage.content == previousGreeting ? firstMessage.id : nil
         }()
+        // 单条助手消息也可能是导入或手工编辑的历史；只有已确认的开场白可随选择替换。
+        let previousSeededGreetingMessageID = previousBinding?.seededGreetingMessageID ?? inferredSeededGreetingMessageID
+        let canReplaceSeededGreeting = seedGreetingIfEmpty
+            && greetingSelectionChanged
+            && messages.count == 1
+            && messages[0].role == .assistant
+            && messages[0].id == previousSeededGreetingMessageID
+        let shouldSeedGreeting = seedGreetingIfEmpty && (messages.isEmpty || canReplaceSeededGreeting)
         let seededGreetingMessageID: UUID? = {
             if shouldSeedGreeting {
                 return canReplaceSeededGreeting ? messages[0].id : UUID()
             }
             return greetingSelectionChanged
                 ? nil
-                : previousBinding?.seededGreetingMessageID ?? inferredSeededGreetingMessageID
+                : previousSeededGreetingMessageID
         }()
         let binding = SessionRoleplayBinding(
             sessionID: sessionID,
             characterIDs: characterIDs,
             personaID: personaID,
-            additionalWorldbookIDs: additionalWorldbookIDs,
+            additionalWorldbookIDs: draft.additionalWorldbookIDs,
             selectedGreetingIndex: normalizedGreetingIndex,
-            htmlRenderingEnabled: htmlRenderingEnabled,
-            helperScriptsEnabled: helperScriptsEnabled,
+            htmlRenderingEnabled: draft.htmlRenderingEnabled,
+            helperScriptsEnabled: draft.helperScriptsEnabled,
             seededGreetingMessageID: seededGreetingMessageID
         )
-        roleplayStore.upsertBinding(binding)
-        roleplayStore.setPreferredPersonaID(personaID)
+        try roleplayStore.saveBindingDraft(binding, replacing: previousBinding)
         var variableSnapshot = roleplayStore.variableSnapshot(sessionID: sessionID)
         if let character = selectedCharacter {
             variableSnapshot.character.merge(character.initialVariables) { _, new in new }
@@ -256,5 +275,11 @@ extension ChatService {
 
     public func unbindRoleplay(sessionID: UUID) {
         roleplayStore.removeBinding(sessionID: sessionID)
+    }
+
+    public func removeRoleplayBindingDraft(_ original: SessionRoleplayBinding) throws {
+        guard roleplayStore.removeBinding(sessionID: original.sessionID, expected: original) else {
+            throw RoleplayDraftWriteError.changedExternally
+        }
     }
 }

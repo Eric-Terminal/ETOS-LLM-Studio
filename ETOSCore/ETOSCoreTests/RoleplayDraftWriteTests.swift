@@ -4,6 +4,103 @@ import Testing
 
 @Suite("角色扮演草稿保存", .serialized)
 struct RoleplayDraftWriteTests {
+    @Test("会话绑定比较原版本，保留引用并拒绝过期解除")
+    func bindingDraftVersionChecks() throws {
+        let store = RoleplayStore.shared
+        let preferred = store.preferredPersonaID()
+        let character = RoleplayCharacter(name: "绑定回归角色")
+        let persona = PersonaProfile(name: "绑定回归身份")
+        let sessionID = UUID()
+        defer {
+            store.removeBinding(sessionID: sessionID)
+            store.deleteCharacter(id: character.id)
+            store.deletePersona(id: persona.id)
+            store.setPreferredPersonaID(preferred)
+        }
+        try store.saveCharacterDraft(character, replacing: nil)
+        try store.savePersonaDraft(persona, replacing: nil)
+        let bookID = UUID()
+        let draft = SessionRoleplayBinding(sessionID: sessionID, characterIDs: [character.id, character.id], personaID: persona.id,
+                                           additionalWorldbookIDs: [bookID, bookID], selectedGreetingIndex: 2)
+        try store.saveBindingDraft(draft, replacing: nil)
+        let original = try #require(store.binding(sessionID: sessionID))
+        #expect(original.characterIDs == [character.id])
+        #expect(original.additionalWorldbookIDs == [bookID])
+        #expect(store.preferredPersonaID() == persona.id)
+        var edited = original
+        edited.helperScriptsEnabled = false
+        try store.saveBindingDraft(edited, replacing: original)
+        #expect(throws: RoleplayDraftWriteError.self) { try store.saveBindingDraft(original, replacing: original) }
+        #expect(throws: RoleplayDraftWriteError.self) { try store.saveBindingDraft(draft, replacing: nil) }
+        #expect(!store.removeBinding(sessionID: sessionID, expected: original))
+        let latest = try #require(store.binding(sessionID: sessionID))
+        #expect(!latest.helperScriptsEnabled && latest.additionalWorldbookIDs == [bookID])
+        var missing = latest
+        missing.characterIDs = [UUID()]
+        #expect(throws: RoleplayDraftWriteError.self) { try store.saveBindingDraft(missing, replacing: latest) }
+        missing = latest
+        missing.personaID = UUID()
+        #expect(throws: RoleplayDraftWriteError.self) { try store.saveBindingDraft(missing, replacing: latest) }
+        #expect(store.binding(sessionID: sessionID) == latest)
+        #expect(store.removeBinding(sessionID: sessionID, expected: latest))
+        #expect(throws: RoleplayDraftWriteError.self) { try store.saveBindingDraft(latest, replacing: latest) }
+    }
+
+    @Test("过期绑定不改开场白或变量，解除仅清除来源会话变量")
+    func staleBindingDoesNotInitializeMessages() throws {
+        let store = RoleplayStore.shared
+        let preferred = store.preferredPersonaID()
+        let service = ChatService(roleplayStore: store)
+        let character = RoleplayCharacter(name: "开场绑定回归", firstMessage: "第一条开场", alternateGreetings: ["另一条开场"])
+        let session = service.createSavedSession(name: "来源会话")
+        let other = service.createSavedSession(name: "另一个会话")
+        defer {
+            store.removeBinding(sessionID: session.id)
+            store.removeBinding(sessionID: other.id)
+            store.deleteCharacter(id: character.id)
+            store.setPreferredPersonaID(preferred)
+            service.deleteSessions([session, other])
+        }
+        try store.saveCharacterDraft(character, replacing: nil)
+        try service.saveRoleplayBindingDraft(.init(sessionID: session.id, characterIDs: [character.id]), replacing: nil)
+        let original = try #require(store.binding(sessionID: session.id))
+        let first = try #require(service.messagesSnapshot(for: session.id).first)
+        #expect(first.content == "第一条开场" && first.id == original.seededGreetingMessageID)
+        var changed = original
+        changed.selectedGreetingIndex = 1
+        try service.saveRoleplayBindingDraft(changed, replacing: original)
+        let latest = try #require(store.binding(sessionID: session.id))
+        #expect(service.messagesSnapshot(for: session.id).first?.content == "另一条开场")
+        #expect(service.messagesSnapshot(for: session.id).first?.id == first.id)
+        var variables = store.variableSnapshot(sessionID: session.id)
+        variables.chat["keep"] = .int(7)
+        store.saveVariableSnapshot(variables, sessionID: session.id)
+        var otherVariables = store.variableSnapshot(sessionID: other.id)
+        otherVariables.chat["other"] = .int(9)
+        store.saveVariableSnapshot(otherVariables, sessionID: other.id)
+        let before = service.messagesSnapshot(for: session.id)
+        #expect(throws: RoleplayDraftWriteError.self) { try service.saveRoleplayBindingDraft(original, replacing: original) }
+        #expect(throws: RoleplayDraftWriteError.self) { try service.removeRoleplayBindingDraft(original) }
+        #expect(service.messagesSnapshot(for: session.id) == before)
+        #expect(store.variableSnapshot(sessionID: session.id).chat["keep"] == .int(7))
+        try service.removeRoleplayBindingDraft(latest)
+        #expect(store.binding(sessionID: session.id) == nil)
+        #expect(store.variableSnapshot(sessionID: session.id).chat.isEmpty)
+        #expect(store.variableSnapshot(sessionID: other.id).chat["other"] == .int(9))
+        #expect(service.messagesSnapshot(for: session.id) == before)
+        #expect(service.messagesSnapshot(for: other.id).isEmpty)
+
+        // 仅有一条助手消息也不一定是角色开场白，改变选项不能抹去导入的历史。
+        let imported = ChatMessage(role: .assistant, content: "手工保留的助手消息")
+        service.updateMessages([imported], for: other.id)
+        try service.saveRoleplayBindingDraft(.init(sessionID: other.id, characterIDs: [character.id]), replacing: nil)
+        let importedBinding = try #require(store.binding(sessionID: other.id))
+        var alternate = importedBinding
+        alternate.selectedGreetingIndex = 1
+        try service.saveRoleplayBindingDraft(alternate, replacing: importedBinding)
+        #expect(service.messagesSnapshot(for: other.id) == [imported])
+    }
+
     @Test("过期角色编辑与删除被拒绝，删除后的旧草稿不能复活")
     func staleCharacterDrafts() throws {
         let store = RoleplayStore.shared

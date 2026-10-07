@@ -327,6 +327,30 @@ final class MacWorkspaceModel: ObservableObject {
         }.value
     }
 
+    func saveRoleplayBinding(_ draft: MacRoleplayBindingDraft, removing: Bool = false) async throws {
+        guard phase == .ready, !isRestoringData, !isExportingSnapshot, !isMutatingHistory, !sessionLibrary.isWorking,
+              !roleplayModel.isWorking, !worldbookModel.isWorking, !sendingSessionIDs.contains(draft.sessionID),
+              !runningSessionIDs.contains(draft.sessionID), AppLockManager.shared.state != .locked,
+              let service else { throw MacMemoryWriteError.busy }
+        // 修改可能初始化或替换开场白，沿用历史写入屏障，并始终操作编辑页捕获的会话。
+        isMutatingHistory = true
+        defer { isMutatingHistory = false; flushToolSupplements() }
+        let task = Task.detached(priority: .userInitiated) {
+            try Task.checkCancellation()
+            guard service.chatSessionsSubject.value.contains(where: { $0.id == draft.sessionID }) else {
+                throw RoleplayDraftWriteError.changedExternally
+            }
+            guard !service.runningSessionIDsSubject.value.contains(draft.sessionID) else { throw MacMemoryWriteError.busy }
+            if removing {
+                guard let original = draft.original else { throw RoleplayDraftWriteError.changedExternally }
+                try service.removeRoleplayBindingDraft(original)
+            } else {
+                try service.saveRoleplayBindingDraft(draft.preparedBinding(), replacing: draft.original)
+            }
+        }
+        try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+    }
+
     func selectModel(_ id: String?) {
         guard let service, let model = models.first(where: { $0.id == id }) else { return }
         Task.detached(priority: .userInitiated) { service.setSelectedModel(model) }
