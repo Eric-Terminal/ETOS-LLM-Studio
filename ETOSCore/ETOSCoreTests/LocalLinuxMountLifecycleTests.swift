@@ -4,6 +4,33 @@ import Testing
 
 @Suite("挂载状态切换与失败恢复", .serialized)
 struct LocalLinuxMountLifecycleTests {
+    @Test("旧目录确认不能切换、重新授权或删除后来修改的挂载")
+    func staleConfirmationRejectsMutations() async throws {
+        let root = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let saved = try saveRecord(directory: root, access: .readOnly, enabled: false)
+        defer { _ = Persistence.deleteLocalLinuxMount(id: saved.id) }
+        let original = try #require(Persistence.loadLocalLinuxMounts().first { $0.id == saved.id })
+        var changed = original; changed.displayName = "另一个目录配置"
+        try #require(Persistence.saveLocalLinuxMount(changed))
+        let manager = makeManager(root: root, bridge: MountBridgeStub())
+        await #expect(throws: LocalLinuxRuntimeError.self) { try await manager.setEnabled(true, id: saved.id, expected: original) }
+        await #expect(throws: LocalLinuxRuntimeError.self) { try await manager.reauthorize(id: saved.id, with: root, access: .readWrite, expected: original) }
+        await #expect(throws: LocalLinuxRuntimeError.self) { try await manager.delete(id: saved.id, force: true, expected: original) }
+        #expect(Persistence.loadLocalLinuxMounts().first { $0.id == saved.id } == changed)
+    }
+
+    @Test("租约和授权探测更新不会撤销同一目录的确认")
+    func dynamicStatusKeepsConfigurationIdentity() {
+        let original = LocalLinuxMountRecord(displayName: "目录", bookmark: Data([1]), access: .readOnly, guestPath: "/mnt/test")
+        var current = original; current.activeLeaseCount = 9; current.authorizationState = .materializing; current.updatedAt = Date()
+        #expect(current.matchesConfiguration(original))
+        current.bookmark = Data([2])
+        #expect(!current.matchesConfiguration(original))
+        current = original; current.access = .readWrite
+        #expect(!current.matchesConfiguration(original))
+    }
+
     @Test("即时挂载失败后重试不会留下重复记录")
     func failedAdditionDoesNotPersistRecords() async throws {
         let root = try makeDirectory()

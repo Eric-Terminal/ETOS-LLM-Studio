@@ -3,6 +3,15 @@ import Testing
 @testable import ETOSCore
 
 struct GuideMacLinuxKnowledgeTests {
+    @Test("工作区与挂载指引区分草稿、目录授权和删除范围")
+    func workspaceAndMountGuidance() {
+        let chinese = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "zh-Hans"))
+        #expect(chinese.content.contains("数据库删除失败时恢复原目录"))
+        #expect(chinese.content.contains("应用目录权限必须重新选择目录"))
+        #expect(chinese.content.contains("目录名、宿主路径和书签"))
+        #expect(chinese.content.contains("不是一致性快照"))
+    }
+
     @Test("Mac Linux 指引区分宿主 MCP、手动执行及向导隐私边界")
     func executionAndPrivacyBoundaries() {
         let english = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "en"))

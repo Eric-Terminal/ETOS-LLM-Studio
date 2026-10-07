@@ -7825,3 +7825,31 @@
 "Mac Linux 停止任务确认" = "Currently running tasks in this scope will stop. History and output will remain. This does not stop future tool calls from an ongoing chat.";
 "Mac Linux 停止 Agent 确认" = "This Agent Run and its descendant Runs will stop, including their ongoing requests and tasks. History and output will remain.";
 "Mac Linux 任务使用说明" = "Open Tasks and Terminals from Local Linux to see all local task records. The chat entry shows only its source conversation. Tasks are grouped by conversation and Agent Run. Active tasks remain visible; Load More adds 50 history records. Refresh returns to the first history window. Native Mac MCP connections remain in MCP management.\n\nOpen a task to view its saved command, arguments, directory, state and exit information. Raw output is read in 64 KB pages. New output updates the current final page; navigation and copying apply only to the displayed page. Byte counts reflect saved task state. An unavailable file does not remove the record, and a failed page read retains your prior page. Open an active terminal from details to attach to it.\n\nStop Task and the session or global stop controls cancel currently running tasks without stopping future calls from an ongoing chat. Stop This Agent also stops that Run’s requests and descendant Runs. Confirm the intended scope; history and output remain.\n\nDiagnostic Details shows the stored record and JSON. Copying is manual and does not submit a report. A compatibility event alone does not prove failure; check the completion reason and exit code. The guide sees only IDs and status, not commands, arguments, environment values, output or diagnostic bodies. It cannot stop tasks, copy content or send reports. Locking and database restore clear old pages and confirmations.";
+
+// Mac Linux 工作区与挂载
+"工作区仍有任务运行，请稍后重试。" = "Tasks are still using this workspace. Try again after they finish.";
+"挂载配置已变化，请刷新后重试。" = "The mount configuration has changed. Refresh and try again.";
+"应用启用状态" = "Apply Enabled State";
+"重新载入草稿" = "Reload Draft";
+"Mac 挂载草稿说明" = "Changes stay in the draft until you apply them. This button saves only the enabled state; changing permissions requires choosing the directory again.";
+"Mac Linux 工作区使用说明" = "Workspaces contain files and raw logs for conversations, Linux MCP processes or the user terminal. The list shows saved size summaries. Recalculate scans in the background; Refresh reloads saved records.\n\nPrepare Export creates a ZIP in Linux/Exports, then Share lets you choose its destination. The source is unchanged. Files being written are not a consistent snapshot.\n\nDeleting a workspace requires confirmation and waits for its current tasks to finish after cancellation. New tasks may require you to retry. Files inside that workspace are deleted; Home, Shared and external directories remain. Database deletion failure restores the original directory. Later chat activity may create a new workspace.\n\nThe cleanup policy saves automatically and applies only to future session deletion. Independent Linux MCP workspaces require manual cleanup. The guide can propose this policy, but cannot scan, export, share or delete files. Locking or restoring invalidates old pages and pending confirmations.";
+"Mac Linux 挂载使用说明" = "Choose an external folder with the system picker to grant access. A new mount starts enabled. The default permission saves automatically and affects new mounts only. Read-write access changes original files; read-only access protects them through the file tools and Linux mount.\n\nIn details, enabled state and reauthorization permission are drafts. Apply Enabled State saves only the switch. To apply directory permissions or repair authorization, choose the directory again. Reload Draft discards edits and reads the latest record. The guide changes drafts only and cannot open the picker or apply them.\n\nAuthorization status does not prove that a folder is mounted in the current kernel. Lease counts describe current use. Ordinary removal may fail while in use; forced removal asks for confirmation and may interrupt related tasks. Removing a mount never deletes external files. A changed directory configuration rejects old actions.\n\nLists and details give the guide only IDs, status and permissions, without names, paths or bookmarks. Leaving, locking or restoring invalidates pending directory selections. Locking and restoring clear old drafts. System folder and confirmation dialogs have no separate configuration guide.";
+
+// 补齐共享工作区管理文案
+"会话 %@" = "Conversation %@";
+"会话删除后的工作区" = "Workspaces After Deleting a Conversation";
+"保留并手动清理" = "Keep and Clean Up Manually";
+"停止相关任务并删除" = "Stop Related Tasks and Delete";
+"共享导出文件" = "Share Export File";
+"准备工作区导出" = "Prepare Workspace Export";
+"删除工作区…" = "Delete Workspace…";
+"只读可保护原文件；读写操作会直接修改原文件。" = "Read-only protects originals. Read-write access allows direct changes.";
+"工作区文件与其中的完整输出将被删除，RootFS、Home、Shared 和外部挂载不受影响。" = "The workspace files and their complete output will be deleted. RootFS, Home, Shared, and external mounts are unaffected.";
+"工作区详情" = "Workspace Details";
+"本地 MCP %@" = "Local MCP %@";
+"活动任务" = "Active Tasks";
+"独立工作区" = "Standalone Workspace";
+"管理工作区" = "Manage Workspaces";
+"自动删除只作用于以后删除的会话；本地 MCP 的独立工作区仍需手动处理。" = "Automatic deletion applies only to conversations deleted afterward. Standalone local MCP workspaces still require manual cleanup.";
+"还没有 Linux 工作区。" = "There are no Linux workspaces yet.";
+"随会话自动删除" = "Delete with Conversation";

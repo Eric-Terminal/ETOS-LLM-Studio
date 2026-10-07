@@ -192,7 +192,8 @@ public actor LocalLinuxMountManager {
     public func reauthorize(
         id: UUID,
         with url: URL,
-        access: LocalLinuxMountAccess
+        access: LocalLinuxMountAccess,
+        expected: LocalLinuxMountRecord? = nil
     ) async throws -> LocalLinuxMountRecord {
         try beginMutation(id: id)
         defer { mutatingMountIDs.remove(id) }
@@ -200,6 +201,7 @@ public actor LocalLinuxMountManager {
             throw LocalLinuxRuntimeError.invalidPath(id.uuidString)
         }
         let original = record
+        try validateExpected(expected, current: record)
         record.bookmark = try LocalLinuxExternalDirectory.createBookmark(for: url)
         record.displayName = url.lastPathComponent
         record.access = access
@@ -232,12 +234,13 @@ public actor LocalLinuxMountManager {
         return records().first(where: { $0.id == id }) ?? record
     }
 
-    public func setEnabled(_ isEnabled: Bool, id: UUID) async throws -> LocalLinuxMountRecord {
+    public func setEnabled(_ isEnabled: Bool, id: UUID, expected: LocalLinuxMountRecord? = nil) async throws -> LocalLinuxMountRecord {
         try beginMutation(id: id)
         defer { mutatingMountIDs.remove(id) }
         guard var record = records().first(where: { $0.id == id }) else {
             throw LocalLinuxRuntimeError.invalidPath(id.uuidString)
         }
+        try validateExpected(expected, current: record)
         guard record.isEnabled != isEnabled else { return record }
         if await bridge.runtimePhase() == 2 {
             if isEnabled {
@@ -268,9 +271,10 @@ public actor LocalLinuxMountManager {
         return records().first(where: { $0.id == id }) ?? record
     }
 
-    public func delete(id: UUID, force: Bool) async throws {
+    public func delete(id: UUID, force: Bool, expected: LocalLinuxMountRecord? = nil) async throws {
         try beginMutation(id: id)
         defer { mutatingMountIDs.remove(id) }
+        if let expected { try validateExpected(expected, current: records().first { $0.id == id }) }
         if force {
             await LocalLinuxJobScheduler.shared.cancelJobs(usingMountID: id)
         }
@@ -282,6 +286,13 @@ public actor LocalLinuxMountManager {
             throw LocalLinuxRuntimeError.runtimeUnavailable(
                 NSLocalizedString("无法删除 Linux 挂载。", comment: "Delete Linux mount failure")
             )
+        }
+    }
+
+    private func validateExpected(_ expected: LocalLinuxMountRecord?, current: LocalLinuxMountRecord?) throws {
+        guard let expected else { return }
+        guard current?.matchesConfiguration(expected) == true else {
+            throw LocalLinuxRuntimeError.runtimeUnavailable(NSLocalizedString("挂载配置已变化，请刷新后重试。", comment: ""))
         }
     }
 

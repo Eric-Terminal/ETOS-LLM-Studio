@@ -30,6 +30,9 @@ struct MacLinuxView: View {
                         MacLinuxJobsView(isActive: isActive, runtime: model)
                     } label: { Label(NSLocalizedString("任务与终端", comment: ""), systemImage: "list.bullet.rectangle") }
                     NavigationLink {
+                        MacLinuxMountsView(isActive: isActive, runtime: model)
+                    } label: { Label(NSLocalizedString("工作区与挂载", comment: ""), systemImage: "externaldrive") }
+                    NavigationLink {
                         MacLinuxSettingsView(isActive: isActive, model: model)
                     } label: { Label(NSLocalizedString("配置", comment: ""), systemImage: "slider.horizontal.3") }
                 }
@@ -98,6 +101,7 @@ struct MacLinuxView: View {
                 .bool("enabled", label: NSLocalizedString("启用本地 Linux", comment: ""), get: { configuration.localLinuxEnabled }, set: { configuration.localLinuxEnabled = $0 }),
                 .readOnly("phase", label: NSLocalizedString("运行时", comment: ""), value: { .string(model.snapshot.phase.rawValue) }),
                 .readOnly("jobs_require_navigation", label: NSLocalizedString("任务与终端", comment: ""), value: { .bool(true) }),
+                .readOnly("storage_requires_navigation", label: NSLocalizedString("工作区与挂载", comment: ""), value: { .bool(true) }),
                 .readOnly("terminal_count", label: NSLocalizedString("终端", comment: ""), value: { .int(model.snapshot.activeTerminalCount) }),
                 .readOnly("job_count", label: NSLocalizedString("命令与浏览器任务", comment: ""), value: { .int(model.snapshot.activeJobCount) }),
                 .readOnly("mcp_count", label: NSLocalizedString("本地 MCP", comment: ""), value: { .int(model.snapshot.activeMCPProcessCount) })

@@ -7902,3 +7902,31 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "Mac Linux 停止任务确认" = "Les tâches en cours dans ce périmètre seront arrêtées. L’historique et la sortie seront conservés. Une conversation en cours pourra encore appeler des outils.";
 "Mac Linux 停止 Agent 确认" = "Ce Run Agent et ses descendants seront arrêtés, y compris leurs requêtes et tâches en cours. L’historique et la sortie seront conservés.";
 "Mac Linux 任务使用说明" = "Ouvrez Tâches et terminaux depuis Linux local pour voir tous les enregistrements locaux. L’entrée du chat se limite à sa conversation d’origine. Les tâches sont regroupées par conversation et Run Agent. Toutes les tâches actives restent visibles ; le chargement ajoute 50 entrées d’historique. Actualiser revient au début de l’historique. Les connexions MCP natives du Mac restent dans la gestion MCP.\n\nLes détails montrent la commande, les arguments, le répertoire, l’état et les informations de fin enregistrés. La sortie brute se lit par pages de 64 Ko. Les nouveaux octets actualisent la dernière page affichée ; la copie concerne cette page seulement. Les compteurs reflètent l’état enregistré. Un fichier indisponible ne supprime pas la tâche ; une lecture échouée conserve la page précédente. Les détails permettent aussi de rejoindre un terminal actif.\n\nArrêter une tâche, les tâches d’une conversation ou toutes les tâches annule celles en cours, sans empêcher les futurs appels d’outils du chat. Arrêter cet Agent stoppe aussi les requêtes de ce Run et ses descendants. Confirmez le périmètre ; historique et sortie sont conservés.\n\nLes diagnostics affichent le record enregistré et son JSON. La copie manuelle n’envoie aucun rapport. Un événement de compatibilité ne prouve pas un échec : consultez le motif de fin et le code de sortie. Le guide ne voit que les identifiants et états, sans commandes, arguments, valeurs d’environnement, sortie ou corps du diagnostic. Il ne peut arrêter, copier ni envoyer. Le verrouillage et la restauration effacent les anciens contenus et confirmations.";
+
+// Mac Linux 工作区与挂载
+"工作区仍有任务运行，请稍后重试。" = "Des tâches utilisent encore cet espace de travail. Réessayez après leur fin.";
+"挂载配置已变化，请刷新后重试。" = "La configuration du montage a changé. Actualisez puis réessayez.";
+"应用启用状态" = "Appliquer l’état d’activation";
+"重新载入草稿" = "Recharger le brouillon";
+"Mac 挂载草稿说明" = "Les modifications restent dans le brouillon. Ce bouton enregistre uniquement l’activation ; les permissions nécessitent de choisir à nouveau le dossier.";
+"Mac Linux 工作区使用说明" = "Les espaces de travail contiennent les fichiers et journaux bruts des conversations, processus Linux MCP ou terminaux utilisateur. La liste affiche les tailles enregistrées. Le recalcul analyse en arrière-plan ; l’actualisation relit les enregistrements.\n\nPréparer l’export crée un ZIP dans Linux/Exports. Le partage permet ensuite de choisir sa destination. Le dossier source reste intact ; les fichiers en cours d’écriture ne forment pas un instantané cohérent.\n\nLa suppression demande confirmation, annule les tâches concernées et attend leur fin. De nouvelles tâches peuvent imposer un nouvel essai. Home, Shared et les dossiers externes sont conservés. Un échec de suppression en base restaure le dossier. Une activité ultérieure peut créer un nouvel espace.\n\nLa politique de nettoyage s’enregistre automatiquement et concerne les suppressions futures de conversations. Les espaces Linux MCP indépendants se nettoient manuellement. Le guide peut proposer cette politique, sans analyser, exporter, partager ni supprimer de fichiers. Le verrouillage ou la restauration invalide les anciennes pages et confirmations.";
+"Mac Linux 挂载使用说明" = "Choisissez un dossier externe avec le sélecteur système pour autoriser l’accès. Un nouveau montage est activé. La permission par défaut s’enregistre automatiquement pour les nouveaux montages. La lecture-écriture modifie les originaux ; la lecture seule est imposée par les outils de fichiers et Linux.\n\nDans les détails, activation et permissions de réautorisation restent des brouillons. Appliquer l’activation enregistre uniquement ce choix. Pour appliquer les permissions ou réparer l’autorisation, choisissez à nouveau le dossier. Recharger abandonne les modifications et relit la fiche. Le guide modifie les brouillons mais ne peut ni ouvrir le sélecteur ni les appliquer.\n\nUne autorisation valide ne prouve pas que le dossier est monté dans le noyau actuel. Le nombre de baux indique l’utilisation. Le retrait normal peut échouer en cours d’utilisation ; le retrait forcé nécessite confirmation et peut interrompre des tâches. Les fichiers externes ne sont jamais supprimés. Une configuration modifiée refuse les anciennes actions.\n\nLe guide reçoit uniquement ID, états et permissions, sans noms, chemins ni signets. Quitter, verrouiller ou restaurer invalide les sélections en attente. Verrouillage et restauration effacent les anciens brouillons. Les dialogues système n’ont pas de guide de configuration distinct.";
+
+// 补齐共享工作区管理文案
+"会话 %@" = "Conversation %@";
+"会话删除后的工作区" = "Espaces après suppression d’une conversation";
+"保留并手动清理" = "Conserver et nettoyer manuellement";
+"停止相关任务并删除" = "Arrêter les tâches liées et supprimer";
+"共享导出文件" = "Partager le fichier exporté";
+"准备工作区导出" = "Préparer l’export de l’espace";
+"删除工作区…" = "Supprimer l’espace de travail…";
+"只读可保护原文件；读写操作会直接修改原文件。" = "La lecture seule protège les originaux. La lecture-écriture permet de les modifier directement.";
+"工作区文件与其中的完整输出将被删除，RootFS、Home、Shared 和外部挂载不受影响。" = "Les fichiers de l’espace et leurs sorties complètes seront supprimés. RootFS, Home, Shared et les montages externes ne sont pas affectés.";
+"工作区详情" = "Détails de l’espace de travail";
+"本地 MCP %@" = "MCP local %@";
+"活动任务" = "Tâches actives";
+"独立工作区" = "Espace autonome";
+"管理工作区" = "Gérer les espaces de travail";
+"自动删除只作用于以后删除的会话；本地 MCP 的独立工作区仍需手动处理。" = "La suppression automatique ne s’applique qu’aux conversations supprimées ensuite. Les espaces MCP locaux autonomes restent à nettoyer manuellement.";
+"还没有 Linux 工作区。" = "Aucun espace Linux pour le moment.";
+"随会话自动删除" = "Supprimer avec la conversation";

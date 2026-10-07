@@ -17,10 +17,13 @@ public enum LocalLinuxWorkspaceCleanupCoordinator {
         let workspaces = Persistence.loadLocalAgentWorkspaces(sessionID: sessionID)
         guard !workspaces.isEmpty else { return }
 
+        let revision = LocalLinuxActivityBarrier.shared.revision
         Task.detached(priority: .utility) {
-            await LocalLinuxJobScheduler.shared.cancel(sessionID: sessionID)
-            for workspace in workspaces {
-                try? await LocalLinuxStorageManager.shared.deleteWorkspace(workspace)
+            try? await LocalLinuxActivityBarrier.shared.withActivity(expectedRevision: revision) {
+                for workspace in workspaces {
+                    try Task.checkCancellation()
+                    try await LocalLinuxStorageManager.shared.deleteWorkspace(workspace)
+                }
             }
         }
     }

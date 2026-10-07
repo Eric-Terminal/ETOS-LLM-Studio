@@ -9,9 +9,10 @@ struct MacLinuxServices: Sendable {
     let storage: LocalLinuxStorageManager
     let contexts: LocalAgentRuntimeContextManager
     let fileTools: LocalAgentFileToolExecutor
+    let mounts: LocalLinuxMountManager
 
     static let shared = Task.detached(priority: .utility) {
-        MacLinuxServices(runtime: .shared, scheduler: .shared, storage: .shared, contexts: .shared, fileTools: .shared)
+        MacLinuxServices(runtime: .shared, scheduler: .shared, storage: .shared, contexts: .shared, fileTools: .shared, mounts: .shared)
     }
 }
 

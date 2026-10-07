@@ -595,35 +595,68 @@ public actor LocalLinuxStorageManager {
 
     public func exportWorkspace(_ workspace: LocalAgentWorkspace) throws -> URL {
         let source = try hostURL(for: workspace)
+        guard try source.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else {
+            throw LocalLinuxRuntimeError.invalidPath(workspace.guestPath)
+        }
         try fileManager.createDirectory(at: layout.exports, withIntermediateDirectories: true)
         let archiveURL = uniqueExportURL(baseName: "Linux-Workspace-\(workspace.id.uuidString)")
+        var completed = false
+        defer { if !completed { try? fileManager.removeItem(at: archiveURL) } }
         let archive = try Archive(url: archiveURL, accessMode: .create)
-        let enumerator = fileManager.enumerator(
+        var enumerationError: Error?
+        guard let enumerator = fileManager.enumerator(
             at: source,
             includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsPackageDescendants]
-        )
-        while let item = enumerator?.nextObject() as? URL {
+            options: [.skipsPackageDescendants],
+            errorHandler: { _, error in enumerationError = error; return false }
+        ) else { throw CocoaError(.fileReadUnknown) }
+        while let item = enumerator.nextObject() as? URL {
+            try Task.checkCancellation()
             let values = try item.resourceValues(forKeys: [.isDirectoryKey])
             guard values.isDirectory != true else { continue }
             let relativePath = String(item.path.dropFirst(source.path.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             guard !relativePath.isEmpty else { continue }
             try archive.addEntry(with: relativePath, fileURL: item, compressionMethod: .deflate)
         }
+        if let enumerationError { throw enumerationError }
+        try Task.checkCancellation()
+        completed = true
         ETOSSharedWorkspaceFiles.notifyChange()
         return archiveURL
     }
 
-    public func deleteWorkspace(_ workspace: LocalAgentWorkspace) throws {
+    public func deleteWorkspace(_ workspace: LocalAgentWorkspace) async throws {
+        try await LocalLinuxJobScheduler.shared.cancelAndWaitForJobs(workspaceID: workspace.id)
+        try Task.checkCancellation()
+        // 等待任务时 actor 可以接纳新请求；旧确认不能删除期间重建的同 ID 用户终端工作区。
+        guard let current = Persistence.loadLocalAgentWorkspaces().first(where: { $0.id == workspace.id }),
+              current.createdAt == workspace.createdAt, current.hostRelativePath == workspace.hostRelativePath else {
+            throw LocalLinuxRuntimeError.invalidPath(workspace.guestPath)
+        }
+        guard !Persistence.loadLocalLinuxJobs(activeOnly: true).contains(where: { $0.workspaceID == workspace.id }) else {
+            throw LocalLinuxRuntimeError.runtimeUnavailable(NSLocalizedString("工作区仍有任务运行，请稍后重试。", comment: ""))
+        }
         let url = try hostURL(for: workspace)
-        if fileManager.fileExists(atPath: url.path) {
-            try fileManager.removeItem(at: url)
+        try Self.removeWorkspaceDirectory(url, fileManager: fileManager) {
+            guard Persistence.deleteLocalAgentWorkspace(id: workspace.id) else {
+                throw LocalLinuxRuntimeError.runtimeUnavailable(
+                    NSLocalizedString("无法删除 Linux 工作区记录。", comment: "Delete Linux workspace record failure")
+                )
+            }
         }
-        guard Persistence.deleteLocalAgentWorkspace(id: workspace.id) else {
-            throw LocalLinuxRuntimeError.runtimeUnavailable(
-                NSLocalizedString("无法删除 Linux 工作区记录。", comment: "Delete Linux workspace record failure")
-            )
+    }
+
+    /// 先暂存原目录；数据库删除失败时恢复文件，不能留下有记录却已丢失数据的工作区。
+    static func removeWorkspaceDirectory(_ url: URL, fileManager: FileManager, deleteRecord: () throws -> Void) throws {
+        let backup = url.deletingLastPathComponent().appendingPathComponent(".deleting-\(UUID().uuidString)", isDirectory: true)
+        let existed = fileManager.fileExists(atPath: url.path)
+        if existed { try fileManager.moveItem(at: url, to: backup) }
+        do { try deleteRecord() }
+        catch {
+            if existed { try fileManager.moveItem(at: backup, to: url) }
+            throw error
         }
+        if existed { try fileManager.removeItem(at: backup) }
     }
 
     public func deleteSystem(deleteUserData: Bool) throws {

@@ -7902,3 +7902,31 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "Mac Linux 停止任务确认" = "Se detendrán las tareas actuales del ámbito seleccionado. Se conservarán el historial y la salida. Un chat en curso podrá seguir llamando a herramientas.";
 "Mac Linux 停止 Agent 确认" = "Se detendrán este Run del Agent y sus descendientes, incluidas sus solicitudes y tareas actuales. Se conservarán el historial y la salida.";
 "Mac Linux 任务使用说明" = "Abre Tareas y terminales desde Linux local para ver todos los registros locales. La entrada del chat muestra solo su conversación de origen. Las tareas se agrupan por conversación y Run del Agent. Todas las tareas activas permanecen visibles; cargar más añade 50 registros históricos. Actualizar vuelve al inicio del historial. Las conexiones MCP nativas de Mac siguen en la gestión de MCP.\n\nLos detalles muestran el comando, los argumentos, el directorio, el estado y la información de salida guardados. La salida original se lee en páginas de 64 KB. La nueva salida actualiza la última página mostrada; la copia corresponde solo a esa página. Los contadores reflejan el estado guardado. Un archivo no disponible no elimina el registro; si falla la lectura se conserva la página anterior. También puedes acceder a un terminal activo desde los detalles.\n\nDetener una tarea, las de una conversación o todas cancela las que están en curso, sin impedir futuras llamadas del chat. Detener este Agent también detiene las solicitudes de ese Run y sus descendientes. Confirma el ámbito; se conservarán historial y salida.\n\nLos diagnósticos muestran el registro guardado y su JSON. Copiar manualmente no envía un informe. Un evento de compatibilidad por sí solo no prueba un fallo: revisa el motivo de finalización y el código de salida. La guía solo ve identificadores y estados, sin comandos, argumentos, valores del entorno, salida ni contenido del diagnóstico. No puede detener, copiar ni enviar informes. Bloquear o restaurar la base de datos borra los contenidos y confirmaciones anteriores.";
+
+// Mac Linux 工作区与挂载
+"工作区仍有任务运行，请稍后重试。" = "Todavía hay tareas usando este espacio de trabajo. Vuelve a intentarlo cuando terminen.";
+"挂载配置已变化，请刷新后重试。" = "La configuración del montaje ha cambiado. Actualiza y vuelve a intentarlo.";
+"应用启用状态" = "Aplicar estado de activación";
+"重新载入草稿" = "Recargar borrador";
+"Mac 挂载草稿说明" = "Los cambios permanecen en el borrador. Este botón solo guarda el estado de activación; para cambiar permisos debes volver a elegir la carpeta.";
+"Mac Linux 工作区使用说明" = "Los espacios de trabajo guardan archivos y registros sin procesar de conversaciones, procesos Linux MCP o terminales de usuario. La lista muestra tamaños guardados. Recalcular analiza en segundo plano; Actualizar vuelve a leer los registros.\n\nPreparar exportación crea un ZIP en Linux/Exports; después puedes elegir su destino con Compartir. El origen no cambia. Los archivos que se están escribiendo no forman una instantánea coherente.\n\nEliminar requiere confirmación, cancela las tareas actuales relacionadas y espera a que terminen. Si aparecen tareas nuevas, puede ser necesario reintentar. Home, Shared y las carpetas externas se conservan. Si falla la eliminación en la base de datos, se restaura la carpeta. Actividades posteriores pueden crear otro espacio.\n\nLa política de limpieza se guarda automáticamente y solo afecta a futuras eliminaciones de conversaciones. Los espacios Linux MCP independientes requieren limpieza manual. La guía puede proponer la política, pero no analizar, exportar, compartir ni eliminar archivos. Bloquear o restaurar invalida páginas y confirmaciones anteriores.";
+"Mac Linux 挂载使用说明" = "Elige una carpeta externa con el selector del sistema para autorizar el acceso. Los montajes nuevos empiezan activados. El permiso predeterminado se guarda automáticamente y solo afecta a nuevos montajes. Lectura y escritura modifica los originales; solo lectura se aplica mediante las herramientas de archivos y Linux.\n\nEn los detalles, la activación y el permiso de nueva autorización son borradores. Aplicar estado solo guarda el interruptor. Para aplicar permisos o reparar la autorización, vuelve a elegir la carpeta. Recargar descarta ediciones y lee el registro actual. La guía solo modifica borradores; no abre el selector ni los aplica.\n\nUna autorización válida no garantiza que la carpeta esté montada en el núcleo actual. Los contadores indican su uso. Quitar normalmente puede fallar si está en uso; forzar requiere confirmación y puede interrumpir tareas. Nunca se eliminan los archivos externos. Los cambios de configuración invalidan acciones anteriores.\n\nLa guía solo recibe ID, estados y permisos, sin nombres, rutas ni marcadores. Salir, bloquear o restaurar invalida selecciones pendientes. Bloquear o restaurar también borra borradores antiguos. Los diálogos del sistema no tienen una guía de configuración propia.";
+
+// 补齐共享工作区管理文案
+"会话 %@" = "Conversación %@";
+"会话删除后的工作区" = "Espacios al eliminar una conversación";
+"保留并手动清理" = "Conservar y limpiar manualmente";
+"停止相关任务并删除" = "Detener tareas relacionadas y eliminar";
+"共享导出文件" = "Compartir archivo exportado";
+"准备工作区导出" = "Preparar exportación del espacio";
+"删除工作区…" = "Eliminar espacio de trabajo…";
+"只读可保护原文件；读写操作会直接修改原文件。" = "Solo lectura protege los originales. Lectura y escritura permite modificarlos directamente.";
+"工作区文件与其中的完整输出将被删除，RootFS、Home、Shared 和外部挂载不受影响。" = "Se eliminarán los archivos del espacio y sus salidas completas. RootFS, Home, Shared y los montajes externos no se verán afectados.";
+"工作区详情" = "Detalles del espacio de trabajo";
+"本地 MCP %@" = "MCP local %@";
+"活动任务" = "Tareas activas";
+"独立工作区" = "Espacio independiente";
+"管理工作区" = "Gestionar espacios de trabajo";
+"自动删除只作用于以后删除的会话；本地 MCP 的独立工作区仍需手动处理。" = "La eliminación automática solo se aplica a las conversaciones que se eliminen después. Los espacios MCP locales independientes aún se limpian manualmente.";
+"还没有 Linux 工作区。" = "Aún no hay espacios de trabajo Linux.";
+"随会话自动删除" = "Eliminar con la conversación";
