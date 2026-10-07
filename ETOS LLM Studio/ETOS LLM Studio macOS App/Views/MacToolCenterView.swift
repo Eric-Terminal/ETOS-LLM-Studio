@@ -22,6 +22,9 @@ struct MacToolCenterView: View {
                 NavigationLink {
                     MacShortcutToolsView(isActive: isActive, model: workspace.shortcutTools)
                 } label: { Label(NSLocalizedString("快捷指令工具", comment: ""), systemImage: "square.stack.3d.up") }
+                NavigationLink {
+                    MacSkillsView(isActive: isActive, model: workspace.skills)
+                } label: { Label(NSLocalizedString("Agent Skills", comment: ""), systemImage: "books.vertical") }
             }
             Section {
                 NavigationLink {
@@ -39,6 +42,7 @@ struct MacToolCenterView: View {
                 .readOnly("built_in_requires_navigation", label: NSLocalizedString("内置工具", comment: ""), value: { .bool(true) }),
                 .readOnly("mcp_requires_navigation", label: NSLocalizedString("MCP 工具", comment: ""), value: { .bool(true) }),
                 .readOnly("shortcuts_requires_navigation", label: NSLocalizedString("快捷指令工具", comment: ""), value: { .bool(true) }),
+                .readOnly("skills_requires_navigation", label: NSLocalizedString("Agent Skills", comment: ""), value: { .bool(true) }),
                 .readOnly("approval_requires_navigation", label: NSLocalizedString("审批自动化", comment: ""), value: { .bool(true) })
             ]
         )

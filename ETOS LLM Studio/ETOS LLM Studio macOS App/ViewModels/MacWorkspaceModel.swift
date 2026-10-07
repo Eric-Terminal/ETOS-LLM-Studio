@@ -64,6 +64,7 @@ final class MacWorkspaceModel: ObservableObject {
     let shortcutTools = MacShortcutToolsModel()
     let builtInTools = MacBuiltInToolsModel()
     let toolApproval = MacToolApprovalModel()
+    let skills = MacSkillsModel()
     private(set) var externalOpenRevision = UUID()
     lazy var incomingDocuments = MacIncomingDocumentsModel(
         library: localModels,
@@ -139,6 +140,7 @@ final class MacWorkspaceModel: ObservableObject {
         AppLanguageRuntime.apply(rawValue: configuration.appLanguage)
         await builtInTools.start()
         await toolApproval.start()
+        await skills.start()
         await shortcutTools.start()
         let service = await Task.detached(priority: .userInitiated) { ChatService.shared }.value
         self.service = service
@@ -260,7 +262,7 @@ final class MacWorkspaceModel: ObservableObject {
                 guard let self else { return }
                 suspendRoleplayPresentation(); requestControls.suspend(); modelTests.cancelAll(); localModels.suspend()
                 shortcutTools.suspend()
-                builtInTools.suspend(); toolApproval.suspend()
+                builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
                 incomingDocuments.suspend(acceptNewFiles: !isRestoringData && !isExportingSnapshot && !isClosingRoleplay)
             }
             else { self?.resumeRoleplayPresentation(); self?.resumeRequestControls(); self?.flushToolSupplements() }
@@ -327,7 +329,7 @@ final class MacWorkspaceModel: ObservableObject {
         requestControls.suspend()
         localModels.suspend()
         shortcutTools.suspend()
-        builtInTools.suspend(); toolApproval.suspend()
+        builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
         incomingDocuments.suspend()
         await modelTests.cancelAndWait()
         // KV 清理可能等待正在推理的上下文；先取消生成，退出不能排在清理锁后面等待。
@@ -336,7 +338,7 @@ final class MacWorkspaceModel: ObservableObject {
         }
         await localModels.waitForPendingWrites()
         await shortcutTools.waitForPendingWrites()
-        await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites()
+        await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
         await incomingDocuments.waitForPendingOperations()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
@@ -741,7 +743,7 @@ final class MacWorkspaceModel: ObservableObject {
         modelTests.cancelAll()
         localModels.suspend()
         shortcutTools.suspend()
-        builtInTools.suspend(); toolApproval.suspend()
+        builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
         incomingDocuments.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
@@ -759,7 +761,7 @@ final class MacWorkspaceModel: ObservableObject {
         requestControls.resume()
         localModels.resume()
         shortcutTools.resume()
-        builtInTools.resume(); toolApproval.resume()
+        builtInTools.resume(); toolApproval.resume(); skills.resume()
         incomingDocuments.resume(sessionID: currentSession?.id)
     }
 
@@ -778,7 +780,7 @@ final class MacWorkspaceModel: ObservableObject {
         modelTests.cancelAll()
         localModels.suspend()
         shortcutTools.suspend()
-        builtInTools.suspend(); toolApproval.suspend()
+        builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
         incomingDocuments.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
@@ -794,7 +796,7 @@ final class MacWorkspaceModel: ObservableObject {
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
         await localModels.waitForPendingWrites()
         await shortcutTools.waitForPendingWrites()
-        await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites()
+        await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
         await incomingDocuments.waitForPendingOperations()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
@@ -831,7 +833,7 @@ final class MacWorkspaceModel: ObservableObject {
         modelTests.cancelAll()
         localModels.suspend()
         shortcutTools.suspend()
-        builtInTools.suspend(); toolApproval.suspend()
+        builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
         incomingDocuments.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
@@ -841,7 +843,7 @@ final class MacWorkspaceModel: ObservableObject {
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
         await localModels.waitForPendingWrites()
         await shortcutTools.waitForPendingWrites()
-        await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites()
+        await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
         await incomingDocuments.waitForPendingOperations()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
@@ -864,6 +866,8 @@ final class MacWorkspaceModel: ObservableObject {
         // 解除恢复屏障前更新工具路由，下一轮聊天不能读取旧数据库的快捷指令。
         await ShortcutToolManager.shared.reloadToolsInBackground()
         await AppToolManager.shared.reloadInBackground()
+        do { try await SkillManager.shared.reloadLibraryInBackground() }
+        catch { errorMessage = error.localizedDescription }
         do { try await ToolPermissionCenter.shared.reloadPreferencesInBackground() }
         catch { errorMessage = error.localizedDescription }
         await Task.detached(priority: .userInitiated) {

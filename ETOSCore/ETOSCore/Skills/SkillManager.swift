@@ -13,7 +13,14 @@ import os.log
 
 @MainActor
 public final class SkillManager: ObservableObject {
-    public static let shared = SkillManager()
+    private static var sharedInstance: SkillManager?
+    private static var preparationTask: Task<SkillLibraryState, Never>?
+    public static var shared: SkillManager {
+        if let sharedInstance { return sharedInstance }
+        let manager = SkillManager(state: SkillLibraryState.loadInitial())
+        sharedInstance = manager
+        return manager
+    }
     // 注意：这里必须使用系统合成的 objectWillChange，
     // 否则技能列表与开关状态不会稳定刷新。
 
@@ -200,22 +207,50 @@ public final class SkillManager: ObservableObject {
 
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "SkillManager")
     private let defaults: UserDefaults
+    let libraryWorker = SkillLibraryWorker()
+    private var libraryRevision: UInt64 = 0
 
     @Published public private(set) var skills: [SkillMetadata] = []
     @Published public private(set) var enabledSkillNames: Set<String>
     @Published public private(set) var chatToolsEnabled: Bool
     @Published public private(set) var lastErrorMessage: String?
 
-    private init(defaults: UserDefaults = .standard) {
-        let newlyInstalledBuiltInSkillNames = SkillStore.installBuiltInSkillsIfNeeded()
-        self.defaults = defaults
-        self.enabledSkillNames = Set(Self.stringArrayValue(forKey: DefaultsKey.enabledSkillNames, defaults: defaults))
-        self.chatToolsEnabled = Self.boolValue(forKey: DefaultsKey.chatToolsEnabled, defaults: defaults, defaultValue: true)
-        if !newlyInstalledBuiltInSkillNames.isEmpty {
-            enabledSkillNames.formUnion(newlyInstalledBuiltInSkillNames)
-            persistEnabledSkillNames()
+    private init(state: SkillLibraryState) {
+        defaults = .standard
+        skills = state.skills
+        enabledSkillNames = state.enabledNames
+        chatToolsEnabled = state.chatToolsEnabled
+    }
+
+    /// 桌面启动在创建聊天服务前预热，避免第一次观察共享管理器时扫描技能目录。
+    public static func prepareSharedInBackground() async -> SkillManager {
+        if let sharedInstance { return sharedInstance }
+        // 多个桌面入口同时启动时只安装、扫描一次，避免内置技能目录的并发替换。
+        let task: Task<SkillLibraryState, Never>
+        if let preparationTask { task = preparationTask }
+        else {
+            task = Task.detached(priority: .utility) { SkillLibraryState.loadInitial() }
+            preparationTask = task
         }
-        reloadFromDisk()
+        let state = await task.value
+        preparationTask = nil
+        if let sharedInstance { return sharedInstance }
+        let manager = SkillManager(state: state)
+        sharedInstance = manager
+        return manager
+    }
+
+    func applyLibraryState(_ state: SkillLibraryState) {
+        guard state.revision > libraryRevision else { return }
+        libraryRevision = state.revision
+        skills = state.skills
+        enabledSkillNames = state.enabledNames
+        chatToolsEnabled = state.chatToolsEnabled
+    }
+
+    func invalidateLibraryAfterReadFailure() {
+        // 恢复数据库后读不到新状态时，不允许聊天沿用恢复前的技能与授权入口。
+        skills = []; enabledSkillNames = []; chatToolsEnabled = false
     }
 
     public nonisolated static func isSkillToolName(_ name: String) -> Bool {
@@ -958,35 +993,6 @@ public final class SkillManager: ObservableObject {
         defaults === UserDefaults.standard
     }
 
-    private static func boolValue(forKey key: String, defaults: UserDefaults, defaultValue: Bool) -> Bool {
-        if key == DefaultsKey.chatToolsEnabled, usesDatabase(defaults: defaults) {
-            return AppConfigStore.boolValue(for: .skillsChatToolsEnabled, defaultValue: defaultValue)
-        }
-        guard usesDatabase(defaults: defaults) else {
-            return defaults.object(forKey: key) as? Bool ?? defaultValue
-        }
-        AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
-        if let stored = Persistence.readAppConfigInteger(key: key) {
-            return stored != 0
-        }
-        return defaultValue
-    }
-
-    private static func stringArrayValue(forKey key: String, defaults: UserDefaults) -> [String] {
-        if key == DefaultsKey.enabledSkillNames, usesDatabase(defaults: defaults) {
-            return AppConfigStore.stringArrayValue(for: .skillsEnabledNames, defaultValue: []) ?? []
-        }
-        guard usesDatabase(defaults: defaults) else {
-            return defaults.stringArray(forKey: key) ?? []
-        }
-        AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
-        if let stored = Persistence.readAppConfigText(key: key),
-           let decoded = decodeStringArray(stored) {
-            return decoded
-        }
-        return []
-    }
-
     private static func save(_ value: Bool, forKey key: String, defaults: UserDefaults) {
         if key == DefaultsKey.chatToolsEnabled, usesDatabase(defaults: defaults) {
             AppConfigStore.persistSynchronously(.bool(value), for: .skillsChatToolsEnabled)
@@ -1019,11 +1025,6 @@ public final class SkillManager: ObservableObject {
         return String(data: data, encoding: .utf8)
     }
 
-    private static func decodeStringArray(_ value: String) -> [String]? {
-        guard let data = value.data(using: .utf8) else { return nil }
-        guard let object = try? JSONSerialization.jsonObject(with: data) else { return nil }
-        return object as? [String]
-    }
 }
 
 /// use_skill 的 Markdown 链接发现策略。

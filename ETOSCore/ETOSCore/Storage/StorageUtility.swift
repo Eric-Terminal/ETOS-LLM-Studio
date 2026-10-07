@@ -620,7 +620,12 @@ public enum StorageUtility {
         }
         if isSkillPath {
             Task { @MainActor in
+                #if os(macOS)
+                let manager = await SkillManager.prepareSharedInBackground()
+                try? await manager.reloadLibraryInBackground()
+                #else
                 SkillManager.shared.reloadFromDisk()
+                #endif
             }
         }
     }

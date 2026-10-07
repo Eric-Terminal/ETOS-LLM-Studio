@@ -7700,3 +7700,10 @@
 "强制确认的工具仍需手动批准，修改倒计时会重新开始当前计时。" = "Tools requiring confirmation still need manual approval. Changing the duration restarts the current countdown.";
 "无法保存内置工具设置，请重新打开后重试。" = "Unable to save built-in tool settings. Reopen the page and try again.";
 "清空后，这些工具会重新使用全局自动批准设置。" = "After clearing, these tools will use the global auto-approval setting again.";
+
+/* Mac 技能管理 */
+"Mac Skills 使用说明" = "Manage skills using the same directory format as iPhone and Apple Watch. The main switch and individual enabled states save automatically. Session tool isolation still blocks use_skill. Enabling a skill exposes its instructions without running scripts.\n\nPaste SKILL.md to create a skill, or import a local SKILL.md, folder, ZIP, GitHub source or HTTP/HTTPS link. Review the preview, then choose Import. Replacing an existing skill requires confirmation, replaces its entire directory and enables it. Missing built-in skills are restored at the next launch.\n\nDetails show the body, compatibility and allowed tools. Edit SKILL.md or text resources, create files or delete resources. Images, documents and binary resources keep their original files and are listed only. Edits remain drafts until Save checks the original version. The name field in SKILL.md takes priority over the name input; the input is used when that field is absent. Renaming preserves resources and enabled state.\n\nScript execution remains subject to Agent, local Linux and execution policy requirements. Allow Current Version approves only the current content; changed content needs approval again. Reading or editing never runs scripts. The page guide can propose switches, policies or draft edits. Downloads, imports, deletion, saving drafts and execution remain manual actions. Leaving the page or locking the app invalidates old proposals.";
+"保存技能设置失败，请重试。" = "Could not save skill settings. Try again.";
+"同名技能已存在，导入将替换整个技能目录，并启用该技能。" = "A skill with this name already exists. Importing replaces its entire directory and enables the skill.";
+"未声明 name 时使用的名称" = "Name when SKILL.md omits name";
+"技能内容已变化，请重新打开后再试。" = "This skill has changed. Reopen it and try again.";
