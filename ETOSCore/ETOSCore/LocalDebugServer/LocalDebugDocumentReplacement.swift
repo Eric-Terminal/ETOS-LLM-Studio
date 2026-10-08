@@ -72,6 +72,7 @@ struct LocalDebugDocumentReplacement: Sendable {
     /// 提交开始后不响应取消；只能成功安装或尝试完整回滚，外层必须等待方法实际返回。
     func commit(
         prepare: @Sendable () throws -> Void = {},
+        validateInstalled: @Sendable () throws -> Void = {},
         move: @Sendable (URL, URL) throws -> Void = { try FileManager.default.moveItem(at: $0, to: $1) }
     ) throws {
         try validateComplete()
@@ -82,6 +83,7 @@ struct LocalDebugDocumentReplacement: Sendable {
         let originals = try manager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil).sorted { $0.lastPathComponent < $1.lastPathComponent }
         let incoming = try manager.contentsOfDirectory(at: incomingDirectory, includingPropertiesForKeys: nil).sorted { $0.lastPathComponent < $1.lastPathComponent }
         var saved: [URL] = [], installed: [URL] = []
+        var didInstallAllFiles = false
         // 标记必须先于第一次移动落盘；失败回滚和进程中断后，通用清理都不能删除恢复材料。
         try Data().write(to: commitMarker, options: .atomic)
         do {
@@ -95,9 +97,17 @@ struct LocalDebugDocumentReplacement: Sendable {
                 try move(source, destination)
                 installed.append(destination)
             }
+            didInstallAllFiles = true
+            // 必须先确认新数据库可迁移、可打开，再丢弃原目录；验证器不得发布连接或启动后台写入。
+            try validateInstalled()
         } catch {
             let installationError = error
             var rollbackError: Error?
+            if didInstallAllFiles {
+                // 迁移可能新建目录或侧文件，回滚必须撤回验证器产生的全部条目。
+                do { installed = try manager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil).sorted { $0.lastPathComponent < $1.lastPathComponent } }
+                catch { rollbackError = error }
+            }
             // 已安装的新内容先移回暂存区，恢复失败时两边的数据都留给后续恢复处理。
             for destination in installed.reversed() {
                 do { try move(destination, incomingDirectory.appendingPathComponent(destination.lastPathComponent)) }

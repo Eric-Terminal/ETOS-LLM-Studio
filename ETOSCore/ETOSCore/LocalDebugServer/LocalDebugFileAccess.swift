@@ -44,8 +44,8 @@ struct LocalDebugFileAccess: Sendable {
         self.exportDatabase = exportDatabase
     }
 
-    func url(for path: String, allowRoot: Bool = false, allowLeafSymlink: Bool = false) throws -> URL {
-        try Task.checkCancellation()
+    func url(for path: String, allowRoot: Bool = false, allowLeafSymlink: Bool = false, checkingCancellation: Bool = true) throws -> URL {
+        if checkingCancellation { try Task.checkCancellation() }
         guard !path.hasPrefix("/"), !path.contains("\0") else { throw LocalDebugFileAccessError.invalidPath }
         let components = path.split(separator: "/").map(String.init)
         guard !components.contains("..") else { throw LocalDebugFileAccessError.invalidPath }
@@ -53,7 +53,7 @@ struct LocalDebugFileAccess: Sendable {
         guard allowRoot || !names.isEmpty else { throw LocalDebugFileAccessError.invalidPath }
         var candidate = root
         for (index, name) in names.enumerated() {
-            try Task.checkCancellation()
+            if checkingCancellation { try Task.checkCancellation() }
             candidate.appendPathComponent(name)
             // attributesOfItem 检查链接本身，悬空链接也不能冒充不存在的父目录。
             let attributes: [FileAttributeKey: Any]

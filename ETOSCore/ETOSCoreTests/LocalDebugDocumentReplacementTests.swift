@@ -202,11 +202,11 @@ struct LocalDebugDocumentReplacementTests {
         #expect(try fixture.snapshot() == original)
     }
 
-    @Test("孤立 WAL 和 SHM 不能作为有效的数据库上传")
+    @Test("孤立 WAL、SHM 和 journal 不能作为有效的数据库上传")
     func orphanDatabaseSidecarsAreRejected() throws {
         let fixture = try DebugReplacementFixture()
         defer { fixture.close() }
-        for suffix in ["-wal", "-shm"] {
+        for suffix in ["-wal", "-shm", "-journal"] {
             let staged = try LocalDebugDocumentReplacement(root: fixture.root, paths: ["store.sqlite" + suffix])
             defer { staged.discard() }
             try staged.receive(path: "store.sqlite" + suffix, base64: "")
