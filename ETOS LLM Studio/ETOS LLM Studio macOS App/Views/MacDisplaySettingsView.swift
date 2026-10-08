@@ -13,6 +13,7 @@ struct MacDisplaySettingsView: View {
             Section {
                 MacSettingsIntroCard(id: "display", title: NSLocalizedString("使用说明", comment: ""),
                     details: NSLocalizedString("Mac 消息显示使用说明", comment: ""), documentID: "settings-display", isActive: available)
+                NavigationLink(NSLocalizedString("沉浸背景", comment: "")) { MacBackgroundSettingsView(model: workspace.backgrounds, isActive: available) }
             }
             Section {
                 Toggle(NSLocalizedString("Markdown 渲染", comment: ""), isOn: $configuration.enableMarkdown)
@@ -53,6 +54,7 @@ struct MacDisplaySettingsView: View {
                         GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
             isActive: available && visible,
             settings: [
+                .readOnly("background_requires_navigation", label: NSLocalizedString("沉浸背景", comment: ""), value: { .bool(true) }),
                 .bool("markdown", label: NSLocalizedString("Markdown 渲染", comment: ""), get: { configuration.enableMarkdown }, set: { configuration.enableMarkdown = $0 }),
                 .bool("enhanced_tool_results", label: NSLocalizedString("增强工具结果显示（实验性）", comment: ""), get: { configuration.enableExperimentalToolResultDisplay }, set: { configuration.enableExperimentalToolResultDisplay = $0 }),
                 .integer("user_message_preview_character_limit", label: NSLocalizedString("预览字符数", comment: ""), range: ChatUserMessagePreview.characterLimitRange,

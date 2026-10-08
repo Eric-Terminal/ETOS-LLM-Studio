@@ -135,7 +135,6 @@ public actor ChatBackgroundStartupCache {
 
     private nonisolated static func sourceRevision(named name: String) -> String? {
         let url = ConfigLoader.getBackgroundsDirectory().appendingPathComponent(name)
-        guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey]) else { return nil }
-        return "\(values.contentModificationDate?.timeIntervalSince1970 ?? 0)|\(values.fileSize ?? 0)"
+        return DisplayImageLoader.fileSourceRevision(at: url)
     }
 }

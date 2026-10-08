@@ -82,6 +82,7 @@ struct MacChatView: View {
                 .onScrollGeometryChange(for: Bool.self) { geometry in
                     geometry.contentSize.height - geometry.visibleRect.maxY < 100
                 } action: { _, nearEnd in followsLatest = nearEnd }
+                .background { MacChatBackgroundView(model: workspace.backgrounds) }
                 .onScrollGeometryChange(for: CGFloat.self) { $0.visibleRect.height } action: { _, height in viewportHeight = height }
                 .onScrollGeometryChange(for: CGFloat.self) { $0.contentSize.height } action: { _, _ in
                     if followsLatest { proxy.scrollTo("latest-message", anchor: .bottom) }
@@ -130,7 +131,7 @@ struct MacChatView: View {
             documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace"),
                         GuideDocumentReference(id: "local-models", title: "Local Models"), GuideDocumentReference(id: "tts", title: "Text to Speech")],
             isActive: isVisible && workspace.canManageLocalModels && !importing && editingMessage == nil
-                && rewritingMessage == nil && deletingMessage == nil && !showsRequestControls && !showsBrowser && linuxJobsTarget == nil && speechSource == nil && !workspace.tts.isExportPanelOpen,
+                && rewritingMessage == nil && deletingMessage == nil && !showsRequestControls && !showsBrowser && linuxJobsTarget == nil && speechSource == nil && !workspace.tts.isExportPanelOpen && !workspace.backgrounds.isImportPanelOpen,
             settings: [
                 .readOnly("attachment_count", label: NSLocalizedString("附件", comment: ""), value: { .int(workspace.attachments.count) }),
                 .readOnly("has_audio_draft", label: NSLocalizedString("语音输入", comment: ""), value: { .bool(workspace.audioAttachment != nil) }),

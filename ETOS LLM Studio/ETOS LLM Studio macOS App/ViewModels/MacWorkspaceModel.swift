@@ -70,6 +70,7 @@ final class MacWorkspaceModel: ObservableObject {
     let globalProxy = MacGlobalProxyModel()
     let speechInput = MacSpeechInputModel()
     let tts = MacTTSModel()
+    let backgrounds = MacBackgroundModel()
     let linux = MacLinuxModel()
     private(set) var externalOpenRevision = UUID()
     lazy var incomingDocuments = MacIncomingDocumentsModel(
@@ -152,6 +153,7 @@ final class MacWorkspaceModel: ObservableObject {
         self.service = service
         speechInput.start(service: service)
         tts.start(service: service)
+        backgrounds.start()
         bind(service)
         sessionLibrary.start(service: service, workspace: self)
         worldbookModel.start(service: service, workspace: self)
@@ -163,6 +165,7 @@ final class MacWorkspaceModel: ObservableObject {
         incomingDocuments.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
         speechInput.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
         tts.$isExportPanelOpen.dropFirst().sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &subscriptions)
+        backgrounds.$isImportPanelOpen.dropFirst().sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &subscriptions)
         configuration.$appLanguage.dropFirst().sink { [weak self] _ in self?.requestControls.reload() }.store(in: &subscriptions)
         configuration.$enableMarkdown.combineLatest(configuration.$userMessagePreviewCharacterLimit, configuration.$appLanguage)
             .dropFirst().receive(on: DispatchQueue.main)
@@ -280,7 +283,7 @@ final class MacWorkspaceModel: ObservableObject {
                 suspendRoleplayPresentation(); requestControls.suspend(); modelTests.cancelAll(); localModels.suspend()
                 shortcutTools.suspend()
                 builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-                browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); linux.suspend()
+                browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); backgrounds.suspend(); linux.suspend()
                 incomingDocuments.suspend(acceptNewFiles: !isRestoringData && !isExportingSnapshot && !isClosingRoleplay)
             }
             else { self?.resumeRoleplayPresentation(); self?.resumeRequestControls(); self?.flushToolSupplements() }
@@ -349,7 +352,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.suspend()
         shortcutTools.suspend()
         builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); linux.suspend()
+        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); backgrounds.suspend(); linux.suspend()
         incomingDocuments.suspend()
         await modelTests.cancelAndWait()
         // KV 清理可能等待正在推理的上下文；先取消生成，退出不能排在清理锁后面等待。
@@ -360,7 +363,7 @@ final class MacWorkspaceModel: ObservableObject {
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
         await browser.waitForPendingOperations(); await agentPrompts.waitForPendingWrites(); await globalProxy.waitForPendingWrites(); try? await linux.waitForPendingOperations()
-        await incomingDocuments.waitForPendingOperations(); await speechInput.waitForPendingOperations(); await tts.waitForPendingOperations()
+        await incomingDocuments.waitForPendingOperations(); await speechInput.waitForPendingOperations(); await tts.waitForPendingOperations(); await backgrounds.waitForPendingOperations()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()
@@ -777,7 +780,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.suspend()
         shortcutTools.suspend()
         builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); linux.suspend()
+        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); backgrounds.suspend(); linux.suspend()
         incomingDocuments.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
@@ -796,7 +799,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.resume()
         shortcutTools.resume()
         builtInTools.resume(); toolApproval.resume(); skills.resume()
-        browser.resume(); agentPrompts.resume(); globalProxy.resume(); speechInput.resume(); tts.resume(); linux.resume()
+        browser.resume(); agentPrompts.resume(); globalProxy.resume(); speechInput.resume(); tts.resume(); backgrounds.resume(); linux.resume()
         incomingDocuments.resume(sessionID: currentSession?.id)
     }
 
@@ -816,7 +819,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.suspend()
         shortcutTools.suspend()
         builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); linux.suspend()
+        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); backgrounds.suspend(); linux.suspend()
         incomingDocuments.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
@@ -834,7 +837,7 @@ final class MacWorkspaceModel: ObservableObject {
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
         await browser.waitForPendingOperations(); await agentPrompts.waitForPendingWrites(); await globalProxy.waitForPendingWrites(); try await linux.waitForPendingOperations()
-        await incomingDocuments.waitForPendingOperations(); await speechInput.waitForPendingOperations(); await tts.waitForPendingOperations()
+        await incomingDocuments.waitForPendingOperations(); await speechInput.waitForPendingOperations(); await tts.waitForPendingOperations(); await backgrounds.waitForPendingOperations()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()
@@ -871,7 +874,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.suspend()
         shortcutTools.suspend()
         builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); linux.suspend()
+        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); backgrounds.suspend(); linux.suspend()
         incomingDocuments.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
@@ -883,7 +886,7 @@ final class MacWorkspaceModel: ObservableObject {
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
         await browser.waitForPendingOperations(); await agentPrompts.waitForPendingWrites(); await globalProxy.waitForPendingWrites(); try await linux.waitForPendingOperations()
-        await incomingDocuments.waitForPendingOperations(); await speechInput.waitForPendingOperations(); await tts.waitForPendingOperations()
+        await incomingDocuments.waitForPendingOperations(); await speechInput.waitForPendingOperations(); await tts.waitForPendingOperations(); await backgrounds.waitForPendingOperations()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()
@@ -936,64 +939,4 @@ struct MacMessageEditTarget: Identifiable, Sendable {
     let message: ChatMessage
     let sessionID: UUID
     var id: String { "\(sessionID)-\(message.id)" }
-}
-
-struct MacChatRequestConfiguration {
-    let temperature: Double
-    let topP: Double
-    let systemPrompt: String
-    let historyLimit: Int
-    let streaming: Bool
-    let memory: Bool
-    let memoryWrite: Bool
-    let memoryRetrieval: Bool
-    let systemTime: Bool
-    let timePosition: SystemTimeInjectionPosition
-    let timeLandmark: Bool
-    let timeLandmarkMinutes: Int
-    let speedMetrics: Bool
-    let enhancedPrompt: String?
-
-    @MainActor
-    init(_ configuration: AppConfigStore, session: ChatSession) {
-        temperature = configuration.aiTemperature
-        topP = configuration.aiTopP
-        // Core 会单独拼入会话提示词；此处只传全局提示词，避免覆盖或重复注入。
-        systemPrompt = configuration.systemPrompt
-        historyLimit = configuration.maxChatHistory
-        streaming = configuration.enableStreaming
-        memory = configuration.enableMemory
-        memoryWrite = configuration.enableMemoryWrite
-        memoryRetrieval = configuration.enableMemoryActiveRetrieval
-        systemTime = configuration.includeSystemTimeInPrompt
-        timePosition = SystemTimeInjectionPosition(rawValue: configuration.systemTimeInjectionPosition) ?? .front
-        timeLandmark = configuration.enablePeriodicTimeLandmark
-        timeLandmarkMinutes = configuration.periodicTimeLandmarkIntervalMinutes
-        speedMetrics = configuration.enableResponseSpeedMetrics
-        enhancedPrompt = session.enhancedPrompt
-    }
-
-    func send(_ content: String, attachments: [MacComposerAttachment] = [], audioAttachment: AudioAttachment? = nil, through service: ChatService, sessionID: UUID) async {
-        await service.sendAndProcessMessage(
-            content: content, aiTemperature: temperature, aiTopP: topP,
-            systemPrompt: systemPrompt, maxChatHistory: historyLimit,
-            enableStreaming: streaming, enhancedPrompt: enhancedPrompt,
-            enableMemory: memory, enableMemoryWrite: memoryWrite, enableMemoryActiveRetrieval: memoryRetrieval,
-            includeSystemTime: systemTime, systemTimeInjectionPosition: timePosition,
-            enablePeriodicTimeLandmark: timeLandmark, periodicTimeLandmarkIntervalMinutes: timeLandmarkMinutes,
-            enableResponseSpeedMetrics: speedMetrics, audioAttachment: audioAttachment, imageAttachments: attachments.compactMap(\.image),
-            fileAttachments: attachments.compactMap(\.file), targetSessionID: sessionID
-        )
-    }
-
-    func retry(_ message: ChatMessage, through service: ChatService, sessionID: UUID, prefill: Bool) async {
-        await service.retryMessage(
-            message, aiTemperature: temperature, aiTopP: topP, systemPrompt: systemPrompt,
-            maxChatHistory: historyLimit, enableStreaming: streaming, enhancedPrompt: enhancedPrompt,
-            enableMemory: memory, enableMemoryWrite: memoryWrite, enableMemoryActiveRetrieval: memoryRetrieval,
-            includeSystemTime: systemTime, systemTimeInjectionPosition: timePosition,
-            enablePeriodicTimeLandmark: timeLandmark, periodicTimeLandmarkIntervalMinutes: timeLandmarkMinutes,
-            enableResponseSpeedMetrics: speedMetrics, prefill: prefill, targetSessionID: sessionID
-        )
-    }
 }

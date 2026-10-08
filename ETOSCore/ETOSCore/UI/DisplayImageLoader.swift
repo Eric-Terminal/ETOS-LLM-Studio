@@ -58,14 +58,24 @@ public actor DisplayImageLoader {
 
     public func image(at url: URL, target: DisplayImageTarget) async -> PreparedDisplayImage? {
         guard !target.isEmpty else { return nil }
-        var metadataURL = url
-        metadataURL.removeAllCachedResourceValues()
-        let metadata = try? metadataURL.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
-        let revision = "\(metadata?.contentModificationDate?.timeIntervalSince1970 ?? 0)|\(metadata?.fileSize ?? 0)"
+        let revision = Self.fileSourceRevision(at: url) ?? "missing"
         let request = Request(sourceID: "file:\(url.absoluteString)", target: target, revision: revision)
         return await preparedImage(for: request) {
             Self.decode(at: url, target: target, sourceRevision: revision)
         }
+    }
+
+    /// 显示缓存和启动缓存必须使用同一版本编码，只允许在后台读取元数据。
+    nonisolated static func fileSourceRevision(at url: URL) -> String? {
+        guard let metadata = try? FileManager.default.attributesOfItem(atPath: url.resolvingSymlinksInPath().path) else { return nil }
+        // 快照恢复可保留大小和修改时间；原子替换产生的新文件不能命中旧位图。
+        // 采用文件系统编号，避免依赖不透明资源标识的调试文本。
+        let device = (metadata[.systemNumber] as? NSNumber)?.stringValue ?? ""
+        let inode = (metadata[.systemFileNumber] as? NSNumber)?.stringValue ?? ""
+        let created = (metadata[.creationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        let modified = (metadata[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        let size = (metadata[.size] as? NSNumber)?.uint64Value ?? 0
+        return "\(device):\(inode)|\(created)|\(modified)|\(size)"
     }
 
     /// 待发送附件尚未落盘；身份只取不可变附件 ID，不能在视图更新中哈希整份图片数据。
