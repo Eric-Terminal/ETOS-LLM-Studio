@@ -38,11 +38,19 @@ extension TTSManager {
             audioExportRevision &+= 1
             let revision = audioExportRevision
             // 长文本导出会复制整段音频，预先在后台生成，避免 SwiftUI 查询按钮状态时阻塞主线程。
-            Task { [weak self] in
-                let export = await Task.detached(priority: .utility) {
-                    TTSAudioExportBuilder.make(from: orderedClips)
-                }.value
-                guard let self, revision == self.audioExportRevision else { return }
+            let previous = audioExportTask
+            previous?.cancel()
+            audioExportTask = Task { [weak self] in
+                await previous?.value
+                guard !Task.isCancelled else { return }
+                let preparation = Task.detached(priority: .utility) {
+                    guard !Task.isCancelled else { return nil as TTSAudioExport? }
+                    return TTSAudioExportBuilder.make(from: orderedClips)
+                }
+                let export = await withTaskCancellationHandler {
+                    await preparation.value
+                } onCancel: { preparation.cancel() }
+                guard !Task.isCancelled, let self, revision == self.audioExportRevision else { return }
                 self.cachedNetworkAudioExport = export
             }
         }

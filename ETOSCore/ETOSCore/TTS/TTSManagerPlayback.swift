@@ -32,7 +32,7 @@ extension TTSManager {
             playbackState.status = .buffering
             playbackState.errorMessage = nil
 
-            let settings = settingsStore.snapshot
+            let settings = item.settingsOverride ?? self.settings
 
             do {
                 try activateTTSAudioSessionIfNeeded()
@@ -45,6 +45,8 @@ extension TTSManager {
                     do {
                         try await speakBySystem(item.text, settings: settings)
                     } catch {
+                        try Task.checkCancellation()
+                        if error is CancellationError { throw error }
                         if item.playbackModeOverride == nil, settings.playbackMode == .auto {
                             try await speakByCloud(item, settings: settings)
                         } else {
@@ -84,7 +86,7 @@ extension TTSManager {
     }
 
     private func resolvePlaybackMode(_ mode: TTSPlaybackMode) -> TTSPlaybackMode {
-#if os(iOS) || os(watchOS)
+#if os(iOS) || os(watchOS) || os(macOS)
         if mode == .auto {
             return .system
         }
@@ -104,6 +106,7 @@ extension TTSManager {
         let candidates = [item] + Array(queue.prefix(prefetchWindowSize))
         scheduleCloudPrefetch(for: candidates, settings: settings)
         let clip = try await resolveCloudClip(for: item, settings: settings)
+        try Task.checkCancellation()
         recordNetworkAudioClip(clip, for: item.id)
         try await playAudio(clip: clip, speed: settings.playbackSpeed)
     }
@@ -114,7 +117,9 @@ extension TTSManager {
         }
         if let task = prefetchTasks[item.id] {
             prefetchTasks.removeValue(forKey: item.id)
-            return try await task.value
+            return try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: { task.cancel() }
         }
 
         let service = try resolveCloudService(item.serviceOverride)
@@ -132,35 +137,37 @@ extension TTSManager {
                 continue
             }
 
-            let text = item.text
-            let serviceOverride = item.serviceOverride
-            prefetchTasks[item.id] = Task { [weak self] in
+            let text = item.text, effectiveSettings = item.settingsOverride ?? settings
+            let service = Result { try resolveCloudService(item.serviceOverride) }
+            prefetchTasks[item.id] = Task.detached { [weak self] in
+                try Task.checkCancellation()
                 guard let self else { throw CancellationError() }
-                let service = try self.resolveCloudService(serviceOverride)
-                return try await self.synthesizeCloudAudio(text: text, settings: settings, service: service)
+                return try await self.synthesizeCloudAudio(text: text, settings: effectiveSettings, service: service.get())
             }
         }
     }
 
     func clearPrefetchState() {
-        for task in prefetchTasks.values {
-            task.cancel()
-        }
+        let tasks = Array(prefetchTasks.values)
+        for task in tasks { task.cancel() }
         prefetchTasks.removeAll()
+        guard !tasks.isEmpty else { return }
+        let previous = retiringTask
+        retiringTask = Task {
+            await previous?.value
+            for task in tasks { _ = await task.result }
+        }
     }
 
     private func resolveCloudService(_ serviceOverride: TTSServiceConfiguration? = nil) throws -> TTSServiceConfiguration {
-        guard let service = serviceOverride ?? TTSServiceStore.shared.selectedService else {
+        guard let service = serviceOverride ?? serviceProvider() else {
             throw NSError(domain: "TTS", code: -1, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("未选择可用的 TTS 服务。", comment: "")])
-        }
-        guard service.isReady else {
-            throw NSError(domain: "TTS", code: -7, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前 TTS 服务配置不完整。", comment: "")])
         }
         return service
     }
 
     private func speakBySystem(_ text: String, settings: TTSSettingsSnapshot) async throws {
-#if os(iOS) || os(watchOS)
+#if os(iOS) || os(watchOS) || os(macOS)
         activeBackend = .system
         playbackState.status = .playing
         playbackState.speed = settings.playbackSpeed
@@ -182,12 +189,32 @@ extension TTSManager {
             }
             activeSpeechUtterance = utterance
             speechSynthesizer.speak(utterance)
+#if os(iOS) || os(watchOS)
             startSpeechCompletionMonitor(estimatedDuration: playbackState.duration)
+#elseif os(macOS)
+            startSpeechStartupTimeout()
+#endif
         }
 #else
         throw NSError(domain: "TTS", code: -2, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前平台不支持系统 TTS。", comment: "")])
 #endif
     }
+
+#if os(iOS) || os(watchOS) || os(macOS)
+#if os(macOS)
+    /// macOS 只等待一次启动回调；正常朗读由代理结束，不持续轮询系统语音状态。
+    private func startSpeechStartupTimeout() {
+        stopSpeechMonitor(resetDidStart: false)
+        speechMonitorTask = Task { [weak self] in
+            do { try await Task.sleep(nanoseconds: 5_000_000_000) } catch { return }
+            guard !Task.isCancelled, let self, !speechDidStart, let continuation = speechContinuation else { return }
+            activeSpeechUtterance = nil; speechContinuation = nil; speechMonitorTask = nil
+            speechSynthesizer.stopSpeaking(at: .immediate)
+            continuation.resume(throwing: NSError(domain: "TTS", code: -13,
+                userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("系统朗读未能启动，请重试或切换云端。", comment: "")]))
+        }
+    }
+#endif
 
 #if os(iOS) || os(watchOS)
     /// 兜底监控系统 TTS 的回调，避免在 watchOS 上出现无回调导致队列永久卡住。
@@ -202,7 +229,8 @@ extension TTSManager {
             var speechBeganAt: Date?
 
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 250_000_000)
+                do { try await Task.sleep(nanoseconds: 250_000_000) } catch { return }
+                guard !Task.isCancelled else { return }
 
                 guard let continuation = self.speechContinuation else { break }
                 let elapsed = Date().timeIntervalSince(startedAt)
@@ -267,120 +295,25 @@ extension TTSManager {
             }
         }
     }
+#endif
 
     func stopSpeechMonitor(resetDidStart: Bool = true) {
-        speechMonitorTask?.cancel()
+        let monitor = speechMonitorTask
+        monitor?.cancel()
         speechMonitorTask = nil
+        if let monitor {
+            let previous = retiringTask
+            retiringTask = Task { await previous?.value; await monitor.value }
+        }
         if resetDidStart {
             speechDidStart = false
         }
     }
 #endif
 
-#if canImport(AVFoundation)
-    private func playAudio(clip: AudioClip, speed: Float) async throws {
-        activeBackend = .cloud
-        playbackState.status = .buffering
-
-        var audioData = clip.data
-        if clip.format.lowercased() == "pcm" {
-            audioData = pcmToWav(
-                pcm: clip.data,
-                sampleRate: clip.sampleRate ?? 24_000,
-                channels: clip.channels
-            )
-        }
-
-        let player = try AVAudioPlayer(data: audioData)
-        player.delegate = self
-        player.enableRate = true
-        player.rate = speed
-        player.prepareToPlay()
-        audioPlayer = player
-
-        playbackState.duration = player.duration
-        playbackState.position = 0
-        playbackState.speed = speed
-        playbackState.status = .playing
-
-        startProgressTimer()
-
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            audioContinuation = continuation
-            if !player.play() {
-                continuation.resume(throwing: NSError(domain: "TTS", code: -10, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("音频播放启动失败。", comment: "")]))
-                audioContinuation = nil
-                stopProgressTimer()
-                return
-            }
-        }
-
-        stopProgressTimer()
-        playbackState.position = 0
-        playbackState.duration = 0
-    }
-
-    private func startProgressTimer() {
-        stopProgressTimer()
-        progressTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self, let audioPlayer = self.audioPlayer else { return }
-                self.playbackState.position = audioPlayer.currentTime
-                self.playbackState.duration = audioPlayer.duration
-            }
-        }
-    }
-
-    func stopProgressTimer() {
-        progressTimer?.invalidate()
-        progressTimer = nil
-    }
-
-    private func pcmToWav(pcm: Data, sampleRate: Int, channels: Int = 1, bitsPerSample: Int = 16) -> Data {
-        let byteRate = sampleRate * channels * bitsPerSample / 8
-        let blockAlign = channels * bitsPerSample / 8
-        var header = Data()
-        header.append("RIFF".data(using: .ascii)!)
-        header.append(UInt32(36 + pcm.count).littleEndianData)
-        header.append("WAVE".data(using: .ascii)!)
-        header.append("fmt ".data(using: .ascii)!)
-        header.append(UInt32(16).littleEndianData)
-        header.append(UInt16(1).littleEndianData)
-        header.append(UInt16(channels).littleEndianData)
-        header.append(UInt32(sampleRate).littleEndianData)
-        header.append(UInt32(byteRate).littleEndianData)
-        header.append(UInt16(blockAlign).littleEndianData)
-        header.append(UInt16(bitsPerSample).littleEndianData)
-        header.append("data".data(using: .ascii)!)
-        header.append(UInt32(pcm.count).littleEndianData)
-        return header + pcm
-    }
-#endif
 }
 
-#if canImport(AVFoundation)
-@MainActor
-extension TTSManager: AVAudioPlayerDelegate {
-    public func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        playbackState.status = .ended
-        if let continuation = audioContinuation {
-            audioContinuation = nil
-            continuation.resume()
-        }
-    }
-
-    public func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
-        playbackState.status = .error
-        playbackState.errorMessage = error?.localizedDescription
-        if let continuation = audioContinuation {
-            audioContinuation = nil
-            continuation.resume(throwing: error ?? NSError(domain: "TTS", code: -11, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("音频解码失败。", comment: "")]))
-        }
-    }
-}
-#endif
-
-#if os(iOS) || os(watchOS)
+#if os(iOS) || os(watchOS) || os(macOS)
 extension TTSManager {
     nonisolated public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
         let utteranceID = ObjectIdentifier(utterance)
@@ -388,6 +321,9 @@ extension TTSManager {
             guard let self,
                   self.activeSpeechUtterance.map(ObjectIdentifier.init) == utteranceID else { return }
             self.speechDidStart = true
+#if os(macOS)
+            self.stopSpeechMonitor(resetDidStart: false)
+#endif
         }
     }
 
