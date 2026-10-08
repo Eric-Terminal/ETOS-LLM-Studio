@@ -8173,3 +8173,25 @@
 "高级渲染暂不可用，已显示原文。" = "Advanced rendering is unavailable. Source text is shown.";
 
 "Mac 聊天动画使用说明" = "Elastic scrolling affects messages only during manual scrolling and momentum, not automatic following or navigation. More displacement makes the wave stronger. A shorter spring response settles sooner; lower damping adds bounce.\n\nSend entry moves newly sent messages from the composer to their position. Attachments enter separately; very long or late messages appear directly. Scrolling, switching sessions or leaving chat cancels old motion without affecting delivery. With system Reduce Motion enabled, scrolling, sending and navigation use static presentation.\n\nChanges save immediately and share settings with iPhone and Apple Watch. Turning an effect off keeps its parameters editable. Reset restores only the corresponding parameters without enabling the effect. The guide may change these settings after confirmation, but cannot send, scroll or demonstrate animations.";
+
+"Mac 消息功能栏使用说明" = "Choose assistant or user messages, then add, remove or move items up and down. The first item starts at the chosen edge: left to right for leading alignment, right to left for trailing alignment. Border and font scale apply to both roles. Font scale multiplies the body’s global scale; narrow windows can scroll the bar horizontally.\n\nItems appear only when the message has the data or action. Request time is when the request began; missing token counts do not appear as zero. Cost uses the message’s saved pricing snapshot when available, otherwise current model pricing. Hover over cost to see its source. Copy always uses complete original text, and read aloud uses current TTS settings. Hiding the bar leaves context menu actions available.\n\nChanges remain in a draft until Save. Leaving discards unsaved edits. If another window changes the settings, reload before editing. With confirmation, the guide can adjust items, order, alignment, border and font scale for the selected role. You still choose Save yourself; the guide cannot perform message actions.";
+
+"修改仅保留在草稿中，点击保存后应用。" = "Changes stay in the draft until you save.";
+
+"功能栏字号" = "Action Bar Font Scale";
+
+"功能栏配置已在其他位置更改，请重新载入后编辑。" = "Action bar settings changed elsewhere. Reload before editing.";
+
+"字体缩放 %.0f%%" = "Font scale %.0f%%";
+
+"当前没有启用的项目" = "No items enabled";
+
+"按当前价格估算：%@" = "Estimated at current prices: %@";
+
+"请求时间：%@" = "Request time: %@";
+
+"费用：%@" = "Cost: %@";
+
+"输入 Token：%@" = "Input tokens: %@";
+
+"输出 Token：%@" = "Output tokens: %@";

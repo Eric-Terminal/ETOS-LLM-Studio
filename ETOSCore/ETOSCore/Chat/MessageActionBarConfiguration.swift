@@ -197,6 +197,21 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
     }
 }
 
+/// 后台生成规范化配置与对应 JSON，主线程发布时无需再次编解码。
+public struct PreparedMessageActionBarConfiguration: Sendable {
+    public let configuration: MessageActionBarConfiguration
+    public let rawValue: String
+
+    public init(_ configuration: MessageActionBarConfiguration) {
+        self.configuration = MessageActionBarConfiguration(
+            assistantItems: configuration.assistantItems, userItems: configuration.userItems,
+            assistantAlignment: configuration.assistantAlignment, userAlignment: configuration.userAlignment,
+            showsOuterBorder: configuration.showsOuterBorder, fontScale: configuration.fontScale
+        )
+        rawValue = self.configuration.encodedString()
+    }
+}
+
 public enum MessageActionBarAvailability {
     public static func canReadAloud(_ message: ChatMessage) -> Bool {
         // 与消息更多菜单的朗读范围保持一致；空的流式占位不显示入口。

@@ -34,6 +34,7 @@ struct MacMessagePresentation: Identifiable {
     let versionLabel: String
     let canRewrite: Bool
     let activity: MacMessageActivity
+    let actionBar: MacMessageActionBarPresentation
     let roleplayDocuments: [RoleplayPreparedDocument]
     var id: UUID { message.id }
 
@@ -44,7 +45,9 @@ struct MacMessagePresentation: Identifiable {
                         preparedText: MacPreparedMessageText? = nil,
                         preparedReasoning: MacPreparedMessageText? = nil,
                         preparedPreview: MacPreparedMessageText? = nil,
-                        palette: MacChatPalette = MacChatPalette(.defaultProfile)) -> MacMessagePresentation {
+                        palette: MacChatPalette = MacChatPalette(.defaultProfile),
+                        actionBar: MessageActionBarConfiguration = .defaultConfiguration,
+                        providers: [Provider] = []) -> MacMessagePresentation {
         let text = renderedContent ?? message.content
         let content = preparedText ?? MacPreparedMessageText(text, markdown: markdown && message.role == .assistant)
         let preview = message.role == .user ? ChatUserMessagePreview(content: text, characterLimit: userPreviewLimit) : nil
@@ -88,6 +91,8 @@ struct MacMessagePresentation: Identifiable {
             versionLabel: String(format: NSLocalizedString("切换版本 (%d/%d)", comment: ""), index + 1, count),
             canRewrite: message.role == .assistant && !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             activity: activity,
+            actionBar: MacMessageActionBarPresentation(message: message, configuration: actionBar,
+                                                       providers: providers, hasVersions: count > 1),
             roleplayDocuments: roleplayDocuments
         )
     }
@@ -106,6 +111,8 @@ actor MacMessagePresentationStore {
     private var preparationID = UUID()
     private var fontRevision = ""
     private var lineSpacing = FontLibrary.defaultIOSLineSpacingEm
+    private var actionBar = MessageActionBarConfiguration.defaultConfiguration
+    private var providers: [Provider] = []
     private let versionIndex = ChatResponseAttemptIndexWorker()
     private let streaming = MacStreamingMarkdownStore()
 
@@ -115,7 +122,8 @@ actor MacMessagePresentationStore {
                  userPreviewLimit: Int = ChatUserMessagePreview.defaultCharacterLimit,
                  appearance: ChatAppearanceProfile = .defaultProfile,
                  lineSpacing: Double = FontLibrary.defaultIOSLineSpacingEm,
-                 advanced: Bool = false) async throws -> [MacMessagePresentation] {
+                 advanced: Bool = false, actionBar: MessageActionBarConfiguration = .defaultConfiguration,
+                 providers: [Provider] = []) async throws -> [MacMessagePresentation] {
         let revision = UUID(); preparationID = revision
         let versions = await versionIndex.prepare(messages: messages, sessionID: sessionID).entries
         try Task.checkCancellation()
@@ -125,7 +133,8 @@ actor MacMessagePresentationStore {
         let usesCustomPresentation = roleplay != nil || !rules.isEmpty
         if usesMarkdown != markdown || usesAdvancedRenderer != advanced || self.language != language || self.userPreviewLimit != userPreviewLimit
             || usesCustomPresentation || usedCustomPresentation || self.appearance != appearance
-            || self.fontRevision != fontRevision || self.lineSpacing != lineSpacing {
+            || self.fontRevision != fontRevision || self.lineSpacing != lineSpacing
+            || self.actionBar != actionBar || self.providers != providers {
             cache.removeAll()
             usesMarkdown = markdown
             usesAdvancedRenderer = advanced
@@ -133,6 +142,7 @@ actor MacMessagePresentationStore {
             self.userPreviewLimit = userPreviewLimit
             self.appearance = appearance
             self.fontRevision = fontRevision; self.lineSpacing = lineSpacing
+            self.actionBar = actionBar; self.providers = providers
         }
         usedCustomPresentation = usesCustomPresentation
         var updated: [UUID: MacMessagePresentation] = [:]
@@ -177,7 +187,8 @@ actor MacMessagePresentationStore {
                 row = MacMessagePresentation.prepare(message, markdown: markdown, versionInfo: versions[message.id],
                                                      renderedContent: extraction?.remainingText ?? visual, roleplayDocuments: documents,
                                                      activeResponseID: activeResponseID, userPreviewLimit: userPreviewLimit,
-                                                     preparedText: text, preparedReasoning: reasoning, preparedPreview: preview, palette: palette)
+                                                     preparedText: text, preparedReasoning: reasoning, preparedPreview: preview, palette: palette,
+                                                     actionBar: actionBar, providers: providers)
             }
             guard preparationID == revision, FontLibrary.adapterCacheToken() == fontRevision else { throw CancellationError() }
             updated[message.id] = row
@@ -201,13 +212,15 @@ actor MacMessagePresentationStore {
                           userPreviewLimit: Int = ChatUserMessagePreview.defaultCharacterLimit,
                           appearance: ChatAppearanceProfile = .defaultProfile,
                           lineSpacing: Double = FontLibrary.defaultIOSLineSpacingEm,
-                          advanced: Bool = false) async throws -> MacRoleplayPresentation {
+                          advanced: Bool = false, actionBar: MessageActionBarConfiguration = .defaultConfiguration,
+                          providers: [Provider] = []) async throws -> MacRoleplayPresentation {
         let worldbooks = service.loadWorldbooks()
         let context = sessionID.map { RoleplayPresentationSnapshot(sessionID: $0, messages: messages, worldbooks: worldbooks) }
         let rows = try await prepare(messages, markdown: markdown, language: language, sessionID: sessionID,
                                      roleplay: context, rules: MessageRegexRuleStore.currentRules(),
                                      activeResponseID: sessionID.flatMap { service.activeResponseMessageID(for: $0) },
-                                     userPreviewLimit: userPreviewLimit, appearance: appearance, lineSpacing: lineSpacing, advanced: advanced)
+                                     userPreviewLimit: userPreviewLimit, appearance: appearance, lineSpacing: lineSpacing, advanced: advanced,
+                                     actionBar: actionBar, providers: providers)
         var scripts: [RoleplayPreparedDocument] = []
         for id in scriptSessionIDs {
             try Task.checkCancellation()

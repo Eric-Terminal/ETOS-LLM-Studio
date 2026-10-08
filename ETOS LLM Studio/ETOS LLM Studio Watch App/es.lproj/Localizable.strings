@@ -8097,3 +8097,25 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "调整后可回到聊天中查看效果。" = "Vuelve al chat para ver los cambios.";
 
 "飞入速度 %.2f s" = "Respuesta de entrada %.2f s";
+
+"Mac 消息功能栏使用说明" = "Elija mensajes del asistente o del usuario y añada, quite o mueva los elementos. El primero parte del borde elegido: de izquierda a derecha o de derecha a izquierda. El borde y la escala de texto se aplican a ambos roles. La escala multiplica la global del cuerpo; las ventanas estrechas permiten desplazamiento horizontal.\n\nSolo aparecen elementos con datos u operaciones disponibles. La hora corresponde al inicio de la solicitud; los tokens desconocidos no se muestran como cero. El coste usa primero los precios guardados con el mensaje y, si no existen, los actuales del modelo. Pase el puntero sobre el coste para ver su origen. Copiar usa todo el texto original y leer en voz alta usa los ajustes TTS actuales. Ocultar la barra conserva las acciones del menú contextual.\n\nLos cambios siguen en el borrador hasta Guardar. Salir descarta lo no guardado. Si otra ventana cambia la configuración, vuelva a cargarla. Con confirmación, la guía puede modificar elementos, orden, alineación, borde y escala del rol elegido. Debe guardar manualmente; la guía no puede ejecutar acciones de mensajes.";
+
+"修改仅保留在草稿中，点击保存后应用。" = "Los cambios permanecen en el borrador hasta que guarde.";
+
+"功能栏字号" = "Escala de texto de la barra de acciones";
+
+"功能栏配置已在其他位置更改，请重新载入后编辑。" = "La configuración cambió en otro lugar. Vuelva a cargarla antes de editar.";
+
+"字体缩放 %.0f%%" = "Escala de texto %.0f%%";
+
+"当前没有启用的项目" = "No hay elementos activados";
+
+"按当前价格估算：%@" = "Estimación con precios actuales: %@";
+
+"请求时间：%@" = "Hora de la solicitud: %@";
+
+"费用：%@" = "Coste: %@";
+
+"输入 Token：%@" = "Tokens de entrada: %@";
+
+"输出 Token：%@" = "Tokens de salida: %@";

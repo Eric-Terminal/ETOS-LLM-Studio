@@ -72,6 +72,7 @@ struct MacChatView: View {
                                         .disabled(!workspace.canModifyCurrentHistory || !workspace.selectedModelSupportsRewrite)
                                     }
                                     if !row.versionOptions.isEmpty {
+                                        MacMessageVersionMenu(row: row)
                                         Button(NSLocalizedString("删除当前版本", comment: ""), role: .destructive) { prepareDeletion(row.message, kind: .currentVersion) }
                                             .disabled(!workspace.canModifyCurrentHistory)
                                         Button(NSLocalizedString("删除所有版本", comment: ""), role: .destructive) { prepareDeletion(row.message, kind: .allVersions) }
@@ -308,20 +309,6 @@ private struct MacMessageRow: View {
                 Text(row.roleTitle).font(.caption).foregroundStyle(.secondary)
                 if row.activity.isActive { ProgressView().controlSize(.mini) }
                 Spacer()
-                if !row.versionOptions.isEmpty {
-                    Menu {
-                        ForEach(row.versionOptions) { option in
-                            Button { workspace.selectVersion(option.id, of: row.message) } label: {
-                                if option.id == row.versionIndex { Label(option.title, systemImage: "checkmark") }
-                                else { Text(option.title) }
-                            }
-                            .disabled(option.id == row.versionIndex)
-                        }
-                    } label: { Text(row.versionLabel) }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                    .disabled(!workspace.canModifyCurrentHistory)
-                }
             }
             if row.activity.hasReasoning, let reasoning = row.reasoning {
                 MacMessageReasoningView(activity: row.activity, reasoning: reasoning, viewportHeight: viewportHeight)
@@ -360,6 +347,7 @@ private struct MacMessageRow: View {
                 }
                 .buttonStyle(.link)
             }
+            MacMessageActionBar(row: row)
         }
         .foregroundStyle(outgoing ? Color.white : Color.primary)
         .tint(outgoing ? Color.white : Color.accentColor)

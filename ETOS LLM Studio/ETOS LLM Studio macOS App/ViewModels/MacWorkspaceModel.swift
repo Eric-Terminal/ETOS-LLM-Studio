@@ -235,7 +235,10 @@ final class MacWorkspaceModel: ObservableObject {
         service.providersSubject.receive(on: DispatchQueue.main).sink { [weak self] providers in
             self?.providers = providers
             self?.refreshModels()
+            self?.refreshMessagePresentation()
         }.store(in: &subscriptions)
+        AppConfigStore.shared.$messageActionBarSettings.dropFirst().receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.refreshMessagePresentation() }.store(in: &subscriptions)
         service.selectedModelSubject.receive(on: DispatchQueue.main).sink { [weak self] model in
             self?.selectedModelID = model?.id
             self?.refreshEffectiveModel()
@@ -328,6 +331,7 @@ final class MacWorkspaceModel: ObservableObject {
         let userPreviewLimit = AppConfigStore.shared.userMessagePreviewCharacterLimit
         let appearance = appearance.activeProfile
         let lineSpacing = AppConfigStore.shared.fontLineSpacingEmIOS
+        let actionBar = AppConfigStore.shared.messageActionBarSettings, providers = providers
         let fontModel = fonts
         let store = presentationStore
         var scriptSessionIDs = runningSessionIDs
@@ -337,7 +341,8 @@ final class MacWorkspaceModel: ObservableObject {
             guard !Task.isCancelled else { return }
             guard let prepared = try? await store.prepareWorkspace(snapshot, markdown: markdown, language: language, sessionID: sessionID,
                                                                  scriptSessionIDs: scriptSessionIDs, service: service, userPreviewLimit: userPreviewLimit,
-                                                                 appearance: appearance, lineSpacing: lineSpacing, advanced: advanced) else { return }
+                                                                 appearance: appearance, lineSpacing: lineSpacing, advanced: advanced,
+                                                                 actionBar: actionBar, providers: providers) else { return }
             guard let self, !Task.isCancelled, presentationRevision == revision else { return }
             roleplayRuntime.apply(prepared, workspace: self)
             messages = prepared.rows

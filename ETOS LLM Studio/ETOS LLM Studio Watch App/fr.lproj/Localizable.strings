@@ -8097,3 +8097,25 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "调整后可回到聊天中查看效果。" = "Revenez au chat pour voir le résultat.";
 
 "飞入速度 %.2f s" = "Réponse d'entrée %.2f s";
+
+"Mac 消息功能栏使用说明" = "Choisissez les messages de l’assistant ou de l’utilisateur, puis ajoutez, retirez ou déplacez les éléments. Le premier part du bord choisi : de gauche à droite ou de droite à gauche. Bordure et échelle du texte s’appliquent aux deux rôles. L’échelle multiplie celle du corps du texte ; une fenêtre étroite permet le défilement horizontal.\n\nSeuls les éléments disponibles apparaissent. L’heure correspond au début de la requête ; un nombre de jetons absent ne devient pas zéro. Le coût utilise d’abord le tarif enregistré avec le message, sinon les tarifs actuels du modèle. Survolez le coût pour voir sa source. Copier utilise le texte original complet et la lecture vocale les réglages TTS actuels. Masquer la barre conserve les actions du menu contextuel.\n\nLes changements restent dans un brouillon jusqu’à Enregistrer. Quitter la page abandonne les modifications non enregistrées. Si une autre fenêtre change les réglages, rechargez-les. Après confirmation, le guide peut modifier les éléments, leur ordre, l’alignement, la bordure et l’échelle du rôle choisi. L’enregistrement reste manuel ; le guide ne peut pas exécuter d’actions sur les messages.";
+
+"修改仅保留在草稿中，点击保存后应用。" = "Les modifications restent dans le brouillon jusqu’à l’enregistrement.";
+
+"功能栏字号" = "Échelle du texte de la barre d’actions";
+
+"功能栏配置已在其他位置更改，请重新载入后编辑。" = "Les réglages ont changé ailleurs. Rechargez-les avant de les modifier.";
+
+"字体缩放 %.0f%%" = "Échelle du texte %.0f%%";
+
+"当前没有启用的项目" = "Aucun élément activé";
+
+"按当前价格估算：%@" = "Estimation aux tarifs actuels : %@";
+
+"请求时间：%@" = "Heure de la requête : %@";
+
+"费用：%@" = "Coût : %@";
+
+"输入 Token：%@" = "Jetons d’entrée : %@";
+
+"输出 Token：%@" = "Jetons de sortie : %@";

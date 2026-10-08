@@ -8020,3 +8020,25 @@
 "调整后可回到聊天中查看效果。" = "Return to chat to see your changes.";
 
 "飞入速度 %.2f s" = "Fly-in Response %.2f s";
+
+"Mac 消息功能栏使用说明" = "Choose assistant or user messages, then add, remove or move items up and down. The first item starts at the chosen edge: left to right for leading alignment, right to left for trailing alignment. Border and font scale apply to both roles. Font scale multiplies the body’s global scale; narrow windows can scroll the bar horizontally.\n\nItems appear only when the message has the data or action. Request time is when the request began; missing token counts do not appear as zero. Cost uses the message’s saved pricing snapshot when available, otherwise current model pricing. Hover over cost to see its source. Copy always uses complete original text, and read aloud uses current TTS settings. Hiding the bar leaves context menu actions available.\n\nChanges remain in a draft until Save. Leaving discards unsaved edits. If another window changes the settings, reload before editing. With confirmation, the guide can adjust items, order, alignment, border and font scale for the selected role. You still choose Save yourself; the guide cannot perform message actions.";
+
+"修改仅保留在草稿中，点击保存后应用。" = "Changes stay in the draft until you save.";
+
+"功能栏字号" = "Action Bar Font Scale";
+
+"功能栏配置已在其他位置更改，请重新载入后编辑。" = "Action bar settings changed elsewhere. Reload before editing.";
+
+"字体缩放 %.0f%%" = "Font scale %.0f%%";
+
+"当前没有启用的项目" = "No items enabled";
+
+"按当前价格估算：%@" = "Estimated at current prices: %@";
+
+"请求时间：%@" = "Request time: %@";
+
+"费用：%@" = "Cost: %@";
+
+"输入 Token：%@" = "Input tokens: %@";
+
+"输出 Token：%@" = "Output tokens: %@";

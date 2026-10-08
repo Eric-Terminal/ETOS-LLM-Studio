@@ -329,9 +329,20 @@ public final class AppConfigStore: ObservableObject {
             write(.chatStreamingDisplayMode, chatStreamingDisplayMode)
         }
     }
+    private var isApplyingPreparedMessageActionBar = false
+
+    /// 调用方先在后台准备；仍经由同一数据库写入队列，备份与退出可等待待写任务。
+    public func applyPreparedMessageActionBarSettings(_ prepared: PreparedMessageActionBarConfiguration) {
+        isApplyingPreparedMessageActionBar = true
+        defer { isApplyingPreparedMessageActionBar = false }
+        messageActionBarSettings = prepared.configuration
+        messageActionBarConfiguration = prepared.rawValue
+    }
+
     @Published public var messageActionBarConfiguration: String {
         didSet {
             write(.messageActionBarConfiguration, messageActionBarConfiguration)
+            guard !isApplyingPreparedMessageActionBar else { return }
             let decoded = MessageActionBarConfiguration.decoded(from: messageActionBarConfiguration)
             if messageActionBarSettings != decoded {
                 messageActionBarSettings = decoded
@@ -340,6 +351,7 @@ public final class AppConfigStore: ObservableObject {
     }
     @Published public var messageActionBarSettings: MessageActionBarConfiguration {
         didSet {
+            guard !isApplyingPreparedMessageActionBar else { return }
             let encoded = messageActionBarSettings.encodedString()
             if messageActionBarConfiguration != encoded {
                 messageActionBarConfiguration = encoded
