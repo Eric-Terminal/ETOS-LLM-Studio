@@ -5,11 +5,17 @@ import UniformTypeIdentifiers
 
 @MainActor
 struct MacChatView: View {
+    let showSessions: () -> Void
     @State private var viewportHeight: CGFloat = 0
     @State private var viewportBounds = CGRect.zero
     @State private var composerBounds = CGRect.zero
     @State private var sendRevision = UUID()
     @StateObject private var sendMotion = MacSendMotionModel()
+    @StateObject private var slashComposer = MacSlashCommandComposerModel()
+    @Environment(\.openSettings) private var openSettings
+    @FocusState private var composerFocused: Bool
+    @State private var slashDestination: MacChatQuickActionDestination?
+    @State private var showsSlashModelPicker = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var workspace: MacWorkspaceModel
     @ObservedObject private var configuration = AppConfigStore.shared
@@ -109,11 +115,14 @@ struct MacChatView: View {
             }
         }
         .coordinateSpace(name: MacMessageEntryMotion.coordinateSpace)
-        .onAppear { isVisible = true; workspace.setRoleplayHostVisible(true) }
-        .onDisappear { isVisible = false; sendMotion.cancel(); importing = false; showsBrowser = false; linuxJobsTarget = nil; speechSource = nil; workspace.setRoleplayHostVisible(false) }
-        .onChange(of: workspace.currentSession?.id) { _, _ in sendMotion.cancel(); showsBrowser = false; linuxJobsTarget = nil; speechSource = nil }
-        .onChange(of: workspace.canManageLocalModels) { _, available in if !available { sendMotion.cancel() } }
-        .onChange(of: appLock.state) { _, state in if state == .locked { sendMotion.cancel() } }
+        .onAppear { isVisible = true; workspace.setRoleplayHostVisible(true); refreshSlashCommands() }
+        .onDisappear { isVisible = false; sendMotion.cancel(); importing = false; showsBrowser = false; linuxJobsTarget = nil; speechSource = nil; workspace.setRoleplayHostVisible(false); slashComposer.invalidate(); slashDestination = nil; showsSlashModelPicker = false }
+        .onChange(of: workspace.currentSession?.id) { _, _ in sendMotion.cancel(); showsBrowser = false; linuxJobsTarget = nil; speechSource = nil; slashComposer.invalidate(); refreshSlashCommands() }
+        .onChange(of: workspace.canManageLocalModels) { _, available in if !available { sendMotion.cancel() }; refreshSlashCommands() }
+        .onChange(of: appLock.state) { _, state in if state == .locked { sendMotion.cancel(); slashComposer.invalidate(); slashDestination = nil; showsSlashModelPicker = false } }
+        .onChange(of: workspace.draft) { _, _ in refreshSlashCommands(inputChanged: true) }
+        .onChange(of: configuration.enableSlashCommands) { _, _ in refreshSlashCommands() }
+        .onReceive(workspace.slashCommands.$revision) { _ in refreshSlashCommands() }
         .onChange(of: reduceMotion) { _, reduce in if reduce { sendMotion.cancel() } }
         .onChange(of: configuration.chatSendAnimationEnabled) { _, enabled in if !enabled { sendMotion.cancel() } }
         .onChange(of: workspace.linux.epoch) { _, _ in linuxJobsTarget = nil }
@@ -133,10 +142,11 @@ struct MacChatView: View {
             id: GuidePageID(rawValue: "mac-chat-\(workspace.currentSession?.id.uuidString ?? "none")"),
             title: NSLocalizedString("对话", comment: ""),
             documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace"),
-                        GuideDocumentReference(id: "local-models", title: "Local Models"), GuideDocumentReference(id: "tts", title: "Text to Speech")],
+                        GuideDocumentReference(id: "local-models", title: "Local Models"), GuideDocumentReference(id: "tts", title: "Text to Speech"),
+                        GuideDocumentReference(id: "slash-commands", title: "Quick Commands")],
             isActive: isVisible && workspace.canManageLocalModels && !importing && editingMessage == nil
                 && rewritingMessage == nil && deletingMessage == nil && !showsRequestControls && !showsBrowser && linuxJobsTarget == nil && speechSource == nil && !workspace.tts.isExportPanelOpen && !workspace.backgrounds.isPresentingMedia && !workspace.fonts.isImportPanelOpen
-                && workspace.contextCompression.optionsSession == nil && !workspace.contextCompression.showsDetails,
+                && workspace.contextCompression.optionsSession == nil && !workspace.contextCompression.showsDetails && slashDestination == nil && !showsSlashModelPicker,
             settings: [
                 .readOnly("attachment_count", label: NSLocalizedString("附件", comment: ""), value: { .int(workspace.attachments.count) }),
                 .readOnly("has_audio_draft", label: NSLocalizedString("语音输入", comment: ""), value: { .bool(workspace.audioAttachment != nil) }),
@@ -153,6 +163,8 @@ struct MacChatView: View {
         .sheet(item: $speechSource) { MacSpeechRecorderView(model: workspace.speechInput, source: $0) }
         .sheet(isPresented: $showsRequestControls) { MacRequestRuntimeView(model: workspace.requestControls) }
         .modifier(MacContextCompressionHost(model: workspace.contextCompression))
+        .sheet(item: $slashDestination) { MacChatQuickActionSheet(target: $0) }
+        .sheet(isPresented: $showsSlashModelPicker) { MacSlashCommandModelPicker() }
         .sheet(item: $linuxJobsTarget) { target in
             NavigationStack {
                 MacLinuxJobsView(isActive: isVisible && workspace.canManageLocalModels, runtime: workspace.linux, sessionID: target.sessionID)
@@ -216,8 +228,70 @@ struct MacChatView: View {
         workspace.send { [weak model = sendMotion] presentation in model?.accept(presentation, for: id) }
     }
 
+    private func refreshSlashCommands(inputChanged: Bool = false) {
+        guard isVisible, workspace.canManageLocalModels else { slashComposer.invalidate(); return }
+        slashComposer.refresh(text: workspace.draft, sessionID: workspace.currentSession?.id,
+            enabled: configuration.enableSlashCommands, catalog: workspace.slashCommands.catalog, inputChanged: inputChanged)
+    }
+
+    private func submitComposer() {
+        guard isVisible, workspace.canManageLocalModels else { return }
+        let sessionID = workspace.currentSession?.id, revision = workspace.slashCommands.revision
+        let enabled = configuration.enableSlashCommands
+        Task {
+            guard let result = await slashComposer.resolve(text: workspace.draft, sessionID: sessionID,
+                enabled: enabled, catalog: workspace.slashCommands.catalog),
+                  isVisible, workspace.canManageLocalModels, workspace.currentSession?.id == sessionID,
+                  workspace.service?.currentSessionSubject.value?.id == sessionID,
+                  workspace.slashCommands.revision == revision, configuration.enableSlashCommands == enabled,
+                  workspace.draft == result.text else { return }
+            if let suggestion = result.recognized { performSlashCommand(suggestion) }
+            else { sendMessage() }
+        }
+    }
+
+    private func performSlashCommand(_ suggestion: ChatSlashCommandSuggestion) {
+        guard isVisible, workspace.canManageLocalModels, configuration.enableSlashCommands else { return }
+        sendMotion.cancel()
+        switch suggestion {
+        case .custom(let command):
+            guard workspace.slashCommands.catalog?.commandsByID[command.id] == command else { return }
+            slashComposer.markCustomPrefill(command.prompt); workspace.draft = command.prompt; composerFocused = true
+            refreshSlashCommands()
+        case .builtIn(let command):
+            workspace.draft = ""; slashComposer.invalidate()
+            switch MacSlashCommandRoute(command) {
+            case .new: workspace.newSession()
+            case .model: composerFocused = false; showsSlashModelPicker = true
+            case .sessions: composerFocused = false; showSessions()
+            case .settings: composerFocused = false; openSettings()
+            case .daily: composerFocused = false; workspace.dailyPulse.showsWindow = true
+            case .page(let page):
+                composerFocused = false
+                slashDestination = MacChatQuickActionDestination(page: page, sessionID: workspace.currentSession?.id,
+                    isTemporary: workspace.temporaryChatMemoryMode != nil)
+            case .temporary: workspace.slashCommands.actions.temporary(workspace: workspace)
+            case .compact:
+                if workspace.contextCompression.canCompress { composerFocused = false; workspace.contextCompression.openOptions() }
+                else { workspace.errorMessage = NSLocalizedString("当前会话没有可以压缩的对话内容。", comment: "") }
+            case .retry: workspace.slashCommands.actions.retry(workspace: workspace)
+            case .stop:
+                if workspace.isGenerating || workspace.isPreparingSend { workspace.stop() }
+                else { workspace.errorMessage = NSLocalizedString("当前没有正在生成的回复。", comment: "") }
+            case .clear: workspace.clearComposer()
+            }
+        }
+    }
+
     private var composer: some View {
         VStack(alignment: .leading) {
+            if configuration.enableSlashCommands {
+                MacSlashCommandSuggestionsView(model: slashComposer) { suggestion, text, sessionID in
+                    guard workspace.draft == text, workspace.currentSession?.id == sessionID,
+                          workspace.service?.currentSessionSubject.value?.id == sessionID else { return }
+                    performSlashCommand(suggestion)
+                }
+            }
             if let audio = workspace.audioAttachment {
                 HStack(alignment: .top) {
                     MacAudioPreviewView(attachment: audio, isActive: isVisible && workspace.canManageLocalModels && speechSource == nil)
@@ -245,6 +319,23 @@ struct MacChatView: View {
                 }
             }
             TextEditor(text: $workspace.draft)
+                .focused($composerFocused)
+                .onKeyPress(.upArrow) {
+                    guard slashComposer.input?.text == workspace.draft else { return .ignored }
+                    return slashComposer.moveSelection(-1) ? .handled : .ignored
+                }
+                .onKeyPress(.downArrow) {
+                    guard slashComposer.input?.text == workspace.draft else { return .ignored }
+                    return slashComposer.moveSelection(1) ? .handled : .ignored
+                }
+                .onKeyPress(.tab) {
+                    guard slashComposer.input?.text == workspace.draft, let selected = slashComposer.selectedSuggestion() else { return .ignored }
+                    workspace.draft = selected.invocation; return .handled
+                }
+                .onKeyPress(.escape) {
+                    guard slashComposer.input?.rows.isEmpty == false else { return .ignored }
+                    slashComposer.dismissSuggestions(); return .handled
+                }
                 .font(.body)
                 .frame(minHeight: 60, maxHeight: 140)
                 .accessibilityLabel(NSLocalizedString("消息", comment: ""))
@@ -272,12 +363,17 @@ struct MacChatView: View {
                 } label: { Label(NSLocalizedString("任务与终端", comment: ""), systemImage: "list.bullet.rectangle") }
                     .disabled(workspace.currentSession == nil || !workspace.canManageLocalModels || workspace.linux.isSuspended)
                 Spacer()
-                if workspace.isGenerating || workspace.isPreparingSend {
+                if configuration.enableSlashCommands && workspace.draft.first == "/" {
+                    Button(slashComposer.input?.recognized == nil ? NSLocalizedString("发送", comment: "") : NSLocalizedString("执行指令", comment: ""), action: submitComposer)
+                        .keyboardShortcut(.return, modifiers: .command)
+                        .disabled(!workspace.canManageLocalModels || workspace.slashCommands.catalog == nil || slashComposer.isResolving
+                            || (slashComposer.input?.recognized == nil && !workspace.canSend))
+                } else if workspace.isGenerating || workspace.isPreparingSend {
                     Button { workspace.stop() } label: {
                         Label(NSLocalizedString("停止生成", comment: ""), systemImage: "stop.fill")
                     }
                 } else {
-                    Button { sendMessage() } label: {
+                    Button { submitComposer() } label: {
                         Label(NSLocalizedString("发送", comment: ""), systemImage: "arrow.up")
                     }
                     .buttonStyle(.borderedProminent)

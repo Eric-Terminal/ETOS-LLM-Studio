@@ -75,7 +75,7 @@ struct MacChatQuickActionsView: View {
 }
 
 @MainActor
-private struct MacChatQuickActionSheet: View {
+struct MacChatQuickActionSheet: View {
     let target: MacChatQuickActionDestination
     @EnvironmentObject private var workspace: MacWorkspaceModel
     @Environment(\.dismiss) private var dismiss

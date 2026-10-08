@@ -11,14 +11,17 @@ struct MacWorkspaceView: View {
     @State private var sessionToDelete: ChatSession?
     @State private var sessionToBind: ChatSession?
     @State private var sessionToRoleplay: ChatSession?
+    @State private var columnVisibility = NavigationSplitViewVisibility.all
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             MacSessionLibrarySidebar(model: workspace.sessionLibrary)
         } content: {
             MacSessionListView(model: workspace.sessionLibrary, edit: { sessionToEdit = $0 }, delete: { sessionToDelete = $0 })
         } detail: {
-            MacChatView()
+            MacChatView(showSessions: {
+                workspace.sessionLibrary.scope = .all; workspace.sessionLibrary.query = ""; columnVisibility = .all
+            })
                 .navigationTitle(workspace.currentSession?.name ?? NSLocalizedString("新的对话", comment: ""))
                 .toolbar {
                     ToolbarItem { MacChatQuickActionsView() }

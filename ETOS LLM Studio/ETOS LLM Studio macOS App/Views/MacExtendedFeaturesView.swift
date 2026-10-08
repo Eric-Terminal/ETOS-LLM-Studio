@@ -15,6 +15,8 @@ struct MacExtendedFeaturesView: View {
                     details: NSLocalizedString("Mac 拓展功能入口说明", comment: ""), documentID: "chat-quick-actions", isActive: available)
             }
             Section {
+                NavigationLink { MacSlashCommandSettingsView(isActive: available, model: workspace.slashCommands) }
+                    label: { Label(NSLocalizedString("快速指令", comment: ""), systemImage: "command") }
                 NavigationLink { MacLocalModelLibraryView(isActive: available, library: workspace.localModels) }
                     label: { Label(NSLocalizedString("本地模型", comment: ""), systemImage: "cpu") }
                 NavigationLink { MacLinuxView(isActive: available, model: workspace.linux) }
@@ -39,9 +41,11 @@ struct MacExtendedFeaturesView: View {
         .onDisappear { visible = false }
         .guideSettingsPageContext(id: "mac-extended-features", title: NSLocalizedString("拓展功能", comment: ""),
             documents: [GuideDocumentReference(id: "chat-quick-actions", title: "Chat Quick Actions"),
+                GuideDocumentReference(id: "slash-commands", title: "Quick Commands"),
                 GuideDocumentReference(id: "data-import", title: "Data Import"),
                 GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")], isActive: available && visible,
             settings: [
+                .readOnly("slash_commands_require_navigation", label: NSLocalizedString("快速指令", comment: ""), value: { .bool(true) }),
                 .readOnly("local_models_require_navigation", label: NSLocalizedString("本地模型", comment: ""), value: { .bool(true) }),
                 .readOnly("linux_requires_navigation", label: NSLocalizedString("本地 Linux", comment: ""), value: { .bool(true) }),
                 .readOnly("backup_requires_navigation", label: NSLocalizedString("快照备份", comment: ""), value: { .bool(true) }),

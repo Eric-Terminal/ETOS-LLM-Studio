@@ -34,7 +34,7 @@ final class MacWorkspaceModel: ObservableObject {
     @Published private(set) var isExportingSnapshot = false
     @Published private var isEditingHistory = false
     private(set) var isMutatingHistory: Bool {
-        get { isEditingHistory || contextCompression.isWorking }
+        get { isEditingHistory || contextCompression.isWorking || slashCommands.actions.isWorking }
         set { isEditingHistory = newValue }
     }
     @Published private(set) var attachments: [MacComposerAttachment] = []
@@ -80,6 +80,7 @@ final class MacWorkspaceModel: ObservableObject {
     let linux = MacLinuxModel()
     let dailyPulse = MacDailyPulseModel()
     let contextCompression = MacContextCompressionModel()
+    let slashCommands = MacSlashCommandsModel()
     let dataImportOperations = MacDataImportOperations()
     private(set) var externalOpenRevision = UUID()
     lazy var incomingDocuments = MacIncomingDocumentsModel(
@@ -174,6 +175,7 @@ final class MacWorkspaceModel: ObservableObject {
         browser.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
         linux.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
         contextCompression.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
+        slashCommands.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
         incomingDocuments.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
         speechInput.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
         tts.$isExportPanelOpen.dropFirst().sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &subscriptions)
@@ -317,7 +319,7 @@ final class MacWorkspaceModel: ObservableObject {
                 builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
                 browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); backgrounds.suspend(); appearance.suspend(); fonts.suspend(); linux.suspend()
                 incomingDocuments.suspend(acceptNewFiles: !isRestoringData && !isExportingSnapshot && !isClosingRoleplay)
-                dailyPulse.suspend(); contextCompression.suspend(); dataImportOperations.cancelPreviews()
+                dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); dataImportOperations.cancelPreviews()
             }
             else { self?.resumeRoleplayPresentation(); self?.resumeRequestControls(); self?.flushToolSupplements() }
         }.store(in: &subscriptions)
@@ -384,7 +386,7 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     func prepareForTermination() async {
-        dailyPulse.suspend(); contextCompression.suspend()
+        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend()
         isClosingRoleplay = true
         externalOpenRevision = UUID()
         // 退出时不能让等待控件落盘的发送任务随后发出新请求。
@@ -404,7 +406,7 @@ final class MacWorkspaceModel: ObservableObject {
         if let service {
             for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
         }
-        await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations()
+        await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations(); await slashCommands.waitForPendingOperations()
         await localModels.waitForPendingWrites()
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
@@ -589,11 +591,6 @@ final class MacWorkspaceModel: ObservableObject {
             }
         }
         try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
-    }
-
-    func selectModel(_ id: String?) {
-        guard let service, let model = models.first(where: { $0.id == id }) else { return }
-        Task.detached(priority: .userInitiated) { service.setSelectedModel(model) }
     }
 
     func saveRoleplayData(_ source: RoleplayDataDraft, values: [String: JSONValue], message: ChatMessage?) async throws -> RoleplayDataDraft {
@@ -812,6 +809,7 @@ final class MacWorkspaceModel: ObservableObject {
 
     func removeAttachment(_ id: UUID) { attachments.removeAll { $0.id == id } }
     func removeAudioAttachment() { audioAttachment = nil }
+    func clearComposer() { incomingDocuments.invalidateAttachmentContext(); draft = ""; attachments.removeAll(); audioAttachment = nil }
 
     func applySpeechInput(_ result: MacSpeechInputResult, source: MacSpeechInputSource) -> Bool {
         guard canManageLocalModels, currentSession?.id == source.sessionID, incomingDocuments.contextID == source.composerContextID else { return false }
@@ -825,7 +823,7 @@ final class MacWorkspaceModel: ObservableObject {
     func beginSnapshotExport() -> Bool {
         guard !isRestoringData, !isMutatingHistory, !roleplayRuntime.isBusy, !sessionLibrary.isWorking, !worldbookModel.isWorking, !roleplayModel.isWorking, !isExportingSnapshot, !SnapshotUploadManager.shared.isUploading else { return false }
         isExportingSnapshot = true
-        dailyPulse.suspend(); contextCompression.suspend(); dataImportOperations.cancelPreviews()
+        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); dataImportOperations.cancelPreviews()
         externalOpenRevision = UUID()
         modelTests.cancelAll()
         localModels.suspend()
@@ -849,6 +847,7 @@ final class MacWorkspaceModel: ObservableObject {
         requestControls.resume()
         dailyPulse.start(workspace: self); dailyPulse.resume()
         contextCompression.start(workspace: self); contextCompression.resume()
+        slashCommands.resume()
         localModels.resume()
         shortcutTools.resume()
         builtInTools.resume(); toolApproval.resume(); skills.resume()
@@ -875,7 +874,7 @@ final class MacWorkspaceModel: ObservableObject {
             ])
         }
         isRestoringData = true
-        dailyPulse.suspend(); contextCompression.suspend()
+        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend()
         externalOpenRevision = UUID()
         modelTests.cancelAll()
         localModels.suspend()
@@ -895,7 +894,7 @@ final class MacWorkspaceModel: ObservableObject {
         }
         await modelTests.cancelAndWait(); await dataImportOperations.cancelAndWaitForPreviews()
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
-        await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations()
+        await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations(); await slashCommands.waitForPendingOperations()
         await localModels.waitForPendingWrites()
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
@@ -932,7 +931,7 @@ final class MacWorkspaceModel: ObservableObject {
             ])
         }
         isRestoringData = true
-        dailyPulse.suspend(); contextCompression.suspend()
+        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend()
         externalOpenRevision = UUID()
         modelTests.cancelAll()
         localModels.suspend()
@@ -946,7 +945,7 @@ final class MacWorkspaceModel: ObservableObject {
         defer { isRestoringData = false; resumeRoleplayPresentation(); resumeRequestControls() }
         await modelTests.cancelAndWait(); await dataImportOperations.cancelAndWaitForPreviews()
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
-        await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations()
+        await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations(); await slashCommands.waitForPendingOperations()
         await localModels.waitForPendingWrites()
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
