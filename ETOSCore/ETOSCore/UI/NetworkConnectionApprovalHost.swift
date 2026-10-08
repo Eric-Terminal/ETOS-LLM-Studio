@@ -10,6 +10,7 @@ import SwiftUI
 
 @MainActor
 private struct NetworkConnectionApprovalHost: ViewModifier {
+    let isEnabled: Bool
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var center = NetworkConnectionApprovalCenter.shared
     #if os(iOS)
@@ -19,10 +20,11 @@ private struct NetworkConnectionApprovalHost: ViewModifier {
     #endif
 
     private var isPresentationActive: Bool {
+        guard isEnabled else { return false }
         #if os(macOS)
-        NSApplication.shared.isActive && appLock.state != .locked
+        return NSApplication.shared.isActive && appLock.state != .locked
         #else
-        scenePhase == .active
+        return scenePhase == .active
         #endif
     }
 
@@ -37,6 +39,7 @@ private struct NetworkConnectionApprovalHost: ViewModifier {
             .onChange(of: scenePhase) { _, _ in
                 center.setActive(isPresentationActive)
             }
+            .onChange(of: isEnabled) { _, _ in center.setActive(isPresentationActive) }
             #if os(macOS)
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                 center.setActive(isPresentationActive)
@@ -125,7 +128,7 @@ private struct NetworkConnectionApprovalHost: ViewModifier {
 
 @MainActor
 extension View {
-    public func networkConnectionApprovalHost() -> some View {
-        modifier(NetworkConnectionApprovalHost())
+    public func networkConnectionApprovalHost(isEnabled: Bool = true) -> some View {
+        modifier(NetworkConnectionApprovalHost(isEnabled: isEnabled))
     }
 }

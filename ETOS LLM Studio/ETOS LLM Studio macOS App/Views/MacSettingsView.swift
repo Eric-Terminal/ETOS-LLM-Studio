@@ -69,17 +69,7 @@ struct MacSettingsView: View {
             .tabItem { Label(NSLocalizedString("数据管理", comment: ""), systemImage: "externaldrive") }
             .tag(Tab.data)
             NavigationStack {
-                AppLockSettingsView()
-                    .guidePageContext(
-                        descriptor: GuidePageDescriptor(
-                            id: "mac-security", title: NSLocalizedString("安全", comment: ""),
-                            documents: [GuideDocumentReference(id: "app-lock", title: "App Lock")]
-                        ),
-                        isFallback: true, isActive: selectedTab == .security,
-                        snapshot: { GuidePageSnapshot(fields: [
-                            "password": GuideSnapshotField(label: NSLocalizedString("密码", comment: ""), value: .string(GuideSnapshotField.hiddenValue), access: .writeOnly)
-                        ]) }
-                    )
+                MacSecuritySettingsView(isActive: selectedTab == .security)
             }
             .tabItem { Label(NSLocalizedString("安全", comment: ""), systemImage: "lock.shield") }
             .tag(Tab.security)
@@ -95,7 +85,7 @@ struct MacSettingsView: View {
             MacGuideView().inspectorColumnWidth(min: 300, ideal: 360, max: 500)
         }
         .overlay { if appLock.state == .locked { AppLockOverlayView() } }
-        .networkConnectionApprovalHost()
+        .networkConnectionApprovalHost(isEnabled: workspace.canManageLocalModels)
         .onChange(of: configuration.appLanguage) { _, language in
             AppLanguageRuntime.apply(rawValue: language)
         }

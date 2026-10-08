@@ -82,6 +82,7 @@ final class MacWorkspaceModel: ObservableObject {
     let contextCompression = MacContextCompressionModel()
     let slashCommands = MacSlashCommandsModel()
     let dataImportOperations = MacDataImportOperations()
+    let connectionSecurity = MacConnectionSecurityModel()
     private(set) var externalOpenRevision = UUID()
     lazy var incomingDocuments = MacIncomingDocumentsModel(
         library: localModels,
@@ -319,7 +320,7 @@ final class MacWorkspaceModel: ObservableObject {
                 builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
                 browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); backgrounds.suspend(); appearance.suspend(); fonts.suspend(); linux.suspend()
                 incomingDocuments.suspend(acceptNewFiles: !isRestoringData && !isExportingSnapshot && !isClosingRoleplay)
-                dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); dataImportOperations.cancelPreviews()
+                dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); connectionSecurity.suspend(); dataImportOperations.cancelPreviews()
             }
             else { self?.resumeRoleplayPresentation(); self?.resumeRequestControls(); self?.flushToolSupplements() }
         }.store(in: &subscriptions)
@@ -386,7 +387,7 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     func prepareForTermination() async {
-        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend()
+        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); connectionSecurity.suspend()
         isClosingRoleplay = true
         externalOpenRevision = UUID()
         // 退出时不能让等待控件落盘的发送任务随后发出新请求。
@@ -406,7 +407,7 @@ final class MacWorkspaceModel: ObservableObject {
         if let service {
             for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
         }
-        await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations(); await slashCommands.waitForPendingOperations()
+        await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations(); await slashCommands.waitForPendingOperations(); await connectionSecurity.waitForPendingOperations()
         await localModels.waitForPendingWrites()
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
@@ -823,7 +824,7 @@ final class MacWorkspaceModel: ObservableObject {
     func beginSnapshotExport() -> Bool {
         guard !isRestoringData, !isMutatingHistory, !roleplayRuntime.isBusy, !sessionLibrary.isWorking, !worldbookModel.isWorking, !roleplayModel.isWorking, !isExportingSnapshot, !SnapshotUploadManager.shared.isUploading else { return false }
         isExportingSnapshot = true
-        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); dataImportOperations.cancelPreviews()
+        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); connectionSecurity.suspend(); dataImportOperations.cancelPreviews()
         externalOpenRevision = UUID()
         modelTests.cancelAll()
         localModels.suspend()
@@ -847,7 +848,7 @@ final class MacWorkspaceModel: ObservableObject {
         requestControls.resume()
         dailyPulse.start(workspace: self); dailyPulse.resume()
         contextCompression.start(workspace: self); contextCompression.resume()
-        slashCommands.resume()
+        slashCommands.resume(); connectionSecurity.resume()
         localModels.resume()
         shortcutTools.resume()
         builtInTools.resume(); toolApproval.resume(); skills.resume()
@@ -874,7 +875,7 @@ final class MacWorkspaceModel: ObservableObject {
             ])
         }
         isRestoringData = true
-        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend()
+        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); connectionSecurity.suspend()
         externalOpenRevision = UUID()
         modelTests.cancelAll()
         localModels.suspend()
@@ -894,7 +895,7 @@ final class MacWorkspaceModel: ObservableObject {
         }
         await modelTests.cancelAndWait(); await dataImportOperations.cancelAndWaitForPreviews()
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
-        await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations(); await slashCommands.waitForPendingOperations()
+        await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations(); await slashCommands.waitForPendingOperations(); await connectionSecurity.waitForPendingOperations()
         await localModels.waitForPendingWrites()
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
@@ -904,18 +905,18 @@ final class MacWorkspaceModel: ObservableObject {
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()
-        await mcp.prepareForDatabaseRestore()
+        await NetworkConnectionSecurity.shared.prepareForDatabaseRestore(); await mcp.prepareForDatabaseRestore()
         do {
             await AppConfigStore.shared.flushPendingWrites()
             await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
             let summary = try await operation(service)
             didRestore = true
             await refreshRestoredData(service)
-            await mcp.finishDatabaseRestore()
+            await NetworkConnectionSecurity.shared.finishDatabaseRestore(); await mcp.finishDatabaseRestore()
             AppLockManager.shared.refreshState()
             return summary
         } catch {
-            await mcp.finishDatabaseRestore()
+            await NetworkConnectionSecurity.shared.finishDatabaseRestore(); await mcp.finishDatabaseRestore()
             throw error
         }
     }
@@ -931,7 +932,7 @@ final class MacWorkspaceModel: ObservableObject {
             ])
         }
         isRestoringData = true
-        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend()
+        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); connectionSecurity.suspend()
         externalOpenRevision = UUID()
         modelTests.cancelAll()
         localModels.suspend()
@@ -945,7 +946,7 @@ final class MacWorkspaceModel: ObservableObject {
         defer { isRestoringData = false; resumeRoleplayPresentation(); resumeRequestControls() }
         await modelTests.cancelAndWait(); await dataImportOperations.cancelAndWaitForPreviews()
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
-        await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations(); await slashCommands.waitForPendingOperations()
+        await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations(); await slashCommands.waitForPendingOperations(); await connectionSecurity.waitForPendingOperations()
         await localModels.waitForPendingWrites()
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
@@ -955,13 +956,13 @@ final class MacWorkspaceModel: ObservableObject {
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()
-        await mcp.prepareForDatabaseRestore()
+        await NetworkConnectionSecurity.shared.prepareForDatabaseRestore(); await mcp.prepareForDatabaseRestore()
         await AppConfigStore.shared.flushPendingWrites()
         await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
         // 异步清理期间裁决可能已失效，核心再次核对 ID 后才允许覆盖。
         await cloud.resolveInitialConflict(using: resolution, expectedConflictID: conflictID)
         await refreshRestoredData(service)
-        await mcp.finishDatabaseRestore()
+        await NetworkConnectionSecurity.shared.finishDatabaseRestore(); await mcp.finishDatabaseRestore()
         AppLockManager.shared.refreshState()
         if case .failed(let reason) = cloud.state {
             throw NSError(domain: "ETOSMacCloudSync", code: 1, userInfo: [NSLocalizedDescriptionKey: reason])

@@ -87,7 +87,7 @@ struct MacWorkspaceView: View {
                 sessionToDelete = nil
             }
         }
-        .networkConnectionApprovalHost()
+        .networkConnectionApprovalHost(isEnabled: workspace.canManageLocalModels)
         .modifier(MacDailyPulseHost(model: workspace.dailyPulse))
         .overlay { if appLock.state == .locked { AppLockOverlayView() } }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
