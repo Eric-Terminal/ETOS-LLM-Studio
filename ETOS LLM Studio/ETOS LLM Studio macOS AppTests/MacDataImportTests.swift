@@ -134,7 +134,7 @@ struct MacDataImportTests {
         release.continuation.yield(())
         await operations.waitForCompletion()
         let summary = try await caller.value
-        #expect(summary?.importedSessions == 1)
+        #expect(summary.importedSessions == 1)
     }
 
     @Test("数据库恢复排空仍在读取的预览，取消结果不会继续成为新预览")

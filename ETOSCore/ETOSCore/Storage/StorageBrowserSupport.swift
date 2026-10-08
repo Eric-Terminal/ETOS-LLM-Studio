@@ -363,6 +363,7 @@ public enum StorageBrowserSupport {
         var hasNextPage = false
 
         while let row = try cursor.next() {
+            try Task.checkCancellation()
             if skippedRows < rowsToSkip {
                 skippedRows += 1
                 continue

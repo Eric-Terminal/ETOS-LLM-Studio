@@ -10,7 +10,7 @@ import Foundation
 import SwiftUI
 
 /// 文件信息模型
-public struct FileItem: Identifiable, Hashable {
+public struct FileItem: Identifiable, Hashable, Sendable {
     public let id: String
     public let name: String
     public let url: URL
@@ -29,7 +29,7 @@ public struct FileItem: Identifiable, Hashable {
 }
 
 /// 存储类别
-public enum StorageCategory: String, CaseIterable, Identifiable {
+public enum StorageCategory: String, CaseIterable, Identifiable, Sendable {
     case sessions = "ChatSessions"
     case audio = "AudioFiles"
     case images = "ImageFiles"
@@ -90,7 +90,7 @@ public enum StorageCategory: String, CaseIterable, Identifiable {
 }
 
 /// 存储统计信息
-public struct StorageBreakdown {
+public struct StorageBreakdown: Sendable {
     public var totalSize: Int64 = 0
     public var categorySize: [StorageCategory: Int64] = [:]
     public var otherSize: Int64 = 0

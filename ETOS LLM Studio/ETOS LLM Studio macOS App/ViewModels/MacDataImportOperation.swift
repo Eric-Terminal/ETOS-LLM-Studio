@@ -21,7 +21,7 @@ enum MacDataImportOperation {
 
 @MainActor
 final class MacDataImportOperations {
-    private var pending: Task<SyncMergeSummary?, Error>?
+    private var pending: Task<Void, Never>?
     private var previews: [UUID: (cancel: () -> Void, completion: Task<Void, Never>)] = [:]
 
     func trackPreview<Value>(_ worker: Task<Value, Error>) -> UUID {
@@ -41,14 +41,14 @@ final class MacDataImportOperations {
         for id in pending.keys { previews.removeValue(forKey: id) }
     }
 
-    func perform(_ operation: @escaping @MainActor () async throws -> SyncMergeSummary?) async throws -> SyncMergeSummary? {
+    func perform<Value>(_ operation: @escaping @MainActor () async throws -> Value) async throws -> Value {
         guard pending == nil else { throw MacMemoryWriteError.busy }
-        // 原生确认后的写入由工作区持有，关页或退出不得取消一半的合并。
+        // 导入与存储清理由工作区持有，关页或退出不得取消一半的写入。
         let task = Task { @MainActor in try await operation() }
-        pending = task
+        pending = Task { _ = await task.result }
         defer { pending = nil }
         return try await task.value
     }
 
-    func waitForCompletion() async { _ = try? await pending?.value }
+    func waitForCompletion() async { await pending?.value }
 }

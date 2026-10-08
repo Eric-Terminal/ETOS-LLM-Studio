@@ -860,10 +860,10 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     func importData(_ operation: MacDataImportOperation) async throws -> SyncMergeSummary? {
-        try await dataImportOperations.perform { try await self.performDataImport(operation) }
+        try await dataImportOperations.perform { try await self.performDataMaintenance { try await operation.apply(using: $0) } }
     }
 
-    private func performDataImport(_ operation: MacDataImportOperation) async throws -> SyncMergeSummary? {
+    func performDataMaintenance<Value>(_ operation: (ChatService) async throws -> Value) async throws -> Value {
         let cloud = CloudSyncManager.shared
         let mcp = MCPManager.shared
         guard canManageLocalModels, !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, !worldbookModel.isWorking, !roleplayModel.isWorking, !isExportingSnapshot, !memoryModel.isWorking, !conversationMemoryModel.isWorking, sendingSessionIDs.isEmpty,
@@ -908,7 +908,7 @@ final class MacWorkspaceModel: ObservableObject {
         do {
             await AppConfigStore.shared.flushPendingWrites()
             await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
-            let summary = try await operation.apply(using: service)
+            let summary = try await operation(service)
             didRestore = true
             await refreshRestoredData(service)
             await mcp.finishDatabaseRestore()

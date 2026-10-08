@@ -49,16 +49,19 @@ struct MacSettingsView: View {
                     NavigationLink(NSLocalizedString("iCloud 漫游同步", comment: "")) { MacCloudSyncView() }
                     NavigationLink(NSLocalizedString("导入数据", comment: "")) { MacDataImportView(isActive: selectedTab == .data) }
                     NavigationLink(NSLocalizedString("用量统计", comment: "")) { MacUsageAnalyticsView(isActive: selectedTab == .data) }
+                    NavigationLink(NSLocalizedString("存储管理", comment: "")) { MacStorageManagementView(isActive: selectedTab == .data) }
                 }
                 .navigationTitle(NSLocalizedString("数据管理", comment: ""))
                 .guideSettingsPageContext(
                     id: "mac-data", title: NSLocalizedString("数据管理", comment: ""),
                     documents: SnapshotBackupGuideSupport.documents + [GuideDocumentReference(id: "settings-sync", title: "Sync Settings"),
                         GuideDocumentReference(id: "usage-analytics", title: "Usage Analytics"),
+                        GuideDocumentReference(id: "storage-management", title: "Storage Management"),
                         GuideDocumentReference(id: "data-import", title: "Data Import")], isActive: selectedTab == .data,
                     settings: [
                         .readOnly("restoring", label: NSLocalizedString("正在恢复快照…", comment: ""), value: { .bool(workspace.isRestoringData) }),
                         .readOnly("import_requires_navigation", label: NSLocalizedString("导入数据", comment: ""), value: { .bool(true) }),
+                        .readOnly("storage_requires_navigation", label: NSLocalizedString("存储管理", comment: ""), value: { .bool(true) }),
                         .readOnly("usage_requires_navigation", label: NSLocalizedString("用量统计", comment: ""), value: { .bool(true) })
                     ]
                 )

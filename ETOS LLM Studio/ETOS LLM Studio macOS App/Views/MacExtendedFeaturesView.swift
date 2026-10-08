@@ -23,6 +23,8 @@ struct MacExtendedFeaturesView: View {
                     label: { Label(NSLocalizedString("本地 Linux", comment: ""), systemImage: "terminal") }
             }
             Section(NSLocalizedString("数据管理", comment: "")) {
+                NavigationLink { MacStorageManagementView(isActive: available) }
+                    label: { Label(NSLocalizedString("存储管理", comment: ""), systemImage: "internaldrive") }
                 NavigationLink { MacBackupRestoreView() }
                     label: { Label(NSLocalizedString("快照备份", comment: ""), systemImage: "externaldrive") }
                 NavigationLink { MacCloudSyncView() }
@@ -43,6 +45,7 @@ struct MacExtendedFeaturesView: View {
             documents: [GuideDocumentReference(id: "chat-quick-actions", title: "Chat Quick Actions"),
                 GuideDocumentReference(id: "slash-commands", title: "Quick Commands"),
                 GuideDocumentReference(id: "data-import", title: "Data Import"),
+                GuideDocumentReference(id: "storage-management", title: "Storage Management"),
                 GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")], isActive: available && visible,
             settings: [
                 .readOnly("slash_commands_require_navigation", label: NSLocalizedString("快速指令", comment: ""), value: { .bool(true) }),
@@ -51,6 +54,7 @@ struct MacExtendedFeaturesView: View {
                 .readOnly("backup_requires_navigation", label: NSLocalizedString("快照备份", comment: ""), value: { .bool(true) }),
                 .readOnly("sync_requires_navigation", label: NSLocalizedString("iCloud 漫游同步", comment: ""), value: { .bool(true) }),
                 .readOnly("import_requires_navigation", label: NSLocalizedString("导入数据", comment: ""), value: { .bool(true) }),
+                .readOnly("storage_requires_navigation", label: NSLocalizedString("存储管理", comment: ""), value: { .bool(true) }),
                 .readOnly("security_requires_navigation", label: NSLocalizedString("应用锁", comment: ""), value: { .bool(true) })
             ])
     }
