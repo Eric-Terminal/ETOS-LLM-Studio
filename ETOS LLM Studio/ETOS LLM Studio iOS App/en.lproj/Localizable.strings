@@ -8083,3 +8083,30 @@
 "无法播放此音频。" = "This audio could not be played.";
 "Mac 语音草稿说明" = "Recording, transcription and playback do not send messages. Insert text or add audio to the draft, review it, then send manually.";
 "Mac 语音输入使用说明" = "Enable voice input to show the chat microphone. Choose AAC for a smaller M4A file or WAV for uncompressed audio. The microphone opens a recording window; Start requests permission and begins recording. Stop to preview, pause, seek or record again.\n\nFor text, choose a transcription model, click Transcribe after recording, edit the result, then insert it into the draft. Automatic uses the first available entry, normally the system recognizer. Remote models use an OpenAI Audio Transcriptions compatible endpoint; local models use their configured decoder and VAD. System recognition may need a network connection.\n\nRaw-audio mode adds or replaces one pending audio attachment. Use it with a chat model that accepts audio. You can preview or remove it in the composer; Send remains a separate action. Unsent audio is kept in memory. Closing the recording window, switching conversations or locking cancels unfinished work. The guide can change settings but cannot record, transcribe, play audio or read the transcript.";
+
+/* Mac 朗读设置、服务草稿及播放控制 */
+"Mac 朗读使用说明" = "System uses Mac voices; Cloud uses the selected service; Auto tries cloud if system speech fails. Choose an installed voice or enter its identifier. Watch parameters only affect watchOS.\n\nRight-click a message to read it. Autoplay only handles newly completed requests in the current conversation, never opened history. Controls pause, replay, seek cloud audio and export. Background permission does not start playback. Audio stays in memory and is cleared on conversation changes, lock or quit.";
+"Mac 朗读参数草稿说明" = "Save to apply mode, autoplay, rate, pitch, voice and Watch parameters. Rate and pitch affect system speech; playback speed affects cloud audio.";
+"Mac 朗读行为立即保存说明" = "Behavior options and service selection save immediately. Speech parameters above and service editor drafts require Save. Preview, export and deletion are manual actions.";
+"Mac 语音服务使用说明" = "Choose a protocol, then enter its endpoint, key, model and voice. Edit the advanced fields supported by that service. Changing protocol resets defaults and clears the old key; restoring recommended parameters keeps the endpoint and key.\n\nPreview uses the draft and sends example text to the cloud service. Save applies the configuration. Existing keys are hidden from the guide. Confirmed guide proposals only edit drafts; they do not play, export or save.";
+"Voice / Voice ID / Reference ID" = "Voice / Voice ID / Reference ID";
+"云端朗读" = "Cloud";
+"你好，这是一段语音试听。" = "Hello, this is a speech preview.";
+"删除语音服务" = "Delete Speech Service";
+"前进 10 秒" = "Forward 10 Seconds";
+"后退 10 秒" = "Back 10 Seconds";
+"导出音频" = "Export Speech Audio";
+"手表朗读字数上限" = "watchOS Max Reading Characters";
+"播放倍速" = "Playback Speed";
+"朗读方式" = "Mode";
+"朗读设置" = "TTS Settings";
+"朗读语速" = "System Speech Rate";
+"系统朗读" = "System";
+"继续播放" = "Resume Reading";
+"行为" = "Reading Behavior";
+"试听" = "Preview Current Settings";
+"语音输出" = "Text to Speech";
+"过滤代码和 HTML" = "Filter Code and HTML Tags";
+"选择" = "Select";
+"配置不完整" = "The current TTS service configuration is incomplete.";
+"音调" = "System Pitch";

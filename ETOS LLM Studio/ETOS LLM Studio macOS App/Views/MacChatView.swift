@@ -37,6 +37,8 @@ struct MacChatView: View {
                                         NSPasteboard.general.clearContents()
                                         NSPasteboard.general.setString(row.message.content, forType: .string)
                                     }
+                                    MacReadAloudButton(model: workspace.tts, message: row.message,
+                                        sessionID: workspace.currentSession?.id, isActive: workspace.canManageLocalModels)
                                     Button(NSLocalizedString("编辑", comment: "")) {
                                         if let sessionID = workspace.currentSession?.id { editingMessage = MacMessageEditTarget(message: row.message, sessionID: sessionID) }
                                     }
@@ -91,6 +93,7 @@ struct MacChatView: View {
                 }
             }
             Divider()
+            MacTTSPlaybackView(model: workspace.tts, isActive: workspace.canManageLocalModels).padding(.horizontal)
             MacRoleplayScriptHost(runtime: workspace.roleplayRuntime).padding(.horizontal)
             if configuration.localModelPerformanceMonitorEnabled && workspace.selectedModelIsLocal && workspace.canManageLocalModels {
                 MacLocalResourceUsageView()
@@ -123,12 +126,13 @@ struct MacChatView: View {
             id: GuidePageID(rawValue: "mac-chat-\(workspace.currentSession?.id.uuidString ?? "none")"),
             title: NSLocalizedString("对话", comment: ""),
             documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace"),
-                        GuideDocumentReference(id: "local-models", title: "Local Models")],
+                        GuideDocumentReference(id: "local-models", title: "Local Models"), GuideDocumentReference(id: "tts", title: "Text to Speech")],
             isActive: isVisible && workspace.canManageLocalModels && !importing && editingMessage == nil
-                && rewritingMessage == nil && deletingMessage == nil && !showsRequestControls && !showsBrowser && linuxJobsTarget == nil && speechSource == nil,
+                && rewritingMessage == nil && deletingMessage == nil && !showsRequestControls && !showsBrowser && linuxJobsTarget == nil && speechSource == nil && !workspace.tts.isExportPanelOpen,
             settings: [
                 .readOnly("attachment_count", label: NSLocalizedString("附件", comment: ""), value: { .int(workspace.attachments.count) }),
                 .readOnly("has_audio_draft", label: NSLocalizedString("语音输入", comment: ""), value: { .bool(workspace.audioAttachment != nil) }),
+                .readOnly("tts_playback_status", label: NSLocalizedString("语音输出", comment: ""), value: { .string(workspace.tts.player.playbackState.status.rawValue) }),
                 .readOnly("importing_files", label: NSLocalizedString("处理中", comment: ""), value: { .bool(workspace.isImportingAttachments) }),
                 .readOnly("imported_local_models", label: NSLocalizedString("本地模型", comment: ""), value: { .int(workspace.incomingDocuments.importedModelCount) }),
                 .readOnly("requires_manual_send", label: NSLocalizedString("发送", comment: ""), value: { .bool(true) })

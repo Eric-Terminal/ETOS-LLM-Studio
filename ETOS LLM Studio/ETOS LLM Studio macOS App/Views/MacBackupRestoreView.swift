@@ -131,6 +131,7 @@ struct MacBackupRestoreView: View {
                 try await workspace.linux.waitForPendingOperations()
                 await workspace.incomingDocuments.waitForPendingOperations()
                 await workspace.speechInput.waitForPendingOperations()
+                await workspace.tts.waitForPendingOperations()
                 await workspace.requestControls.waitForPendingWrites()
                 await configuration.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()

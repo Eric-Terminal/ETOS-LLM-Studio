@@ -69,6 +69,7 @@ final class MacWorkspaceModel: ObservableObject {
     let agentPrompts = MacAgentPromptModel()
     let globalProxy = MacGlobalProxyModel()
     let speechInput = MacSpeechInputModel()
+    let tts = MacTTSModel()
     let linux = MacLinuxModel()
     private(set) var externalOpenRevision = UUID()
     lazy var incomingDocuments = MacIncomingDocumentsModel(
@@ -150,6 +151,7 @@ final class MacWorkspaceModel: ObservableObject {
         let service = await Task.detached(priority: .userInitiated) { ChatService.shared }.value
         self.service = service
         speechInput.start(service: service)
+        tts.start(service: service)
         bind(service)
         sessionLibrary.start(service: service, workspace: self)
         worldbookModel.start(service: service, workspace: self)
@@ -160,6 +162,7 @@ final class MacWorkspaceModel: ObservableObject {
         linux.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
         incomingDocuments.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
         speechInput.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
+        tts.$isExportPanelOpen.dropFirst().sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &subscriptions)
         configuration.$appLanguage.dropFirst().sink { [weak self] _ in self?.requestControls.reload() }.store(in: &subscriptions)
         sessionLibrary.$isWorking.dropFirst().sink { [weak self] working in
             self?.objectWillChange.send()
@@ -197,6 +200,7 @@ final class MacWorkspaceModel: ObservableObject {
         service.currentSessionSubject.receive(on: DispatchQueue.main).sink { [weak self] session in
             if self?.currentSession?.id != session?.id {
                 self?.speechInput.cancel()
+                self?.tts.showSession(session?.id)
                 self?.presentationTask?.cancel()
                 self?.presentationRevision = UUID()
                 self?.sourceMessages = []
@@ -273,7 +277,7 @@ final class MacWorkspaceModel: ObservableObject {
                 suspendRoleplayPresentation(); requestControls.suspend(); modelTests.cancelAll(); localModels.suspend()
                 shortcutTools.suspend()
                 builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-                browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); linux.suspend()
+                browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); linux.suspend()
                 incomingDocuments.suspend(acceptNewFiles: !isRestoringData && !isExportingSnapshot && !isClosingRoleplay)
             }
             else { self?.resumeRoleplayPresentation(); self?.resumeRequestControls(); self?.flushToolSupplements() }
@@ -341,7 +345,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.suspend()
         shortcutTools.suspend()
         builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); linux.suspend()
+        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); linux.suspend()
         incomingDocuments.suspend()
         await modelTests.cancelAndWait()
         // KV 清理可能等待正在推理的上下文；先取消生成，退出不能排在清理锁后面等待。
@@ -352,7 +356,7 @@ final class MacWorkspaceModel: ObservableObject {
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
         await browser.waitForPendingOperations(); await agentPrompts.waitForPendingWrites(); await globalProxy.waitForPendingWrites(); try? await linux.waitForPendingOperations()
-        await incomingDocuments.waitForPendingOperations(); await speechInput.waitForPendingOperations()
+        await incomingDocuments.waitForPendingOperations(); await speechInput.waitForPendingOperations(); await tts.waitForPendingOperations()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()
@@ -769,7 +773,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.suspend()
         shortcutTools.suspend()
         builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); linux.suspend()
+        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); linux.suspend()
         incomingDocuments.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
@@ -788,7 +792,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.resume()
         shortcutTools.resume()
         builtInTools.resume(); toolApproval.resume(); skills.resume()
-        browser.resume(); agentPrompts.resume(); globalProxy.resume(); speechInput.resume(); linux.resume()
+        browser.resume(); agentPrompts.resume(); globalProxy.resume(); speechInput.resume(); tts.resume(); linux.resume()
         incomingDocuments.resume(sessionID: currentSession?.id)
     }
 
@@ -808,7 +812,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.suspend()
         shortcutTools.suspend()
         builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); linux.suspend()
+        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); linux.suspend()
         incomingDocuments.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
@@ -826,7 +830,7 @@ final class MacWorkspaceModel: ObservableObject {
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
         await browser.waitForPendingOperations(); await agentPrompts.waitForPendingWrites(); await globalProxy.waitForPendingWrites(); try await linux.waitForPendingOperations()
-        await incomingDocuments.waitForPendingOperations(); await speechInput.waitForPendingOperations()
+        await incomingDocuments.waitForPendingOperations(); await speechInput.waitForPendingOperations(); await tts.waitForPendingOperations()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()
@@ -863,7 +867,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.suspend()
         shortcutTools.suspend()
         builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); linux.suspend()
+        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); linux.suspend()
         incomingDocuments.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
@@ -875,7 +879,7 @@ final class MacWorkspaceModel: ObservableObject {
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
         await browser.waitForPendingOperations(); await agentPrompts.waitForPendingWrites(); await globalProxy.waitForPendingWrites(); try await linux.waitForPendingOperations()
-        await incomingDocuments.waitForPendingOperations(); await speechInput.waitForPendingOperations()
+        await incomingDocuments.waitForPendingOperations(); await speechInput.waitForPendingOperations(); await tts.waitForPendingOperations()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()

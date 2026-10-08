@@ -261,9 +261,11 @@ public final class TTSManager: NSObject, ObservableObject {
     }
 
     public var canReplayLastRequest: Bool {
-        guard let request = lastReplayRequest else { return false }
-        return !request.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        // 仅非空的已预处理分段会保存重播请求；视图查询时无需再次扫描整篇正文。
+        lastReplayRequest != nil
     }
+
+    public var canSeekCurrentAudio: Bool { audioPlayback != nil && playbackState.duration > 0 }
 
     /// 重新朗读上一条成功提交的文本，便于在播放结束后快速重试
     public func replayLastRequest() {
