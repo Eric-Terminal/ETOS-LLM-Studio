@@ -8042,3 +8042,37 @@
 "输入 Token：%@" = "Input tokens: %@";
 
 "输出 Token：%@" = "Output tokens: %@";
+
+"%@ · %@ Token" = "%@ · %@ tokens";
+
+"%@ 次请求 · %@ Token" = "%@ requests · %@ tokens";
+
+"%@，请求 %@ 次，Token %@，错误 %@" = "%@, %@ requests, %@ tokens, %@ errors";
+
+"Mac 用量统计使用说明" = "Overview totals cover all recorded usage and do not change with the detail filters. Select a heatmap or calendar date, then choose day, week, month or all time. Day view shows hourly token trends. Model bars use the same time buckets; expand model and source rankings for details.\n\nTotal tokens follow Core accounting without adding thinking or cache tokens twice. Missing cache rates show “No data”. Costs are estimated from current model prices and request times. An absent cost total is hidden and does not prove no cost occurred. This differs from the message action bar, which prefers saved pricing snapshots. Unrecorded history cannot be reconstructed from chat messages.\n\nNew usage, sync and price changes refresh the page automatically; manual refresh is also available. Leaving or locking clears the display and stops subscriptions. Returning keeps your date and scope while loading fresh data. The guide can explain loaded totals but cannot change filters, refresh, clear records or read raw request bodies.";
+
+"Token 占比" = "Token share";
+
+"上个月" = "Previous month";
+
+"下个月" = "Next month";
+
+"对话数" = "Conversations";
+
+"小时" = "Hour";
+
+"日期" = "Date";
+
+"日期下方为 Token 数，点击日期查看对应范围。" = "Token counts appear below each date. Select a date to view its range.";
+
+"暂无数据" = "No data";
+
+"最常使用的模型" = "Most used model";
+
+"模型分布" = "Model breakdown";
+
+"活跃热力图" = "Activity heatmap";
+
+"趋势明细" = "Trend details";
+
+"图表显示 Token 用量最高的三个模型。" = "The chart shows the three models with the highest token usage.";

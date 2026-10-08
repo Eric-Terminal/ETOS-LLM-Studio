@@ -8272,3 +8272,37 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "输入 Token：%@" = "Jetons d’entrée : %@";
 
 "输出 Token：%@" = "Jetons de sortie : %@";
+
+"%@ · %@ Token" = "%@ · %@ jetons";
+
+"%@ 次请求 · %@ Token" = "%@ requêtes · %@ jetons";
+
+"%@，请求 %@ 次，Token %@，错误 %@" = "%@, %@ requêtes, %@ jetons, %@ erreurs";
+
+"Mac 用量统计使用说明" = "La vue d’ensemble couvre tout l’usage enregistré, indépendamment des filtres de détail. Choisissez une date sur la carte ou le calendrier, puis jour, semaine, mois ou toute la période. Le jour affiche des tendances horaires. Les modèles utilisent les mêmes créneaux ; développez les classements par modèle et source.\n\nLe total suit Core sans compter deux fois les jetons de réflexion ou de cache. Un taux inconnu affiche « Aucune donnée ». Le coût est estimé avec les tarifs actuels et l’heure des requêtes. Un coût absent est masqué, sans prouver la gratuité. Cette règle diffère de la barre des messages, qui privilégie les tarifs enregistrés. Les requêtes non enregistrées ne peuvent pas être reconstituées à partir des messages.\n\nUsage, synchronisation et prix déclenchent une actualisation, également possible manuellement. Quitter ou verrouiller efface l’affichage et arrête les abonnements. Au retour, date et période sont conservées et les données rechargées. Le guide explique les totaux chargés sans modifier les filtres, actualiser, effacer les données ou lire les requêtes brutes.";
+
+"Token 占比" = "Part des jetons";
+
+"上个月" = "Mois précédent";
+
+"下个月" = "Mois suivant";
+
+"对话数" = "Conversations";
+
+"小时" = "Heure";
+
+"日期" = "Date";
+
+"日期下方为 Token 数，点击日期查看对应范围。" = "Les jetons figurent sous chaque date. Sélectionnez une date pour consulter sa période.";
+
+"暂无数据" = "Aucune donnée";
+
+"最常使用的模型" = "Modèle le plus utilisé";
+
+"模型分布" = "Répartition par modèle";
+
+"活跃热力图" = "Carte d’activité";
+
+"趋势明细" = "Détails de la tendance";
+
+"图表显示 Token 用量最高的三个模型。" = "Le graphique montre les trois modèles consommant le plus de jetons.";

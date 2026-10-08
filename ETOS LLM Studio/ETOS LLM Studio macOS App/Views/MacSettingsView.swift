@@ -45,12 +45,17 @@ struct MacSettingsView: View {
                 List {
                     NavigationLink(NSLocalizedString("快照备份", comment: "")) { MacBackupRestoreView() }
                     NavigationLink(NSLocalizedString("iCloud 漫游同步", comment: "")) { MacCloudSyncView() }
+                    NavigationLink(NSLocalizedString("用量统计", comment: "")) { MacUsageAnalyticsView(isActive: selectedTab == .data) }
                 }
                 .navigationTitle(NSLocalizedString("数据管理", comment: ""))
                 .guideSettingsPageContext(
                     id: "mac-data", title: NSLocalizedString("数据管理", comment: ""),
-                    documents: SnapshotBackupGuideSupport.documents + [GuideDocumentReference(id: "settings-sync", title: "Sync Settings")], isActive: selectedTab == .data,
-                    settings: [.readOnly("restoring", label: NSLocalizedString("正在恢复快照…", comment: ""), value: { .bool(workspace.isRestoringData) })]
+                    documents: SnapshotBackupGuideSupport.documents + [GuideDocumentReference(id: "settings-sync", title: "Sync Settings"),
+                        GuideDocumentReference(id: "usage-analytics", title: "Usage Analytics")], isActive: selectedTab == .data,
+                    settings: [
+                        .readOnly("restoring", label: NSLocalizedString("正在恢复快照…", comment: ""), value: { .bool(workspace.isRestoringData) }),
+                        .readOnly("usage_requires_navigation", label: NSLocalizedString("用量统计", comment: ""), value: { .bool(true) })
+                    ]
                 )
             }
             .tabItem { Label(NSLocalizedString("数据管理", comment: ""), systemImage: "externaldrive") }

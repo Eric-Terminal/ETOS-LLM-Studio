@@ -8119,3 +8119,37 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "输入 Token：%@" = "Tokens de entrada: %@";
 
 "输出 Token：%@" = "Tokens de salida: %@";
+
+"%@ · %@ Token" = "%@ · %@ tokens";
+
+"%@ 次请求 · %@ Token" = "%@ solicitudes · %@ tokens";
+
+"%@，请求 %@ 次，Token %@，错误 %@" = "%@, %@ solicitudes, %@ tokens, %@ errores";
+
+"Mac 用量统计使用说明" = "El resumen incluye todo el uso registrado y no cambia con los filtros de detalle. Elija una fecha en el mapa o calendario y luego día, semana, mes o todo. La vista diaria muestra tendencias horarias. Los modelos comparten intervalos de tiempo; despliegue los rankings por modelo y origen.\n\nEl total sigue el cálculo de Core sin sumar dos veces pensamiento o caché. Una tasa desconocida muestra «Sin datos». Los costes se estiman con los precios actuales y la hora de cada solicitud. Si no hay un total de coste se oculta, sin demostrar que no hubo coste. Esta regla difiere de la barra de mensajes, que prioriza precios guardados. El historial no registrado no puede reconstruirse desde los mensajes.\n\nEl nuevo uso, la sincronización y los precios actualizan la página automáticamente; también puede actualizarla manualmente. Salir o bloquear borra la vista y detiene las suscripciones. Al volver se conserva fecha e intervalo y se cargan datos nuevos. La guía explica los totales cargados, pero no cambia filtros, actualiza, borra registros ni lee solicitudes sin procesar.";
+
+"Token 占比" = "Proporción de tokens";
+
+"上个月" = "Mes anterior";
+
+"下个月" = "Mes siguiente";
+
+"对话数" = "Conversaciones";
+
+"小时" = "Hora";
+
+"日期" = "Fecha";
+
+"日期下方为 Token 数，点击日期查看对应范围。" = "Los tokens aparecen debajo de cada fecha. Seleccione una fecha para ver su intervalo.";
+
+"暂无数据" = "Sin datos";
+
+"最常使用的模型" = "Modelo más utilizado";
+
+"模型分布" = "Distribución por modelo";
+
+"活跃热力图" = "Mapa de actividad";
+
+"趋势明细" = "Detalles de la tendencia";
+
+"图表显示 Token 用量最高的三个模型。" = "El gráfico muestra los tres modelos con mayor uso de tokens.";
