@@ -135,6 +135,13 @@ private struct MacProviderEditor: View {
                         MacJSONDraftEditor(pageID: GuidePageID(rawValue: "mac-provider-headers-\(draft.id)"), title: NSLocalizedString("请求头 JSON", comment: ""), kind: .stringDictionary, text: $headers)
                     }
                 } header: { Text(NSLocalizedString("请求头 JSON", comment: "")) }
+                if !LocalModelProviderBridge.isLocalProvider(draft) {
+                    Section {
+                        NavigationLink(NSLocalizedString("独立代理", comment: "")) {
+                            MacProviderProxyView(proxy: $draft.proxyConfiguration, providerID: draft.id, isActive: !isBusy && didPrepare)
+                        }
+                    }
+                }
                 if let error { Text(error).font(.footnote).foregroundStyle(.red) }
             }
             .formStyle(.grouped)
@@ -170,6 +177,7 @@ private struct MacProviderEditor: View {
                 id: GuidePageID(rawValue: "mac-provider-\(draft.id)"), title: NSLocalizedString("提供商配置", comment: ""),
                 documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
                 settings: [
+                    .readOnly("proxy_requires_navigation", label: NSLocalizedString("独立代理", comment: ""), value: { .bool(!LocalModelProviderBridge.isLocalProvider(draft)) }),
                     .readOnly("editing_mode", label: NSLocalizedString("编辑方式", comment: ""), value: { .string("draft_until_save") })
                 ] + (isBusy || !didPrepare || workspace.isRestoringData ? [] : [
                     .string("name", label: NSLocalizedString("名称", comment: ""), get: { draft.name }, set: { draft.name = $0 }),
@@ -239,6 +247,7 @@ private struct MacProviderEditor: View {
                 let saved = updated
                 let original = self.original
                 try await Task.detached {
+                    if let proxy = saved.proxyConfiguration { try NetworkProxyConfigurationLibrary.validate(proxy) }
                     guard service.providersSubject.value.first(where: { $0.id == saved.id }) == original else {
                         throw MCPConfigurationWriteError.changedExternally
                     }
