@@ -8,7 +8,6 @@
 import Combine
 import ETOSCore
 import Foundation
-import UniformTypeIdentifiers
 
 @MainActor
 final class MacWorkspaceModel: ObservableObject {
@@ -35,6 +34,7 @@ final class MacWorkspaceModel: ObservableObject {
     @Published private(set) var isExportingSnapshot = false
     @Published private(set) var isMutatingHistory = false
     @Published private(set) var attachments: [MacComposerAttachment] = []
+    @Published private(set) var audioAttachment: AudioAttachment?
     @Published private(set) var recoveryRequest: Persistence.LaunchRecoveryRequest?
     @Published var errorMessage: String?
     @Published var draft = "" {
@@ -68,6 +68,7 @@ final class MacWorkspaceModel: ObservableObject {
     let browser = MacBrowserModel()
     let agentPrompts = MacAgentPromptModel()
     let globalProxy = MacGlobalProxyModel()
+    let speechInput = MacSpeechInputModel()
     let linux = MacLinuxModel()
     private(set) var externalOpenRevision = UUID()
     lazy var incomingDocuments = MacIncomingDocumentsModel(
@@ -99,7 +100,7 @@ final class MacWorkspaceModel: ObservableObject {
     var canSend: Bool {
         phase == .ready && !isRestoringData && !isMutatingHistory && !roleplayRuntime.isBusy && !sessionLibrary.isWorking && currentSession != nil && effectiveModel != nil && !isGenerating && !isPreparingSend
             && !requestControls.isWorking && !requestControls.isSuspended
-            && !isImportingAttachments && (!draft.isEmpty || !attachments.isEmpty)
+            && !isImportingAttachments && !speechInput.isActive && (!draft.isEmpty || !attachments.isEmpty || audioAttachment != nil)
     }
 
     var canEditRequestControls: Bool {
@@ -148,6 +149,7 @@ final class MacWorkspaceModel: ObservableObject {
         await shortcutTools.start()
         let service = await Task.detached(priority: .userInitiated) { ChatService.shared }.value
         self.service = service
+        speechInput.start(service: service)
         bind(service)
         sessionLibrary.start(service: service, workspace: self)
         worldbookModel.start(service: service, workspace: self)
@@ -157,6 +159,7 @@ final class MacWorkspaceModel: ObservableObject {
         browser.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
         linux.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
         incomingDocuments.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
+        speechInput.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
         configuration.$appLanguage.dropFirst().sink { [weak self] _ in self?.requestControls.reload() }.store(in: &subscriptions)
         sessionLibrary.$isWorking.dropFirst().sink { [weak self] working in
             self?.objectWillChange.send()
@@ -193,6 +196,7 @@ final class MacWorkspaceModel: ObservableObject {
         }.store(in: &subscriptions)
         service.currentSessionSubject.receive(on: DispatchQueue.main).sink { [weak self] session in
             if self?.currentSession?.id != session?.id {
+                self?.speechInput.cancel()
                 self?.presentationTask?.cancel()
                 self?.presentationRevision = UUID()
                 self?.sourceMessages = []
@@ -269,7 +273,7 @@ final class MacWorkspaceModel: ObservableObject {
                 suspendRoleplayPresentation(); requestControls.suspend(); modelTests.cancelAll(); localModels.suspend()
                 shortcutTools.suspend()
                 builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-                browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); linux.suspend()
+                browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); linux.suspend()
                 incomingDocuments.suspend(acceptNewFiles: !isRestoringData && !isExportingSnapshot && !isClosingRoleplay)
             }
             else { self?.resumeRoleplayPresentation(); self?.resumeRequestControls(); self?.flushToolSupplements() }
@@ -337,7 +341,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.suspend()
         shortcutTools.suspend()
         builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); linux.suspend()
+        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); linux.suspend()
         incomingDocuments.suspend()
         await modelTests.cancelAndWait()
         // KV 清理可能等待正在推理的上下文；先取消生成，退出不能排在清理锁后面等待。
@@ -348,7 +352,7 @@ final class MacWorkspaceModel: ObservableObject {
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
         await browser.waitForPendingOperations(); await agentPrompts.waitForPendingWrites(); await globalProxy.waitForPendingWrites(); try? await linux.waitForPendingOperations()
-        await incomingDocuments.waitForPendingOperations()
+        await incomingDocuments.waitForPendingOperations(); await speechInput.waitForPendingOperations()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()
@@ -553,13 +557,15 @@ final class MacWorkspaceModel: ObservableObject {
         guard canSend, let service, let session = currentSession else { return }
         let content = draft
         let attachments = self.attachments
+        let audioAttachment = self.audioAttachment
         let configuration = MacChatRequestConfiguration(AppConfigStore.shared, session: session)
         sendingSessionIDs.insert(session.id)
         draft = ""
         self.attachments = []
+        self.audioAttachment = nil
         sendTasks[session.id] = Task { [weak self] in
             await self?.requestControls.waitForPendingWrites()
-            if !Task.isCancelled { await configuration.send(content, attachments: attachments, through: service, sessionID: session.id) }
+            if !Task.isCancelled { await configuration.send(content, attachments: attachments, audioAttachment: audioAttachment, through: service, sessionID: session.id) }
             self?.sendTasks.removeValue(forKey: session.id)
             self?.sendingSessionIDs.remove(session.id)
             self?.flushToolSupplements()
@@ -744,6 +750,16 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     func removeAttachment(_ id: UUID) { attachments.removeAll { $0.id == id } }
+    func removeAudioAttachment() { audioAttachment = nil }
+
+    func applySpeechInput(_ result: MacSpeechInputResult, source: MacSpeechInputSource) -> Bool {
+        guard canManageLocalModels, currentSession?.id == source.sessionID, incomingDocuments.contextID == source.composerContextID else { return false }
+        switch result {
+        case .audio(let attachment): audioAttachment = attachment
+        case .text(let text): draft += draft.isEmpty ? text : "\n" + text
+        }
+        return true
+    }
 
     func beginSnapshotExport() -> Bool {
         guard !isRestoringData, !isMutatingHistory, !roleplayRuntime.isBusy, !sessionLibrary.isWorking, !worldbookModel.isWorking, !roleplayModel.isWorking, !isExportingSnapshot, !SnapshotUploadManager.shared.isUploading else { return false }
@@ -753,7 +769,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.suspend()
         shortcutTools.suspend()
         builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); linux.suspend()
+        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); linux.suspend()
         incomingDocuments.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
@@ -772,7 +788,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.resume()
         shortcutTools.resume()
         builtInTools.resume(); toolApproval.resume(); skills.resume()
-        browser.resume(); agentPrompts.resume(); globalProxy.resume(); linux.resume()
+        browser.resume(); agentPrompts.resume(); globalProxy.resume(); speechInput.resume(); linux.resume()
         incomingDocuments.resume(sessionID: currentSession?.id)
     }
 
@@ -792,7 +808,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.suspend()
         shortcutTools.suspend()
         builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); linux.suspend()
+        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); linux.suspend()
         incomingDocuments.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
@@ -810,7 +826,7 @@ final class MacWorkspaceModel: ObservableObject {
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
         await browser.waitForPendingOperations(); await agentPrompts.waitForPendingWrites(); await globalProxy.waitForPendingWrites(); try await linux.waitForPendingOperations()
-        await incomingDocuments.waitForPendingOperations()
+        await incomingDocuments.waitForPendingOperations(); await speechInput.waitForPendingOperations()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()
@@ -847,7 +863,7 @@ final class MacWorkspaceModel: ObservableObject {
         localModels.suspend()
         shortcutTools.suspend()
         builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
-        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); linux.suspend()
+        browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); linux.suspend()
         incomingDocuments.suspend()
         suspendRoleplayPresentation()
         requestControls.suspend()
@@ -859,7 +875,7 @@ final class MacWorkspaceModel: ObservableObject {
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
         await browser.waitForPendingOperations(); await agentPrompts.waitForPendingWrites(); await globalProxy.waitForPendingWrites(); try await linux.waitForPendingOperations()
-        await incomingDocuments.waitForPendingOperations()
+        await incomingDocuments.waitForPendingOperations(); await speechInput.waitForPendingOperations()
         await requestControls.waitForPendingWrites()
         await presentationTask?.value
         await roleplayRuntime.waitForPendingActions()
@@ -895,6 +911,7 @@ final class MacWorkspaceModel: ObservableObject {
         }.value
         draft = AppConfigStore.shared.chatComposerDraft
         attachments.removeAll()
+        audioAttachment = nil
         conversationMemoryModel.reload()
         worldbookModel.reloadAfterRestore()
         roleplayModel.reloadAfterRestore()
@@ -911,25 +928,6 @@ struct MacMessageEditTarget: Identifiable, Sendable {
     let message: ChatMessage
     let sessionID: UUID
     var id: String { "\(sessionID)-\(message.id)" }
-}
-
-struct MacComposerAttachment: Identifiable, Sendable {
-    let id: UUID
-    let fileName: String
-    let image: ImageAttachment?
-    let file: FileAttachment?
-
-    init(data: Data, type: UTType, fileName: String) {
-        id = UUID()
-        self.fileName = fileName
-        if type.conforms(to: .image) {
-            image = ImageAttachment(id: id, data: data, mimeType: type.preferredMIMEType ?? "image/png", fileName: fileName)
-            file = nil
-        } else {
-            image = nil
-            file = FileAttachment(id: id, data: data, mimeType: type.preferredMIMEType ?? "application/octet-stream", fileName: fileName)
-        }
-    }
 }
 
 struct MacChatRequestConfiguration {
@@ -967,7 +965,7 @@ struct MacChatRequestConfiguration {
         enhancedPrompt = session.enhancedPrompt
     }
 
-    func send(_ content: String, attachments: [MacComposerAttachment] = [], through service: ChatService, sessionID: UUID) async {
+    func send(_ content: String, attachments: [MacComposerAttachment] = [], audioAttachment: AudioAttachment? = nil, through service: ChatService, sessionID: UUID) async {
         await service.sendAndProcessMessage(
             content: content, aiTemperature: temperature, aiTopP: topP,
             systemPrompt: systemPrompt, maxChatHistory: historyLimit,
@@ -975,7 +973,7 @@ struct MacChatRequestConfiguration {
             enableMemory: memory, enableMemoryWrite: memoryWrite, enableMemoryActiveRetrieval: memoryRetrieval,
             includeSystemTime: systemTime, systemTimeInjectionPosition: timePosition,
             enablePeriodicTimeLandmark: timeLandmark, periodicTimeLandmarkIntervalMinutes: timeLandmarkMinutes,
-            enableResponseSpeedMetrics: speedMetrics, imageAttachments: attachments.compactMap(\.image),
+            enableResponseSpeedMetrics: speedMetrics, audioAttachment: audioAttachment, imageAttachments: attachments.compactMap(\.image),
             fileAttachments: attachments.compactMap(\.file), targetSessionID: sessionID
         )
     }

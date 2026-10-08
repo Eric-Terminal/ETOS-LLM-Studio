@@ -11,7 +11,7 @@ import Foundation
 // MARK: - 音频录制格式
 
 /// 音频录制格式枚举
-public enum AudioRecordingFormat: String, CaseIterable, Codable {
+public enum AudioRecordingFormat: String, CaseIterable, Codable, Sendable {
     case aac = "aac"
     case wav = "wav"
 

@@ -130,6 +130,7 @@ struct MacBackupRestoreView: View {
                 await workspace.globalProxy.waitForPendingWrites()
                 try await workspace.linux.waitForPendingOperations()
                 await workspace.incomingDocuments.waitForPendingOperations()
+                await workspace.speechInput.waitForPendingOperations()
                 await workspace.requestControls.waitForPendingWrites()
                 await configuration.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()

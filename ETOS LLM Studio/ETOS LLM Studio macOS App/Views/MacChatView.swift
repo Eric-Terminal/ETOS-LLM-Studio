@@ -16,6 +16,7 @@ struct MacChatView: View {
     @State private var showsRequestControls = false
     @State private var showsBrowser = false
     @State private var linuxJobsTarget: MacLinuxJobsTarget?
+    @State private var speechSource: MacSpeechInputSource?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -103,8 +104,8 @@ struct MacChatView: View {
             } else { composer }
         }
         .onAppear { isVisible = true; workspace.setRoleplayHostVisible(true) }
-        .onDisappear { isVisible = false; importing = false; showsBrowser = false; linuxJobsTarget = nil; workspace.setRoleplayHostVisible(false) }
-        .onChange(of: workspace.currentSession?.id) { _, _ in showsBrowser = false; linuxJobsTarget = nil }
+        .onDisappear { isVisible = false; importing = false; showsBrowser = false; linuxJobsTarget = nil; speechSource = nil; workspace.setRoleplayHostVisible(false) }
+        .onChange(of: workspace.currentSession?.id) { _, _ in showsBrowser = false; linuxJobsTarget = nil; speechSource = nil }
         .onChange(of: workspace.linux.epoch) { _, _ in linuxJobsTarget = nil }
         .onChange(of: workspace.incomingDocuments.contextID) { _, _ in importing = false; importContext = nil }
         .dropDestination(for: URL.self) { urls, _ in
@@ -124,9 +125,10 @@ struct MacChatView: View {
             documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace"),
                         GuideDocumentReference(id: "local-models", title: "Local Models")],
             isActive: isVisible && workspace.canManageLocalModels && !importing && editingMessage == nil
-                && rewritingMessage == nil && deletingMessage == nil && !showsRequestControls && !showsBrowser && linuxJobsTarget == nil,
+                && rewritingMessage == nil && deletingMessage == nil && !showsRequestControls && !showsBrowser && linuxJobsTarget == nil && speechSource == nil,
             settings: [
                 .readOnly("attachment_count", label: NSLocalizedString("附件", comment: ""), value: { .int(workspace.attachments.count) }),
+                .readOnly("has_audio_draft", label: NSLocalizedString("语音输入", comment: ""), value: { .bool(workspace.audioAttachment != nil) }),
                 .readOnly("importing_files", label: NSLocalizedString("处理中", comment: ""), value: { .bool(workspace.isImportingAttachments) }),
                 .readOnly("imported_local_models", label: NSLocalizedString("本地模型", comment: ""), value: { .int(workspace.incomingDocuments.importedModelCount) }),
                 .readOnly("requires_manual_send", label: NSLocalizedString("发送", comment: ""), value: { .bool(true) })
@@ -136,6 +138,7 @@ struct MacChatView: View {
             MacMessageEditor(message: target.message, sessionID: target.sessionID)
         }
         .sheet(item: $rewritingMessage) { MacMessageRewriteView(target: $0) }
+        .sheet(item: $speechSource) { MacSpeechRecorderView(model: workspace.speechInput, source: $0) }
         .sheet(isPresented: $showsRequestControls) { MacRequestRuntimeView(model: workspace.requestControls) }
         .sheet(item: $linuxJobsTarget) { target in
             NavigationStack {
@@ -174,6 +177,17 @@ struct MacChatView: View {
         )
     }
 
+    private func openSpeechRecorder() {
+        guard workspace.canManageLocalModels, let sessionID = workspace.currentSession?.id else { return }
+        let model = configuration.sendSpeechAsAudio ? nil : workspace.speechInput.catalog.resolve(configuration.speechModelIdentifier)
+        guard configuration.sendSpeechAsAudio || model != nil else {
+            workspace.errorMessage = NSLocalizedString("请选择一个语音转文字模型。", comment: "")
+            return
+        }
+        speechSource = MacSpeechInputSource(sessionID: sessionID, composerContextID: workspace.incomingDocuments.contextID,
+            format: AudioRecordingFormat(rawValue: configuration.audioRecordingFormat) ?? .aac, model: model)
+    }
+
     private func prepareDeletion(_ message: ChatMessage, kind: MessageHistoryDeletionKind) {
         guard let sessionID = workspace.currentSession?.id else { return }
         deletingMessage = MacMessageDeletionTarget(message: message, sessionID: sessionID, kind: kind)
@@ -181,6 +195,12 @@ struct MacChatView: View {
 
     private var composer: some View {
         VStack(alignment: .leading) {
+            if let audio = workspace.audioAttachment {
+                HStack(alignment: .top) {
+                    MacAudioPreviewView(attachment: audio, isActive: isVisible && workspace.canManageLocalModels && speechSource == nil)
+                    Button(NSLocalizedString("移除附件", comment: ""), role: .destructive) { workspace.removeAudioAttachment() }
+                }.buttonStyle(.borderless)
+            }
             if workspace.incomingDocuments.importedModelCount > 0 {
                 Text(String(format: NSLocalizedString("已导入 %d 个本地模型，可在模型管理中查看。", comment: ""), workspace.incomingDocuments.importedModelCount))
                     .font(.footnote).foregroundStyle(.secondary)
@@ -212,6 +232,10 @@ struct MacChatView: View {
                     Label(NSLocalizedString("添加附件", comment: ""), systemImage: "paperclip")
                 }
                 .disabled(workspace.isImportingAttachments || !workspace.canManageLocalModels)
+                if configuration.enableSpeechInput {
+                    Button { openSpeechRecorder() } label: { Label(NSLocalizedString("语音输入", comment: ""), systemImage: "mic") }
+                        .disabled(!workspace.canManageLocalModels || workspace.currentSession == nil)
+                }
                 if workspace.isImportingAttachments { ProgressView().controlSize(.small) }
                 Button { showsRequestControls = true } label: {
                     Label(NSLocalizedString("聊天控制", comment: ""), systemImage: "slider.horizontal.3")

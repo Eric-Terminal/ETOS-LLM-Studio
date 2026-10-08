@@ -16,6 +16,7 @@ public final class SpeechRecordingAudioSession: @unchecked Sendable {
 
     public convenience init() {
         self.init { active in
+#if os(iOS) || os(watchOS) || os(visionOS)
             let session = AVAudioSession.sharedInstance()
             if active {
                 try session.setCategory(.playAndRecord, mode: .spokenAudio, options: [.duckOthers])
@@ -23,6 +24,8 @@ public final class SpeechRecordingAudioSession: @unchecked Sendable {
             } else {
                 try session.setActive(false, options: .notifyOthersOnDeactivation)
             }
+#endif
+            // macOS 的录音设备由 AVAudioRecorder/AVAudioEngine 管理，没有移动端音频会话。
         }
     }
 

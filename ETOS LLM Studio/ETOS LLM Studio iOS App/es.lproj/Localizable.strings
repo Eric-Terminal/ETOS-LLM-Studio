@@ -8145,3 +8145,18 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "重新载入会丢弃当前草稿。" = "Al recargar se descartará el borrador actual.";
 "Mac 提供商代理优先级说明" = "Desactiva el proxy independiente para heredar la configuración global. Con una configuración independiente, desactivar el proxy evita el proxy global de la app. Vuelve al editor del proveedor para guardar.";
 "Mac 代理设置使用说明" = "Elige HTTP/HTTPS o SOCKS5 e introduce un host o una IP sin protocolo ni ruta. Indica el puerto por separado (1–65535). Un nombre de usuario activa la autenticación; la contraseña es opcional. Desactivar el proxy conserva los valores.\n\nLos cambios son borradores hasta que se guardan. Guarda la configuración global aquí y la independiente en el editor del proveedor. Sin configuración independiente, el proveedor hereda el proxy global. Un proxy independiente desactivado evita el proxy global de la app, aunque puede seguir aplicándose el proxy del sistema.\n\nLas nuevas llamadas por la ruta compartida de solicitudes de modelos leen los ajustes guardados; las solicitudes en curso continúan. Esto no cambia la red de macOS ni configura procesos MCP nativos o programas de Linux. Verifica manualmente la conexión en la página de prueba del modelo. La guía puede proponer cambios del borrador, pero no guardar, probar conexiones ni leer nombres de usuario o contraseñas existentes.";
+
+/* Mac 语音录制与草稿预览 */
+"AAC (M4A)" = "AAC (M4A)";
+"WAV" = "WAV";
+"开始录音" = "Iniciar grabación";
+"重新录音" = "Volver a grabar";
+"转写" = "Transcribir";
+"识别结果" = "Transcripción";
+"插入文字" = "Insertar texto";
+"播放" = "Reproducir";
+"暂停" = "Pausar";
+"播放进度" = "Posición de reproducción";
+"无法播放此音频。" = "No se pudo reproducir este audio.";
+"Mac 语音草稿说明" = "Grabar, transcribir y escuchar no envía mensajes. Añade texto o audio al borrador, revísalo y envíalo manualmente.";
+"Mac 语音输入使用说明" = "Activa la entrada de voz para mostrar el micrófono del chat. AAC genera un M4A más pequeño y WAV conserva audio sin comprimir. El micrófono abre la ventana; Iniciar solicita permiso y comienza la grabación. Al detenerla puedes escuchar, pausar, cambiar la posición o volver a grabar.\n\nPara obtener texto, elige un modelo, transcribe la grabación, revisa o edita el resultado e insértalo en el borrador. La selección automática usa la primera entrada, normalmente el reconocimiento del sistema. Los modelos remotos necesitan una API compatible con OpenAI Audio Transcriptions; los locales usan su decodificador y VAD configurados. El reconocimiento del sistema puede requerir Internet.\n\nEl modo de audio original añade o reemplaza un adjunto de audio pendiente. Úsalo con un modelo de chat que acepte audio. Puedes escucharlo o quitarlo en el editor; el envío es manual. El audio no enviado queda en memoria. Cerrar la ventana, cambiar de conversación o bloquear cancela las tareas pendientes. La guía puede cambiar ajustes, pero no grabar, transcribir, reproducir ni leer la transcripción.";

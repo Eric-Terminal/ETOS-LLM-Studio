@@ -7968,3 +7968,18 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "重新载入会丢弃当前草稿。" = "Le rechargement supprimera le brouillon actuel.";
 "Mac 提供商代理优先级说明" = "Désactivez le proxy indépendant pour hériter de la configuration globale. Avec une configuration indépendante, désactiver le proxy ignore le proxy global de l’app. Revenez à l’éditeur du fournisseur pour enregistrer.";
 "Mac 代理设置使用说明" = "Choisissez HTTP/HTTPS ou SOCKS5, puis saisissez un hôte ou une IP sans protocole ni chemin. Saisissez le port séparément (1–65535). Un nom d’utilisateur active l’authentification ; le mot de passe est facultatif. La désactivation conserve les valeurs saisies.\n\nLes modifications restent un brouillon jusqu’à l’enregistrement. Enregistrez la configuration globale ici et la configuration indépendante dans l’éditeur du fournisseur. Sans configuration indépendante, le fournisseur hérite du proxy global. Un proxy indépendant désactivé ignore celui de l’app, mais les réglages proxy du système peuvent encore s’appliquer.\n\nLes nouveaux appels via le circuit partagé de requêtes aux modèles lisent les réglages enregistrés ; les requêtes en cours continuent. Cela ne modifie pas le réseau macOS et ne configure pas les processus MCP natifs ni les programmes Linux. Vérifiez manuellement la connexion depuis la page de test du modèle. Le guide peut proposer des modifications du brouillon, mais ne peut ni enregistrer, ni tester la connexion, ni lire les identifiants existants.";
+
+/* Mac 语音录制与草稿预览 */
+"AAC (M4A)" = "AAC (M4A)";
+"WAV" = "WAV";
+"开始录音" = "Enregistrer";
+"重新录音" = "Réenregistrer";
+"转写" = "Transcrire";
+"识别结果" = "Transcription";
+"插入文字" = "Insérer le texte";
+"播放" = "Lire";
+"暂停" = "Pause";
+"播放进度" = "Position de lecture";
+"无法播放此音频。" = "Impossible de lire cet audio.";
+"Mac 语音草稿说明" = "L’enregistrement, la transcription et l’écoute n’envoient aucun message. Ajoutez le texte ou l’audio au brouillon, vérifiez-le, puis envoyez-le manuellement.";
+"Mac 语音输入使用说明" = "Activez la saisie vocale pour afficher le microphone du chat. AAC produit un petit fichier M4A ; WAV conserve l’audio non compressé. Le microphone ouvre une fenêtre, et le bouton d’enregistrement demande l’autorisation avant de commencer. Après l’arrêt, écoutez, mettez en pause, déplacez la position ou réenregistrez.\n\nPour obtenir du texte, choisissez un modèle, transcrivez l’enregistrement, vérifiez ou modifiez le résultat puis insérez-le dans le brouillon. Le mode automatique utilise la première entrée, généralement la reconnaissance système. Les modèles distants utilisent une API compatible OpenAI Audio Transcriptions ; les modèles locaux reprennent leurs décodeur et VAD. La reconnaissance système peut nécessiter Internet.\n\nLe mode audio brut ajoute ou remplace une pièce jointe audio en attente. Utilisez un modèle de chat acceptant l’audio. Vous pouvez l’écouter ou la retirer avant d’envoyer manuellement. L’audio non envoyé reste en mémoire. Fermer la fenêtre, changer de conversation ou verrouiller annule le travail inachevé. Le guide peut modifier les réglages, mais ne peut ni enregistrer, ni transcrire, ni lire l’audio ou la transcription.";

@@ -106,6 +106,9 @@ private struct MacGeneralSettingsView: View {
                 NavigationLink(NSLocalizedString("全局代理设置", comment: "")) {
                     MacGlobalProxyView(model: workspace.globalProxy, isActive: isActive)
                 }
+                NavigationLink(NSLocalizedString("语音输入", comment: "")) {
+                    MacSpeechInputSettingsView(model: workspace.speechInput, isActive: isActive)
+                }
             }
             Section {
                 Toggle(NSLocalizedString("流式输出", comment: ""), isOn: $configuration.enableStreaming)
@@ -142,6 +145,7 @@ private struct MacGeneralSettingsView: View {
             isActive: isActive,
             settings: [
                 .readOnly("proxy_requires_navigation", label: NSLocalizedString("全局代理设置", comment: ""), value: { .bool(true) }),
+                .readOnly("speech_requires_navigation", label: NSLocalizedString("语音输入", comment: ""), value: { .bool(true) }),
                 .string("language", label: NSLocalizedString("语言", comment: ""), allowedValues: AppLanguagePreference.allCases.map(\.rawValue), get: { configuration.appLanguage }, set: { configuration.appLanguage = $0 }),
                 .bool("streaming", label: NSLocalizedString("流式输出", comment: ""), get: { configuration.enableStreaming }, set: { configuration.enableStreaming = $0 }),
                 .bool("markdown", label: NSLocalizedString("Markdown 渲染", comment: ""), get: { configuration.enableMarkdown }, set: { configuration.enableMarkdown = $0 }),

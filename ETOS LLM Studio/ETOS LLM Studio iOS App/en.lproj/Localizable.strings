@@ -8068,3 +8068,18 @@
 "重新载入会丢弃当前草稿。" = "Reloading will discard the current draft.";
 "Mac 提供商代理优先级说明" = "Turn off Independent Proxy to inherit the global configuration. With an independent configuration, turning off Enable Proxy skips the App global proxy. Return to the provider editor to save.";
 "Mac 代理设置使用说明" = "Choose HTTP/HTTPS or SOCKS5, enter a host or IP without a URL scheme or path, and enter the port separately (1–65535). A username enables authentication; the password is optional. Disabling the proxy keeps the entered values.\n\nChanges remain drafts until saved. Save the global page here; save an independent configuration from the provider editor. A provider without an independent configuration inherits the global proxy. A disabled independent proxy skips the App global proxy, but system proxy settings may still apply.\n\nNew calls through the shared model request path read the saved settings; existing requests continue. This does not change macOS network settings or configure native MCP processes or Linux programs. Validate the connection manually from the model test page. The guide can propose draft changes but cannot save or test connections, and cannot read existing usernames or passwords.";
+
+/* Mac 语音录制与草稿预览 */
+"AAC (M4A)" = "AAC (M4A)";
+"WAV" = "WAV";
+"开始录音" = "Start Recording";
+"重新录音" = "Record Again";
+"转写" = "Transcribe";
+"识别结果" = "Transcript";
+"插入文字" = "Insert Text";
+"播放" = "Play";
+"暂停" = "Pause";
+"播放进度" = "Playback Position";
+"无法播放此音频。" = "This audio could not be played.";
+"Mac 语音草稿说明" = "Recording, transcription and playback do not send messages. Insert text or add audio to the draft, review it, then send manually.";
+"Mac 语音输入使用说明" = "Enable voice input to show the chat microphone. Choose AAC for a smaller M4A file or WAV for uncompressed audio. The microphone opens a recording window; Start requests permission and begins recording. Stop to preview, pause, seek or record again.\n\nFor text, choose a transcription model, click Transcribe after recording, edit the result, then insert it into the draft. Automatic uses the first available entry, normally the system recognizer. Remote models use an OpenAI Audio Transcriptions compatible endpoint; local models use their configured decoder and VAD. System recognition may need a network connection.\n\nRaw-audio mode adds or replaces one pending audio attachment. Use it with a chat model that accepts audio. You can preview or remove it in the composer; Send remains a separate action. Unsent audio is kept in memory. Closing the recording window, switching conversations or locking cancels unfinished work. The guide can change settings but cannot record, transcribe, play audio or read the transcript.";

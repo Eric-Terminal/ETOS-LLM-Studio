@@ -42,12 +42,17 @@ public enum SystemSpeechRecognizerService {
 
 #if canImport(Speech) && canImport(AVFoundation)
     public static func requestAuthorization() async -> Bool {
+        guard !Task.isCancelled else { return false }
         guard SFSpeechRecognizer.authorizationStatus() != .authorized else { return true }
-        return await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { status in
-                continuation.resume(returning: status == .authorized)
+        let completion = SystemSpeechCompletion<Bool>()
+        return (try? await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                guard completion.install(continuation) else { return }
+                SFSpeechRecognizer.requestAuthorization { status in
+                    completion.finish(.success(status == .authorized))
+                }
             }
-        }
+        } onCancel: { completion.finish(.failure(CancellationError())) }) ?? false
     }
 
     public static func transcribe(
@@ -55,6 +60,7 @@ public enum SystemSpeechRecognizerService {
         fileExtension: String,
         localeIdentifier: String? = nil
     ) async throws -> String {
+        try Task.checkCancellation()
         let sanitizedExtension = fileExtension.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedExtension = sanitizedExtension.isEmpty ? "m4a" : sanitizedExtension
         let tempURL = FileManager.default.temporaryDirectory
@@ -68,7 +74,9 @@ public enum SystemSpeechRecognizerService {
         audioURL: URL,
         localeIdentifier: String? = nil
     ) async throws -> String {
-        guard await requestAuthorization() else {
+        let authorized = await requestAuthorization()
+        try Task.checkCancellation()
+        guard authorized else {
             throw TranscriptionError.authorizationDenied
         }
         let recognizers = makeSpeechRecognizers(localeIdentifier: localeIdentifier)
@@ -78,8 +86,11 @@ public enum SystemSpeechRecognizerService {
 
         var lastError: Error?
         for recognizer in recognizers {
+            try Task.checkCancellation()
             do {
                 return try await transcribe(audioURL: audioURL, recognizer: recognizer)
+            } catch is CancellationError {
+                throw CancellationError()
             } catch TranscriptionError.emptyResult {
                 throw TranscriptionError.emptyResult
             } catch {
@@ -97,36 +108,22 @@ public enum SystemSpeechRecognizerService {
         let request = SFSpeechURLRecognitionRequest(url: audioURL)
         request.shouldReportPartialResults = false
 
-        return try await withCheckedThrowingContinuation { continuation in
-            var hasCompleted = false
-            var recognitionTask: SFSpeechRecognitionTask?
-
-            recognitionTask = recognizer.recognitionTask(with: request) { result, error in
-                if hasCompleted { return }
-
-                if let error {
-                    hasCompleted = true
-                    continuation.resume(throwing: TranscriptionError.recognitionFailed(error.localizedDescription))
-                    recognitionTask?.cancel()
-                    recognitionTask = nil
-                    return
+        let completion = SystemSpeechCompletion<String>()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                guard completion.install(continuation) else { return }
+                let task = recognizer.recognitionTask(with: request) { result, error in
+                    if let error {
+                        completion.finish(.failure(TranscriptionError.recognitionFailed(error.localizedDescription)))
+                        return
+                    }
+                    guard let result, result.isFinal else { return }
+                    let transcript = result.bestTranscription.formattedString.trimmingCharacters(in: .whitespacesAndNewlines)
+                    completion.finish(transcript.isEmpty ? .failure(TranscriptionError.emptyResult) : .success(transcript))
                 }
-
-                guard let result else { return }
-                guard result.isFinal else { return }
-
-                let transcript = result.bestTranscription.formattedString
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                hasCompleted = true
-                if transcript.isEmpty {
-                    continuation.resume(throwing: TranscriptionError.emptyResult)
-                } else {
-                    continuation.resume(returning: transcript)
-                }
-                recognitionTask?.cancel()
-                recognitionTask = nil
+                completion.installCancellation { task.cancel() }
             }
-        }
+        } onCancel: { completion.finish(.failure(CancellationError())) }
     }
 
     fileprivate static func makeSpeechRecognizer(localeIdentifier: String?) -> SFSpeechRecognizer? {
