@@ -39,6 +39,9 @@ struct MacLinuxView: View {
                     NavigationLink {
                         MacLinuxSettingsView(isActive: isActive, model: model)
                     } label: { Label(NSLocalizedString("配置", comment: ""), systemImage: "slider.horizontal.3") }
+                    NavigationLink {
+                        MacLinuxRecipesView(isActive: isActive, runtime: model)
+                    } label: { Label(NSLocalizedString("安装常用环境", comment: ""), systemImage: "shippingbox") }
                 }
                 Section(NSLocalizedString("当前活动", comment: "")) {
                     LabeledContent(NSLocalizedString("运行时", comment: ""), value: model.snapshot.phase.displayName)
@@ -71,6 +74,10 @@ struct MacLinuxView: View {
                     Toggle(NSLocalizedString("同时删除用户数据", comment: ""), isOn: $deleteUserData).disabled(!model.canOperate)
                     Button(NSLocalizedString("重置本地 Linux", comment: ""), role: .destructive) { confirmation = .reset }
                         .disabled(!model.canOperate || !configuration.localLinuxEnabled)
+                }
+                Section {
+                    NavigationLink { MacLinuxComplianceView(isActive: isActive) }
+                        label: { Label(NSLocalizedString("许可与源码", comment: ""), systemImage: "doc.text") }
                 }
                 feedback
             }.formStyle(.grouped)
@@ -107,12 +114,14 @@ struct MacLinuxView: View {
                 .readOnly("jobs_require_navigation", label: NSLocalizedString("任务与终端", comment: ""), value: { .bool(true) }),
                 .readOnly("storage_requires_navigation", label: NSLocalizedString("工作区与挂载", comment: ""), value: { .bool(true) }),
                 .readOnly("files_require_navigation", label: NSLocalizedString("Linux 文件", comment: ""), value: { .bool(true) }),
+                .readOnly("recipes_require_confirmation", label: NSLocalizedString("安装常用环境", comment: ""), value: { .bool(true) }),
                 .readOnly("terminal_count", label: NSLocalizedString("终端", comment: ""), value: { .int(model.snapshot.activeTerminalCount) }),
                 .readOnly("job_count", label: NSLocalizedString("命令与浏览器任务", comment: ""), value: { .int(model.snapshot.activeJobCount) }),
                 .readOnly("mcp_count", label: NSLocalizedString("本地 MCP", comment: ""), value: { .int(model.snapshot.activeMCPProcessCount) })
             ] : [
                 .readOnly("phase", label: NSLocalizedString("运行时", comment: ""), value: { .string(model.snapshot.phase.rawValue) }),
                 .readOnly("storage", label: NSLocalizedString("存储", comment: ""), value: { .string(model.storageSize) }),
+                .readOnly("compliance_requires_navigation", label: NSLocalizedString("许可与源码", comment: ""), value: { .bool(true) }),
                 .readOnly("delete_user_data", label: NSLocalizedString("同时删除用户数据", comment: ""), value: { .bool(deleteUserData) }),
                 .readOnly("manual_operations_only", label: NSLocalizedString("系统", comment: ""), value: { .bool(true) })
             ]

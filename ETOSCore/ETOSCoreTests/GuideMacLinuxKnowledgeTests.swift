@@ -3,6 +3,18 @@ import Testing
 @testable import ETOSCore
 
 struct GuideMacLinuxKnowledgeTests {
+    @Test("常用环境与合规指引区分一次发送、guest 作用域及随包声明")
+    func recipesAndComplianceGuidance() {
+        let chinese = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "zh-Hans"))
+        #expect(chinese.content.contains("终端页只附着"))
+        #expect(chinese.content.contains("不修改 /etc/apk/repositories"))
+        #expect(chinese.content.contains("不会回滚已经安装的包"))
+        #expect(chinese.content.contains("不表示页面已重新计算压缩包哈希"))
+        let english = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "en"))
+        #expect(english.content.contains("reopening never resends"))
+        #expect(english.content.contains("without rolling back installed packages"))
+    }
+
     @Test("文件指引说明预览预算、原件比较、递归删除和向导隐私")
     func fileBrowserGuidance() {
         let chinese = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "zh-Hans"))
