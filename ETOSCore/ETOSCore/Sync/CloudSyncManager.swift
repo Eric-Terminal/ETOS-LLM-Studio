@@ -466,6 +466,7 @@ public final class CloudSyncManager: ObservableObject {
     }
 
     func buildLocalSnapshot(options: SyncOptions) async -> SyncLocalSnapshot {
+        if options.contains(.dailyPulse) { await DailyPulseManager.flushPendingPersistence() }
         await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
         let buildSnapshot = snapshotBuilder
         return await runOnSnapshotBuildQueue {

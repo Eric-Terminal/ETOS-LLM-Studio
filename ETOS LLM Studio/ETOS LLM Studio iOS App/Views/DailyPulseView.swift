@@ -37,6 +37,9 @@ struct DailyPulseView: View {
 
     var body: some View {
         List {
+            if pulseManager.isLoading || deliveryCoordinator.isLoading {
+                ProgressView(NSLocalizedString("正在加载…", comment: ""))
+            }
             if pulseManager.todayRun != nil || pulseManager.isPreparingTodayPulse {
                 todayPulseSection
             }
@@ -53,6 +56,7 @@ struct DailyPulseView: View {
             pulseAvailabilitySection
         }
         .navigationTitle(NSLocalizedString("每日脉冲", comment: ""))
+        .disabled(pulseManager.isLoading || deliveryCoordinator.isLoading)
         .navigationBarTitleDisplayMode(.inline)
         .alert(NSLocalizedString("每日脉冲", comment: ""), isPresented: alertBinding) {
             Button(NSLocalizedString("知道了", comment: ""), role: .cancel) {
@@ -79,6 +83,7 @@ struct DailyPulseView: View {
             id: "daily-pulse",
             title: NSLocalizedString("每日脉冲", comment: "每日脉冲向导上下文标题"),
             documents: [GuideDocumentReference(id: "daily-pulse", title: "Daily Pulse")],
+            isActive: !pulseManager.isLoading && !deliveryCoordinator.isLoading,
             settings: dailyPulseGuideSettings
         )
     }
@@ -683,6 +688,7 @@ struct DailyPulseView: View {
 private struct DailyPulseDeliveryTimeEditor: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
+    @ObservedObject private var pulseManager = DailyPulseManager.shared
 
     let deliveryTimeID: UUID
     @State private var timeDraft = ""
@@ -729,6 +735,7 @@ private struct DailyPulseDeliveryTimeEditor: View {
             }
         }
         .navigationTitle(NSLocalizedString("编辑卡片", comment: "Daily Pulse edit card title"))
+        .disabled(pulseManager.isLoading || deliveryCoordinator.isLoading)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             timeDraft = deliveryTime?.timeText ?? ""
@@ -740,6 +747,7 @@ private struct DailyPulseDeliveryTimeEditor: View {
             id: GuidePageID(rawValue: "daily-pulse-delivery-time-\(deliveryTimeID.uuidString.lowercased())"),
             title: NSLocalizedString("编辑卡片", comment: "每日脉冲送达时间向导上下文标题"),
             documents: [GuideDocumentReference(id: "daily-pulse", title: "Daily Pulse")],
+            isActive: !pulseManager.isLoading && !deliveryCoordinator.isLoading,
             settings: deliveryTimeGuideSettings
         )
     }
@@ -789,7 +797,7 @@ private struct DailyPulseDeliveryTimeEditor: View {
     }
 
     private func saveTimeDraft() {
-        guard !isTimeInvalid,
+        guard !pulseManager.isLoading, !deliveryCoordinator.isLoading, !isTimeInvalid,
               let components = DailyPulseDeliveryCoordinator.reminderTimeComponents(from: timeDraft),
               deliveryCoordinator.updateDeliveryTime(
                 id: deliveryTimeID,

@@ -251,6 +251,7 @@ extension AppConfigStore {
         for task in tasks {
             await task.value
         }
+        await DailyPulseManager.flushPendingPersistence()
     }
 
     private func flushPendingChatComposerDraftWriteIfNeeded() async {

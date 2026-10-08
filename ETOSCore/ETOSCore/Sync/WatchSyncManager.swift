@@ -180,6 +180,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         Task.detached(priority: .userInitiated) {
             await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
             let syncOptions = SyncOptions(rawValue: optionsRawValue)
+            if syncOptions.contains(.dailyPulse) { await DailyPulseManager.flushPendingPersistence() }
             let snapshot = SyncDeltaEngine.buildLocalSnapshot(
                 options: syncOptions,
                 channel: syncChannel
@@ -1023,6 +1024,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                 Task.detached(priority: .userInitiated) {
                     await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
                     let responseOptions = SyncOptions(rawValue: responseOptionsRawValue)
+                    if responseOptions.contains(.dailyPulse) { await DailyPulseManager.flushPendingPersistence() }
                     let localSnapshot = SyncDeltaEngine.buildLocalSnapshot(
                         options: responseOptions,
                         channel: responseChannel

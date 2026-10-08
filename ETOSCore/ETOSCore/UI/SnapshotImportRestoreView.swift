@@ -131,6 +131,7 @@ public struct SnapshotImportRestoreView: View {
                 if let restoreOperation {
                     try await restoreOperation(fileURL, restorePassword)
                 } else {
+                    await AppConfigStore.shared.flushPendingWrites()
                     try await Task.detached(priority: .userInitiated) {
                         try SnapshotRestoreService.restoreSnapshot(from: fileURL, password: restorePassword)
                     }.value

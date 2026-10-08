@@ -338,28 +338,30 @@ public enum SyncDeltaEngine {
                     }
                 }
             case .dailyPulseRun:
-                if deletion.recordID == dailyPulseBundleRecordID {
-                    let hadRuns = !Persistence.loadDailyPulseRuns().isEmpty
-                    let hadHistory = !Persistence.loadDailyPulseFeedbackHistory().isEmpty
-                    let hadCuration = Persistence.loadDailyPulsePendingCuration() != nil
-                    let hadSignals = !Persistence.loadDailyPulseExternalSignals().isEmpty
-                    let hadTasks = !Persistence.loadDailyPulseTasks().isEmpty
-                    if hadRuns || hadHistory || hadCuration || hadSignals || hadTasks {
+                let delete = await DailyPulsePersistenceQueue.shared.enqueue {
+                    [recordID = deletion.recordID, isBundle = deletion.recordID == dailyPulseBundleRecordID] in
+                    if isBundle {
+                        let hadRuns = !Persistence.loadDailyPulseRuns().isEmpty
+                        let hadHistory = !Persistence.loadDailyPulseFeedbackHistory().isEmpty
+                        let hadCuration = Persistence.loadDailyPulsePendingCuration() != nil
+                        let hadSignals = !Persistence.loadDailyPulseExternalSignals().isEmpty
+                        let hadTasks = !Persistence.loadDailyPulseTasks().isEmpty
+                        guard hadRuns || hadHistory || hadCuration || hadSignals || hadTasks else { return false }
                         Persistence.saveDailyPulseRuns([])
                         Persistence.saveDailyPulseFeedbackHistory([])
                         Persistence.saveDailyPulsePendingCuration(nil)
                         Persistence.saveDailyPulseExternalSignals([])
                         Persistence.saveDailyPulseTasks([])
-                        summary.importedDailyPulseRuns += 1
-                        dailyPulseDeleted = true
+                        return true
                     }
-                    continue
-                }
-                var runs = Persistence.loadDailyPulseRuns()
-                let before = runs.count
-                runs.removeAll { $0.dayKey == deletion.recordID }
-                if runs.count != before {
+                    var runs = Persistence.loadDailyPulseRuns()
+                    let before = runs.count
+                    runs.removeAll { $0.dayKey == recordID }
+                    guard runs.count != before else { return false }
                     Persistence.saveDailyPulseRuns(runs)
+                    return true
+                }
+                if await delete.value {
                     summary.importedDailyPulseRuns += 1
                     dailyPulseDeleted = true
                 }

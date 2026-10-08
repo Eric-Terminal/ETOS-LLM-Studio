@@ -32,6 +32,8 @@ extension DailyPulseManager {
         notifyReadyWhenFinished: Bool = false
     ) async {
         await waitForPersistedStateLoad()
+        await DailyPulseDeliveryCoordinator.shared.waitForSettingsLoad()
+        guard !Task.isCancelled else { return }
         if isGenerating { return }
         guard Self.shouldStartGeneration(
             isDailyPulseEnabled: isDailyPulseEnabled,
@@ -216,7 +218,7 @@ extension DailyPulseManager {
                 if !tomorrowCurationText.isEmpty {
                     tomorrowCurationText = ""
                 } else {
-                    Persistence.saveDailyPulsePendingCuration(nil)
+                    DailyPulsePersistenceQueue.shared.enqueue { Persistence.saveDailyPulsePendingCuration(nil) }
                 }
             }
             await DailyPulseDeliveryCoordinator.shared.refreshReminderSchedule()
@@ -227,6 +229,7 @@ extension DailyPulseManager {
         } catch {
             if Self.isCancellationError(error) || Task.isCancelled {
                 logger.info("每日脉冲生成已取消，触发方式: \(trigger.rawValue, privacy: .public)")
+                await DailyPulsePersistenceQueue.shared.flush()
                 return
             }
 
@@ -238,6 +241,7 @@ extension DailyPulseManager {
             }
             logger.error("每日脉冲生成失败: \(description, privacy: .public)")
         }
+        await DailyPulsePersistenceQueue.shared.flush()
     }
 
     nonisolated static func shouldStartGeneration(
@@ -261,7 +265,8 @@ extension DailyPulseManager {
     }
 
     func persistRuns() {
-        Persistence.saveDailyPulseRuns(runs)
+        let snapshot = runs
+        DailyPulsePersistenceQueue.shared.enqueue { Persistence.saveDailyPulseRuns(snapshot) }
     }
 
     func replaceGenerationCheckpoint(_ checkpoint: DailyPulseGenerationCheckpoint) {
@@ -287,9 +292,7 @@ extension DailyPulseManager {
 
     func persistGenerationRuntimeState() async {
         let snapshot = generationRuntimeState
-        let previousTask = generationRuntimePersistenceTask
-        let persistenceTask = Task.detached(priority: .utility) {
-            await previousTask?.value
+        let persistenceTask = DailyPulsePersistenceQueue.shared.enqueue {
             Persistence.saveDailyPulseGenerationRuntimeState(snapshot)
         }
         generationRuntimePersistenceTask = persistenceTask
@@ -298,9 +301,7 @@ extension DailyPulseManager {
 
     func persistGenerationRuntimeStateInBackground() {
         let snapshot = generationRuntimeState
-        let previousTask = generationRuntimePersistenceTask
-        generationRuntimePersistenceTask = Task.detached(priority: .utility) {
-            await previousTask?.value
+        generationRuntimePersistenceTask = DailyPulsePersistenceQueue.shared.enqueue {
             Persistence.saveDailyPulseGenerationRuntimeState(snapshot)
         }
     }
@@ -320,7 +321,18 @@ extension DailyPulseManager {
 
     func persistTasks() {
         tasks = Self.sortedTasks(tasks)
-        Persistence.saveDailyPulseTasks(tasks)
+        let snapshot = tasks
+        DailyPulsePersistenceQueue.shared.enqueue { Persistence.saveDailyPulseTasks(snapshot) }
+    }
+
+    func persistFeedbackHistory() {
+        let snapshot = feedbackHistory
+        DailyPulsePersistenceQueue.shared.enqueue { Persistence.saveDailyPulseFeedbackHistory(snapshot) }
+    }
+
+    func persistExternalSignals() {
+        let snapshot = externalSignals
+        DailyPulsePersistenceQueue.shared.enqueue { Persistence.saveDailyPulseExternalSignals(snapshot) }
     }
 
     func appendFeedbackEvent(_ event: DailyPulseFeedbackEvent) {
@@ -329,7 +341,7 @@ extension DailyPulseManager {
             to: feedbackHistory,
             limit: Self.feedbackHistoryRetentionLimit
         )
-        Persistence.saveDailyPulseFeedbackHistory(feedbackHistory)
+        persistFeedbackHistory()
     }
 
     func persistPendingCurationFromDraft(referenceDate: Date = Date()) {
@@ -341,7 +353,7 @@ extension DailyPulseManager {
                         $0.dayKey == Self.nextDayKey(from: referenceDate)
                     }))
             pendingCuration = nil
-            Persistence.saveDailyPulsePendingCuration(nil)
+            DailyPulsePersistenceQueue.shared.enqueue { Persistence.saveDailyPulsePendingCuration(nil) }
             if shouldInvalidatePreparedRun {
                 invalidatePreparedTomorrowRun(referenceDate: referenceDate)
             }
@@ -359,7 +371,7 @@ extension DailyPulseManager {
             createdAt: pendingCuration?.createdAt ?? Date()
         )
         pendingCuration = note
-        Persistence.saveDailyPulsePendingCuration(note)
+        DailyPulsePersistenceQueue.shared.enqueue { Persistence.saveDailyPulsePendingCuration(note) }
         if shouldInvalidatePreparedRun {
             invalidatePreparedTomorrowRun(referenceDate: referenceDate)
         }
@@ -373,7 +385,7 @@ extension DailyPulseManager {
             if tomorrowCurationText == pendingCuration.text {
                 tomorrowCurationText = ""
             }
-            Persistence.saveDailyPulsePendingCuration(nil)
+            DailyPulsePersistenceQueue.shared.enqueue { Persistence.saveDailyPulsePendingCuration(nil) }
         }
     }
 
