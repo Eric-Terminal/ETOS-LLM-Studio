@@ -151,7 +151,7 @@ struct LocalDebugFileAccessTests {
     func fileCommandsRunInBackground() async throws {
         let fixture = try DebugFileFixture()
         defer { fixture.close() }
-        let server = LocalDebugServer(), root = fixture.root
+        let server = fixture.makeServer(), root = fixture.root
         server.fileRoot = { #expect(!Thread.isMainThread); return root }
         let encoded = Data("消息".utf8).base64EncodedString()
         let uploaded = await server.handleUpload(["path": "nested/file.txt", "data": encoded])
@@ -177,8 +177,7 @@ struct LocalDebugFileAccessTests {
     func invalidBatchDoesNotClearDirectory() async throws {
         let fixture = try DebugFileFixture()
         defer { fixture.close() }
-        let server = LocalDebugServer(), root = fixture.root
-        server.fileRoot = { root }
+        let server = fixture.makeServer()
         let encoded = Data("保留内容".utf8).base64EncodedString()
         try fixture.access.upload(path: "keep.txt", base64: encoded)
         let batches: [[[String: Any]]] = [
@@ -201,8 +200,7 @@ struct LocalDebugFileAccessTests {
     func validBatchAndClearKeepProtocolSemantics() async throws {
         let fixture = try DebugFileFixture()
         defer { fixture.close() }
-        let server = LocalDebugServer(), root = fixture.root
-        server.fileRoot = { root }
+        let server = fixture.makeServer()
         try fixture.access.upload(path: "old.txt", base64: "")
         let outside = fixture.directory.appendingPathComponent("outside.txt")
         try Data("外部".utf8).write(to: outside)
@@ -220,8 +218,7 @@ struct LocalDebugFileAccessTests {
     func invalidStreamingListDoesNotClearDirectory() async throws {
         let fixture = try DebugFileFixture()
         defer { fixture.close() }
-        let server = LocalDebugServer(), root = fixture.root
-        server.fileRoot = { root }
+        let server = fixture.makeServer()
         try fixture.access.upload(path: "keep.txt", base64: "")
         await server.handleUploadList(["paths": ["../outside"], "total": 1])
         #expect(try fixture.access.scan().paths == ["keep.txt"])
@@ -229,11 +226,12 @@ struct LocalDebugFileAccessTests {
     }
 
     @MainActor
-    @Test("已开始的批量覆盖在断开后仍完成，命令队列等待实际文件写入")
-    func acceptedBatchRemainsOwnedAfterDisconnect() async throws {
+    @Test("暂存期间断开会保留原目录，命令队列等待接收任务实际退出")
+    func batchCancelledBeforeCommitKeepsOriginalFiles() async throws {
         let fixture = try DebugFileFixture()
         defer { fixture.close() }
-        let server = LocalDebugServer(), root = fixture.root
+        let server = fixture.makeServer(), root = fixture.root
+        try fixture.access.upload(path: "keep.txt", base64: "")
         let arrival = AsyncStream<Void>.makeStream(), release = DispatchSemaphore(value: 0)
         server.fileRoot = {
             #expect(!Thread.isMainThread)
@@ -252,8 +250,9 @@ struct LocalDebugFileAccessTests {
         #expect(!server.commandQueue.isEmpty)
         release.signal()
         await server.waitForPendingOperations()
-        #expect(response?["status"] as? String == "ok" && server.commandQueue.isEmpty)
-        #expect(try fixture.access.scan().paths == ["accepted.txt"])
+        #expect(response?["status"] as? String == "error" && server.commandQueue.isEmpty)
+        #expect(try fixture.access.scan().paths == ["keep.txt"])
+        #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.directory.path) == ["root"])
     }
 }
 
@@ -270,6 +269,17 @@ private struct DebugFileFixture {
     }
 
     func close() { try? FileManager.default.removeItem(at: directory) }
+
+    @MainActor
+    func makeServer() -> LocalDebugServer {
+        let server = LocalDebugServer(), root = root
+        server.fileRoot = { root }
+        server.installDocuments = { try $0.commit() }
+        server.documentReplacementCoordinator = { operation in
+            try await Task.detached(priority: .userInitiated) { try operation() }.value
+        }
+        return server
+    }
 }
 
 private actor DebugFileGate {

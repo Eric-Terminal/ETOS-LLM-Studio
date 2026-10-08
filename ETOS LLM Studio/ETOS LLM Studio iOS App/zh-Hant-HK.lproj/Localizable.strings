@@ -8305,3 +8305,7 @@
 "Streaming download ended; polling resumed." = "串流下載結束，恢復輪詢。";
 "Streaming upload started; polling paused." = "開始串流上傳，暫停輪詢。";
 "Streaming upload ended; polling resumed." = "串流上傳結束，恢復輪詢。";
+
+/* 远程全量上传与恢复文件 */
+"The upload is incomplete. The original files have been kept." = "上傳內容不完整，已保留原檔案。";
+"File replacement could not be rolled back completely. Recovery files were kept at %@." = "檔案替換未能完全復原，復原檔案已保留在 %@。";

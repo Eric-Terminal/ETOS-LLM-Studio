@@ -8390,3 +8390,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "Streaming download ended; polling resumed." = "انتهى التنزيل المتدفق؛ تم استئناف الاستطلاع.";
 "Streaming upload started; polling paused." = "بدأ الرفع المتدفق؛ تم إيقاف الاستطلاع مؤقتًا.";
 "Streaming upload ended; polling resumed." = "انتهى الرفع المتدفق؛ تم استئناف الاستطلاع.";
+
+/* 远程全量上传与恢复文件 */
+"The upload is incomplete. The original files have been kept." = "الرفع غير مكتمل. تم الاحتفاظ بالملفات الأصلية.";
+"File replacement could not be rolled back completely. Recovery files were kept at %@." = "تعذّر التراجع عن استبدال الملفات بالكامل. تم الاحتفاظ بملفات الاسترداد في %@.";

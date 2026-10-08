@@ -128,14 +128,6 @@ struct LocalDebugFileAccess: Sendable {
         }
     }
 
-    /// 原全量命令的文件删除部分；活动数据库和其他写入者的停止仍由恢复协调层负责。
-    func clearContents() throws {
-        try Task.checkCancellation()
-        let contents = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
-        // 删除一旦开始就完成本次目录清理，不能因任务取消而假装事务已经回滚。
-        for item in contents { try FileManager.default.removeItem(at: item) }
-    }
-
     func scan() throws -> Scan {
         var pending = [""], files: [String] = [], skipped: [String] = []
         while let relativeDirectory = pending.popLast() {

@@ -80,6 +80,11 @@ public class LocalDebugServer: ObservableObject {
     var resolvingOpenAIRequestIDs: Set<UUID> = []
     let insertSession: @Sendable (ChatSession, [ChatMessage]) throws -> Void
     var fileRoot: @Sendable () -> URL = { StorageUtility.documentsDirectory }
+    var installDocuments: @Sendable (LocalDebugDocumentReplacement) throws -> Void = { try Persistence.installDebugDocuments($0) }
+    var fetchFilePayload: (@Sendable (String) async throws -> Data)?
+
+    /// 宿主在执行闭包前暂停页面和运行任务，闭包返回后刷新状态并恢复入口；不得排空当前调试命令自身。
+    public var documentReplacementCoordinator: (@MainActor (@escaping @Sendable () throws -> Void) async throws -> Void)?
 
     var httpPollingTimer: Timer?
     var httpSession: URLSession?

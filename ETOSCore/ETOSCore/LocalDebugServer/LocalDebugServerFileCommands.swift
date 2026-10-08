@@ -170,78 +170,57 @@ extension LocalDebugServer {
 
         logger.info("收到文件列表: \(total) 个文件")
 
-        let validation = await runDebugFileOperation { access in
-            try access.validateUploadPaths(paths)
-            return ["status": "ok"]
+        var replacement: LocalDebugDocumentReplacement?
+        do {
+            guard total == paths.count else { throw LocalDebugDocumentReplacementError.incompleteUpload }
+            let staged = try await prepareDebugUpload(paths: paths)
+            replacement = staged
+            for (index, path) in paths.enumerated() {
+                try await fetchAndStageFile(path: path, into: staged, index: index + 1, total: total)
+            }
+            try await commitDebugUpload(staged)
+            if canContinueDebugCommand { logger.info("所有文件上传完成！") }
+        } catch {
+            await sendHTTPResponseAsync(["status": "error", "message": error.localizedDescription])
         }
-        guard canContinueDebugCommand else { return }
-        guard validation["status"] as? String == "ok" else {
-            await sendHTTPResponseAsync(validation)
-            return
-        }
-        let cleared = await handleClearDocuments()
-        guard canContinueDebugCommand else { return }
-        guard cleared["status"] as? String == "ok" else {
-            await sendHTTPResponseAsync(cleared)
-            return
-        }
-
-        for (index, path) in paths.enumerated() {
-            guard canContinueDebugCommand else { return }
-            guard await fetchAndWriteFile(path: path, index: index + 1, total: total) else { return }
-        }
-
-        guard canContinueDebugCommand else { return }
-        logger.info("所有文件上传完成！")
+        if let replacement { await discardDebugUpload(replacement) }
     }
 
-    /// 请求并写入单个文件
-    func fetchAndWriteFile(path: String, index: Int, total: Int) async -> Bool {
-        guard canContinueDebugCommand else { return false }
+    /// 请求返回后只写入暂存区；所有文件齐全之前不触碰原 Documents。
+    func fetchAndStageFile(path: String, into replacement: LocalDebugDocumentReplacement, index: Int, total: Int) async throws {
+        guard canContinueDebugCommand else { throw CancellationError() }
         let token = connectionToken
-        guard let url = URL(string: "http://\(serverURL)/fetch_file") else {
-            logger.error("无效的URL")
-            return false
+        let data = try await fetchDebugFilePayload(path: path)
+        guard canContinueDebugCommand, isCurrentConnection(token) else { throw CancellationError() }
+        let worker = Task.detached(priority: .userInitiated) {
+            guard let json = try LocalDebugJSONObject.decode(data)?.value,
+                  json["status"] as? String == "ok", let base64 = json["data"] as? String else {
+                throw URLError(.badServerResponse)
+            }
+            try replacement.receive(path: path, base64: base64)
         }
+        try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
+        guard canContinueDebugCommand, isCurrentConnection(token) else { throw CancellationError() }
+        logger.info("[\(index)/\(total)] 已暂存: \(path)")
+    }
 
-        guard let session = httpSession else {
-            logger.error("httpSession 为 nil，无法请求文件")
-            return false
+    private func fetchDebugFilePayload(path: String) async throws -> Data {
+        if let fetchFilePayload { return try await fetchFilePayload(path) }
+        guard let url = URL(string: "http://\(serverURL)/fetch_file"), let session = httpSession else {
+            throw URLError(.badURL)
         }
-
+        let token = connectionToken
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 30.0
-
-        do {
-            let requestBody = LocalDebugJSONObject(value: ["path": path])
-            request.httpBody = try await Task.detached(priority: .userInitiated) { try requestBody.encoded() }.value
-            guard canContinueDebugCommand, isCurrentConnection(token) else { return false }
-            let (data, response) = try await session.securedData(for: request)
-            guard canContinueDebugCommand, isCurrentConnection(token) else { return false }
-            if let response = response as? HTTPURLResponse, response.statusCode != 200 {
-                throw URLError(.badServerResponse)
-            }
-            let result = await runDebugFileOperation { access in
-                guard let json = try LocalDebugJSONObject.decode(data)?.value,
-                      json["status"] as? String == "ok", let base64 = json["data"] as? String else {
-                    throw URLError(.badServerResponse)
-                }
-                return ["status": "ok", "size": try access.upload(path: path, base64: base64)]
-            }
-            guard canContinueDebugCommand, isCurrentConnection(token) else { return false }
-            guard result["status"] as? String == "ok" else {
-                await sendHTTPResponseAsync(result)
-                return false
-            }
-            logger.info("[\(index)/\(total)] 写入: \(path)")
-            return true
-        } catch {
-            logger.error("请求文件失败 \(path): \(error.localizedDescription)")
-            await sendHTTPResponseAsync(["status": "error", "message": error.localizedDescription])
-            return false
-        }
+        request.timeoutInterval = 30
+        let requestBody = LocalDebugJSONObject(value: ["path": path])
+        request.httpBody = try await Task.detached(priority: .userInitiated) { try requestBody.encoded() }.value
+        guard canContinueDebugCommand, isCurrentConnection(token) else { throw CancellationError() }
+        let (data, response) = try await session.securedData(for: request)
+        guard canContinueDebugCommand, isCurrentConnection(token) else { throw CancellationError() }
+        guard let response = response as? HTTPURLResponse, response.statusCode == 200 else { throw URLError(.badServerResponse) }
+        return data
     }
 
     /// HTTP 流式上传：接收单个文件（旧方法，保留兼容）
@@ -263,41 +242,24 @@ extension LocalDebugServer {
 
     /// 清空 Documents 目录
     func handleClearDocuments() async -> [String: Any] {
-        await runDebugFileOperation { access in
-            try access.clearContents()
+        do {
+            let replacement = try await prepareDebugUpload(paths: [])
+            try await commitDebugUpload(replacement)
             return ["status": "ok", "message": "目录已清空"]
+        } catch {
+            return ["status": "error", "message": error.localizedDescription]
         }
     }
 
     /// 批量上传（WebSocket 模式）
     func handleBatchUpload(files: [[String: Any]]) async -> [String: Any] {
-        let request = LocalDebugJSONObject(value: ["files": files])
-        let fileRoot = fileRoot
-        // 原批量覆盖一旦开始便连续完成；后台化不能引入“断开后刚清空就取消”的新窗口。
-        // 完整暂存、回滚和活动数据库协调仍需恢复层接管，不能将此处当作原子恢复。
-        let worker = Task.detached(priority: .userInitiated) {
-            do {
-                let access = LocalDebugFileAccess(root: fileRoot())
-                let files = request.value["files"] as? [[String: Any]] ?? []
-                var uploads: [(path: String, base64: String)] = []
-                for fileInfo in files {
-                    guard let relativePath = fileInfo["path"] as? String,
-                          let base64Data = fileInfo["data"] as? String,
-                          Data(base64Encoded: base64Data) != nil else {
-                        throw LocalDebugFileAccessError.invalidBase64
-                    }
-                    uploads.append((relativePath, base64Data))
-                }
-                // 所有路径和数据先校验；参数错误不能在删除旧目录之后才被发现。
-                try access.validateUploadPaths(uploads.map { $0.path })
-                try access.clearContents()
-                for upload in uploads { try access.upload(path: upload.path, base64: upload.base64) }
-                return LocalDebugJSONObject(value: ["status": "ok", "message": "已覆盖 Documents 目录，共 \(files.count) 个文件"])
-            } catch {
-                return LocalDebugJSONObject(value: ["status": "error", "message": error.localizedDescription])
-            }
+        do {
+            let replacement = try await prepareDebugBatch(LocalDebugJSONObject(value: ["files": files]))
+            try await commitDebugUpload(replacement)
+            return ["status": "ok", "message": "已覆盖 Documents 目录，共 \(files.count) 个文件"]
+        } catch {
+            return ["status": "error", "message": error.localizedDescription]
         }
-        return await worker.value.value
     }
 
     func handleMkdir(_ json: [String: Any]) async -> [String: Any] {

@@ -8240,3 +8240,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "Streaming download ended; polling resumed." = "Descarga en flujo finalizada; sondeo reanudado.";
 "Streaming upload started; polling paused." = "Carga en flujo iniciada; sondeo en pausa.";
 "Streaming upload ended; polling resumed." = "Carga en flujo finalizada; sondeo reanudado.";
+
+/* 远程全量上传与恢复文件 */
+"The upload is incomplete. The original files have been kept." = "La carga está incompleta. Se han conservado los archivos originales.";
+"File replacement could not be rolled back completely. Recovery files were kept at %@." = "No se pudo revertir por completo la sustitución de archivos. Los archivos de recuperación se han conservado en %@.";

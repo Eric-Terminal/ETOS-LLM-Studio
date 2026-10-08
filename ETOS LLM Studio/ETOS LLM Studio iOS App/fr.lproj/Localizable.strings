@@ -8390,3 +8390,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "Streaming download ended; polling resumed." = "Téléchargement en flux terminé ; interrogation reprise.";
 "Streaming upload started; polling paused." = "Envoi en flux démarré ; interrogation suspendue.";
 "Streaming upload ended; polling resumed." = "Envoi en flux terminé ; interrogation reprise.";
+
+/* 远程全量上传与恢复文件 */
+"The upload is incomplete. The original files have been kept." = "L’envoi est incomplet. Les fichiers d’origine ont été conservés.";
+"File replacement could not be rolled back completely. Recovery files were kept at %@." = "Le remplacement des fichiers n’a pas pu être entièrement annulé. Les fichiers de récupération ont été conservés dans %@.";

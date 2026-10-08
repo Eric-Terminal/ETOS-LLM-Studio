@@ -8163,3 +8163,7 @@
 "Streaming download ended; polling resumed." = "Streaming download ended; polling resumed.";
 "Streaming upload started; polling paused." = "Streaming upload started; polling paused.";
 "Streaming upload ended; polling resumed." = "Streaming upload ended; polling resumed.";
+
+/* 远程全量上传与恢复文件 */
+"The upload is incomplete. The original files have been kept." = "The upload is incomplete. The original files have been kept.";
+"File replacement could not be rolled back completely. Recovery files were kept at %@." = "File replacement could not be rolled back completely. Recovery files were kept at %@.";

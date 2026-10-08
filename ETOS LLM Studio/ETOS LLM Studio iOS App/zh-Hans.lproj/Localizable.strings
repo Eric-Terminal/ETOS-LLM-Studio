@@ -8299,3 +8299,7 @@
 "Streaming download ended; polling resumed." = "流式下载结束，恢复轮询。";
 "Streaming upload started; polling paused." = "开始流式上传，暂停轮询。";
 "Streaming upload ended; polling resumed." = "流式上传结束，恢复轮询。";
+
+/* 远程全量上传与恢复文件 */
+"The upload is incomplete. The original files have been kept." = "上传内容不完整，已保留原文件。";
+"File replacement could not be rolled back completely. Recovery files were kept at %@." = "文件替换未能完全回滚，恢复文件已保留在 %@。";

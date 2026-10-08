@@ -8156,3 +8156,7 @@
 "Streaming download ended; polling resumed." = "ストリーミングダウンロードが終了しました。ポーリングを再開します。";
 "Streaming upload started; polling paused." = "ストリーミングアップロードを開始しました。ポーリングを一時停止します。";
 "Streaming upload ended; polling resumed." = "ストリーミングアップロードが終了しました。ポーリングを再開します。";
+
+/* 远程全量上传与恢复文件 */
+"The upload is incomplete. The original files have been kept." = "アップロードが不完全なため、元のファイルを保持しました。";
+"File replacement could not be rolled back completely. Recovery files were kept at %@." = "ファイルの置換を完全に元に戻せませんでした。復旧用ファイルは %@ に保持されています。";

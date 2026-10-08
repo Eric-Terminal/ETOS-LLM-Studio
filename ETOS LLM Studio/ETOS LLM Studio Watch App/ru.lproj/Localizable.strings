@@ -8156,3 +8156,7 @@
 "Streaming download ended; polling resumed." = "Потоковое скачивание завершилось; опрос возобновлён.";
 "Streaming upload started; polling paused." = "Потоковая отправка началась; опрос приостановлен.";
 "Streaming upload ended; polling resumed." = "Потоковая отправка завершилась; опрос возобновлён.";
+
+/* 远程全量上传与恢复文件 */
+"The upload is incomplete. The original files have been kept." = "Загрузка не завершена. Исходные файлы сохранены.";
+"File replacement could not be rolled back completely. Recovery files were kept at %@." = "Не удалось полностью отменить замену файлов. Файлы для восстановления сохранены в %@.";
