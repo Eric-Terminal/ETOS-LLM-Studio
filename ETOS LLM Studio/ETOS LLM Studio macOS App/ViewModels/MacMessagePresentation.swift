@@ -96,6 +96,7 @@ struct MacMessagePresentation: Identifiable {
 actor MacMessagePresentationStore {
     private var cache: [UUID: MacMessagePresentation] = [:]
     private var usesMarkdown = false
+    private var usesAdvancedRenderer = false
     private var language = ""
     private var usedCustomPresentation = false
     private var userPreviewLimit = ChatUserMessagePreview.defaultCharacterLimit
@@ -106,13 +107,15 @@ actor MacMessagePresentationStore {
     private var fontRevision = ""
     private var lineSpacing = FontLibrary.defaultIOSLineSpacingEm
     private let versionIndex = ChatResponseAttemptIndexWorker()
+    private let streaming = MacStreamingMarkdownStore()
 
     func prepare(_ messages: [ChatMessage], markdown: Bool, language: String, sessionID: UUID? = nil,
                  roleplay: RoleplayPresentationSnapshot? = nil, rules: [MessageRegexRule] = [],
                  activeResponseID: UUID? = nil,
                  userPreviewLimit: Int = ChatUserMessagePreview.defaultCharacterLimit,
                  appearance: ChatAppearanceProfile = .defaultProfile,
-                 lineSpacing: Double = FontLibrary.defaultIOSLineSpacingEm) async throws -> [MacMessagePresentation] {
+                 lineSpacing: Double = FontLibrary.defaultIOSLineSpacingEm,
+                 advanced: Bool = false) async throws -> [MacMessagePresentation] {
         let revision = UUID(); preparationID = revision
         let versions = await versionIndex.prepare(messages: messages, sessionID: sessionID).entries
         try Task.checkCancellation()
@@ -120,11 +123,12 @@ actor MacMessagePresentationStore {
         let palette = MacChatPalette(appearance)
         let fontRevision = FontLibrary.adapterCacheToken()
         let usesCustomPresentation = roleplay != nil || !rules.isEmpty
-        if usesMarkdown != markdown || self.language != language || self.userPreviewLimit != userPreviewLimit
+        if usesMarkdown != markdown || usesAdvancedRenderer != advanced || self.language != language || self.userPreviewLimit != userPreviewLimit
             || usesCustomPresentation || usedCustomPresentation || self.appearance != appearance
             || self.fontRevision != fontRevision || self.lineSpacing != lineSpacing {
             cache.removeAll()
             usesMarkdown = markdown
+            usesAdvancedRenderer = advanced
             self.language = language
             self.userPreviewLimit = userPreviewLimit
             self.appearance = appearance
@@ -146,14 +150,18 @@ actor MacMessagePresentationStore {
                 let documents = extraction.map { roleplay?.documents(for: message, extraction: $0) ?? [] } ?? []
                 let source = extraction?.remainingText ?? visual
                 let outgoing = message.role == .user && message.authorKind == .user
-                let base = textCache.prepare(source, messageID: message.id,
-                                             markdown: markdown && message.role == .assistant)
-                let text = try await prepareColors(base, outgoing: outgoing, appearance: appearance, fontRevision: fontRevision, lineSpacing: lineSpacing)
                 let activity = MacMessageActivity(message: message, activeResponseID: activeResponseID)
+                let live = markdown && activity.isActive && message.isReceivingStream
+                let base: MacPreparedMessageText
+                if live { base = try await streaming.prepare(source, messageID: message.id, advanced: advanced) }
+                else { base = textCache.prepare(source, messageID: message.id,
+                    markdown: markdown && message.role == .assistant, advanced: advanced) }
+                let text = try await prepareColors(base, outgoing: outgoing, appearance: appearance, fontRevision: fontRevision,
+                    lineSpacing: lineSpacing, appliesRules: !live)
                 var reasoning: MacPreparedMessageText?
                 if let source = message.reasoningContent {
                     let base = textCache.prepare(source, messageID: message.id, reasoning: true,
-                                                 markdown: markdown && !activity.suppressesReasoningContent)
+                                                 markdown: markdown && !activity.suppressesReasoningContent, advanced: advanced)
                     // 活跃思考沿用纯文本预览，不触发规则匹配或额外格式化。
                     reasoning = try await prepareColors(base, outgoing: outgoing, appearance: appearance,
                         fontRevision: fontRevision, lineSpacing: lineSpacing, appliesRules: !activity.suppressesReasoningContent)
@@ -182,6 +190,9 @@ actor MacMessagePresentationStore {
         cache = updated
         textCache.retain(Set(updated.keys))
         coloredTexts = coloredTexts.filter { textIDs.contains($0.key) }
+        await streaming.retain(activeResponseID.map { Set([$0]) } ?? [])
+        try Task.checkCancellation()
+        guard preparationID == revision else { throw CancellationError() }
         return result
     }
 
@@ -189,13 +200,14 @@ actor MacMessagePresentationStore {
                           scriptSessionIDs: Set<UUID>, service: ChatService,
                           userPreviewLimit: Int = ChatUserMessagePreview.defaultCharacterLimit,
                           appearance: ChatAppearanceProfile = .defaultProfile,
-                          lineSpacing: Double = FontLibrary.defaultIOSLineSpacingEm) async throws -> MacRoleplayPresentation {
+                          lineSpacing: Double = FontLibrary.defaultIOSLineSpacingEm,
+                          advanced: Bool = false) async throws -> MacRoleplayPresentation {
         let worldbooks = service.loadWorldbooks()
         let context = sessionID.map { RoleplayPresentationSnapshot(sessionID: $0, messages: messages, worldbooks: worldbooks) }
         let rows = try await prepare(messages, markdown: markdown, language: language, sessionID: sessionID,
                                      roleplay: context, rules: MessageRegexRuleStore.currentRules(),
                                      activeResponseID: sessionID.flatMap { service.activeResponseMessageID(for: $0) },
-                                     userPreviewLimit: userPreviewLimit, appearance: appearance, lineSpacing: lineSpacing)
+                                     userPreviewLimit: userPreviewLimit, appearance: appearance, lineSpacing: lineSpacing, advanced: advanced)
         var scripts: [RoleplayPreparedDocument] = []
         for id in scriptSessionIDs {
             try Task.checkCancellation()

@@ -10,6 +10,7 @@
 - Mac 浏览器需要 WebKit/AppKit；共享 Core 的公开 WKWebView 分支已包含 macOS，不能再把 `BrowserSessionManagerUnavailable` 加入条件配置来代替实际实现。`BrowserMacRuntimeTests` 只在 macOS + WebKit 下编译，需要原生 Mac 测试目标验证。
 - 复用既有第三方依赖版本，不创建 `Package.swift`。重点核实 SQLCipher、llama.cpp、iSH runtime 的 macOS 架构切片及链接条件；不能把 iOS 模拟器产物当作原生 macOS 产物。
 - Mac App 也需要现有 `MarkdownUI` package product，版本沿用移动端。`MacPreparedMessageText` 在后台构造只读 `MarkdownContent`，`MacMessageTextView` 负责原生块级展示；不能为接入而把解析移到 SwiftUI `body`。
+- Mac target 额外共享 iOS `Views/ETAdvancedMarkdownRendererCodeHighlighting.swift` 这一个源码文件，用于后台代码高亮；不加入移动端 Markdown 入口、UIKit 数学图片或网页承载文件。公式/图表使用 Mac 独立 WebKit 承载与 Core `ETAdvancedMarkdownSource`，固定版本网页库从 jsDelivr 按需加载；App Sandbox 如启用，须有网络客户端能力。资源不可用时回退原文，不把联网依赖当作已随包离线交付。
 - iSH 公共 SDK 的构建声明已包含 macOS 26.0 `arm64`/`x86_64`，由 `scripts/build-native-static-libraries.sh` 进入九切片完整构建，再把 `products/macosx/libiSHApple.a` 放到既有 `llama-build/products/macosx-$(CONFIGURATION)` 链接目录。Core 的 `LocalLinuxISHAdapter.c` 已启用 `TARGET_OS_OSX` 并携带 iSH/SQLite/resolv/z 的链接选项。GUI 接入时确认该 C 文件属于 Core target、Mac 库搜索路径与配置一致；声明本身不是已成功链接的证明。公共 SDK 脚本还调用包含运行用例的 Swift 检查入口，执行整套脚本需要同时获得编译和测试授权。
 - Mac App 的 `PRODUCT_MODULE_NAME` 使用 `ETOS_LLM_Studio_macOS_App`；新增相应的 macOS 单元测试 target，加入 `ETOS LLM Studio/ETOS LLM Studio macOS AppTests` 中的测试源码。该测试目录不加入 App target。
 
@@ -281,4 +282,16 @@ Mac 根目录为 `Application Support/ETOS LLM Studio`，通过 `StorageUtility.
    同步显示文档目录、Mac 中英知识、两份介绍及双端八语言六个键。40 个本次文件差异格式、159 键的 16 表覆盖/资源语法/新增重复键及源码长度静态检查通过；未编译、运行测试、App、CoreText 解码/注册或文件面板。工程需要加入上述文件及测试，未修改工程文件或 iSH。工具链与授权就绪后需验证实际 TTF/OTF/TTC/WOFF/WOFF2、系统沙盒授权、同名字体注册与多字形覆盖、逐字/整段回退、Markdown 四语义槽位、字号及行距、批量部分失败与磁盘失败、云同步竞态、窗口与锁定/恢复收尾、原生确认与向导失效及语言切换。其余高级显示和平台能力继续对齐，整体 Mac 目标尚未完成。
 
 
-目前源码包含聊天、附件、会话草稿、图片/视频背景导入选择与显示、照片图库导入与图片裁切草稿、聊天配色/文字规则与每日切换、字体库和优先级草稿/字号/行距、原生气泡及玻璃、录音/转写与待发语音试听、系统/云端朗读设置与服务草稿、消息朗读/自动播放及音频导出、文件夹/标签/颜色分类与正文搜索、提供商/模型/MCP 基础配置、全局及提供商独立代理草稿、模型独立协议与完整价格草稿、请求参数与结构化控制编辑、聊天控制运行态及有效覆盖参数预览、滑块配色与请求思考反馈、MCP 资源/提示词读取、快捷指令配置/导入/描述生成、内置工具及审批设置、Skills 管理与导入、本机会话浏览器、Agent 提示词管理、本地 Linux 运行管理与用户终端、Linux 任务历史/输出分页/诊断查看、工作区导出清理与外部目录挂载、guest 文件浏览编辑/删除、环境变量/命令规则/终端快捷键管理、常用环境安装及随包许可/源码查看、快照备份恢复、S3/R2 与 iCloud 同步管理、工具问答与 Widget、记忆编辑、嵌入维护、归档传输、跨对话摘要与画像、世界书管理/会话绑定、角色与身份资料管理、角色正则/脚本编辑、宏和分层变量编辑、角色 HTML/脚本承载及向导入口。完整功能对齐仍在继续，其余 Linux 配置、工具中心其余入口、显示及其他高级配置与平台能力等不能据此视为完成，浏览器与其他新 Mac 功能还需工程接入及运行验证。
+60. Mac 消息接入高级渲染和 Core 流式分块。显示页沿用 `enableAdvancedRenderer` 与 `chat.streamingDisplay.mode` 原键；Markdown 关闭时隐藏高级开关，向导字段只读，并通过上下文 ID 变化使旧提案失效。即时与柔和分别使用 Core 的 60/120 毫秒界面发布间隔，动态重订阅当前消息快照，不改变请求流式开关；逐字淡入与其余动画仍未接入。
+
+   新增 Core `ETAdvancedMarkdownSource`，复用数学解析器的代码范围保护，以随机命名空间占位符传递行内/块级公式，并使用 Markdown AST 识别实际 Mermaid/mmd 代码块，避免把外层代码示例误当成图表。原文、复制、编辑、导出和模型输入不变。Mac 每窗口拥有独立 `ETStreamingMarkdownPipeline`，稳定段落保留已解析对象，末尾显示正在接收的文本/代码；替换重置块代次，请求结束后直接发布完整 Markdown，活动思考仍为纯文本。取消与准备代次阻止旧行覆盖新行，历史清理移除流式缓存。
+
+   普通代码块共享既有 iOS `ETCodeSyntaxHighlighter`，在后台生成 Text，UI 只消费结果；上限沿用 12000 个 UTF-16 单元，超过上限或指定代码色时使用普通文字。新增复制、展开/收起的原生控件；复制始终使用原始代码。不在本项改动移动端高亮调用链，也不执行 HTML/SVG 代码预览。简单文字的既有颜色/字体规则结果仍优先显示。
+
+   只有包含公式或图表的完成内容/稳定块才使用独立非持久 WKWebView。HTML 与 JSON 后台生成，转义脚本结束标签，原始 HTML 显示字面文本，DOMPurify 清理 Markdown 输出；KaTeX 使用 `trust:false`，Mermaid 使用 strict。网页只回传高度与准备/失败状态，不注册角色脚本、聊天工具或文件桥；只允许用户激活 HTTP/HTTPS/mailto 链接后交给系统。替换文档销毁旧承载，拆除回调并停止页面；锁定、备份、恢复、退出与离开可见区域时显式移除网页，不能依赖锁屏遮罩自动销毁。退出状态改为发布属性，确保界面及时停用；资源失败或 20 秒加载截止后显示原文和手动重试。四个语义字体、配色、字号和行距传入网页，网页不重复执行指定文字规则。
+
+   资源按需加载固定版本 Marked 18.1.0、DOMPurify 3.4.16、KaTeX 0.19.0 和 Mermaid 12.1.0。只读取 npm 元数据并静态确认五个 CDN URL 的 HTTP 状态与资源类型，未执行这些脚本；原 iOS 网页资源版本不变。此实现需要联网，不承诺离线公式/图表；高级网页中的普通代码保留复制与折叠，本次语法高亮用于原生代码块。API 参考 [Marked 扩展接口](https://marked.js.org/using_pro)、[KaTeX 选项](https://katex.org/docs/options.html) 与 [Mermaid 配置](https://mermaid.js.org/config/schema-docs/config.html)。
+
+   新增五个 Mac 源文件、一个 Core 源文件及两个测试文件。十个未执行用例覆盖代码范围保护、公式类型与占位碰撞、真实/伪 Mermaid 围栏、Unicode 和脚本载荷、稳定块身份、替换与清理、未闭合代码及完成交接、高级开关缓存、活动思考、资源按需包含及向导语义。同步显示文档目录、Mac 中英知识、双端八语言介绍与两个新键。33 个本次文件的差异格式、48 个文案键的 16 表覆盖、资源语法、无新增重复键、源码长度与其他 22 个文件哈希的静态检查通过。未编译、运行测试、App 或网页脚本，未修改工程文件与 iSH。完整工具链和授权就绪后须补验目标成员关系、三端构建、Core/Mac 测试、实际 KaTeX/Mermaid 与代码格式、CDN 失败/慢加载/重试、深浅色与语言、字体和文字规则、流式取消/替换/切会话、窗口尺寸及锁定/恢复时承载销毁；其余显示与平台能力仍需继续对齐。
+
+目前源码包含聊天、附件、会话草稿、图片/视频背景导入选择与显示、照片图库导入与图片裁切草稿、聊天配色/文字规则与每日切换、字体库和优先级草稿/字号/行距、基础与高级 Markdown、公式/Mermaid、后台代码高亮及流式稳定分块、原生气泡及玻璃、录音/转写与待发语音试听、系统/云端朗读设置与服务草稿、消息朗读/自动播放及音频导出、文件夹/标签/颜色分类与正文搜索、提供商/模型/MCP 基础配置、全局及提供商独立代理草稿、模型独立协议与完整价格草稿、请求参数与结构化控制编辑、聊天控制运行态及有效覆盖参数预览、滑块配色与请求思考反馈、MCP 资源/提示词读取、快捷指令配置/导入/描述生成、内置工具及审批设置、Skills 管理与导入、本机会话浏览器、Agent 提示词管理、本地 Linux 运行管理与用户终端、Linux 任务历史/输出分页/诊断查看、工作区导出清理与外部目录挂载、guest 文件浏览编辑/删除、环境变量/命令规则/终端快捷键管理、常用环境安装及随包许可/源码查看、快照备份恢复、S3/R2 与 iCloud 同步管理、工具问答与 Widget、记忆编辑、嵌入维护、归档传输、跨对话摘要与画像、世界书管理/会话绑定、角色与身份资料管理、角色正则/脚本编辑、宏和分层变量编辑、角色 HTML/脚本承载及向导入口。完整功能对齐仍在继续，其余 Linux 配置、工具中心其余入口、显示及其他高级配置与平台能力等不能据此视为完成，浏览器与其他新 Mac 功能还需工程接入及运行验证。

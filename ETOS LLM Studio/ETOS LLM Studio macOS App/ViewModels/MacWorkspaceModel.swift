@@ -85,7 +85,7 @@ final class MacWorkspaceModel: ObservableObject {
     )
     private var roleplayHostVisible = false
     private var roleplayLifecycleRevision = UUID()
-    private var isClosingRoleplay = false
+    @Published private var isClosingRoleplay = false
     private var questionnaires: [UUID: [MacQuestionnaireModel]] = [:]
     private var toolDrafts: [UUID: [AppToolInputDraftRequest]] = [:]
     private var pendingSupplements: [UUID: [String]] = [:]
@@ -177,6 +177,8 @@ final class MacWorkspaceModel: ObservableObject {
         configuration.$enableMarkdown.combineLatest(configuration.$userMessagePreviewCharacterLimit, configuration.$appLanguage)
             .dropFirst().receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.refreshMessagePresentation() }.store(in: &subscriptions)
+        configuration.$enableAdvancedRenderer.dropFirst().receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.refreshMessagePresentation() }.store(in: &subscriptions)
         appearance.$renderRevision.dropFirst().receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.refreshMessagePresentation() }.store(in: &subscriptions)
         fonts.$renderRevision.dropFirst().receive(on: DispatchQueue.main)
@@ -248,9 +250,16 @@ final class MacWorkspaceModel: ObservableObject {
                 guard let self else { return }
                 temporaryChatMemoryMode = service.temporaryChatMemoryMode(for: currentSession?.id)
             }.store(in: &subscriptions)
-        service.messagesForSessionSubject
-            .map { [weak service] in (sessionID: service?.currentSessionSubject.value?.id, messages: $0) }
-            .throttle(for: .milliseconds(60), scheduler: DispatchQueue.global(qos: .userInitiated), latest: true)
+        AppConfigStore.shared.$chatStreamingDisplayMode.removeDuplicates()
+            .map { [weak service] mode -> AnyPublisher<(sessionID: UUID?, messages: [ChatMessage]), Never> in
+                guard let service else { return Empty().eraseToAnyPublisher() }
+                return service.messagesForSessionSubject
+                    .map { [weak service] in (sessionID: service?.currentSessionSubject.value?.id, messages: $0) }
+                    .throttle(for: .seconds(ChatStreamingDisplayMode.normalized(mode).uiPublishInterval),
+                              scheduler: DispatchQueue.global(qos: .userInitiated), latest: true)
+                    .eraseToAnyPublisher()
+            }
+            .switchToLatest()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] event in
                 guard let self, currentSession?.id == event.sessionID else { return }
@@ -314,6 +323,7 @@ final class MacWorkspaceModel: ObservableObject {
         let snapshot = sourceMessages
         let sessionID = currentSession?.id
         let markdown = AppConfigStore.shared.enableMarkdown
+        let advanced = AppConfigStore.shared.enableAdvancedRenderer
         let language = AppConfigStore.shared.appLanguage
         let userPreviewLimit = AppConfigStore.shared.userMessagePreviewCharacterLimit
         let appearance = appearance.activeProfile
@@ -327,7 +337,7 @@ final class MacWorkspaceModel: ObservableObject {
             guard !Task.isCancelled else { return }
             guard let prepared = try? await store.prepareWorkspace(snapshot, markdown: markdown, language: language, sessionID: sessionID,
                                                                  scriptSessionIDs: scriptSessionIDs, service: service, userPreviewLimit: userPreviewLimit,
-                                                                 appearance: appearance, lineSpacing: lineSpacing) else { return }
+                                                                 appearance: appearance, lineSpacing: lineSpacing, advanced: advanced) else { return }
             guard let self, !Task.isCancelled, presentationRevision == revision else { return }
             roleplayRuntime.apply(prepared, workspace: self)
             messages = prepared.rows

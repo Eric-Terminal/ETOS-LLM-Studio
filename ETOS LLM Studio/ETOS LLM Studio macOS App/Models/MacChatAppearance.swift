@@ -40,11 +40,19 @@ struct MacChatTextPalette: @unchecked Sendable {
     let emphasis: Color?
     let strong: Color?
     let code: Color?
+    let bodyHex: String?
+    let emphasisHex: String?
+    let strongHex: String?
+    let codeHex: String?
     init(body: ChatAppearanceColorSlot, styles: ChatAppearanceTextStyleColors) {
         self.body = body.isEnabled ? ChatAppearanceColorCodec.color(from: body.hex, fallback: .primary) : nil
         emphasis = styles.emphasis.isEnabled ? ChatAppearanceColorCodec.color(from: styles.emphasis.hex, fallback: .primary) : nil
         strong = styles.strong.isEnabled ? ChatAppearanceColorCodec.color(from: styles.strong.hex, fallback: .primary) : nil
         code = styles.code.isEnabled ? ChatAppearanceColorCodec.color(from: styles.code.hex, fallback: .primary) : nil
+        bodyHex = body.isEnabled ? body.hex : nil
+        emphasisHex = styles.emphasis.isEnabled ? styles.emphasis.hex : nil
+        strongHex = styles.strong.isEnabled ? styles.strong.hex : nil
+        codeHex = styles.code.isEnabled ? styles.code.hex : nil
     }
     static let automatic = MacChatTextPalette(body: .defaultLightText, styles: .init(defaultHex: "1C1C1EFF"))
 }

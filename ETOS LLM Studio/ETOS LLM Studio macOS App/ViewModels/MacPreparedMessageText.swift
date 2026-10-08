@@ -11,20 +11,34 @@ struct MacPreparedMessageText: @unchecked Sendable {
     let lightRules: AttributedString?
     let darkRules: AttributedString?
     let typography: MacTextTypography
+    let advanced: ETAdvancedMarkdownSource?
+    let advancedEnabled: Bool
+    let stream: MacStreamingMarkdownSnapshot?
 
-    init(_ source: String, markdown: Bool) {
+    init(_ source: String, markdown: Bool, advanced: Bool = false) {
         id = UUID()
         self.source = source
         plain = AttributedString(source)
         self.markdown = markdown ? MarkdownContent(source) : nil
         lightRules = nil; darkRules = nil
         typography = .system
+        advancedEnabled = advanced
+        let rich = markdown && advanced ? ETAdvancedMarkdownSource(source) : nil
+        self.advanced = rich?.requiresWebRenderer == true ? rich : nil
+        stream = nil
+    }
+
+    init(_ source: String, stream: MacStreamingMarkdownSnapshot) {
+        id = UUID(); self.source = source; plain = AttributedString(source)
+        markdown = nil; lightRules = nil; darkRules = nil; typography = .system
+        advanced = nil; advancedEnabled = false; self.stream = stream
     }
 
     init(base: MacPreparedMessageText, lightRules: AttributedString?, darkRules: AttributedString?, typography: MacTextTypography = .system) {
         id = base.id; source = base.source; plain = base.plain; markdown = base.markdown
         self.lightRules = lightRules; self.darkRules = darkRules
         self.typography = typography
+        advanced = base.advanced; advancedEnabled = base.advancedEnabled; stream = base.stream
     }
 }
 
@@ -38,10 +52,11 @@ struct MacMessageTextCache {
     private var values: [Key: MacPreparedMessageText] = [:]
 
     mutating func prepare(_ source: String, messageID: UUID, reasoning: Bool = false, preview: Bool = false,
-                          markdown: Bool) -> MacPreparedMessageText {
+                          markdown: Bool, advanced: Bool = false) -> MacPreparedMessageText {
         let key = Key(messageID: messageID, reasoning: reasoning, preview: preview)
-        if let value = values[key], value.source == source, (value.markdown != nil) == markdown { return value }
-        let value = MacPreparedMessageText(source, markdown: markdown)
+        if let value = values[key], value.source == source, (value.markdown != nil) == markdown,
+           value.advancedEnabled == advanced { return value }
+        let value = MacPreparedMessageText(source, markdown: markdown, advanced: advanced)
         values[key] = value
         return value
     }

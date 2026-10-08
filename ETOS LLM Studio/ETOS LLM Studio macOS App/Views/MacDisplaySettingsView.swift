@@ -19,6 +19,9 @@ struct MacDisplaySettingsView: View {
             }
             Section {
                 Toggle(NSLocalizedString("Markdown 渲染", comment: ""), isOn: $configuration.enableMarkdown)
+                if configuration.enableMarkdown {
+                    Toggle(NSLocalizedString("使用高级渲染器", comment: ""), isOn: $configuration.enableAdvancedRenderer)
+                }
                 Toggle(NSLocalizedString("增强工具结果显示（实验性）", comment: ""), isOn: $configuration.enableExperimentalToolResultDisplay)
                 Toggle(NSLocalizedString("关闭助手气泡", comment: ""), isOn: $configuration.enableNoBubbleUI)
                 Toggle(NSLocalizedString("液态玻璃效果", comment: ""), isOn: $configuration.enableLiquidGlass)
@@ -29,6 +32,13 @@ struct MacDisplaySettingsView: View {
                     Button(NSLocalizedString("恢复默认玻璃底色", comment: "")) { configuration.liquidGlassTintOpacity = LiquidGlassTintSetting.defaultOpacity }
                 }
             } header: { Text(NSLocalizedString("气泡与排版", comment: "")) }
+            Section {
+                Picker(NSLocalizedString("流式显示", comment: ""), selection: $configuration.chatStreamingDisplayMode) {
+                    ForEach(ChatStreamingDisplayMode.allCases) { mode in Text(mode.displayName).tag(mode.rawValue) }
+                }
+            } footer: {
+                Text(NSLocalizedString("Mac 流式显示说明", comment: "")).font(.footnote).foregroundStyle(.secondary)
+            }
             Section {
                 TextField(NSLocalizedString("预览字符数", comment: ""), value: $configuration.userMessagePreviewCharacterLimit,
                           format: .number.grouping(.never))
@@ -59,7 +69,7 @@ struct MacDisplaySettingsView: View {
         .onAppear { visible = true }
         .onDisappear { visible = false }
         .guideSettingsPageContext(
-            id: "mac-display", title: NSLocalizedString("显示设置", comment: ""),
+            id: GuidePageID(rawValue: "mac-display-\(configuration.enableMarkdown)"), title: NSLocalizedString("显示设置", comment: ""),
             documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings"),
                         GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
             isActive: available && visible,
@@ -72,6 +82,11 @@ struct MacDisplaySettingsView: View {
                 .double("liquid_glass_tint_opacity", label: NSLocalizedString("玻璃底色不透明度", comment: ""), range: 0...1,
                         get: { configuration.liquidGlassTintOpacity }, set: { configuration.liquidGlassTintOpacity = $0 }),
                 .bool("markdown", label: NSLocalizedString("Markdown 渲染", comment: ""), get: { configuration.enableMarkdown }, set: { configuration.enableMarkdown = $0 }),
+                configuration.enableMarkdown
+                    ? .bool("advanced_renderer", label: NSLocalizedString("使用高级渲染器", comment: ""), get: { configuration.enableAdvancedRenderer }, set: { configuration.enableAdvancedRenderer = $0 })
+                    : .readOnly("advanced_renderer", label: NSLocalizedString("使用高级渲染器", comment: ""), value: { .bool(configuration.enableAdvancedRenderer) }),
+                .string("streaming_display_mode", label: NSLocalizedString("流式显示", comment: ""), allowedValues: ["immediate", "gentle"],
+                        get: { configuration.chatStreamingDisplayMode }, set: { configuration.chatStreamingDisplayMode = $0 }),
                 .bool("enhanced_tool_results", label: NSLocalizedString("增强工具结果显示（实验性）", comment: ""), get: { configuration.enableExperimentalToolResultDisplay }, set: { configuration.enableExperimentalToolResultDisplay = $0 }),
                 .integer("user_message_preview_character_limit", label: NSLocalizedString("预览字符数", comment: ""), range: ChatUserMessagePreview.characterLimitRange,
                          get: { configuration.userMessagePreviewCharacterLimit }, set: { configuration.userMessagePreviewCharacterLimit = $0 }),
