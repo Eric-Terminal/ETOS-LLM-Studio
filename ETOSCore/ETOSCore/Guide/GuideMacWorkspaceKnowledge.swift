@@ -8,6 +8,8 @@ public enum GuideMacWorkspaceKnowledge {
             title: chinese ? "Mac 聊天与配置草稿" : "Mac Chat and Configuration Drafts",
             keywords: ["macOS", "Mac", "桌面", "stdio", "数据库", "草稿", "快捷键", "文件夹", "标签", "GGUF", "下载", "LoRA", "内置工具", "自动批准", "倒计时", "Skills", "技能", "快捷指令", "清单", "描述生成", "浏览器", "接管", "登录", "draft", "database", "folder", "tag", "approval", "countdown", "Shortcuts", "manifest", "browser", "WebKit"],
             content: chinese ? """
+            Mac 聊天输入区提供“压缩为续聊”，选项页先改保留轮次、聊天模型和侧重点草稿，再手动创建独立会话。来源和续聊都有跳转入口；顶部可查看摘要、保留原文与工具参数/结果。移除入口仅隐藏一个方向，保留交接内容。设置的上下文标签包含提醒开关与 Token 阈值，点击通知只打开选项。选项、详情、提醒设置、介绍和移除确认各有独立向导，不能通过向导开始压缩或执行工具。详见 context-compression 文档。
+
             Mac 每日脉冲从聊天工具栏打开，卡片、任务、反馈历史、外部信号和设置使用独立标签。复用 Core 的数据库和保留规则，只展示今天的卡片，预先准备的明日内容不会提前显示。详情可喜欢、降权、隐藏、重置反馈、加入任务、保存为正式会话或继续聊；继续聊只填入草稿，不自动发送，重置反馈也不会删除历史事件。隐藏卡片可从今天的隐藏区域打开。
 
             设置直接保存，包含启用、首次打开补生成、专用模型、焦点、明日策展、外部上下文和每卡时间。时间编辑器仅改草稿，须点击保存；外部时间变化时拒绝覆盖。页面向导只经原生确认修改设置与时间草稿，卡片和其他管理标签只读，不能生成、归档、继续聊、反馈、删除或执行 MCP/快捷指令。介绍与编辑器各有独立上下文，切标签、离页、锁定及数据恢复使旧提案失效。
@@ -162,6 +164,8 @@ public enum GuideMacWorkspaceKnowledge {
 
             Mac 与 iOS/watchOS 复用数据库结构、配置编码和附件相对路径；Mac 数据目录为 Application Support/ETOS LLM Studio，不直接读写移动设备的沙盒。平台路径和本地执行环境需要分别配置。页面向导只能使用当前页面声明的工具，不能执行用户 MCP、系统命令或快捷指令，也不会从 JSON 编辑器读取已有秘密。
             """ : """
+            Mac offers Compress to Continue beside the composer. Edit retained rounds, chat model and focus as drafts, then manually create an independent session. Source and continuation links support navigation; the handoff shows its summary, retained text and tool arguments/results. Removing a link hides only that direction and preserves the handoff. The Context settings tab contains reminders and the token threshold; notification clicks only open options. Options, details, settings, introductions and removal confirmation have independent guide contexts and cannot generate or execute tools through the guide. See context-compression.
+
             Mac Daily Pulse opens from the chat toolbar, with separate tabs for cards, tasks, feedback history, external signals and settings. It reuses Core storage and retention: only today's cards are shown, and prepared tomorrow content is not revealed early. Card details support likes, downranking, hiding, resetting feedback, tasks, conversation archiving and continuing chat. Continuing fills a draft without sending; resetting feedback does not erase history events. Hidden cards remain accessible in today's hidden section.
 
             Settings save directly: enablement, generation on first open, dedicated model, focus, tomorrow curation, external context and per-card delivery times. The time editor changes a draft and requires manual Save; external time changes prevent overwriting. The page guide may propose settings and time-draft changes through native confirmation. Cards and other management tabs are read-only to the guide. It cannot generate, archive, continue chat, give feedback, delete records or run MCP tools or shortcuts. Introduction and editor contexts are independent; changing tabs, leaving, locking or restoring invalidates old proposals.

@@ -8248,3 +8248,9 @@
 "送达时间已变更，请重新打开编辑。" = "The delivery time has changed. Reopen the editor.";
 "重置反馈" = "Reset feedback";
 "隐藏" = "Hide";
+
+/* Mac 续聊压缩 */
+"Mac 续聊压缩说明正文" = "Open Compress to Continue beside the composer. Choose how many recent rounds to retain, a compression model and an optional focus, then click Create Continuation. Earlier history becomes a summary; the source conversation and its messages remain unchanged. Attachments must be fully readable. Save temporary chats first.\n\nAt the top of the new conversation, view the summary and retained text or return to the source. The source also links to its continuation. Removing a link hides only that direction and does not delete content.\n\nReminders estimate tokens across the complete conversation, with a threshold from 1,000 to 2,000,000. They never compress automatically; notification clicks open options for you to confirm. The page guide can edit drafts but cannot generate or execute tools. Stopping or locking cancels generation. A save already in progress finishes without forcing navigation.";
+"只隐藏此入口，不删除会话或续聊上下文。" = "Hide this link only, without deleting the conversation or continuation context.";
+"提醒 Token 阈值" = "Reminder Token Threshold";
+"达到阈值时提醒，不会自动压缩。通知只打开选项，仍需手动创建续聊会话。" = "Remind at the threshold without compressing automatically. Notifications open options; you still create the continuation manually.";

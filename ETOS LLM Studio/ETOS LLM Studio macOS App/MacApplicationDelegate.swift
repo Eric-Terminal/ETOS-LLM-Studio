@@ -11,6 +11,7 @@ final class MacApplicationDelegate: NSObject, NSApplicationDelegate, ObservableO
     private var showWorkspace: (@MainActor () -> Void)?
     private var openTasks: [UUID: Task<Void, Never>] = [:]
     private var pulseNotifications: AnyCancellable?
+    private var compressionNotifications: AnyCancellable?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         AppLocalNotificationCenter.shared.configureIfNeeded()
@@ -19,11 +20,17 @@ final class MacApplicationDelegate: NSObject, NSApplicationDelegate, ObservableO
                 guard !requests.isEmpty, let self, !isTerminating else { return }
                 showWorkspace?()
             }
+        compressionNotifications = AppLocalNotificationCenter.shared.$pendingContextCompressionSessionID.receive(on: DispatchQueue.main)
+            .sink { [weak self] id in
+                guard id != nil, let self, !isTerminating else { return }
+                showWorkspace?()
+            }
     }
 
     func attach(workspace: MacWorkspaceModel, showWorkspace: @escaping @MainActor () -> Void) {
         self.workspace = workspace; self.showWorkspace = showWorkspace
         if !isTerminating, !AppLocalNotificationCenter.shared.pendingDailyPulseRequests.isEmpty { showWorkspace() }
+        if !isTerminating, AppLocalNotificationCenter.shared.pendingContextCompressionSessionID != nil { showWorkspace() }
         guard !isTerminating, !pendingOpenRequests.isEmpty else { return }
         let pending = pendingOpenRequests
         pendingOpenRequests.removeAll()

@@ -26,6 +26,7 @@ struct MacSettingsView: View {
                     NavigationLink(NSLocalizedString("跨对话记忆与画像", comment: "")) { MacConversationMemoryView(model: workspace.conversationMemoryModel) }
                     NavigationLink(NSLocalizedString("世界书", comment: "")) { MacWorldbookListView(model: workspace.worldbookModel) }
                     NavigationLink(NSLocalizedString("角色扮演与酒馆兼容", comment: "")) { MacRoleplayLibraryView(model: workspace.roleplayModel) }
+                    NavigationLink(NSLocalizedString("上下文压缩", comment: "")) { MacContextCompressionSettingsView(isActive: selectedTab == .context) }
                 }
                 .navigationTitle(NSLocalizedString("上下文", comment: ""))
                 .guideSettingsPageContext(
@@ -35,7 +36,8 @@ struct MacSettingsView: View {
                         .readOnly("requires_navigation", label: NSLocalizedString("记忆", comment: ""), value: { .bool(true) }),
                         .readOnly("profile_requires_navigation", label: NSLocalizedString("跨对话记忆与画像", comment: ""), value: { .bool(true) }),
                         .readOnly("worldbooks_requires_navigation", label: NSLocalizedString("世界书", comment: ""), value: { .bool(true) }),
-                        .readOnly("roleplay_requires_navigation", label: NSLocalizedString("角色扮演与酒馆兼容", comment: ""), value: { .bool(true) })
+                        .readOnly("roleplay_requires_navigation", label: NSLocalizedString("角色扮演与酒馆兼容", comment: ""), value: { .bool(true) }),
+                        .readOnly("compression_requires_navigation", label: NSLocalizedString("上下文压缩", comment: ""), value: { .bool(true) })
                     ]
                 )
             }

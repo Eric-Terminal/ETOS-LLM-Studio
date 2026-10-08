@@ -4,7 +4,8 @@ import Foundation
 extension ChatService {
     /// 用户切换会话时先在后台读取历史；连续点选只提交最后一次选择。
     @MainActor
-    public func selectSession(_ session: ChatSession?) async {
+    public func selectSession(_ session: ChatSession?, isSelectionAllowed: @MainActor () -> Bool = { true }) async {
+        guard isSelectionAllowed() else { return }
         let token = UUID()
         let sourceSessionID = currentSessionSubject.value?.id
         sessionSelectionLock.withLock { sessionSelectionToken = token }
@@ -17,7 +18,8 @@ extension ChatService {
             guard let self, let session else { return [ChatMessage]() }
             return self.messagesForSessionActivation(session.id)
         }.value
-        guard !Task.isCancelled else { return }
+        // 后台读盘期间窗口可能锁定；调用方在实际发布前再次核对生命周期。
+        guard !Task.isCancelled, isSelectionAllowed() else { return }
         sessionSelectionLock.withLock {
             guard sessionSelectionToken == token,
                   currentSessionSubject.value?.id == sourceSessionID else { return }

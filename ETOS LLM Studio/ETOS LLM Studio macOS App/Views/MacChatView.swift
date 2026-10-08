@@ -30,7 +30,8 @@ struct MacChatView: View {
             MacChatTimeline(isActive: isVisible && workspace.canManageLocalModels, hasMessages: !workspace.messages.isEmpty, sendRevision: sendRevision,
                 onUserInteraction: { sendMotion.cancel() }, viewportHeight: $viewportHeight, viewportBounds: $viewportBounds) {
                     LazyVStack(alignment: .leading) {
-                        if workspace.messages.isEmpty {
+                        MacContinuationHeader(model: workspace.contextCompression)
+                        if workspace.messages.isEmpty && workspace.contextCompression.presentation?.context == nil {
                             ContentUnavailableView {
                                 Label(NSLocalizedString("新的对话", comment: ""), systemImage: "bubble.left.and.bubble.right")
                             } description: {
@@ -81,6 +82,7 @@ struct MacChatView: View {
                                     Button(NSLocalizedString("删除", comment: ""), role: .destructive) { prepareDeletion(row.message, kind: .message) }
                                         .disabled(!workspace.canModifyCurrentHistory)
                                 }
+                            MacContinuationMessageLinks(model: workspace.contextCompression, messageID: row.id)
                         }
                     }
                     .padding()
@@ -133,7 +135,8 @@ struct MacChatView: View {
             documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace"),
                         GuideDocumentReference(id: "local-models", title: "Local Models"), GuideDocumentReference(id: "tts", title: "Text to Speech")],
             isActive: isVisible && workspace.canManageLocalModels && !importing && editingMessage == nil
-                && rewritingMessage == nil && deletingMessage == nil && !showsRequestControls && !showsBrowser && linuxJobsTarget == nil && speechSource == nil && !workspace.tts.isExportPanelOpen && !workspace.backgrounds.isPresentingMedia && !workspace.fonts.isImportPanelOpen,
+                && rewritingMessage == nil && deletingMessage == nil && !showsRequestControls && !showsBrowser && linuxJobsTarget == nil && speechSource == nil && !workspace.tts.isExportPanelOpen && !workspace.backgrounds.isPresentingMedia && !workspace.fonts.isImportPanelOpen
+                && workspace.contextCompression.optionsSession == nil && !workspace.contextCompression.showsDetails,
             settings: [
                 .readOnly("attachment_count", label: NSLocalizedString("附件", comment: ""), value: { .int(workspace.attachments.count) }),
                 .readOnly("has_audio_draft", label: NSLocalizedString("语音输入", comment: ""), value: { .bool(workspace.audioAttachment != nil) }),
@@ -149,6 +152,7 @@ struct MacChatView: View {
         .sheet(item: $rewritingMessage) { MacMessageRewriteView(target: $0) }
         .sheet(item: $speechSource) { MacSpeechRecorderView(model: workspace.speechInput, source: $0) }
         .sheet(isPresented: $showsRequestControls) { MacRequestRuntimeView(model: workspace.requestControls) }
+        .modifier(MacContextCompressionHost(model: workspace.contextCompression))
         .sheet(item: $linuxJobsTarget) { target in
             NavigationStack {
                 MacLinuxJobsView(isActive: isVisible && workspace.canManageLocalModels, runtime: workspace.linux, sessionID: target.sessionID)
@@ -260,6 +264,7 @@ struct MacChatView: View {
                     Label(NSLocalizedString("聊天控制", comment: ""), systemImage: "slider.horizontal.3")
                 }
                 .disabled(workspace.effectiveModelName == nil || !workspace.canEditRequestControls)
+                MacContextCompressionEntry(model: workspace.contextCompression)
                 Button { showsBrowser = true } label: { Label(NSLocalizedString("浏览器", comment: ""), systemImage: "safari") }
                     .disabled(workspace.currentSession == nil || !workspace.canManageLocalModels || workspace.browser.isSuspended)
                 Button {

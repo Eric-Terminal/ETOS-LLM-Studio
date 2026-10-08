@@ -12,6 +12,40 @@ import Testing
 
 @Suite("Conversation Continuation Persistence Tests")
 struct ConversationContinuationPersistenceTests {
+    @Test("隐藏单向入口不覆盖外部更新的摘要或另一侧标记")
+    func hideLinkPreservesLatestContext() throws {
+        try withStore { store in
+            let source = ChatSession(id: UUID(), name: "来源", isTemporary: false)
+            let child = ChatSession(id: UUID(), name: "续聊", isTemporary: false)
+            store.saveChatSessions([source])
+            let original = makeContext(source: source, child: child)
+            try store.createConversationContinuationSession(session: child, context: original)
+            var updated = original.hidingLink(.sourceSession)
+            updated.summary = "同步后的新摘要"
+            try store.saveConversationContinuationContext(updated)
+            try store.hideConversationContinuationLink(contextID: original.id, childSessionID: child.id, kind: .continuationSession)
+            let saved = try #require(try store.loadConversationContinuationContext(for: child.id))
+            #expect(saved.summary == updated.summary)
+            #expect(saved.isSourceSessionLinkHidden && saved.isContinuationSessionLinkHidden)
+            #expect(saved.retainedMessages == original.retainedMessages)
+        }
+    }
+
+    @Test("旧入口不能隐藏相同会话中的另一份交接")
+    func hideLinkRejectsDifferentIdentity() throws {
+        try withStore { store in
+            let source = ChatSession(id: UUID(), name: "来源", isTemporary: false)
+            let child = ChatSession(id: UUID(), name: "续聊", isTemporary: false)
+            store.saveChatSessions([source])
+            let context = makeContext(source: source, child: child)
+            try store.createConversationContinuationSession(session: child, context: context)
+            #expect(throws: ContextCompressionError.sourceSessionNotFound) {
+                try store.hideConversationContinuationLink(contextID: UUID(), childSessionID: child.id, kind: .sourceSession)
+            }
+            #expect(try store.loadConversationContinuationContext(for: child.id)?.isSourceSessionLinkHidden == false)
+        }
+    }
+
     @Test func createsSessionAndContextInOneTransaction() throws {
         try withStore { store in
             let source = ChatSession(id: UUID(), name: "原会话", isTemporary: false)

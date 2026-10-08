@@ -8174,3 +8174,9 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "送达时间已变更，请重新打开编辑。" = "La hora de entrega ha cambiado. Vuelve a abrir el editor.";
 "重置反馈" = "Restablecer comentarios";
 "隐藏" = "Ocultar";
+
+/* Mac 续聊压缩 */
+"Mac 续聊压缩说明正文" = "Abre la compresión junto al cuadro de entrada. Elige cuántos intercambios recientes conservar, un modelo y un enfoque opcional; después crea la conversación de continuación. El historial anterior se resume y la conversación original permanece intacta. Los archivos adjuntos deben poder leerse por completo. Guarda primero las conversaciones temporales.\n\nEn la parte superior de la nueva conversación puedes consultar el resumen y el texto conservado o volver al origen. La conversación original también incluye un enlace a la continuación. Quitar un enlace solo oculta esa dirección, sin borrar contenido.\n\nLos recordatorios estiman los tokens de toda la conversación, con un umbral de 1.000 a 2.000.000. Nunca comprimen automáticamente: la notificación abre las opciones para que las confirmes. La guía puede editar borradores, pero no generar ni ejecutar herramientas. Detener o bloquear cancela la generación. Si el guardado ya comenzó, se completa sin forzar un cambio de conversación.";
+"只隐藏此入口，不删除会话或续聊上下文。" = "Ocultar solo este enlace, sin borrar la conversación ni el contexto de continuación.";
+"提醒 Token 阈值" = "Umbral de tokens del recordatorio";
+"达到阈值时提醒，不会自动压缩。通知只打开选项，仍需手动创建续聊会话。" = "Avisar al alcanzar el umbral, sin compresión automática. La notificación abre las opciones; la continuación se crea manualmente.";

@@ -226,7 +226,7 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         estimatedTokens: Int,
         tokenThreshold: Int
     ) async -> Bool {
-        guard await requestAuthorizationIfNeeded() else { return false }
+        guard !Task.isCancelled, await requestAuthorizationIfNeeded(), !Task.isCancelled else { return false }
 
         let content = UNMutableNotificationContent()
         content.title = NSLocalizedString(

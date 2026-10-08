@@ -8325,3 +8325,9 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "送达时间已变更，请重新打开编辑。" = "L’heure de livraison a changé. Rouvrez l’éditeur.";
 "重置反馈" = "Réinitialiser l’avis";
 "隐藏" = "Masquer";
+
+/* Mac 续聊压缩 */
+"Mac 续聊压缩说明正文" = "Ouvrez la compression près du champ de saisie. Choisissez le nombre d’échanges récents à conserver, un modèle et, si nécessaire, un point à privilégier, puis créez la conversation de continuation. Le reste de l’historique est résumé ; la conversation source et ses messages restent inchangés. Les pièces jointes doivent être entièrement lisibles. Enregistrez d’abord les conversations temporaires.\n\nEn haut de la nouvelle conversation, consultez le résumé et le texte conservé, ou revenez à la source. La source propose aussi un lien vers la continuation. Retirer un lien ne masque que ce sens de navigation, sans supprimer le contenu.\n\nLes rappels estiment les tokens de toute la conversation, avec un seuil de 1 000 à 2 000 000. Ils ne lancent jamais la compression automatiquement. Un clic sur la notification ouvre les options à confirmer. Le guide peut modifier les brouillons, mais ne peut ni générer ni exécuter des outils. Arrêter ou verrouiller annule la génération. Un enregistrement déjà commencé se termine sans imposer de changement de conversation.";
+"只隐藏此入口，不删除会话或续聊上下文。" = "Masquer uniquement ce lien, sans supprimer la conversation ni son contexte de continuation.";
+"提醒 Token 阈值" = "Seuil de tokens du rappel";
+"达到阈值时提醒，不会自动压缩。通知只打开选项，仍需手动创建续聊会话。" = "Rappeler au seuil sans compression automatique. La notification ouvre les options ; vous créez la continuation manuellement.";
