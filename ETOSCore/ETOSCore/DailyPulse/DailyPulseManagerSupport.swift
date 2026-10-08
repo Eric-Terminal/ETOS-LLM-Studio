@@ -401,7 +401,7 @@ extension DailyPulseManager {
         .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    public static func defaultContinuationPrompt(for card: DailyPulseCard) -> String {
+    public nonisolated static func defaultContinuationPrompt(for card: DailyPulseCard) -> String {
         let suggested = card.suggestedPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if !suggested.isEmpty {
             return suggested

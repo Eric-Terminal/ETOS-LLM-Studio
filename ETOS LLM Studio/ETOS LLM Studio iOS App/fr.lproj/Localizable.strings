@@ -8306,3 +8306,22 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "趋势明细" = "Détails de la tendance";
 
 "图表显示 Token 用量最高的三个模型。" = "Le graphique montre les trois modèles consommant le plus de jetons.";
+
+// Mac 每日脉冲
+"Mac 每日脉冲使用说明" = "Ouvrez Daily Pulse depuis la barre d’outils du chat. Les cartes s’appuient sur vos conversations récentes, vos priorités, les tâches inachevées et les sources de contexte activées. Une carte permet de lire les détails, donner un avis, ajouter une tâche ou enregistrer une conversation. Continuer le chat ouvre cette conversation et remplit un brouillon sans l’envoyer. Les cartes masquées restent accessibles. Réinitialiser un avis ne supprime pas son historique, qui se gère séparément.\n\nLes réglages sont enregistrés lors de la modification. Chaque carte a sa propre heure de livraison ; les modifications d’heure restent un brouillon jusqu’à Enregistrer. La livraison programmée nécessite l’autorisation des notifications. Le Mac prépare les cartes lorsque l’app est ouverte et déverrouillée, pas pendant la veille ni après sa fermeture. Les notifications système déjà programmées peuvent encore arriver ; la préparation reprend quand l’app redevient disponible.\n\nLe guide peut proposer des modifications des réglages et des brouillons d’heure après confirmation. La génération, l’enregistrement, la poursuite du chat, les avis et les suppressions passent par les boutons de l’app. Le guide n’exécute ni outils MCP ni raccourcis.";
+"为什么推荐给你" = "Pourquoi cette recommandation";
+"今天还没有卡片" = "Aucune carte pour aujourd’hui";
+"卡片 %d" = "Carte %d";
+"反馈" = "Avis";
+"外部信号" = "Signaux externes";
+"已保存为会话" = "Enregistrée comme conversation";
+"建议追问" = "Question suggérée";
+"暂无任务" = "Aucune tâche";
+"暂无外部信号" = "Aucun signal externe";
+"未反馈" = "Aucun avis";
+"清空反馈历史" = "Effacer l’historique des avis";
+"清空外部信号" = "Effacer les signaux externes";
+"这张卡片已不可用。" = "Cette carte n’est plus disponible.";
+"送达时间已变更，请重新打开编辑。" = "L’heure de livraison a changé. Rouvrez l’éditeur.";
+"重置反馈" = "Réinitialiser l’avis";
+"隐藏" = "Masquer";

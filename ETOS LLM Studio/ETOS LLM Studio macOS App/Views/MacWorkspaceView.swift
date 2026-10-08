@@ -22,6 +22,7 @@ struct MacWorkspaceView: View {
                 .navigationTitle(workspace.currentSession?.name ?? NSLocalizedString("新的对话", comment: ""))
                 .toolbar {
                     ToolbarItem { MacTemporaryChatMenu() }
+                    ToolbarItem { MacDailyPulseEntry(model: workspace.dailyPulse) }
                     Button { sessionToRoleplay = workspace.currentSession } label: {
                         Label(NSLocalizedString("会话角色绑定", comment: ""), systemImage: "person.text.rectangle")
                     }
@@ -84,6 +85,7 @@ struct MacWorkspaceView: View {
             }
         }
         .networkConnectionApprovalHost()
+        .modifier(MacDailyPulseHost(model: workspace.dailyPulse))
         .overlay { if appLock.state == .locked { AppLockOverlayView() } }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
             appLock.handleSceneDidEnterBackground()

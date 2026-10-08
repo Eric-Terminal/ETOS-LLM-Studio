@@ -81,31 +81,29 @@ extension DailyPulseManager {
             guard let generationModel = await resolveGenerationModel() else {
                 throw DailyPulseGenerationError.noModelSelected
             }
+            try Task.checkCancellation()
 
-            let scheduledDeliveries = DailyPulseDeliveryCoordinator
-                .groupedCardDeliveryTimes(deliveryTimes)
-                .compactMap { deliveryGroup -> (deliveryTimes: [DailyPulseDeliveryTime], scheduledAt: Date)? in
-                    guard let firstDeliveryTime = deliveryGroup.first,
-                          let scheduledAt = DailyPulseDeliveryCoordinator.deliveryDate(
-                              dayKey: generationDayKey,
-                              time: firstDeliveryTime
-                          ) else {
-                        return nil
+            let modelIdentifier = generationModel.id
+            let scheduleTask = Task.detached(priority: .userInitiated) {
+                let deliveries = DailyPulseDeliveryCoordinator.groupedCardDeliveryTimes(deliveryTimes)
+                    .compactMap { group -> (deliveryTimes: [DailyPulseDeliveryTime], scheduledAt: Date)? in
+                        guard let first = group.first,
+                              let date = DailyPulseDeliveryCoordinator.deliveryDate(dayKey: generationDayKey, time: first) else { return nil }
+                        return (group, date)
                     }
-                    return (deliveryGroup, scheduledAt)
-                }
+                return (deliveries: deliveries,
+                    groups: Self.partitionedSessionExcerpts(input.sessionExcerpts,
+                        cardCounts: deliveries.map { $0.deliveryTimes.count }, scheduledDeliveryDates: deliveries.map(\.scheduledAt)),
+                    signature: Self.generationScheduleSignature(deliveryTimes: deliveryTimes, modelIdentifier: modelIdentifier))
+            }
+            let schedule = await withTaskCancellationHandler { await scheduleTask.value } onCancel: { scheduleTask.cancel() }
+            try Task.checkCancellation()
+            let scheduledDeliveries = schedule.deliveries
             guard !scheduledDeliveries.isEmpty else {
                 throw DailyPulseGenerationError.invalidModelOutput
             }
-            let sessionGroups = Self.partitionedSessionExcerpts(
-                input.sessionExcerpts,
-                cardCounts: scheduledDeliveries.map { $0.deliveryTimes.count },
-                scheduledDeliveryDates: scheduledDeliveries.map(\.scheduledAt)
-            )
-            let scheduleSignature = Self.generationScheduleSignature(
-                deliveryTimes: deliveryTimes,
-                modelIdentifier: generationModel.id
-            )
+            let sessionGroups = schedule.groups
+            let scheduleSignature = schedule.signature
             var checkpoint = Self.resumableCheckpoint(
                 from: generationRuntimeState.checkpoints,
                 dayKey: generationDayKey,
@@ -118,6 +116,7 @@ extension DailyPulseManager {
             replaceGenerationCheckpoint(checkpoint)
 
             for (index, scheduledDelivery) in scheduledDeliveries.enumerated() {
+                try Task.checkCancellation()
                 let deliveryGroup = scheduledDelivery.deliveryTimes
                 let scheduledAt = scheduledDelivery.scheduledAt
                 let cardsAtTime = deliveryGroup.count
@@ -136,17 +135,21 @@ extension DailyPulseManager {
                 checkpoint.generatedCards.removeAll { incompleteCardIDs.contains($0.id) }
                 let existingCards = checkpoint.generatedCards
 
-                let userPrompt = Self.makeUserPrompt(
-                    from: input,
-                    sessionExcerpts: sessionGroups.indices.contains(index) ? sessionGroups[index] : [],
-                    cardsPerDelivery: cardsAtTime,
-                    candidateCardsPerDelivery: cardsAtTime * 2,
-                    scheduledDeliveryDate: scheduledAt,
-                    excludedTopics: existingCards.map(\.title)
-                )
+                let promptTask = Task.detached(priority: .userInitiated) {
+                    (system: Self.systemPrompt, user: Self.makeUserPrompt(
+                        from: input,
+                        sessionExcerpts: sessionGroups.indices.contains(index) ? sessionGroups[index] : [],
+                        cardsPerDelivery: cardsAtTime,
+                        candidateCardsPerDelivery: cardsAtTime * 2,
+                        scheduledDeliveryDate: scheduledAt,
+                        excludedTopics: existingCards.map(\.title)
+                    ))
+                }
+                let prompts = await withTaskCancellationHandler { await promptTask.value } onCancel: { promptTask.cancel() }
+                try Task.checkCancellation()
                 let raw = try await chatService.generateDetachedChatCompletion(
-                    systemPrompt: Self.systemPrompt,
-                    userPrompt: userPrompt,
+                    systemPrompt: prompts.system,
+                    userPrompt: prompts.user,
                     temperature: 0.45,
                     runnableModel: generationModel,
                     requestSource: .dailyPulse,
@@ -164,22 +167,22 @@ extension DailyPulseManager {
                         }
                     }
                 )
-                let parsed = try Self.parseModelResponse(from: raw)
-                let cards = Self.makeCards(
-                    from: parsed.cards,
-                    fallbackFocus: input.focusText,
-                    profile: input.preferenceProfile,
-                    limit: cardsAtTime,
-                    excluding: existingCards
-                )
+                try Task.checkCancellation()
+                let parseTask = Task.detached(priority: .userInitiated) {
+                    let parsed = try Self.parseModelResponse(from: raw)
+                    return (headline: Self.normalizedText(parsed.headline,
+                        fallback: NSLocalizedString("这次有几条值得你看", comment: "Daily Pulse delivery batch fallback headline")),
+                        cards: Self.makeCards(from: parsed.cards, fallbackFocus: input.focusText,
+                            profile: input.preferenceProfile, limit: cardsAtTime, excluding: existingCards))
+                }
+                let parsed = try await withTaskCancellationHandler { try await parseTask.value } onCancel: { parseTask.cancel() }
+                try Task.checkCancellation()
+                let cards = parsed.cards
                 guard cards.count == cardsAtTime else {
                     throw DailyPulseGenerationError.invalidModelOutput
                 }
 
-                let headline = Self.normalizedText(
-                    parsed.headline,
-                    fallback: NSLocalizedString("这次有几条值得你看", comment: "Daily Pulse delivery batch fallback headline")
-                )
+                let headline = parsed.headline
                 checkpoint.firstHeadline = checkpoint.firstHeadline ?? headline
                 checkpoint.generatedCards.append(contentsOf: cards)
                 checkpoint.deliveryBatches.append(contentsOf: zip(deliveryGroup, cards).map { pair in

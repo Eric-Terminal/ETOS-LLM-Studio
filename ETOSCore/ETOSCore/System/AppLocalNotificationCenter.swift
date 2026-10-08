@@ -138,6 +138,14 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
     @Published public private(set) var pendingRoute: AppLocalNotificationRoute?
     @Published public private(set) var pendingDailyPulseContinuation: AppLocalNotificationDailyPulseContinuation?
     @Published public private(set) var pendingDailyPulseSelection: AppLocalNotificationDailyPulseSelection?
+#if os(macOS)
+    @Published public private(set) var pendingDailyPulseRequests: [DailyPulseNotificationRequest] = []
+    public var macCurrentSessionID: UUID?
+
+    public func consumeDailyPulseRequest() -> DailyPulseNotificationRequest? {
+        pendingDailyPulseRequests.isEmpty ? nil : pendingDailyPulseRequests.removeFirst()
+    }
+#endif
     @Published public private(set) var pendingFeedbackIssueNumber: Int?
     @Published public private(set) var pendingChatSessionID: UUID?
     @Published public private(set) var pendingContextCompressionSessionID: UUID?
@@ -629,6 +637,19 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         actionIdentifier: String,
         payload: AppLocalNotificationPayload
     ) {
+#if os(macOS)
+        let action: DailyPulseNotificationRequest.Action
+        switch actionIdentifier {
+        case UNNotificationDefaultActionIdentifier, appLocalNotificationDailyPulseOpenActionIdentifier: action = .open
+        case appLocalNotificationDailyPulseLikeActionIdentifier: action = .like
+        case appLocalNotificationDailyPulseSaveActionIdentifier: action = .save
+        case appLocalNotificationDailyPulseContinueActionIdentifier: action = .continueChat
+        case appLocalNotificationDailyPulseTaskActionIdentifier: action = .addTask
+        default: return
+        }
+        pendingDailyPulseRequests.append(.init(action: action, runID: payload.runID,
+            cardID: payload.cardID, dayKey: payload.dayKey))
+#else
         switch actionIdentifier {
         case UNNotificationDefaultActionIdentifier, appLocalNotificationDailyPulseOpenActionIdentifier:
             openDailyPulseFromNotification(payload: payload)
@@ -646,6 +667,7 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         default:
             break
         }
+#endif
     }
 
     private func currentNotificationSettings() async -> UNNotificationSettings {
@@ -669,13 +691,18 @@ extension AppLocalNotificationCenter: UNUserNotificationCenterDelegate {
     ) async -> UNNotificationPresentationOptions {
         let payload = AppLocalNotificationPayload(userInfo: notification.request.content.userInfo)
         let shouldPresent = await MainActor.run {
+#if os(macOS)
+            // 冷启动接收通知时数据库可能仍锁定，不能为读取当前会话而初始化 ChatService。
+            return payload.shouldPresentWhileForeground(currentSessionID: AppLocalNotificationCenter.shared.macCurrentSessionID)
+#else
             // 投递与展示之间用户可能已从 B 切回 A，此时应静默；仍在 B 则展示 A 的完成通知。
-            payload.shouldPresentWhileForeground(
+            return payload.shouldPresentWhileForeground(
                 currentSessionID: payload.isChatReply ? ChatService.shared.currentSessionSubject.value?.id : nil
             )
+#endif
         }
         guard shouldPresent else { return [] }
-#if os(iOS)
+#if os(iOS) || os(macOS)
         return [.banner, .list, .sound]
 #elseif os(watchOS)
         if #available(watchOS 8.0, *) {

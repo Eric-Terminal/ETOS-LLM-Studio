@@ -8306,3 +8306,22 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "趋势明细" = "Detalles de la tendencia";
 
 "图表显示 Token 用量最高的三个模型。" = "El gráfico muestra los tres modelos con mayor uso de tokens.";
+
+// Mac 每日脉冲
+"Mac 每日脉冲使用说明" = "Abre Daily Pulse desde la barra del chat. Las tarjetas usan conversaciones recientes, tus prioridades, tareas pendientes y las fuentes de contexto activadas. Abre una tarjeta para ver detalles, dar tu opinión, añadir una tarea o guardarla como conversación. Continuar el chat abre esa conversación y rellena un borrador sin enviarlo. Las tarjetas ocultas siguen disponibles en su sección. Restablecer una valoración no borra su historial, que se gestiona por separado.\n\nLos ajustes se guardan al editarlos. Cada tarjeta tiene su propia hora de entrega; la edición de la hora queda como borrador hasta pulsar Guardar. La entrega programada requiere permiso de notificaciones. El Mac prepara tarjetas mientras la app está abierta y desbloqueada, no en reposo ni tras cerrarla. Las notificaciones del sistema ya programadas aún pueden llegar; la preparación se reanuda cuando la app vuelve a estar disponible.\n\nLa guía puede proponer cambios en ajustes y borradores de hora tras confirmación. Generar, guardar conversaciones, continuar el chat, valorar y borrar registros requiere los controles de la app. La guía no ejecuta herramientas MCP ni atajos.";
+"为什么推荐给你" = "Por qué se recomienda";
+"今天还没有卡片" = "Aún no hay tarjetas para hoy";
+"卡片 %d" = "Tarjeta %d";
+"反馈" = "Comentarios";
+"外部信号" = "Señales externas";
+"已保存为会话" = "Guardada como conversación";
+"建议追问" = "Seguimiento sugerido";
+"暂无任务" = "Aún no hay tareas";
+"暂无外部信号" = "Aún no hay señales externas";
+"未反馈" = "Sin comentarios";
+"清空反馈历史" = "Borrar historial de comentarios";
+"清空外部信号" = "Borrar señales externas";
+"这张卡片已不可用。" = "Esta tarjeta ya no está disponible.";
+"送达时间已变更，请重新打开编辑。" = "La hora de entrega ha cambiado. Vuelve a abrir el editor.";
+"重置反馈" = "Restablecer comentarios";
+"隐藏" = "Ocultar";

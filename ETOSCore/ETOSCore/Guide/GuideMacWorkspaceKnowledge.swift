@@ -8,6 +8,12 @@ public enum GuideMacWorkspaceKnowledge {
             title: chinese ? "Mac 聊天与配置草稿" : "Mac Chat and Configuration Drafts",
             keywords: ["macOS", "Mac", "桌面", "stdio", "数据库", "草稿", "快捷键", "文件夹", "标签", "GGUF", "下载", "LoRA", "内置工具", "自动批准", "倒计时", "Skills", "技能", "快捷指令", "清单", "描述生成", "浏览器", "接管", "登录", "draft", "database", "folder", "tag", "approval", "countdown", "Shortcuts", "manifest", "browser", "WebKit"],
             content: chinese ? """
+            Mac 每日脉冲从聊天工具栏打开，卡片、任务、反馈历史、外部信号和设置使用独立标签。复用 Core 的数据库和保留规则，只展示今天的卡片，预先准备的明日内容不会提前显示。详情可喜欢、降权、隐藏、重置反馈、加入任务、保存为正式会话或继续聊；继续聊只填入草稿，不自动发送，重置反馈也不会删除历史事件。隐藏卡片可从今天的隐藏区域打开。
+
+            设置直接保存，包含启用、首次打开补生成、专用模型、焦点、明日策展、外部上下文和每卡时间。时间编辑器仅改草稿，须点击保存；外部时间变化时拒绝覆盖。页面向导只经原生确认修改设置与时间草稿，卡片和其他管理标签只读，不能生成、归档、继续聊、反馈、删除或执行 MCP/快捷指令。介绍与编辑器各有独立上下文，切标签、离页、锁定及数据恢复使旧提案失效。
+
+            Mac 在应用运行且解锁时按实际送达时刻、午夜、回到前台与系统唤醒处理准备；没有轮询，也不保证休眠或退出后生成。通知点击冷启动时只暂存操作意图，工作区就绪后处理。反馈和任务按原 Core 保存，归档在后台创建会话；锁定取消生成并停用页面，备份、恢复和退出还会等待已接受持久化，恢复后丢弃旧通知操作。日期、正文解析与展示索引在后台准备，停止展示后不保留页面快照。
+
             Mac 用量统计位于设置的数据管理，复用 Core 仪表盘和原数据库用量表。全量概览独立于详情筛选；通过热力图和月历选定日期，再切换日、周、月或全部。Token 趋势按 Core 小时/日期桶显示，另有模型堆叠图、模型榜单与来源明细。缓存与思考不重复计入总量；无命中率显示暂无数据，没有可展示费用汇总时不显示费用，不等于没有发生费用。估价沿用当前价格及请求发生时间，和消息功能栏优先采用已保存费用快照的规则不同；未记录历史不能从消息反推。
 
             统计数字、日期、比例、图表关联及只读向导快照均后台准备。Core 的用量、同步和价格通知触发刷新，不轮询；离页、标签切换、锁定、备份/恢复或退出停用时释放订阅并清空展示。已开始的只读计算可能继续结束，代次检查拒绝迟到发布；再次进入保留日期和范围并重新查询。数据根页、统计页和介绍独立声明只读向导，加载时不提供旧范围汇总，向导不能刷新、选择日期、改变范围或清理记录，也不能读取原始请求和正文。
@@ -156,6 +162,12 @@ public enum GuideMacWorkspaceKnowledge {
 
             Mac 与 iOS/watchOS 复用数据库结构、配置编码和附件相对路径；Mac 数据目录为 Application Support/ETOS LLM Studio，不直接读写移动设备的沙盒。平台路径和本地执行环境需要分别配置。页面向导只能使用当前页面声明的工具，不能执行用户 MCP、系统命令或快捷指令，也不会从 JSON 编辑器读取已有秘密。
             """ : """
+            Mac Daily Pulse opens from the chat toolbar, with separate tabs for cards, tasks, feedback history, external signals and settings. It reuses Core storage and retention: only today's cards are shown, and prepared tomorrow content is not revealed early. Card details support likes, downranking, hiding, resetting feedback, tasks, conversation archiving and continuing chat. Continuing fills a draft without sending; resetting feedback does not erase history events. Hidden cards remain accessible in today's hidden section.
+
+            Settings save directly: enablement, generation on first open, dedicated model, focus, tomorrow curation, external context and per-card delivery times. The time editor changes a draft and requires manual Save; external time changes prevent overwriting. The page guide may propose settings and time-draft changes through native confirmation. Cards and other management tabs are read-only to the guide. It cannot generate, archive, continue chat, give feedback, delete records or run MCP tools or shortcuts. Introduction and editor contexts are independent; changing tabs, leaving, locking or restoring invalidates old proposals.
+
+            While the Mac app is running and unlocked, preparation follows actual delivery times, midnight, activation and wake events without polling. Generation is not guaranteed during sleep or after quitting. Cold-start notification clicks queue intent until the workspace is ready. Archiving creates conversations in the background. Locking cancels generation and disables presentation; backup, restore and termination also drain accepted persistence. Restore discards old notification actions. Dates, text parsing and presentation indexes are prepared in the background, and presentation snapshots are cleared when hidden.
+
             Mac usage analytics is under Settings > Data. It reuses the Core dashboard and existing usage tables. Global totals stay independent of detail filters. Select a date in the heatmap or calendar, then choose day, week, month or all time. Token trends keep Core hour/day buckets, with a stacked model chart and model/source breakdowns. Cache and thinking tokens are not added twice. Missing cache rates show no data. An absent cost total does not prove no cost occurred. Estimates use current pricing and request time, unlike the message action bar’s preference for saved cost snapshots. Unrecorded history cannot be reconstructed from messages.
 
             Formatting, chart joins and read-only guide snapshots are prepared in the background. Core usage, sync and pricing notifications refresh the page without polling. Leaving, changing tabs, locking, backup/restore or quitting releases subscriptions and clears display data. Already started read-only work may finish, but generation checks reject late publication. Returning keeps the date and scope while querying fresh data. Data settings, analytics and its introduction have separate read-only guide contexts. Loading never exposes old totals as a new scope. The guide cannot refresh, select dates, change scope, clear records or read raw requests and message bodies.

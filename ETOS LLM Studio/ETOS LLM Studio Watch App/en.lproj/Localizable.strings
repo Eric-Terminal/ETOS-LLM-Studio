@@ -8076,3 +8076,24 @@
 "趋势明细" = "Trend details";
 
 "图表显示 Token 用量最高的三个模型。" = "The chart shows the three models with the highest token usage.";
+
+// Mac 每日脉冲
+"Mac 每日脉冲使用说明" = "Open Daily Pulse from the chat toolbar. Cards use recent conversations, your focus, unfinished tasks and the context sources you enable. Open a card to view details, give feedback, add a task or save it as a conversation. Continue Chat opens that conversation and fills in a draft; it does not send automatically. Hidden cards remain available in the hidden section. Resetting feedback does not erase feedback history, which you can manage separately.\n\nSettings are saved as you edit. Each card has its own delivery time; time edits remain drafts until you click Save. Scheduled delivery requires notification permission. The Mac prepares cards while the app is running and unlocked. It cannot generate while sleeping or after quitting; scheduled system notifications may still arrive, and preparation resumes when the app becomes available.\n\nThe page guide can propose changes to settings and time drafts after confirmation. Generating, saving conversations, continuing chat, giving feedback and deleting records require the native controls. The guide cannot run MCP tools or shortcuts.";
+"为什么推荐给你" = "Why this is recommended";
+"今天还没有卡片" = "No cards for today yet";
+"卡片" = "Card";
+"卡片 %d" = "Card %d";
+"反馈" = "Feedback";
+"外部信号" = "External signals";
+"已保存为会话" = "Saved as a conversation";
+"建议追问" = "Suggested follow-up";
+"当前页面" = "Current Page";
+"暂无任务" = "No tasks yet";
+"暂无外部信号" = "No external signals yet";
+"未反馈" = "No feedback";
+"清空反馈历史" = "Clear feedback history";
+"清空外部信号" = "Clear external signals";
+"这张卡片已不可用。" = "This card is no longer available.";
+"送达时间已变更，请重新打开编辑。" = "The delivery time has changed. Reopen the editor.";
+"重置反馈" = "Reset feedback";
+"隐藏" = "Hide";

@@ -136,6 +136,7 @@ struct MacBackupRestoreView: View {
                 await workspace.appearance.waitForPendingOperations()
                 await workspace.fonts.waitForPendingOperations()
                 await workspace.requestControls.waitForPendingWrites()
+                await workspace.dailyPulse.waitForPendingOperations()
                 await configuration.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
                 try await Task.detached(priority: .userInitiated) {

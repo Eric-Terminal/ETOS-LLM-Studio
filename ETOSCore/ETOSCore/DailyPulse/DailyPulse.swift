@@ -271,34 +271,37 @@ public final class DailyPulseManager: ObservableObject {
         todayRun
     }
 
-    internal func notificationTarget(
+    public func notificationTarget(
         runID: UUID?,
         cardID: UUID?,
         dayKey: String?
     ) -> (runID: UUID, card: DailyPulseCard)? {
-        if let runID,
-           let run = runs.first(where: { $0.id == runID }) {
-            if let cardID,
-               let card = run.cards.first(where: { $0.id == cardID }) {
-                return (runID, card)
+        Self.notificationTarget(in: runs, runID: runID, cardID: cardID, dayKey: dayKey)
+    }
+
+    public nonisolated static func notificationTarget(
+        in runs: [DailyPulseRun], runID: UUID?, cardID: UUID?, dayKey: String?, referenceDate: Date = Date()
+    ) -> (runID: UUID, card: DailyPulseCard)? {
+        // 明确标识的旧通知不能回退到新一期或另一张卡片，尤其不能误执行反馈、保存和任务操作。
+        if let runID {
+            guard let run = runs.first(where: { $0.id == runID }) else { return nil }
+            if let cardID {
+                return run.cards.first(where: { $0.id == cardID }).map { (runID, $0) }
             }
             if let fallbackCard = run.visibleCards.first ?? run.cards.first {
                 return (runID, fallbackCard)
             }
+            return nil
         }
 
-        let candidateRuns: [DailyPulseRun]
-        if let dayKey, !dayKey.isEmpty {
-            candidateRuns = runs
-                .filter { $0.dayKey == dayKey }
-                .sorted(by: { $0.generatedAt > $1.generatedAt })
-        } else if let primaryRun {
-            candidateRuns = [primaryRun]
-        } else {
-            candidateRuns = runs.sorted(by: { $0.generatedAt > $1.generatedAt })
-        }
+        let targetDay = dayKey.flatMap { $0.isEmpty ? nil : $0 } ?? Self.dayKey(for: referenceDate)
+        let candidateRuns = runs.filter { $0.dayKey == targetDay }.sorted { $0.generatedAt > $1.generatedAt }
 
         for run in candidateRuns {
+            if let cardID {
+                if let card = run.cards.first(where: { $0.id == cardID }) { return (run.id, card) }
+                continue
+            }
             if let fallbackCard = run.visibleCards.first ?? run.cards.first {
                 return (run.id, fallbackCard)
             }

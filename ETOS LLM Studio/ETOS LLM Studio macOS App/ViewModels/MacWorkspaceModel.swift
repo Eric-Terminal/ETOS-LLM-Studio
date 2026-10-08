@@ -74,6 +74,7 @@ final class MacWorkspaceModel: ObservableObject {
     let appearance = MacAppearanceModel()
     let fonts = MacFontModel()
     let linux = MacLinuxModel()
+    let dailyPulse = MacDailyPulseModel()
     private(set) var externalOpenRevision = UUID()
     lazy var incomingDocuments = MacIncomingDocumentsModel(
         library: localModels,
@@ -227,6 +228,7 @@ final class MacWorkspaceModel: ObservableObject {
                 self?.roleplayRuntime.showSession(session?.id, running: service.runningSessionIDsSubject.value)
             }
             self?.currentSession = session
+            AppLocalNotificationCenter.shared.macCurrentSessionID = session?.id
             self?.incomingDocuments.updateSession(session?.id)
             self?.refreshEffectiveModel()
             self?.temporaryChatMemoryMode = service.temporaryChatMemoryMode(for: session?.id)
@@ -308,6 +310,7 @@ final class MacWorkspaceModel: ObservableObject {
                 builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
                 browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); backgrounds.suspend(); appearance.suspend(); fonts.suspend(); linux.suspend()
                 incomingDocuments.suspend(acceptNewFiles: !isRestoringData && !isExportingSnapshot && !isClosingRoleplay)
+                dailyPulse.suspend()
             }
             else { self?.resumeRoleplayPresentation(); self?.resumeRequestControls(); self?.flushToolSupplements() }
         }.store(in: &subscriptions)
@@ -374,6 +377,7 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     func prepareForTermination() async {
+        dailyPulse.suspend()
         isClosingRoleplay = true
         externalOpenRevision = UUID()
         // 退出时不能让等待控件落盘的发送任务随后发出新请求。
@@ -391,6 +395,7 @@ final class MacWorkspaceModel: ObservableObject {
         if let service {
             for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
         }
+        await dailyPulse.waitForPendingOperations()
         await localModels.waitForPendingWrites()
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
@@ -811,6 +816,7 @@ final class MacWorkspaceModel: ObservableObject {
     func beginSnapshotExport() -> Bool {
         guard !isRestoringData, !isMutatingHistory, !roleplayRuntime.isBusy, !sessionLibrary.isWorking, !worldbookModel.isWorking, !roleplayModel.isWorking, !isExportingSnapshot, !SnapshotUploadManager.shared.isUploading else { return false }
         isExportingSnapshot = true
+        dailyPulse.suspend()
         externalOpenRevision = UUID()
         modelTests.cancelAll()
         localModels.suspend()
@@ -832,6 +838,7 @@ final class MacWorkspaceModel: ObservableObject {
             return
         }
         requestControls.resume()
+        dailyPulse.start(workspace: self); dailyPulse.resume()
         localModels.resume()
         shortcutTools.resume()
         builtInTools.resume(); toolApproval.resume(); skills.resume()
@@ -850,6 +857,7 @@ final class MacWorkspaceModel: ObservableObject {
             ])
         }
         isRestoringData = true
+        dailyPulse.suspend()
         externalOpenRevision = UUID()
         modelTests.cancelAll()
         localModels.suspend()
@@ -869,6 +877,7 @@ final class MacWorkspaceModel: ObservableObject {
         }
         await modelTests.cancelAndWait()
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
+        await dailyPulse.waitForPendingOperations()
         await localModels.waitForPendingWrites()
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
@@ -906,6 +915,7 @@ final class MacWorkspaceModel: ObservableObject {
             ])
         }
         isRestoringData = true
+        dailyPulse.suspend()
         externalOpenRevision = UUID()
         modelTests.cancelAll()
         localModels.suspend()
@@ -919,6 +929,7 @@ final class MacWorkspaceModel: ObservableObject {
         defer { isRestoringData = false; resumeRoleplayPresentation(); resumeRequestControls() }
         await modelTests.cancelAndWait()
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
+        await dailyPulse.waitForPendingOperations()
         await localModels.waitForPendingWrites()
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
@@ -944,6 +955,7 @@ final class MacWorkspaceModel: ObservableObject {
     private func refreshRestoredData(_ service: ChatService) async {
         browser.discardRestoredSessions()
         await AppConfigStore.shared.reloadFromPersistentStoreAndWait()
+        await dailyPulse.reloadAfterRestore()
         // 解除恢复屏障前更新工具路由，下一轮聊天不能读取旧数据库的快捷指令。
         await ShortcutToolManager.shared.reloadToolsInBackground()
         await AppToolManager.shared.reloadInBackground()
