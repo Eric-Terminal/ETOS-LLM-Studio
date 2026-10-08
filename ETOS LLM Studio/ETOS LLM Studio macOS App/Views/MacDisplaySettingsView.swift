@@ -14,10 +14,19 @@ struct MacDisplaySettingsView: View {
                 MacSettingsIntroCard(id: "display", title: NSLocalizedString("使用说明", comment: ""),
                     details: NSLocalizedString("Mac 消息显示使用说明", comment: ""), documentID: "settings-display", isActive: available)
                 NavigationLink(NSLocalizedString("沉浸背景", comment: "")) { MacBackgroundSettingsView(model: workspace.backgrounds, isActive: available) }
+                NavigationLink(NSLocalizedString("颜色配置", comment: "")) { MacAppearanceSettingsView(model: workspace.appearance, isActive: available) }
             }
             Section {
                 Toggle(NSLocalizedString("Markdown 渲染", comment: ""), isOn: $configuration.enableMarkdown)
                 Toggle(NSLocalizedString("增强工具结果显示（实验性）", comment: ""), isOn: $configuration.enableExperimentalToolResultDisplay)
+                Toggle(NSLocalizedString("关闭助手气泡", comment: ""), isOn: $configuration.enableNoBubbleUI)
+                Toggle(NSLocalizedString("液态玻璃效果", comment: ""), isOn: $configuration.enableLiquidGlass)
+                if configuration.enableLiquidGlass {
+                    Slider(value: $configuration.liquidGlassTintOpacity, in: 0...1, step: LiquidGlassTintSetting.opacityStep) {
+                        Text(NSLocalizedString("玻璃底色不透明度", comment: ""))
+                    }
+                    Button(NSLocalizedString("恢复默认玻璃底色", comment: "")) { configuration.liquidGlassTintOpacity = LiquidGlassTintSetting.defaultOpacity }
+                }
             } header: { Text(NSLocalizedString("气泡与排版", comment: "")) }
             Section {
                 TextField(NSLocalizedString("预览字符数", comment: ""), value: $configuration.userMessagePreviewCharacterLimit,
@@ -55,6 +64,11 @@ struct MacDisplaySettingsView: View {
             isActive: available && visible,
             settings: [
                 .readOnly("background_requires_navigation", label: NSLocalizedString("沉浸背景", comment: ""), value: { .bool(true) }),
+                .readOnly("colors_require_navigation", label: NSLocalizedString("颜色配置", comment: ""), value: { .bool(true) }),
+                .bool("hide_assistant_bubble", label: NSLocalizedString("关闭助手气泡", comment: ""), get: { configuration.enableNoBubbleUI }, set: { configuration.enableNoBubbleUI = $0 }),
+                .bool("liquid_glass", label: NSLocalizedString("液态玻璃效果", comment: ""), get: { configuration.enableLiquidGlass }, set: { configuration.enableLiquidGlass = $0 }),
+                .double("liquid_glass_tint_opacity", label: NSLocalizedString("玻璃底色不透明度", comment: ""), range: 0...1,
+                        get: { configuration.liquidGlassTintOpacity }, set: { configuration.liquidGlassTintOpacity = $0 }),
                 .bool("markdown", label: NSLocalizedString("Markdown 渲染", comment: ""), get: { configuration.enableMarkdown }, set: { configuration.enableMarkdown = $0 }),
                 .bool("enhanced_tool_results", label: NSLocalizedString("增强工具结果显示（实验性）", comment: ""), get: { configuration.enableExperimentalToolResultDisplay }, set: { configuration.enableExperimentalToolResultDisplay = $0 }),
                 .integer("user_message_preview_character_limit", label: NSLocalizedString("预览字符数", comment: ""), range: ChatUserMessagePreview.characterLimitRange,

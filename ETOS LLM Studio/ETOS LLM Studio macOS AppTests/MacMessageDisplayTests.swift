@@ -24,7 +24,7 @@ struct MacMessageDisplayTests {
         let source = "👨‍👩‍👧‍👦\ne\u{301}后文"
         let message = ChatMessage(role: .user, content: source)
         let row = MacMessagePresentation.prepare(message, markdown: false, userPreviewLimit: 3)
-        #expect(row.userPreview.map { String($0.characters) } == "👨‍👩‍👧‍👦\ne\u{301}…")
+        #expect(row.userPreview?.source == "👨‍👩‍👧‍👦\ne\u{301}…")
         #expect(row.message == message)
         #expect(row.content.source == source)
         let full = MacMessagePresentation.prepare(message, markdown: false, userPreviewLimit: source.count)
@@ -108,5 +108,7 @@ struct MacMessageDisplayTests {
         let english = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "en_US")).content
         #expect(chinese.contains("显示设置") && chinese.contains("完整原文"))
         #expect(english.contains("Display Settings") && english.contains("native confirmation"))
+        #expect(chinese.contains("所有配色和时间段编辑都是草稿") && chinese.contains("不能保存、新增、排序、删除"))
+        #expect(english.contains("they cannot save, add, reorder, delete") && english.contains("drain accepted writes"))
     }
 }

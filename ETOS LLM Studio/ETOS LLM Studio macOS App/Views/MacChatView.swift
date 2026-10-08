@@ -107,7 +107,7 @@ struct MacChatView: View {
             }
             if let model = workspace.activeQuestionnaireModel {
                 MacQuestionnaireView(model: model)
-            } else { composer }
+            } else { composer.modifier(MacComposerAppearance()) }
         }
         .onAppear { isVisible = true; workspace.setRoleplayHostVisible(true) }
         .onDisappear { isVisible = false; importing = false; showsBrowser = false; linuxJobsTarget = nil; speechSource = nil; workspace.setRoleplayHostVisible(false) }
@@ -284,6 +284,12 @@ private struct MacMessageRow: View {
     let row: MacMessagePresentation
     let viewportHeight: CGFloat
     @State private var showsFullContent = false
+    @Environment(\.colorScheme) private var colorScheme
+    private var outgoing: Bool { row.message.role == .user && row.message.authorKind == .user }
+    private var textPalette: MacChatTextPalette {
+        row.palette.text[.resolve(outgoing: outgoing, dark: colorScheme == .dark)] ?? .automatic
+    }
+    private var textColor: Color { textPalette.body ?? (row.message.role == .error ? .red : (outgoing ? .white : .primary)) }
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -315,10 +321,10 @@ private struct MacMessageRow: View {
             } else {
                 Group {
                     if let preview = row.userPreview, !showsFullContent {
-                        Text(preview).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-                    } else { MacMessageTextView(text: row.content) }
+                        MacMessageTextView(text: preview, fallback: textColor)
+                    } else { MacMessageTextView(text: row.content, fallback: textColor) }
                 }
-                .foregroundStyle(row.message.role == .error ? Color.red : Color.primary)
+                .foregroundStyle(textColor)
                 if row.userPreview != nil {
                     Button(NSLocalizedString(showsFullContent ? "收起" : "查看完整内容", comment: "")) { showsFullContent.toggle() }
                         .buttonStyle(.link)
@@ -344,7 +350,11 @@ private struct MacMessageRow: View {
                 .buttonStyle(.link)
             }
         }
-        .padding(.vertical)
+        .foregroundStyle(outgoing ? Color.white : Color.primary)
+        .tint(outgoing ? Color.white : Color.accentColor)
+        .environment(\.macChatTextPalette, textPalette)
+        .padding()
+        .background { MacMessageBubbleBackground(outgoing: outgoing, isError: row.message.role == .error, palette: row.palette) }
         .onChange(of: row.content.id) { _, _ in showsFullContent = false }
     }
 }

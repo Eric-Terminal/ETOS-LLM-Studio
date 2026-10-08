@@ -21,7 +21,8 @@ struct MacMessagePresentation: Identifiable {
 
     let message: ChatMessage
     let content: MacPreparedMessageText
-    let userPreview: AttributedString?
+    let userPreview: MacPreparedMessageText?
+    let palette: MacChatPalette
     let roleTitle: String
     let reasoning: MacPreparedMessageText?
     let toolCalls: [InternalToolCall]
@@ -41,7 +42,9 @@ struct MacMessagePresentation: Identifiable {
                         activeResponseID: UUID? = nil,
                         userPreviewLimit: Int = ChatUserMessagePreview.defaultCharacterLimit,
                         preparedText: MacPreparedMessageText? = nil,
-                        preparedReasoning: MacPreparedMessageText? = nil) -> MacMessagePresentation {
+                        preparedReasoning: MacPreparedMessageText? = nil,
+                        preparedPreview: MacPreparedMessageText? = nil,
+                        palette: MacChatPalette = MacChatPalette(.defaultProfile)) -> MacMessagePresentation {
         let text = renderedContent ?? message.content
         let content = preparedText ?? MacPreparedMessageText(text, markdown: markdown && message.role == .assistant)
         let preview = message.role == .user ? ChatUserMessagePreview(content: text, characterLimit: userPreviewLimit) : nil
@@ -68,7 +71,8 @@ struct MacMessagePresentation: Identifiable {
         return MacMessagePresentation(
             message: message,
             content: content,
-            userPreview: preview.flatMap { $0.isTruncated ? AttributedString($0.content) : nil },
+            userPreview: preparedPreview ?? preview.flatMap { $0.isTruncated ? MacPreparedMessageText($0.content, markdown: false) : nil },
+            palette: palette,
             roleTitle: title,
             reasoning: preparedReasoning ?? message.reasoningContent.map {
                 MacPreparedMessageText($0, markdown: markdown && !activity.suppressesReasoningContent)
@@ -96,25 +100,35 @@ actor MacMessagePresentationStore {
     private var usedCustomPresentation = false
     private var userPreviewLimit = ChatUserMessagePreview.defaultCharacterLimit
     private var textCache = MacMessageTextCache()
+    private var coloredTexts: [UUID: MacColoredTextCacheEntry] = [:]
+    private var appearance = ChatAppearanceProfile.defaultProfile
+    private var preparationID = UUID()
     private let versionIndex = ChatResponseAttemptIndexWorker()
 
     func prepare(_ messages: [ChatMessage], markdown: Bool, language: String, sessionID: UUID? = nil,
                  roleplay: RoleplayPresentationSnapshot? = nil, rules: [MessageRegexRule] = [],
                  activeResponseID: UUID? = nil,
-                 userPreviewLimit: Int = ChatUserMessagePreview.defaultCharacterLimit) async throws -> [MacMessagePresentation] {
+                 userPreviewLimit: Int = ChatUserMessagePreview.defaultCharacterLimit,
+                 appearance: ChatAppearanceProfile = .defaultProfile) async throws -> [MacMessagePresentation] {
+        let revision = UUID(); preparationID = revision
         let versions = await versionIndex.prepare(messages: messages, sessionID: sessionID).entries
         try Task.checkCancellation()
+        guard preparationID == revision else { throw CancellationError() }
+        let palette = MacChatPalette(appearance)
         let usesCustomPresentation = roleplay != nil || !rules.isEmpty
         if usesMarkdown != markdown || self.language != language || self.userPreviewLimit != userPreviewLimit
-            || usesCustomPresentation || usedCustomPresentation {
+            || usesCustomPresentation || usedCustomPresentation || self.appearance != appearance {
             cache.removeAll()
             usesMarkdown = markdown
             self.language = language
             self.userPreviewLimit = userPreviewLimit
+            self.appearance = appearance
         }
         usedCustomPresentation = usesCustomPresentation
         var updated: [UUID: MacMessagePresentation] = [:]
-        let result = try ChatResponseAttemptSupport.visibleMessages(from: messages).map { message in
+        var result: [MacMessagePresentation] = []
+        var textIDs = Set<UUID>()
+        for message in ChatResponseAttemptSupport.visibleMessages(from: messages) {
             try Task.checkCancellation()
             let row: MacMessagePresentation
             if let previous = cache[message.id], previous.message == message, previous.versionInfo == versions[message.id],
@@ -124,35 +138,57 @@ actor MacMessagePresentationStore {
                 let visual = roleplay?.visualContent(message, rules: rules) ?? ChatService.visualMessage(from: message, rules: rules).content
                 let extraction = roleplay?.extraction(for: message, content: visual)
                 let documents = extraction.map { roleplay?.documents(for: message, extraction: $0) ?? [] } ?? []
-                let text = textCache.prepare(extraction?.remainingText ?? visual, messageID: message.id,
+                let source = extraction?.remainingText ?? visual
+                let outgoing = message.role == .user && message.authorKind == .user
+                let base = textCache.prepare(source, messageID: message.id,
                                              markdown: markdown && message.role == .assistant)
+                let text = try await prepareColors(base, outgoing: outgoing, appearance: appearance)
                 let activity = MacMessageActivity(message: message, activeResponseID: activeResponseID)
-                let reasoning = message.reasoningContent.map {
-                    textCache.prepare($0, messageID: message.id, reasoning: true,
-                                      markdown: markdown && !activity.suppressesReasoningContent)
+                var reasoning: MacPreparedMessageText?
+                if let source = message.reasoningContent {
+                    let base = textCache.prepare(source, messageID: message.id, reasoning: true,
+                                                 markdown: markdown && !activity.suppressesReasoningContent)
+                    // 活跃思考沿用纯文本预览，不触发规则匹配或额外格式化。
+                    if activity.suppressesReasoningContent { reasoning = base }
+                    else { reasoning = try await prepareColors(base, outgoing: outgoing, appearance: appearance) }
+                }
+                var preview: MacPreparedMessageText?
+                if message.role == .user {
+                    let candidate = ChatUserMessagePreview(content: source, characterLimit: userPreviewLimit)
+                    if candidate.isTruncated {
+                        let base = textCache.prepare(candidate.content, messageID: message.id, preview: true, markdown: false)
+                        preview = try await prepareColors(base, outgoing: outgoing, appearance: appearance)
+                    }
                 }
                 row = MacMessagePresentation.prepare(message, markdown: markdown, versionInfo: versions[message.id],
                                                      renderedContent: extraction?.remainingText ?? visual, roleplayDocuments: documents,
                                                      activeResponseID: activeResponseID, userPreviewLimit: userPreviewLimit,
-                                                     preparedText: text, preparedReasoning: reasoning)
+                                                     preparedText: text, preparedReasoning: reasoning, preparedPreview: preview, palette: palette)
             }
+            guard preparationID == revision else { throw CancellationError() }
             updated[message.id] = row
-            return row
+            result.append(row)
+            textIDs.insert(row.content.id)
+            if let id = row.reasoning?.id { textIDs.insert(id) }
+            if let id = row.userPreview?.id { textIDs.insert(id) }
         }
+        try Task.checkCancellation()
         cache = updated
         textCache.retain(Set(updated.keys))
+        coloredTexts = coloredTexts.filter { textIDs.contains($0.key) }
         return result
     }
 
     func prepareWorkspace(_ messages: [ChatMessage], markdown: Bool, language: String, sessionID: UUID?,
                           scriptSessionIDs: Set<UUID>, service: ChatService,
-                          userPreviewLimit: Int = ChatUserMessagePreview.defaultCharacterLimit) async throws -> MacRoleplayPresentation {
+                          userPreviewLimit: Int = ChatUserMessagePreview.defaultCharacterLimit,
+                          appearance: ChatAppearanceProfile = .defaultProfile) async throws -> MacRoleplayPresentation {
         let worldbooks = service.loadWorldbooks()
         let context = sessionID.map { RoleplayPresentationSnapshot(sessionID: $0, messages: messages, worldbooks: worldbooks) }
         let rows = try await prepare(messages, markdown: markdown, language: language, sessionID: sessionID,
                                      roleplay: context, rules: MessageRegexRuleStore.currentRules(),
                                      activeResponseID: sessionID.flatMap { service.activeResponseMessageID(for: $0) },
-                                     userPreviewLimit: userPreviewLimit)
+                                     userPreviewLimit: userPreviewLimit, appearance: appearance)
         var scripts: [RoleplayPreparedDocument] = []
         for id in scriptSessionIDs {
             try Task.checkCancellation()
@@ -160,6 +196,28 @@ actor MacMessagePresentationStore {
             scripts.append(contentsOf: snapshot?.scriptDocuments() ?? [])
         }
         return MacRoleplayPresentation(rows: rows, scripts: scripts, buttons: context?.buttons() ?? [])
+    }
+
+    private func prepareColors(_ text: MacPreparedMessageText, outgoing: Bool,
+                               appearance: ChatAppearanceProfile) async throws -> MacPreparedMessageText {
+        let light = outgoing ? appearance.userLightTextStyles : appearance.assistantLightTextStyles
+        let dark = outgoing ? appearance.userDarkTextStyles : appearance.assistantDarkTextStyles
+        if let entry = coloredTexts[text.id], entry.light == light, entry.dark == dark { return entry.text }
+        var lightText: AttributedString?, darkText: AttributedString?
+        if light.customRules.contains(where: { $0.isEnabled && $0.isConfigured }) {
+            lightText = await ChatAppearanceTextRuleRenderer.shared.prepare(request: .init(
+                source: text.source, usesMarkdown: text.markdown != nil, styleColors: light))
+        }
+        try Task.checkCancellation()
+        if dark == light { darkText = lightText }
+        else if dark.customRules.contains(where: { $0.isEnabled && $0.isConfigured }) {
+            darkText = await ChatAppearanceTextRuleRenderer.shared.prepare(request: .init(
+                source: text.source, usesMarkdown: text.markdown != nil, styleColors: dark))
+        }
+        try Task.checkCancellation()
+        let result = MacPreparedMessageText(base: text, lightRules: lightText, darkRules: darkText)
+        coloredTexts[text.id] = .init(light: light, dark: dark, text: result)
+        return result
     }
 }
 
