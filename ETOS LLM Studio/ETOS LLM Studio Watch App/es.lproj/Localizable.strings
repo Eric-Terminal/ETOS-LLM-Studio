@@ -8010,3 +8010,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "选择" = "Seleccionar";
 "配置不完整" = "La configuración del servicio TTS actual está incompleta.";
 "音调" = "System Pitch";
+
+// Mac 消息显示
+"Mac 消息显示使用说明" = "Los cambios se guardan inmediatamente y usan los mismos ajustes que iPhone y Apple Watch. Markdown da formato a títulos, listas, citas, tablas y bloques de código de las respuestas del asistente. Los mensajes del usuario conservan el texto literal. Los resultados mejorados de herramientas muestran las tarjetas compatibles; desactívelos para ver el texto del resultado.\n\nLa vista previa de mensajes del usuario permite de 1 a 100000 caracteres. Puede expandir un mensaje abreviado en su lugar y volver a contraerlo. Copiar desde su menú, editar, enviar al modelo y exportar siguen usando el mensaje original completo.\n\nLa vista previa del razonamiento solo se abre durante la respuesta actual mientras no tenga texto principal ni adjuntos. Se cierra cuando llega contenido o termina la solicitud; el razonamiento terminado puede abrirse manualmente. La altura adaptable crece con el contenido hasta el 30 % del área de chat visible. Desactívela para usar un porcentaje fijo. Cambiar la visualización no envía solicitudes ni inicia la lectura en voz alta.";
+"仅影响显示，复制、编辑和发送仍使用完整消息。" = "Solo afecta a la visualización. Copiar, editar y enviar siguen usando el mensaje completo.";

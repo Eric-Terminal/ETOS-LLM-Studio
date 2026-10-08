@@ -8,6 +8,7 @@ struct MacMessageActivity: Equatable, Sendable {
     let pendingText: String?
     let retryText: String?
     let hasReasoning: Bool
+    let canPreviewReasoning: Bool
     let reasoningHeader: String
     let reasoningLiveSince: Date?
     let animatesReasoning: Bool
@@ -21,6 +22,7 @@ struct MacMessageActivity: Equatable, Sendable {
         hasReasoning = !(message.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasContent = !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !(message.imageFileNames ?? []).isEmpty || !(message.fileFileNames ?? []).isEmpty || message.audioFileName != nil
+        canPreviewReasoning = isActive && hasReasoning && !hasContent
         let waitingForFirstContent = isActive && !hasContent && !hasReasoning && (message.toolCalls ?? []).isEmpty
         pendingText = waitingForFirstContent ? (message.requestRetryStatus?.thinkingText ?? NSLocalizedString("正在思考...", comment: "")) : nil
         retryText = isActive && !waitingForFirstContent ? message.requestRetryStatus?.thinkingText : nil

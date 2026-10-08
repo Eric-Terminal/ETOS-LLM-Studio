@@ -4,6 +4,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct MacChatView: View {
+    @State private var viewportHeight: CGFloat = 0
     @EnvironmentObject private var workspace: MacWorkspaceModel
     @ObservedObject private var configuration = AppConfigStore.shared
     @State private var importing = false
@@ -31,7 +32,7 @@ struct MacChatView: View {
                             }
                         }
                         ForEach(workspace.messages) { row in
-                            MacMessageRow(row: row)
+                            MacMessageRow(row: row, viewportHeight: viewportHeight)
                                 .contextMenu {
                                     Button(NSLocalizedString("复制", comment: "")) {
                                         NSPasteboard.general.clearContents()
@@ -81,6 +82,7 @@ struct MacChatView: View {
                 .onScrollGeometryChange(for: Bool.self) { geometry in
                     geometry.contentSize.height - geometry.visibleRect.maxY < 100
                 } action: { _, nearEnd in followsLatest = nearEnd }
+                .onScrollGeometryChange(for: CGFloat.self) { $0.visibleRect.height } action: { _, height in viewportHeight = height }
                 .onScrollGeometryChange(for: CGFloat.self) { $0.contentSize.height } action: { _, _ in
                     if followsLatest { proxy.scrollTo("latest-message", anchor: .bottom) }
                 }
@@ -277,7 +279,10 @@ private struct MacLinuxJobsTarget: Identifiable {
 
 private struct MacMessageRow: View {
     @EnvironmentObject private var workspace: MacWorkspaceModel
+    @ObservedObject private var configuration = AppConfigStore.shared
     let row: MacMessagePresentation
+    let viewportHeight: CGFloat
+    @State private var showsFullContent = false
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -301,16 +306,22 @@ private struct MacMessageRow: View {
                 }
             }
             if row.activity.hasReasoning, let reasoning = row.reasoning {
-                MacMessageReasoningView(activity: row.activity, reasoning: reasoning)
+                MacMessageReasoningView(activity: row.activity, reasoning: reasoning, viewportHeight: viewportHeight)
             }
             MacMessageWaitingView(activity: row.activity)
-            if let widget = row.widget {
+            if configuration.enableExperimentalToolResultDisplay, let widget = row.widget {
                 MacToolWidgetView(widget: widget, messageID: row.id)
             } else {
-                Text(row.content)
-                    .textSelection(.enabled)
-                    .foregroundStyle(row.message.role == .error ? Color.red : Color.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                Group {
+                    if let preview = row.userPreview, !showsFullContent {
+                        Text(preview).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                    } else { MacMessageTextView(text: row.content) }
+                }
+                .foregroundStyle(row.message.role == .error ? Color.red : Color.primary)
+                if row.userPreview != nil {
+                    Button(NSLocalizedString(showsFullContent ? "收起" : "查看完整内容", comment: "")) { showsFullContent.toggle() }
+                        .buttonStyle(.link)
+                }
                 ForEach(row.roleplayDocuments) { document in
                     MacRoleplayHTMLView(document: document, runtime: workspace.roleplayRuntime)
                 }
@@ -333,6 +344,7 @@ private struct MacMessageRow: View {
             }
         }
         .padding(.vertical)
+        .onChange(of: row.content.id) { _, _ in showsFullContent = false }
     }
 }
 

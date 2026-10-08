@@ -112,10 +112,10 @@ private struct MacGeneralSettingsView: View {
                 NavigationLink(NSLocalizedString("语音输出", comment: "")) {
                     MacTTSSettingsView(model: workspace.tts, isActive: isActive)
                 }
+                NavigationLink(NSLocalizedString("显示设置", comment: "")) { MacDisplaySettingsView(isActive: isActive) }
             }
             Section {
                 Toggle(NSLocalizedString("流式输出", comment: ""), isOn: $configuration.enableStreaming)
-                Toggle(NSLocalizedString("Markdown 渲染", comment: ""), isOn: $configuration.enableMarkdown)
                 Toggle(NSLocalizedString("自动命名会话", comment: ""), isOn: $configuration.enableAutoSessionNaming)
                 Stepper(value: $configuration.maxChatHistory, in: 0...1000) {
                     Text(String(format: NSLocalizedString("历史消息数：%d", comment: ""), configuration.maxChatHistory))
@@ -150,9 +150,9 @@ private struct MacGeneralSettingsView: View {
                 .readOnly("proxy_requires_navigation", label: NSLocalizedString("全局代理设置", comment: ""), value: { .bool(true) }),
                 .readOnly("speech_requires_navigation", label: NSLocalizedString("语音输入", comment: ""), value: { .bool(true) }),
                 .readOnly("tts_requires_navigation", label: NSLocalizedString("语音输出", comment: ""), value: { .bool(true) }),
+                .readOnly("display_requires_navigation", label: NSLocalizedString("显示设置", comment: ""), value: { .bool(true) }),
                 .string("language", label: NSLocalizedString("语言", comment: ""), allowedValues: AppLanguagePreference.allCases.map(\.rawValue), get: { configuration.appLanguage }, set: { configuration.appLanguage = $0 }),
                 .bool("streaming", label: NSLocalizedString("流式输出", comment: ""), get: { configuration.enableStreaming }, set: { configuration.enableStreaming = $0 }),
-                .bool("markdown", label: NSLocalizedString("Markdown 渲染", comment: ""), get: { configuration.enableMarkdown }, set: { configuration.enableMarkdown = $0 }),
                 .bool("auto_title", label: NSLocalizedString("自动命名会话", comment: ""), get: { configuration.enableAutoSessionNaming }, set: { configuration.enableAutoSessionNaming = $0 }),
                 .integer("history_limit", label: NSLocalizedString("历史消息数", comment: ""), range: 0...1000, get: { configuration.maxChatHistory }, set: { configuration.maxChatHistory = $0 }),
                 .bool("temperature_enabled", label: NSLocalizedString("启用温度参数", comment: ""), get: { configuration.aiTemperatureEnabled }, set: { configuration.aiTemperatureEnabled = $0 }),

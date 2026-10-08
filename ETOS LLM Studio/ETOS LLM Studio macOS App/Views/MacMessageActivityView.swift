@@ -20,15 +20,41 @@ struct MacMessageWaitingView: View {
 
 struct MacMessageReasoningView: View {
     let activity: MacMessageActivity
-    let reasoning: String
+    let reasoning: MacPreparedMessageText
+    let viewportHeight: CGFloat
+    @ObservedObject private var configuration = AppConfigStore.shared
     @Environment(\.scenePhase) private var scenePhase
+    @State private var isExpanded = false
+    @State private var contentHeight: CGFloat = 0
+
+    private var shouldPreview: Bool { configuration.enableAutoReasoningPreview && activity.canPreviewReasoning }
+    private var previewHeight: CGFloat {
+        let percent = configuration.reasoningPreviewHeightPercent
+        let fraction = configuration.enableResponsiveReasoningPreviewHeight ? 0.3 : min(100, max(1, percent)) / 100
+        let limit = max(1, viewportHeight * fraction)
+        return configuration.enableResponsiveReasoningPreviewHeight ? min(max(1, contentHeight), limit) : limit
+    }
 
     var body: some View {
-        if activity.suppressesReasoningContent {
-            header
-        } else {
-            DisclosureGroup { Text(reasoning).font(.callout).foregroundStyle(.secondary).textSelection(.enabled) } label: { header }
+        Group {
+            if activity.suppressesReasoningContent && !shouldPreview {
+                header
+            } else {
+                DisclosureGroup(isExpanded: $isExpanded) {
+                    if shouldPreview {
+                        // 流式阶段只展示已准备的纯文本，不提前恢复 Core 抑制的完整 Markdown 渲染。
+                        ScrollView {
+                            Text(reasoning.plain).frame(maxWidth: .infinity, alignment: .leading)
+                                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+                        }
+                        .frame(height: previewHeight)
+                        .textSelection(.enabled)
+                    } else { MacMessageTextView(text: reasoning) }
+                } label: { header }
+                .font(.callout).foregroundStyle(.secondary)
+            }
         }
+        .onChange(of: shouldPreview, initial: true) { _, preview in isExpanded = preview }
     }
 
     @ViewBuilder

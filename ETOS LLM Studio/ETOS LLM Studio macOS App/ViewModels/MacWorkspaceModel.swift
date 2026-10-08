@@ -164,6 +164,9 @@ final class MacWorkspaceModel: ObservableObject {
         speechInput.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
         tts.$isExportPanelOpen.dropFirst().sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &subscriptions)
         configuration.$appLanguage.dropFirst().sink { [weak self] _ in self?.requestControls.reload() }.store(in: &subscriptions)
+        configuration.$enableMarkdown.combineLatest(configuration.$userMessagePreviewCharacterLimit, configuration.$appLanguage)
+            .dropFirst().receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.refreshMessagePresentation() }.store(in: &subscriptions)
         sessionLibrary.$isWorking.dropFirst().sink { [weak self] working in
             self?.objectWillChange.send()
             if !working { Task { [weak self] in self?.flushToolSupplements() } }
@@ -298,12 +301,13 @@ final class MacWorkspaceModel: ObservableObject {
         let sessionID = currentSession?.id
         let markdown = AppConfigStore.shared.enableMarkdown
         let language = AppConfigStore.shared.appLanguage
+        let userPreviewLimit = AppConfigStore.shared.userMessagePreviewCharacterLimit
         let store = presentationStore
         var scriptSessionIDs = runningSessionIDs
         if let sessionID { scriptSessionIDs.insert(sessionID) }
         presentationTask = Task { [weak self] in
             guard let prepared = try? await store.prepareWorkspace(snapshot, markdown: markdown, language: language, sessionID: sessionID,
-                                                                 scriptSessionIDs: scriptSessionIDs, service: service) else { return }
+                                                                 scriptSessionIDs: scriptSessionIDs, service: service, userPreviewLimit: userPreviewLimit) else { return }
             guard let self, !Task.isCancelled, presentationRevision == revision else { return }
             roleplayRuntime.apply(prepared, workspace: self)
             messages = prepared.rows

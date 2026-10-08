@@ -20,9 +20,10 @@ struct MacMessagePresentation: Identifiable {
     }
 
     let message: ChatMessage
-    let content: AttributedString
+    let content: MacPreparedMessageText
+    let userPreview: AttributedString?
     let roleTitle: String
-    let reasoning: String?
+    let reasoning: MacPreparedMessageText?
     let toolCalls: [InternalToolCall]
     let attachments: [Attachment]
     let widget: CompletedToolWidget?
@@ -37,13 +38,14 @@ struct MacMessagePresentation: Identifiable {
 
     static func prepare(_ message: ChatMessage, markdown: Bool, versionInfo: ChatResponseAttemptVersionInfo? = nil,
                         renderedContent: String? = nil, roleplayDocuments: [RoleplayPreparedDocument] = [],
-                        activeResponseID: UUID? = nil) -> MacMessagePresentation {
+                        activeResponseID: UUID? = nil,
+                        userPreviewLimit: Int = ChatUserMessagePreview.defaultCharacterLimit,
+                        preparedText: MacPreparedMessageText? = nil,
+                        preparedReasoning: MacPreparedMessageText? = nil) -> MacMessagePresentation {
         let text = renderedContent ?? message.content
-        let content: AttributedString
-        if markdown, message.role == .assistant,
-           let parsed = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .full)) {
-            content = parsed
-        } else { content = AttributedString(text) }
+        let content = preparedText ?? MacPreparedMessageText(text, markdown: markdown && message.role == .assistant)
+        let preview = message.role == .user ? ChatUserMessagePreview(content: text, characterLimit: userPreviewLimit) : nil
+        let activity = MacMessageActivity(message: message, activeResponseID: activeResponseID)
         let title: String
         switch message.role {
         case .user: title = NSLocalizedString("你", comment: "")
@@ -66,8 +68,11 @@ struct MacMessagePresentation: Identifiable {
         return MacMessagePresentation(
             message: message,
             content: content,
+            userPreview: preview.flatMap { $0.isTruncated ? AttributedString($0.content) : nil },
             roleTitle: title,
-            reasoning: message.reasoningContent,
+            reasoning: preparedReasoning ?? message.reasoningContent.map {
+                MacPreparedMessageText($0, markdown: markdown && !activity.suppressesReasoningContent)
+            },
             toolCalls: message.toolCalls ?? [],
             attachments: attachments,
             widget: CompletedToolWidget(message: message),
@@ -78,7 +83,7 @@ struct MacMessagePresentation: Identifiable {
             versionIndex: index,
             versionLabel: String(format: NSLocalizedString("切换版本 (%d/%d)", comment: ""), index + 1, count),
             canRewrite: message.role == .assistant && !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-            activity: MacMessageActivity(message: message, activeResponseID: activeResponseID),
+            activity: activity,
             roleplayDocuments: roleplayDocuments
         )
     }
@@ -88,18 +93,26 @@ actor MacMessagePresentationStore {
     private var cache: [UUID: MacMessagePresentation] = [:]
     private var usesMarkdown = false
     private var language = ""
+    private var usedCustomPresentation = false
+    private var userPreviewLimit = ChatUserMessagePreview.defaultCharacterLimit
+    private var textCache = MacMessageTextCache()
     private let versionIndex = ChatResponseAttemptIndexWorker()
 
     func prepare(_ messages: [ChatMessage], markdown: Bool, language: String, sessionID: UUID? = nil,
                  roleplay: RoleplayPresentationSnapshot? = nil, rules: [MessageRegexRule] = [],
-                 activeResponseID: UUID? = nil) async throws -> [MacMessagePresentation] {
+                 activeResponseID: UUID? = nil,
+                 userPreviewLimit: Int = ChatUserMessagePreview.defaultCharacterLimit) async throws -> [MacMessagePresentation] {
         let versions = await versionIndex.prepare(messages: messages, sessionID: sessionID).entries
         try Task.checkCancellation()
-        if usesMarkdown != markdown || self.language != language || roleplay != nil || !rules.isEmpty {
+        let usesCustomPresentation = roleplay != nil || !rules.isEmpty
+        if usesMarkdown != markdown || self.language != language || self.userPreviewLimit != userPreviewLimit
+            || usesCustomPresentation || usedCustomPresentation {
             cache.removeAll()
             usesMarkdown = markdown
             self.language = language
+            self.userPreviewLimit = userPreviewLimit
         }
+        usedCustomPresentation = usesCustomPresentation
         var updated: [UUID: MacMessagePresentation] = [:]
         let result = try ChatResponseAttemptSupport.visibleMessages(from: messages).map { message in
             try Task.checkCancellation()
@@ -111,24 +124,35 @@ actor MacMessagePresentationStore {
                 let visual = roleplay?.visualContent(message, rules: rules) ?? ChatService.visualMessage(from: message, rules: rules).content
                 let extraction = roleplay?.extraction(for: message, content: visual)
                 let documents = extraction.map { roleplay?.documents(for: message, extraction: $0) ?? [] } ?? []
+                let text = textCache.prepare(extraction?.remainingText ?? visual, messageID: message.id,
+                                             markdown: markdown && message.role == .assistant)
+                let activity = MacMessageActivity(message: message, activeResponseID: activeResponseID)
+                let reasoning = message.reasoningContent.map {
+                    textCache.prepare($0, messageID: message.id, reasoning: true,
+                                      markdown: markdown && !activity.suppressesReasoningContent)
+                }
                 row = MacMessagePresentation.prepare(message, markdown: markdown, versionInfo: versions[message.id],
                                                      renderedContent: extraction?.remainingText ?? visual, roleplayDocuments: documents,
-                                                     activeResponseID: activeResponseID)
+                                                     activeResponseID: activeResponseID, userPreviewLimit: userPreviewLimit,
+                                                     preparedText: text, preparedReasoning: reasoning)
             }
             updated[message.id] = row
             return row
         }
         cache = updated
+        textCache.retain(Set(updated.keys))
         return result
     }
 
     func prepareWorkspace(_ messages: [ChatMessage], markdown: Bool, language: String, sessionID: UUID?,
-                          scriptSessionIDs: Set<UUID>, service: ChatService) async throws -> MacRoleplayPresentation {
+                          scriptSessionIDs: Set<UUID>, service: ChatService,
+                          userPreviewLimit: Int = ChatUserMessagePreview.defaultCharacterLimit) async throws -> MacRoleplayPresentation {
         let worldbooks = service.loadWorldbooks()
         let context = sessionID.map { RoleplayPresentationSnapshot(sessionID: $0, messages: messages, worldbooks: worldbooks) }
         let rows = try await prepare(messages, markdown: markdown, language: language, sessionID: sessionID,
                                      roleplay: context, rules: MessageRegexRuleStore.currentRules(),
-                                     activeResponseID: sessionID.flatMap { service.activeResponseMessageID(for: $0) })
+                                     activeResponseID: sessionID.flatMap { service.activeResponseMessageID(for: $0) },
+                                     userPreviewLimit: userPreviewLimit)
         var scripts: [RoleplayPreparedDocument] = []
         for id in scriptSessionIDs {
             try Task.checkCancellation()
