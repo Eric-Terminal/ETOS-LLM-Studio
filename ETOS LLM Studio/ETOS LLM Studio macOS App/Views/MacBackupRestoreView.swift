@@ -140,6 +140,7 @@ struct MacBackupRestoreView: View {
                 await workspace.contextCompression.waitForPendingOperations()
                 await workspace.slashCommands.waitForPendingOperations()
                 await workspace.connectionSecurity.waitForPendingOperations()
+                await workspace.remoteAccess.waitForPendingOperations()
                 await workspace.dataImportOperations.cancelAndWaitForPreviews()
                 await configuration.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()

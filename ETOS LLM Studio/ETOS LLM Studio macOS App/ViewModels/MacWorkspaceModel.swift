@@ -83,6 +83,7 @@ final class MacWorkspaceModel: ObservableObject {
     let slashCommands = MacSlashCommandsModel()
     let dataImportOperations = MacDataImportOperations()
     let connectionSecurity = MacConnectionSecurityModel()
+    let remoteAccess = MacRemoteAccessModel()
     private(set) var externalOpenRevision = UUID()
     lazy var incomingDocuments = MacIncomingDocumentsModel(
         library: localModels,
@@ -162,6 +163,7 @@ final class MacWorkspaceModel: ObservableObject {
         await shortcutTools.start()
         let service = await Task.detached(priority: .userInitiated) { ChatService.shared }.value
         self.service = service
+        configureRemoteAccess()
         speechInput.start(service: service)
         tts.start(service: service)
         backgrounds.start()
@@ -320,7 +322,7 @@ final class MacWorkspaceModel: ObservableObject {
                 builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
                 browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); backgrounds.suspend(); appearance.suspend(); fonts.suspend(); linux.suspend()
                 incomingDocuments.suspend(acceptNewFiles: !isRestoringData && !isExportingSnapshot && !isClosingRoleplay)
-                dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); connectionSecurity.suspend(); dataImportOperations.cancelPreviews()
+                dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); connectionSecurity.suspend(); remoteAccess.suspend(); dataImportOperations.cancelPreviews()
             }
             else { self?.resumeRoleplayPresentation(); self?.resumeRequestControls(); self?.flushToolSupplements() }
         }.store(in: &subscriptions)
@@ -387,7 +389,7 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     func prepareForTermination() async {
-        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); connectionSecurity.suspend()
+        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); connectionSecurity.suspend(); remoteAccess.suspend()
         isClosingRoleplay = true
         externalOpenRevision = UUID()
         // 退出时不能让等待控件落盘的发送任务随后发出新请求。
@@ -407,7 +409,7 @@ final class MacWorkspaceModel: ObservableObject {
         if let service {
             for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
         }
-        await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations(); await slashCommands.waitForPendingOperations(); await connectionSecurity.waitForPendingOperations()
+        await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations(); await slashCommands.waitForPendingOperations(); await connectionSecurity.waitForPendingOperations(); await remoteAccess.waitForPendingOperations()
         await localModels.waitForPendingWrites()
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
@@ -824,7 +826,7 @@ final class MacWorkspaceModel: ObservableObject {
     func beginSnapshotExport() -> Bool {
         guard !isRestoringData, !isMutatingHistory, !roleplayRuntime.isBusy, !sessionLibrary.isWorking, !worldbookModel.isWorking, !roleplayModel.isWorking, !isExportingSnapshot, !SnapshotUploadManager.shared.isUploading else { return false }
         isExportingSnapshot = true
-        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); connectionSecurity.suspend(); dataImportOperations.cancelPreviews()
+        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); connectionSecurity.suspend(); remoteAccess.suspend(); dataImportOperations.cancelPreviews()
         externalOpenRevision = UUID()
         modelTests.cancelAll()
         localModels.suspend()
@@ -848,7 +850,7 @@ final class MacWorkspaceModel: ObservableObject {
         requestControls.resume()
         dailyPulse.start(workspace: self); dailyPulse.resume()
         contextCompression.start(workspace: self); contextCompression.resume()
-        slashCommands.resume(); connectionSecurity.resume()
+        slashCommands.resume(); connectionSecurity.resume(); remoteAccess.resume()
         localModels.resume()
         shortcutTools.resume()
         builtInTools.resume(); toolApproval.resume(); skills.resume()
@@ -864,7 +866,7 @@ final class MacWorkspaceModel: ObservableObject {
         try await dataImportOperations.perform { try await self.performDataMaintenance { try await operation.apply(using: $0) } }
     }
 
-    func performDataMaintenance<Value>(_ operation: (ChatService) async throws -> Value) async throws -> Value {
+    func performDataMaintenance<Value>(remoteAccessCommand: Bool = false, _ operation: (ChatService) async throws -> Value) async throws -> Value {
         let cloud = CloudSyncManager.shared
         let mcp = MCPManager.shared
         guard canManageLocalModels, !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, !worldbookModel.isWorking, !roleplayModel.isWorking, !isExportingSnapshot, !memoryModel.isWorking, !conversationMemoryModel.isWorking, sendingSessionIDs.isEmpty,
@@ -875,7 +877,7 @@ final class MacWorkspaceModel: ObservableObject {
             ])
         }
         isRestoringData = true
-        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); connectionSecurity.suspend()
+        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); connectionSecurity.suspend(); remoteAccess.suspend(disconnectConnection: !remoteAccessCommand)
         externalOpenRevision = UUID()
         modelTests.cancelAll()
         localModels.suspend()
@@ -895,7 +897,7 @@ final class MacWorkspaceModel: ObservableObject {
         }
         await modelTests.cancelAndWait(); await dataImportOperations.cancelAndWaitForPreviews()
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
-        await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations(); await slashCommands.waitForPendingOperations(); await connectionSecurity.waitForPendingOperations()
+        await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations(); await slashCommands.waitForPendingOperations(); await connectionSecurity.waitForPendingOperations(); if !remoteAccessCommand { await remoteAccess.waitForPendingOperations() }
         await localModels.waitForPendingWrites()
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()
@@ -932,7 +934,7 @@ final class MacWorkspaceModel: ObservableObject {
             ])
         }
         isRestoringData = true
-        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); connectionSecurity.suspend()
+        dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); connectionSecurity.suspend(); remoteAccess.suspend()
         externalOpenRevision = UUID()
         modelTests.cancelAll()
         localModels.suspend()
@@ -946,7 +948,7 @@ final class MacWorkspaceModel: ObservableObject {
         defer { isRestoringData = false; resumeRoleplayPresentation(); resumeRequestControls() }
         await modelTests.cancelAndWait(); await dataImportOperations.cancelAndWaitForPreviews()
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
-        await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations(); await slashCommands.waitForPendingOperations(); await connectionSecurity.waitForPendingOperations()
+        await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations(); await slashCommands.waitForPendingOperations(); await connectionSecurity.waitForPendingOperations(); await remoteAccess.waitForPendingOperations()
         await localModels.waitForPendingWrites()
         await shortcutTools.waitForPendingWrites()
         await builtInTools.waitForPendingWrites(); await toolApproval.waitForPendingWrites(); await skills.waitForPendingWrites()

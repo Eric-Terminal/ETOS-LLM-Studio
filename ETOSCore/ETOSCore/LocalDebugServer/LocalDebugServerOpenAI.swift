@@ -80,8 +80,8 @@ extension LocalDebugServer {
         ]
     }
 
-    public func resolvePendingOpenAIRequest(save: Bool) {
-        guard let pending = reservePendingOpenAIRequest(targetID: nil) else { return }
+    public func resolvePendingOpenAIRequest(id: UUID? = nil, save: Bool) {
+        guard let pending = reservePendingOpenAIRequest(targetID: id) else { return }
         let token = connectionToken
         // 用户已经确认的保存必须完成；断开可以丢弃远端排队命令，不能丢弃这次原生确认。
         commandQueue.enqueue(discardOnCancellation: false) { [self] in

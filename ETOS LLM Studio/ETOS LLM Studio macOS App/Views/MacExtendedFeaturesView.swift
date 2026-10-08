@@ -37,6 +37,8 @@ struct MacExtendedFeaturesView: View {
                     label: { Label(NSLocalizedString("应用锁", comment: ""), systemImage: "lock.shield") }
                 NavigationLink { MacConnectionSecurityView(isActive: isActive, model: workspace.connectionSecurity) }
                     label: { Label(NSLocalizedString("Connection Exceptions", comment: ""), systemImage: "network") }
+                NavigationLink { MacRemoteAccessView(isActive: isActive, model: workspace.remoteAccess) }
+                    label: { Label(NSLocalizedString("远程文件访问", comment: ""), systemImage: "network") }
             }
         }
         .navigationTitle(NSLocalizedString("拓展功能", comment: ""))
@@ -48,6 +50,7 @@ struct MacExtendedFeaturesView: View {
                 GuideDocumentReference(id: "slash-commands", title: "Quick Commands"),
                 GuideDocumentReference(id: "data-import", title: "Data Import"),
                 GuideDocumentReference(id: "storage-management", title: "Storage Management"),
+                GuideDocumentReference(id: "remote-file-access", title: NSLocalizedString("远程文件访问", comment: "")),
                 GuideDocumentReference(id: "network-connection-exceptions", title: NSLocalizedString("Connection Exceptions", comment: "")),
                 GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")], isActive: available && visible,
             settings: [
@@ -59,6 +62,7 @@ struct MacExtendedFeaturesView: View {
                 .readOnly("import_requires_navigation", label: NSLocalizedString("导入数据", comment: ""), value: { .bool(true) }),
                 .readOnly("storage_requires_navigation", label: NSLocalizedString("存储管理", comment: ""), value: { .bool(true) }),
                 .readOnly("connection_exceptions_require_navigation", label: NSLocalizedString("Connection Exceptions", comment: ""), value: { .bool(true) }),
+                .readOnly("remote_access_requires_navigation", label: NSLocalizedString("远程文件访问", comment: ""), value: { .bool(true) }),
                 .readOnly("security_requires_navigation", label: NSLocalizedString("应用锁", comment: ""), value: { .bool(true) })
             ])
     }

@@ -26,9 +26,10 @@ public struct LocalDebugDiscoveredServer: Identifiable, Hashable, Sendable {
     }
 }
 
+@MainActor
 public final class LocalDebugServerDiscovery: ObservableObject {
-    public static let serviceType = "_etos-debug._tcp."
-    public static let serviceTypeForInfoPlist = "_etos-debug._tcp"
+    nonisolated public static let serviceType = "_etos-debug._tcp."
+    nonisolated public static let serviceTypeForInfoPlist = "_etos-debug._tcp"
 
     @Published public private(set) var discoveredServers: [LocalDebugDiscoveredServer] = []
     @Published public private(set) var isSearching = false
@@ -36,11 +37,14 @@ public final class LocalDebugServerDiscovery: ObservableObject {
 
     private var browser: NWBrowser?
     private let queue = DispatchQueue(label: "com.etos.local-debug.discovery")
+    private(set) var generation = UUID()
 
     public init() {}
 
     public func start() {
         guard browser == nil else { return }
+        generation = UUID()
+        let token = generation
 
         let parameters = NWParameters.tcp
         parameters.includePeerToPeer = true
@@ -52,10 +56,14 @@ public final class LocalDebugServerDiscovery: ObservableObject {
         let newBrowser = NWBrowser(for: descriptor, using: parameters)
 
         newBrowser.stateUpdateHandler = { [weak self] state in
-            self?.handleBrowserState(state)
+            Task { @MainActor [weak self] in self?.handleBrowserState(state, generation: token) }
         }
         newBrowser.browseResultsChangedHandler = { [weak self] results, _ in
-            self?.handleBrowseResults(results)
+            // TXT 解析和排序在浏览器队列完成，主执行器只接收当前扫描的展示数据。
+            let servers = results.compactMap(Self.discoveredServer(from:)).sorted {
+                $0.name.localizedStandardCompare($1.name) == .orderedAscending
+            }
+            Task { @MainActor [weak self] in self?.handleBrowseResults(servers, generation: token) }
         }
 
         browser = newBrowser
@@ -70,53 +78,47 @@ public final class LocalDebugServerDiscovery: ObservableObject {
     }
 
     public func stop() {
+        generation = UUID()
         browser?.cancel()
         browser = nil
         isSearching = false
+        discoveredServers = []
+        errorMessage = nil
     }
 
-    private func handleBrowserState(_ state: NWBrowser.State) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            switch state {
-            case .ready:
-                self.isSearching = true
-                self.errorMessage = nil
-            case .failed(let error):
-                self.isSearching = false
-                self.errorMessage = String(
-                    format: NSLocalizedString("自动发现失败: %@", comment: ""),
-                    error.localizedDescription
-                )
-                self.browser?.cancel()
-                self.browser = nil
-            case .cancelled:
-                self.isSearching = false
-            case .waiting(let error):
-                self.errorMessage = String(
-                    format: NSLocalizedString("自动发现等待网络: %@", comment: ""),
-                    error.localizedDescription
-                )
-            case .setup:
-                self.isSearching = true
-            @unknown default:
-                self.isSearching = true
-            }
+    func handleBrowserState(_ state: NWBrowser.State, generation token: UUID) {
+        guard generation == token else { return }
+        switch state {
+        case .ready:
+            isSearching = true
+            errorMessage = nil
+        case .failed(let error):
+            isSearching = false
+            errorMessage = String(format: NSLocalizedString("自动发现失败: %@", comment: ""), error.localizedDescription)
+            browser?.cancel()
+            browser = nil
+            generation = UUID()
+            discoveredServers = []
+        case .cancelled:
+            isSearching = false
+            browser = nil
+            generation = UUID()
+            discoveredServers = []
+        case .waiting(let error):
+            errorMessage = String(format: NSLocalizedString("自动发现等待网络: %@", comment: ""), error.localizedDescription)
+        case .setup:
+            isSearching = true
+        @unknown default:
+            isSearching = true
         }
     }
 
-    private func handleBrowseResults(_ results: Set<NWBrowser.Result>) {
-        let servers = results.compactMap(Self.discoveredServer(from:))
-            .sorted {
-                $0.name.localizedStandardCompare($1.name) == .orderedAscending
-            }
-
-        DispatchQueue.main.async { [weak self] in
-            self?.discoveredServers = servers
-        }
+    func handleBrowseResults(_ servers: [LocalDebugDiscoveredServer], generation token: UUID) {
+        guard generation == token else { return }
+        discoveredServers = servers
     }
 
-    private static func discoveredServer(from result: NWBrowser.Result) -> LocalDebugDiscoveredServer? {
+    nonisolated private static func discoveredServer(from result: NWBrowser.Result) -> LocalDebugDiscoveredServer? {
         guard case let .service(name, type, domain, _) = result.endpoint else { return nil }
 
         let txt = txtRecordDictionary(from: result.metadata)
@@ -132,12 +134,12 @@ public final class LocalDebugServerDiscovery: ObservableObject {
         )
     }
 
-    private static func txtRecordDictionary(from metadata: NWBrowser.Result.Metadata) -> [String: String] {
+    nonisolated private static func txtRecordDictionary(from metadata: NWBrowser.Result.Metadata) -> [String: String] {
         guard case let .bonjour(txtRecord) = metadata else { return [:] }
         return txtRecord.dictionary
     }
 
-    private static func preferredHost(in txt: [String: String], name: String, domain: String) -> String? {
+    nonisolated private static func preferredHost(in txt: [String: String], name: String, domain: String) -> String? {
         for key in ["host", "hostname", "address", "ip"] {
             if let value = txt[key]?.trimmingCharacters(in: .whitespacesAndNewlines),
                !value.isEmpty {
@@ -157,11 +159,11 @@ public final class LocalDebugServerDiscovery: ObservableObject {
         return isUsableHost(host) ? host : nil
     }
 
-    private static func isUsableHost(_ host: String) -> Bool {
+    nonisolated private static func isUsableHost(_ host: String) -> Bool {
         !host.contains { $0.isWhitespace || $0 == "/" }
     }
 
-    private static func intValue(in txt: [String: String], keys: [String]) -> Int? {
+    nonisolated private static func intValue(in txt: [String: String], keys: [String]) -> Int? {
         for key in keys {
             guard let raw = txt[key],
                   let value = Int(raw),
