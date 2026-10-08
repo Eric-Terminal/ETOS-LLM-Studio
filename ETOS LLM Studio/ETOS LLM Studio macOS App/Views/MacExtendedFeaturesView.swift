@@ -25,6 +25,8 @@ struct MacExtendedFeaturesView: View {
                     label: { Label(NSLocalizedString("快照备份", comment: ""), systemImage: "externaldrive") }
                 NavigationLink { MacCloudSyncView() }
                     label: { Label(NSLocalizedString("iCloud 漫游同步", comment: ""), systemImage: "icloud") }
+                NavigationLink { MacDataImportView(isActive: available) }
+                    label: { Label(NSLocalizedString("导入数据", comment: ""), systemImage: "square.and.arrow.down") }
             }
             Section(NSLocalizedString("安全", comment: "")) {
                 NavigationLink { AppLockSettingsView() }
@@ -37,12 +39,14 @@ struct MacExtendedFeaturesView: View {
         .onDisappear { visible = false }
         .guideSettingsPageContext(id: "mac-extended-features", title: NSLocalizedString("拓展功能", comment: ""),
             documents: [GuideDocumentReference(id: "chat-quick-actions", title: "Chat Quick Actions"),
+                GuideDocumentReference(id: "data-import", title: "Data Import"),
                 GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")], isActive: available && visible,
             settings: [
                 .readOnly("local_models_require_navigation", label: NSLocalizedString("本地模型", comment: ""), value: { .bool(true) }),
                 .readOnly("linux_requires_navigation", label: NSLocalizedString("本地 Linux", comment: ""), value: { .bool(true) }),
                 .readOnly("backup_requires_navigation", label: NSLocalizedString("快照备份", comment: ""), value: { .bool(true) }),
                 .readOnly("sync_requires_navigation", label: NSLocalizedString("iCloud 漫游同步", comment: ""), value: { .bool(true) }),
+                .readOnly("import_requires_navigation", label: NSLocalizedString("导入数据", comment: ""), value: { .bool(true) }),
                 .readOnly("security_requires_navigation", label: NSLocalizedString("应用锁", comment: ""), value: { .bool(true) })
             ])
     }

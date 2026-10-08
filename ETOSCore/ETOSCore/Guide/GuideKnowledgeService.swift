@@ -75,6 +75,7 @@ public enum GuideDocumentCatalog {
         GuideMacWorkspaceKnowledge.document(),
         GuideContextCompressionKnowledge.document(),
         GuideChatQuickActionsKnowledge.document(),
+        GuideDataImportKnowledge.document(),
         GuideDocument(
             id: "message-tool-call-editing",
             title: "消息工具调用 JSON 编辑",

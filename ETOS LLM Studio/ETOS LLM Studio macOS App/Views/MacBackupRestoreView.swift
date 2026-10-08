@@ -138,6 +138,7 @@ struct MacBackupRestoreView: View {
                 await workspace.requestControls.waitForPendingWrites()
                 await workspace.dailyPulse.waitForPendingOperations()
                 await workspace.contextCompression.waitForPendingOperations()
+                await workspace.dataImportOperations.cancelAndWaitForPreviews()
                 await configuration.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
                 try await Task.detached(priority: .userInitiated) {
@@ -184,6 +185,7 @@ struct MacSnapshotFile: Identifiable {
     let id = UUID()
     let url: URL
     var removesOnDismiss = false
+    var restoreRequest: SnapshotRestoreRequest?
 }
 
 struct MacSnapshotRestoreSheet: View {
@@ -194,6 +196,8 @@ struct MacSnapshotRestoreSheet: View {
     var body: some View {
         NavigationStack {
             SnapshotImportRestoreView(fileURL: file.url, restoreOperation: { url, password in
+                // 第三方入口提供的独立副本至少保留到已确认的恢复结束。
+                defer { withExtendedLifetime(file.restoreRequest) {} }
                 try await workspace.restoreSnapshot(from: url, password: password)
             }, onDismiss: onDismiss)
         }

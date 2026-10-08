@@ -80,6 +80,7 @@ final class MacWorkspaceModel: ObservableObject {
     let linux = MacLinuxModel()
     let dailyPulse = MacDailyPulseModel()
     let contextCompression = MacContextCompressionModel()
+    let dataImportOperations = MacDataImportOperations()
     private(set) var externalOpenRevision = UUID()
     lazy var incomingDocuments = MacIncomingDocumentsModel(
         library: localModels,
@@ -316,7 +317,7 @@ final class MacWorkspaceModel: ObservableObject {
                 builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
                 browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); backgrounds.suspend(); appearance.suspend(); fonts.suspend(); linux.suspend()
                 incomingDocuments.suspend(acceptNewFiles: !isRestoringData && !isExportingSnapshot && !isClosingRoleplay)
-                dailyPulse.suspend(); contextCompression.suspend()
+                dailyPulse.suspend(); contextCompression.suspend(); dataImportOperations.cancelPreviews()
             }
             else { self?.resumeRoleplayPresentation(); self?.resumeRequestControls(); self?.flushToolSupplements() }
         }.store(in: &subscriptions)
@@ -396,6 +397,8 @@ final class MacWorkspaceModel: ObservableObject {
         builtInTools.suspend(); toolApproval.suspend(); skills.suspend()
         browser.suspend(); agentPrompts.suspend(); globalProxy.suspend(); speechInput.suspend(); tts.suspend(); backgrounds.suspend(); appearance.suspend(); fonts.suspend(); linux.suspend()
         incomingDocuments.suspend()
+        await dataImportOperations.waitForCompletion()
+        await dataImportOperations.cancelAndWaitForPreviews()
         await modelTests.cancelAndWait()
         // KV 清理可能等待正在推理的上下文；先取消生成，退出不能排在清理锁后面等待。
         if let service {
@@ -822,7 +825,7 @@ final class MacWorkspaceModel: ObservableObject {
     func beginSnapshotExport() -> Bool {
         guard !isRestoringData, !isMutatingHistory, !roleplayRuntime.isBusy, !sessionLibrary.isWorking, !worldbookModel.isWorking, !roleplayModel.isWorking, !isExportingSnapshot, !SnapshotUploadManager.shared.isUploading else { return false }
         isExportingSnapshot = true
-        dailyPulse.suspend(); contextCompression.suspend()
+        dailyPulse.suspend(); contextCompression.suspend(); dataImportOperations.cancelPreviews()
         externalOpenRevision = UUID()
         modelTests.cancelAll()
         localModels.suspend()
@@ -854,9 +857,17 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     func restoreSnapshot(from url: URL, password: String?) async throws {
+        _ = try await importData(.snapshot(url, password: password))
+    }
+
+    func importData(_ operation: MacDataImportOperation) async throws -> SyncMergeSummary? {
+        try await dataImportOperations.perform { try await self.performDataImport(operation) }
+    }
+
+    private func performDataImport(_ operation: MacDataImportOperation) async throws -> SyncMergeSummary? {
         let cloud = CloudSyncManager.shared
         let mcp = MCPManager.shared
-        guard !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, !worldbookModel.isWorking, !roleplayModel.isWorking, !isExportingSnapshot, !memoryModel.isWorking, !conversationMemoryModel.isWorking, sendingSessionIDs.isEmpty,
+        guard canManageLocalModels, !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, !worldbookModel.isWorking, !roleplayModel.isWorking, !isExportingSnapshot, !memoryModel.isWorking, !conversationMemoryModel.isWorking, sendingSessionIDs.isEmpty,
               !SnapshotUploadManager.shared.isUploading, !mcp.isBusy,
               let service, cloud.beginLocalDataRestore() else {
             throw NSError(domain: "ETOSMacSnapshot", code: 1, userInfo: [
@@ -882,7 +893,7 @@ final class MacWorkspaceModel: ObservableObject {
             resumeRoleplayPresentation()
             resumeRequestControls()
         }
-        await modelTests.cancelAndWait()
+        await modelTests.cancelAndWait(); await dataImportOperations.cancelAndWaitForPreviews()
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
         await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations()
         await localModels.waitForPendingWrites()
@@ -898,13 +909,12 @@ final class MacWorkspaceModel: ObservableObject {
         do {
             await AppConfigStore.shared.flushPendingWrites()
             await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
-            try await Task.detached(priority: .userInitiated) {
-                try SnapshotRestoreService.restoreSnapshot(from: url, password: password)
-            }.value
+            let summary = try await operation.apply(using: service)
             didRestore = true
             await refreshRestoredData(service)
             await mcp.finishDatabaseRestore()
             AppLockManager.shared.refreshState()
+            return summary
         } catch {
             await mcp.finishDatabaseRestore()
             throw error
@@ -934,7 +944,7 @@ final class MacWorkspaceModel: ObservableObject {
         requestControls.suspend()
         discardToolInteractions()
         defer { isRestoringData = false; resumeRoleplayPresentation(); resumeRequestControls() }
-        await modelTests.cancelAndWait()
+        await modelTests.cancelAndWait(); await dataImportOperations.cancelAndWaitForPreviews()
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
         await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations()
         await localModels.waitForPendingWrites()
@@ -984,16 +994,4 @@ final class MacWorkspaceModel: ObservableObject {
         worldbookModel.reloadAfterRestore()
         roleplayModel.reloadAfterRestore()
     }
-}
-
-struct MacMessageDeletionTarget {
-    let message: ChatMessage
-    let sessionID: UUID
-    let kind: MessageHistoryDeletionKind
-}
-
-struct MacMessageEditTarget: Identifiable, Sendable {
-    let message: ChatMessage
-    let sessionID: UUID
-    var id: String { "\(sessionID)-\(message.id)" }
 }
