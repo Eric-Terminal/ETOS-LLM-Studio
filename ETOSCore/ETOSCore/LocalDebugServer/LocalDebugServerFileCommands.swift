@@ -181,8 +181,10 @@ extension LocalDebugServer {
         }
     }
 
-    /// HTTP 流式下载：连续发送所有文件到电脑（不等待响应）
+    /// HTTP 流式下载逐项等待发送；连接失效后不再读取下一项。
     func handleDownloadAllStream() async {
+        guard canContinueDebugCommand else { return }
+        let token = connectionToken
         let documentsURL = StorageUtility.documentsDirectory
 
         guard httpSession != nil else {
@@ -194,9 +196,9 @@ extension LocalDebugServer {
         addLog("开始流式下载（暂停轮询）", type: .info)
 
         defer {
-            Task { @MainActor in
-                self.isTransferring = false
-                self.addLog("流式下载结束（恢复轮询）", type: .info)
+            if isCurrentConnection(token) {
+                isTransferring = false
+                addLog("流式下载结束（恢复轮询）", type: .info)
             }
         }
 
@@ -212,6 +214,7 @@ extension LocalDebugServer {
             var failCount = 0
 
             for (index, relativePath) in filePaths.enumerated() {
+                guard canContinueDebugCommand else { return }
                 let fileURL = documentsURL.appendingPathComponent(relativePath)
 
                 do {
@@ -226,6 +229,7 @@ extension LocalDebugServer {
                     ]
 
                     await sendHTTPResponseAsync(response)
+                    guard canContinueDebugCommand else { return }
                     successCount += 1
 
                     if (index + 1) % 10 == 0 || index + 1 == filePaths.count {
@@ -241,6 +245,7 @@ extension LocalDebugServer {
             logger.info("传输统计: 成功 \(successCount), 失败 \(failCount), 总计 \(filePaths.count)")
 
             try? await Task.sleep(nanoseconds: 500_000_000)
+            guard canContinueDebugCommand else { return }
 
             let completeResponse: [String: Any] = [
                 "status": "ok",
@@ -312,6 +317,8 @@ extension LocalDebugServer {
 
     /// HTTP 流式上传：接收文件列表，连续请求所有文件
     func handleUploadList(_ json: [String: Any]) async {
+        guard canContinueDebugCommand else { return }
+        let token = connectionToken
         guard let paths = json["paths"] as? [String],
               let total = json["total"] as? Int else {
             logger.error("无效的文件列表")
@@ -322,9 +329,9 @@ extension LocalDebugServer {
         addLog("开始流式上传（暂停轮询）", type: .info)
 
         defer {
-            Task { @MainActor in
-                self.isTransferring = false
-                self.addLog("流式上传结束（恢复轮询）", type: .info)
+            if isCurrentConnection(token) {
+                isTransferring = false
+                addLog("流式上传结束（恢复轮询）", type: .info)
             }
         }
 
@@ -346,19 +353,19 @@ extension LocalDebugServer {
         }
 
         for (index, path) in paths.enumerated() {
+            guard canContinueDebugCommand else { return }
             await fetchAndWriteFile(path: path, index: index + 1, total: total)
         }
 
+        guard canContinueDebugCommand else { return }
         logger.info("所有文件上传完成！")
     }
 
     /// 请求并写入单个文件
     func fetchAndWriteFile(path: String, index: Int, total: Int) async {
-        let components = serverURL.split(separator: ":").map(String.init)
-        let host = components.first ?? ""
-        let port = components.count > 1 ? components[1] : "7654"
-
-        guard let url = URL(string: "http://\(host):\(port)/fetch_file") else {
+        guard canContinueDebugCommand else { return }
+        let token = connectionToken
+        guard let url = URL(string: "http://\(serverURL)/fetch_file") else {
             logger.error("无效的URL")
             return
         }
@@ -382,6 +389,7 @@ extension LocalDebugServer {
 
         do {
             let (data, _) = try await session.securedData(for: request)
+            guard canContinueDebugCommand, isCurrentConnection(token) else { return }
 
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let status = json["status"] as? String,

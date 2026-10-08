@@ -13,19 +13,19 @@ import os.log
 
 extension LocalDebugServer {
     func handleOpenAIQueueList() async -> [String: Any] {
-        let queue = pendingOpenAIRequests.map { item in
-            [
-                "id": item.id.uuidString,
-                "model": item.model ?? "",
-                "message_count": item.originalMessageCount,
-                "received_at": Self.formatWebConsoleDate(item.receivedAt)
-            ] as [String: Any]
-        }
-        return [
-            "status": "ok",
-            "queue": queue,
-            "count": queue.count
-        ]
+        let pending = pendingOpenAIRequests
+        let result = await Task.detached(priority: .utility) {
+            let queue = pending.map { item in
+                [
+                    "id": item.id.uuidString,
+                    "model": item.model ?? "",
+                    "message_count": item.originalMessageCount,
+                    "received_at": Self.formatWebConsoleDate(item.receivedAt)
+                ] as [String: Any]
+            }
+            return LocalDebugJSONObject(value: ["status": "ok", "queue": queue, "count": queue.count])
+        }.value
+        return result.value
     }
 
     func handleOpenAIQueueResolve(_ json: [String: Any]) async -> [String: Any] {
@@ -53,17 +53,20 @@ extension LocalDebugServer {
     }
 
     func handleOpenAICapture(_ json: [String: Any]) async -> [String: Any] {
-        guard let requestData = json["request"] as? [String: Any],
-              let pending = parseOpenAIChatCompletions(requestData) else {
+        guard let requestData = json["request"] as? [String: Any] else {
+            return ["status": "error", "message": "无效的 OpenAI 请求"]
+        }
+        let request = LocalDebugJSONObject(value: requestData)
+        let worker = Task.detached(priority: .userInitiated) { self.parseOpenAIChatCompletions(request.value) }
+        let parsed = await withTaskCancellationHandler { await worker.value } onCancel: { worker.cancel() }
+        guard canContinueDebugCommand, let pending = parsed else {
             return ["status": "error", "message": "无效的 OpenAI 请求"]
         }
 
         let model = pending.model
 
-        await MainActor.run {
-            self.pendingOpenAIRequests.append(pending)
-            self.updatePendingOpenAIState()
-        }
+        pendingOpenAIRequests.append(pending)
+        updatePendingOpenAIState()
 
         logger.info("捕获 OpenAI 请求: \(model ?? "unknown")")
 
@@ -99,7 +102,7 @@ extension LocalDebugServer {
         return pending
     }
 
-    func parseOpenAIChatCompletions(_ json: [String: Any]) -> PendingOpenAIRequest? {
+    nonisolated func parseOpenAIChatCompletions(_ json: [String: Any]) -> PendingOpenAIRequest? {
         guard let rawMessages = json["messages"] as? [[String: Any]] else {
             return nil
         }
@@ -109,6 +112,7 @@ extension LocalDebugServer {
         var messages: [ChatMessage] = []
 
         for rawMessage in rawMessages {
+            guard !Task.isCancelled else { return nil }
             let roleString = (rawMessage["role"] as? String) ?? "user"
             let content = normalizeOpenAIContent(rawMessage["content"])
 
@@ -139,7 +143,7 @@ extension LocalDebugServer {
         )
     }
 
-    func normalizeOpenAIContent(_ content: Any?) -> String {
+    nonisolated func normalizeOpenAIContent(_ content: Any?) -> String {
         if let text = content as? String {
             return text
         }
@@ -169,12 +173,10 @@ extension LocalDebugServer {
         sessions.insert(session, at: 0)
         Persistence.saveChatSessions(sessions)
 
-        Task { @MainActor in
-            let chatService = ChatService.shared
-            var liveSessions = chatService.chatSessionsSubject.value
-            liveSessions.insert(session, at: 0)
-            chatService.chatSessionsSubject.send(liveSessions)
-        }
+        let chatService = ChatService.shared
+        var liveSessions = chatService.chatSessionsSubject.value
+        liveSessions.insert(session, at: 0)
+        chatService.chatSessionsSubject.send(liveSessions)
     }
 
     func formatSessionTitle(for date: Date) -> String {
@@ -197,11 +199,7 @@ extension LocalDebugServer {
         } else {
             summary = nil
         }
-        let count = pendingOpenAIRequests.count
-
-        Task { @MainActor in
-            self.pendingOpenAIRequest = summary
-            self.pendingOpenAIQueueCount = count
-        }
+        pendingOpenAIRequest = summary
+        pendingOpenAIQueueCount = pendingOpenAIRequests.count
     }
 }

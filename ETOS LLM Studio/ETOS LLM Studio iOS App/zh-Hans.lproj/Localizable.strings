@@ -8273,3 +8273,11 @@
 /* Mac 连接例外管理 */
 "Mac 连接例外说明" = "在此管理这台 Mac 记住的 HTTP 和证书验证例外。HTTP 会以明文发送消息、文件和 API Key。证书例外仍保留 HTTPS 加密，但无法正常验证服务器身份。\n\n连接被拦截并询问授权时，可选择取消、仅本次继续或继续并记住。记住的选择只匹配相同协议、主机和端口；证书变化或出现新的验证问题时，可能需要再次确认。\n\n开关只启用已记住的地址，不会允许任意服务器。关闭开关或移除地址会停止受影响的连接。App 自有服务始终要求正常 HTTPS 验证。这些设置不改变 macOS、Safari、本地 Linux 或原生 stdin/stdout 子进程的信任策略。\n\n修改立即保存。打开地址可查看类型和创建时间，或移除例外。页面向导可以解释当前状态；批准连接和修改信任请亲自使用原生控件。";
 "This connection exception is no longer saved." = "此连接例外已不再保存。";
+
+/* 本地调试命令与连接日志 */
+"Debug command received: %@" = "收到调试命令：%@";
+"Debug server returned HTTP %d." = "调试服务器返回 HTTP %d。";
+"Debug response sent (%@)" = "调试响应已发送（%@）";
+"Debug response failed: %@" = "调试响应发送失败：%@";
+"Debug poll failed: %@" = "调试轮询失败：%@";
+"Disconnected after %d failed polls." = "连续 %d 次轮询失败，已断开连接。";

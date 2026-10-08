@@ -8364,3 +8364,11 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 /* Mac 连接例外管理 */
 "Mac 连接例外说明" = "Gérez les exceptions HTTP et de certificat enregistrées sur ce Mac. HTTP transmet les messages, fichiers et clés API sans chiffrement. Une exception de certificat conserve le chiffrement HTTPS, mais l’identité du serveur ne peut pas être vérifiée normalement.\n\nLorsqu’une connexion bloquée demande une autorisation, choisissez Annuler, Continuer une fois ou Continuer et mémoriser. Les choix mémorisés ne s’appliquent qu’au même protocole, hôte et port. Un certificat modifié ou un nouveau problème de validation peut nécessiter une nouvelle confirmation.\n\nLes interrupteurs autorisent les adresses mémorisées, pas tous les serveurs. Les désactiver ou supprimer une adresse arrête les connexions concernées. Les services propres à l’app exigent toujours une vérification HTTPS normale. Ces réglages ne modifient pas la confiance de macOS, Safari, Linux local ou des processus enfants natifs stdin/stdout.\n\nLes modifications sont enregistrées immédiatement. Ouvrez une adresse pour consulter son type et sa date ou la supprimer. Le guide explique l’état actuel ; approuvez les connexions et modifiez la confiance à l’aide des commandes natives.";
 "This connection exception is no longer saved." = "Cette exception de connexion n’est plus enregistrée.";
+
+/* 本地调试命令与连接日志 */
+"Debug command received: %@" = "Commande de débogage reçue : %@";
+"Debug server returned HTTP %d." = "Le serveur de débogage a renvoyé HTTP %d.";
+"Debug response sent (%@)" = "Réponse de débogage envoyée (%@)";
+"Debug response failed: %@" = "Échec de l’envoi de la réponse de débogage : %@";
+"Debug poll failed: %@" = "Échec de l’interrogation de débogage : %@";
+"Disconnected after %d failed polls." = "Déconnexion après %d échecs consécutifs d’interrogation.";

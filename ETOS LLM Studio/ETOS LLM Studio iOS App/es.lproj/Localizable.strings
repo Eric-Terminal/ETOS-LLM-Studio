@@ -8364,3 +8364,11 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 /* Mac 连接例外管理 */
 "Mac 连接例外说明" = "Gestiona las excepciones de HTTP y certificados guardadas en este Mac. HTTP envía mensajes, archivos y claves API sin cifrar. Una excepción de certificado mantiene el cifrado HTTPS, pero no permite verificar la identidad del servidor de la forma habitual.\n\nCuando una conexión bloqueada solicite permiso, elige Cancelar, Continuar una vez o Continuar y recordar. Las decisiones guardadas solo se aplican al mismo protocolo, host y puerto. Un cambio de certificado o un nuevo problema de validación puede requerir otra confirmación.\n\nLos interruptores habilitan las direcciones guardadas, no todos los servidores. Desactivarlos o eliminar una dirección detiene las conexiones afectadas. Los servicios propios de la app siempre requieren la verificación HTTPS normal. Estos ajustes no cambian la confianza de macOS, Safari, Linux local ni los procesos secundarios nativos stdin/stdout.\n\nLos cambios se guardan inmediatamente. Abre una dirección para consultar su tipo y fecha o eliminarla. La guía explica el estado actual; aprueba conexiones y cambia la confianza mediante los controles nativos.";
 "This connection exception is no longer saved." = "Esta excepción de conexión ya no está guardada.";
+
+/* 本地调试命令与连接日志 */
+"Debug command received: %@" = "Comando de depuración recibido: %@";
+"Debug server returned HTTP %d." = "El servidor de depuración devolvió HTTP %d.";
+"Debug response sent (%@)" = "Respuesta de depuración enviada (%@)";
+"Debug response failed: %@" = "Error al enviar la respuesta de depuración: %@";
+"Debug poll failed: %@" = "Error de sondeo de depuración: %@";
+"Disconnected after %d failed polls." = "Desconectado tras %d sondeos fallidos consecutivos.";

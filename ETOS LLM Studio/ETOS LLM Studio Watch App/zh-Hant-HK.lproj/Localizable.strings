@@ -8129,3 +8129,11 @@
 /* Mac 连接例外管理 */
 "Mac 连接例外说明" = "在此管理這部 Mac 記住的 HTTP 和憑證驗證例外。HTTP 會以明文傳送訊息、檔案和 API Key。憑證例外仍保留 HTTPS 加密，但無法正常驗證伺服器身分。\n\n連線被攔截並要求授權時，可選擇取消、僅本次繼續或繼續並記住。記住的選擇只匹配相同通訊協定、主機和連接埠；憑證變更或出現新的驗證問題時，可能需要再次確認。\n\n開關只啟用已記住的地址，不會允許任何伺服器。關閉開關或移除地址會停止受影響的連線。App 自有服務始終要求正常 HTTPS 驗證。這些設定不會改變 macOS、Safari、本機 Linux 或原生 stdin/stdout 子程序的信任策略。\n\n修改會立即儲存。開啟地址可查看類型和建立時間，或移除例外。頁面導覽可以解釋目前狀態；批准連線和修改信任請親自使用原生控制項。";
 "This connection exception is no longer saved." = "此連線例外已不再儲存。";
+
+/* 本地调试命令与连接日志 */
+"Debug command received: %@" = "收到偵錯指令：%@";
+"Debug server returned HTTP %d." = "偵錯伺服器傳回 HTTP %d。";
+"Debug response sent (%@)" = "偵錯回應已傳送（%@）";
+"Debug response failed: %@" = "偵錯回應傳送失敗：%@";
+"Debug poll failed: %@" = "偵錯輪詢失敗：%@";
+"Disconnected after %d failed polls." = "連續 %d 次輪詢失敗，已中斷連線。";

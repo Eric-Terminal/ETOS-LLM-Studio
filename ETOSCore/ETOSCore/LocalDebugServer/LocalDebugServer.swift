@@ -18,20 +18,20 @@ public class LocalDebugServer: ObservableObject {
     // 注意：这里必须使用系统合成的 objectWillChange，
     // 否则本地调试页的连接状态、请求队列与日志不会稳定刷新。
 
-    public struct OpenAIRequestSummary: Identifiable, Hashable {
+    public struct OpenAIRequestSummary: Identifiable, Hashable, Sendable {
         public let id: UUID
         public let model: String?
         public let messageCount: Int
         public let receivedAt: Date
     }
 
-    public struct DebugLogEntry: Identifiable {
+    public struct DebugLogEntry: Identifiable, Sendable {
         public let id = UUID()
         public let timestamp: Date
         public let message: String
         public let type: LogType
 
-        public enum LogType: CustomStringConvertible {
+        public enum LogType: CustomStringConvertible, Sendable {
             case info, send, receive, error, heartbeat
 
             public var description: String {
@@ -70,6 +70,8 @@ public class LocalDebugServer: ObservableObject {
     @Published public var useHTTP: Bool = true // HTTP 轮询模式开关（默认启用）
     @Published public var debugLogs: [DebugLogEntry] = []
     @Published public var isTransferring: Bool = false
+    @Published public internal(set) var isProcessingCommand = false
+    @Published public internal(set) var isDisconnecting = false
 
     let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "LocalDebugServer")
     var wsConnection: NWConnection?
@@ -78,6 +80,11 @@ public class LocalDebugServer: ObservableObject {
 
     var httpPollingTimer: Timer?
     var httpSession: URLSession?
+    var httpConnectionTask: Task<Void, Never>?
+    var httpPollTask: Task<Void, Never>?
+    var httpPollID: UUID?
+    let commandQueue = LocalDebugCommandQueue()
+    var disconnectWaiterCount = 0
     /// 电脑端调试追求跟手操作，HTTP 轮询以高频短请求承载命令通道。
     let httpPollingInterval: TimeInterval = 0.2
     var httpFailureCount: Int = 0
