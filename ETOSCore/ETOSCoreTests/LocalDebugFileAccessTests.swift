@@ -274,6 +274,7 @@ private struct DebugFileFixture {
     func makeServer() -> LocalDebugServer {
         let server = LocalDebugServer(), root = root
         server.fileRoot = { root }
+        server.managedDatabaseFiles = { [] }
         server.installDocuments = { try $0.commit() }
         server.documentReplacementCoordinator = { operation in
             try await Task.detached(priority: .userInitiated) { try operation() }.value

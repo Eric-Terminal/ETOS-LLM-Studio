@@ -13,8 +13,11 @@ import os.log
 extension LocalDebugServer {
     func runDebugFileOperation(_ operation: @escaping @Sendable (LocalDebugFileAccess) throws -> [String: Any]) async -> [String: Any] {
         let fileRoot = fileRoot
+        let managedDatabaseFiles = managedDatabaseFiles, exportDatabaseFile = exportDatabaseFile
         return await runDebugDataOperation {
-            do { return try operation(LocalDebugFileAccess(root: fileRoot())) }
+            do {
+                return try operation(LocalDebugFileAccess(root: fileRoot(), managedDatabases: managedDatabaseFiles(), exportDatabase: exportDatabaseFile))
+            }
             catch { return ["status": "error", "message": error.localizedDescription] }
         }
     }

@@ -80,6 +80,8 @@ public class LocalDebugServer: ObservableObject {
     var resolvingOpenAIRequestIDs: Set<UUID> = []
     let insertSession: @Sendable (ChatSession, [ChatMessage]) throws -> Void
     var fileRoot: @Sendable () -> URL = { StorageUtility.documentsDirectory }
+    var managedDatabaseFiles: @Sendable () -> [LocalDebugManagedDatabase] = { Persistence.debugManagedDatabaseFiles() }
+    var exportDatabaseFile: @Sendable (LocalDebugManagedDatabase, URL) throws -> Void = { try Persistence.exportDebugDatabase($0, to: $1) }
     var installDocuments: @Sendable (LocalDebugDocumentReplacement) throws -> Void = { try Persistence.installDebugDocuments($0) }
     var fetchFilePayload: (@Sendable (String) async throws -> Data)?
 

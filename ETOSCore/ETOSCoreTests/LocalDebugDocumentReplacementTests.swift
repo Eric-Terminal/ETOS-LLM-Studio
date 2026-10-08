@@ -273,6 +273,7 @@ struct DebugReplacementFixture: Sendable {
     func server() -> LocalDebugServer {
         let server = LocalDebugServer(), root = root
         server.fileRoot = { root }
+        server.managedDatabaseFiles = { [] }
         server.installDocuments = { #expect(!Thread.isMainThread); try $0.commit() }
         server.documentReplacementCoordinator = { operation in
             try await Task.detached(priority: .userInitiated) { try operation() }.value
