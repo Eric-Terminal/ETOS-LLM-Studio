@@ -16,6 +16,7 @@ struct MacDisplaySettingsView: View {
                 NavigationLink(NSLocalizedString("沉浸背景", comment: "")) { MacBackgroundSettingsView(model: workspace.backgrounds, isActive: available) }
                 NavigationLink(NSLocalizedString("颜色配置", comment: "")) { MacAppearanceSettingsView(model: workspace.appearance, isActive: available) }
                 NavigationLink(NSLocalizedString("字体设置", comment: "")) { MacFontSettingsView(model: workspace.fonts, isActive: available) }
+                NavigationLink(NSLocalizedString("聊天动画", comment: "")) { MacChatAnimationSettingsView(isActive: available) }
             }
             Section {
                 Toggle(NSLocalizedString("Markdown 渲染", comment: ""), isOn: $configuration.enableMarkdown)
@@ -33,6 +34,7 @@ struct MacDisplaySettingsView: View {
                 }
             } header: { Text(NSLocalizedString("气泡与排版", comment: "")) }
             Section {
+                Toggle(NSLocalizedString("四键消息导航", comment: ""), isOn: $configuration.chatTimelineNavigationEnabled)
                 Picker(NSLocalizedString("流式显示", comment: ""), selection: $configuration.chatStreamingDisplayMode) {
                     ForEach(ChatStreamingDisplayMode.allCases) { mode in Text(mode.displayName).tag(mode.rawValue) }
                 }
@@ -77,6 +79,9 @@ struct MacDisplaySettingsView: View {
                 .readOnly("background_requires_navigation", label: NSLocalizedString("沉浸背景", comment: ""), value: { .bool(true) }),
                 .readOnly("colors_require_navigation", label: NSLocalizedString("颜色配置", comment: ""), value: { .bool(true) }),
                 .readOnly("fonts_require_navigation", label: NSLocalizedString("字体设置", comment: ""), value: { .bool(true) }),
+                .readOnly("animations_require_navigation", label: NSLocalizedString("聊天动画", comment: ""), value: { .bool(true) }),
+                .bool("timeline_navigation", label: NSLocalizedString("四键消息导航", comment: ""),
+                      get: { configuration.chatTimelineNavigationEnabled }, set: { configuration.chatTimelineNavigationEnabled = $0 }),
                 .bool("hide_assistant_bubble", label: NSLocalizedString("关闭助手气泡", comment: ""), get: { configuration.enableNoBubbleUI }, set: { configuration.enableNoBubbleUI = $0 }),
                 .bool("liquid_glass", label: NSLocalizedString("液态玻璃效果", comment: ""), get: { configuration.enableLiquidGlass }, set: { configuration.enableLiquidGlass = $0 }),
                 .double("liquid_glass_tint_opacity", label: NSLocalizedString("玻璃底色不透明度", comment: ""), range: 0...1,

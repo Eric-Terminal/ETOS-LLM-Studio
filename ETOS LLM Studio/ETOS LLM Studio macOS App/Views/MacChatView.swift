@@ -3,14 +3,20 @@ import ETOSCore
 import SwiftUI
 import UniformTypeIdentifiers
 
+@MainActor
 struct MacChatView: View {
     @State private var viewportHeight: CGFloat = 0
+    @State private var viewportBounds = CGRect.zero
+    @State private var composerBounds = CGRect.zero
+    @State private var sendRevision = UUID()
+    @StateObject private var sendMotion = MacSendMotionModel()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var workspace: MacWorkspaceModel
     @ObservedObject private var configuration = AppConfigStore.shared
+    @ObservedObject private var appLock = AppLockManager.shared
     @State private var importing = false
     @State private var importContext: UUID?
     @State private var isVisible = false
-    @State private var followsLatest = true
     @State private var editingMessage: MacMessageEditTarget?
     @State private var rewritingMessage: MacMessageEditTarget?
     @State private var deletingMessage: MacMessageDeletionTarget?
@@ -21,8 +27,8 @@ struct MacChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScrollViewReader { proxy in
-                ScrollView {
+            MacChatTimeline(isActive: isVisible && workspace.canManageLocalModels, hasMessages: !workspace.messages.isEmpty, sendRevision: sendRevision,
+                onUserInteraction: { sendMotion.cancel() }, viewportHeight: $viewportHeight, viewportBounds: $viewportBounds) {
                     LazyVStack(alignment: .leading) {
                         if workspace.messages.isEmpty {
                             ContentUnavailableView {
@@ -33,6 +39,8 @@ struct MacChatView: View {
                         }
                         ForEach(workspace.messages) { row in
                             MacMessageRow(row: row, viewportHeight: viewportHeight)
+                                .modifier(MacMessageEntryMotion(model: sendMotion, messageID: row.id, sessionID: workspace.currentSession?.id,
+                                    viewport: viewportBounds, isActive: isVisible && workspace.canManageLocalModels))
                                 .contextMenu {
                                     Button(NSLocalizedString("复制", comment: "")) {
                                         NSPasteboard.general.clearContents()
@@ -73,28 +81,13 @@ struct MacChatView: View {
                                         .disabled(!workspace.canModifyCurrentHistory)
                                 }
                         }
-                        Color.clear.frame(height: 1).id("latest-message")
                     }
                     .padding()
                     .frame(maxWidth: 900)
                     .frame(maxWidth: .infinity)
-                }
-                .onScrollGeometryChange(for: Bool.self) { geometry in
-                    geometry.contentSize.height - geometry.visibleRect.maxY < 100
-                } action: { _, nearEnd in followsLatest = nearEnd }
-                .background { MacChatBackgroundView(model: workspace.backgrounds) }
-                .onScrollGeometryChange(for: CGFloat.self) { $0.visibleRect.height } action: { _, height in viewportHeight = height }
-                .onScrollGeometryChange(for: CGFloat.self) { $0.contentSize.height } action: { _, _ in
-                    if followsLatest { proxy.scrollTo("latest-message", anchor: .bottom) }
-                }
-                .onChange(of: workspace.messages.count) { _, _ in
-                    if followsLatest { proxy.scrollTo("latest-message", anchor: .bottom) }
-                }
-                .onChange(of: workspace.currentSession?.id) { _, _ in
-                    followsLatest = true
-                    proxy.scrollTo("latest-message", anchor: .bottom)
-                }
             }
+            .id(workspace.currentSession?.id)
+            .background { MacChatBackgroundView(model: workspace.backgrounds) }
             Divider()
             MacTTSPlaybackView(model: workspace.tts, isActive: workspace.canManageLocalModels).padding(.horizontal)
             MacRoleplayScriptHost(runtime: workspace.roleplayRuntime).padding(.horizontal)
@@ -107,11 +100,19 @@ struct MacChatView: View {
             }
             if let model = workspace.activeQuestionnaireModel {
                 MacQuestionnaireView(model: model)
-            } else { composer.modifier(MacComposerAppearance()) }
+            } else {
+                composer.modifier(MacComposerAppearance())
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(MacMessageEntryMotion.coordinateSpace)) } action: { composerBounds = $0 }
+            }
         }
+        .coordinateSpace(name: MacMessageEntryMotion.coordinateSpace)
         .onAppear { isVisible = true; workspace.setRoleplayHostVisible(true) }
-        .onDisappear { isVisible = false; importing = false; showsBrowser = false; linuxJobsTarget = nil; speechSource = nil; workspace.setRoleplayHostVisible(false) }
-        .onChange(of: workspace.currentSession?.id) { _, _ in showsBrowser = false; linuxJobsTarget = nil; speechSource = nil }
+        .onDisappear { isVisible = false; sendMotion.cancel(); importing = false; showsBrowser = false; linuxJobsTarget = nil; speechSource = nil; workspace.setRoleplayHostVisible(false) }
+        .onChange(of: workspace.currentSession?.id) { _, _ in sendMotion.cancel(); showsBrowser = false; linuxJobsTarget = nil; speechSource = nil }
+        .onChange(of: workspace.canManageLocalModels) { _, available in if !available { sendMotion.cancel() } }
+        .onChange(of: appLock.state) { _, state in if state == .locked { sendMotion.cancel() } }
+        .onChange(of: reduceMotion) { _, reduce in if reduce { sendMotion.cancel() } }
+        .onChange(of: configuration.chatSendAnimationEnabled) { _, enabled in if !enabled { sendMotion.cancel() } }
         .onChange(of: workspace.linux.epoch) { _, _ in linuxJobsTarget = nil }
         .onChange(of: workspace.incomingDocuments.contextID) { _, _ in importing = false; importContext = nil }
         .dropDestination(for: URL.self) { urls, _ in
@@ -200,6 +201,16 @@ struct MacChatView: View {
         deletingMessage = MacMessageDeletionTarget(message: message, sessionID: sessionID, kind: kind)
     }
 
+    private func sendMessage() {
+        guard isVisible, workspace.canManageLocalModels, workspace.canSend, let sessionID = workspace.currentSession?.id else { return }
+        sendRevision = UUID()
+        guard configuration.chatSendAnimationEnabled, !reduceMotion, composerBounds.height > 0 else {
+            sendMotion.cancel(); workspace.send(); return
+        }
+        let id = sendMotion.begin(sessionID: sessionID, origin: CGPoint(x: composerBounds.midX, y: composerBounds.midY))
+        workspace.send { [weak model = sendMotion] presentation in model?.accept(presentation, for: id) }
+    }
+
     private var composer: some View {
         VStack(alignment: .leading) {
             if let audio = workspace.audioAttachment {
@@ -260,7 +271,7 @@ struct MacChatView: View {
                         Label(NSLocalizedString("停止生成", comment: ""), systemImage: "stop.fill")
                     }
                 } else {
-                    Button { workspace.send() } label: {
+                    Button { sendMessage() } label: {
                         Label(NSLocalizedString("发送", comment: ""), systemImage: "arrow.up")
                     }
                     .buttonStyle(.borderedProminent)

@@ -592,7 +592,7 @@ final class MacWorkspaceModel: ObservableObject {
         return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
     }
 
-    func send() {
+    func send(onMessagesPrepared: ChatSendPresentationHandler? = nil) {
         guard canSend, let service, let session = currentSession else { return }
         let content = draft
         let attachments = self.attachments
@@ -604,7 +604,10 @@ final class MacWorkspaceModel: ObservableObject {
         self.audioAttachment = nil
         sendTasks[session.id] = Task { [weak self] in
             await self?.requestControls.waitForPendingWrites()
-            if !Task.isCancelled { await configuration.send(content, attachments: attachments, audioAttachment: audioAttachment, through: service, sessionID: session.id) }
+            if !Task.isCancelled {
+                await configuration.send(content, attachments: attachments, audioAttachment: audioAttachment, through: service,
+                    sessionID: session.id, onMessagesPrepared: onMessagesPrepared)
+            }
             self?.sendTasks.removeValue(forKey: session.id)
             self?.sendingSessionIDs.remove(session.id)
             self?.flushToolSupplements()
