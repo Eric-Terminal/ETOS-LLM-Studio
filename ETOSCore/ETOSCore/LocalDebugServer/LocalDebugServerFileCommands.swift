@@ -11,51 +11,21 @@ import Foundation
 import os.log
 
 extension LocalDebugServer {
+    func runDebugFileOperation(_ operation: @escaping @Sendable (LocalDebugFileAccess) throws -> [String: Any]) async -> [String: Any] {
+        let fileRoot = fileRoot
+        return await runDebugDataOperation {
+            do { return try operation(LocalDebugFileAccess(root: fileRoot())) }
+            catch { return ["status": "error", "message": error.localizedDescription] }
+        }
+    }
+
     func handleList(_ json: [String: Any]) async -> [String: Any] {
         guard let path = json["path"] as? String else {
             return ["status": "error", "message": "缺少 path 参数"]
         }
 
-        let documentsURL = StorageUtility.documentsDirectory
-
-        let normalizedPath = path.trimmingCharacters(in: .whitespaces)
-        let targetURL: URL
-        if normalizedPath.isEmpty || normalizedPath == "." {
-            targetURL = documentsURL
-        } else {
-            targetURL = documentsURL.appendingPathComponent(normalizedPath)
-        }
-
-        guard targetURL.path.hasPrefix(documentsURL.path) else {
-            return ["status": "error", "message": "路径越界"]
-        }
-
-        do {
-            let contents = try FileManager.default.contentsOfDirectory(atPath: targetURL.path)
-            var items: [[String: Any]] = []
-
-            for item in contents {
-                let itemURL = targetURL.appendingPathComponent(item)
-                var isDirectory: ObjCBool = false
-                FileManager.default.fileExists(atPath: itemURL.path, isDirectory: &isDirectory)
-
-                let attributes = try FileManager.default.attributesOfItem(atPath: itemURL.path)
-
-                items.append([
-                    "name": item,
-                    "isDirectory": isDirectory.boolValue,
-                    "size": attributes[.size] as? Int64 ?? 0,
-                    "modificationDate": (attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
-                ])
-            }
-
-            return [
-                "status": "ok",
-                "path": path,
-                "items": items
-            ]
-        } catch {
-            return ["status": "error", "message": error.localizedDescription]
+        return await runDebugFileOperation { access in
+            ["status": "ok", "path": path, "items": try access.list(path: path)]
         }
     }
 
@@ -64,54 +34,21 @@ extension LocalDebugServer {
             return ["status": "error", "message": "缺少 path 参数"]
         }
 
-        let documentsURL = StorageUtility.documentsDirectory
-        let targetURL = documentsURL.appendingPathComponent(path)
-
-        guard targetURL.path.hasPrefix(documentsURL.path),
-              FileManager.default.fileExists(atPath: targetURL.path) else {
-            return ["status": "error", "message": "文件不存在"]
-        }
-
-        do {
-            let data = try Data(contentsOf: targetURL)
-            return [
-                "status": "ok",
-                "path": path,
-                "data": data.base64EncodedString(),
-                "size": data.count
-            ]
-        } catch {
-            return ["status": "error", "message": error.localizedDescription]
+        return await runDebugFileOperation { access in
+            var payload = try access.download(path: path)
+            payload["status"] = "ok"
+            return payload
         }
     }
 
     func handleUpload(_ json: [String: Any]) async -> [String: Any] {
         guard let path = json["path"] as? String,
-              let base64 = json["data"] as? String,
-              let data = Data(base64Encoded: base64) else {
+              let base64 = json["data"] as? String else {
             return ["status": "error", "message": "参数错误"]
         }
 
-        let documentsURL = StorageUtility.documentsDirectory
-        let targetURL = documentsURL.appendingPathComponent(path)
-
-        guard targetURL.path.hasPrefix(documentsURL.path) else {
-            return ["status": "error", "message": "路径越界"]
-        }
-
-        do {
-            try FileManager.default.createDirectory(
-                at: targetURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try data.write(to: targetURL)
-            return [
-                "status": "ok",
-                "path": path,
-                "size": data.count
-            ]
-        } catch {
-            return ["status": "error", "message": error.localizedDescription]
+        return await runDebugFileOperation { access in
+            ["status": "ok", "path": path, "size": try access.upload(path: path, base64: base64)]
         }
     }
 
@@ -120,64 +57,37 @@ extension LocalDebugServer {
             return ["status": "error", "message": "缺少 path 参数"]
         }
 
-        let documentsURL = StorageUtility.documentsDirectory
-        let targetURL = documentsURL.appendingPathComponent(path)
-
-        guard targetURL.path.hasPrefix(documentsURL.path),
-              FileManager.default.fileExists(atPath: targetURL.path) else {
-            return ["status": "error", "message": "文件不存在"]
-        }
-
-        do {
-            try FileManager.default.removeItem(at: targetURL)
+        return await runDebugFileOperation { access in
+            try access.delete(path: path)
             return ["status": "ok", "path": path]
-        } catch {
-            return ["status": "error", "message": error.localizedDescription]
         }
     }
 
     /// 兼容模式：只返回文件路径列表（不含文件数据）
     /// 用于让 Python 端逐个请求下载。
     func handleListAll() async -> [String: Any] {
-        let documentsURL = StorageUtility.documentsDirectory
-
-        do {
-            logger.info("开始扫描 Documents 目录（仅路径）...")
-            var filePaths: [String] = []
-
-            try collectFilePaths(documentsURL, baseURL: documentsURL, filePaths: &filePaths)
-
-            logger.info("扫描完成: \(filePaths.count) 个文件")
-
+        await runDebugFileOperation { access in
+            let scan = try access.scan()
             return [
                 "status": "ok",
-                "paths": filePaths,
-                "total": filePaths.count,
+                "paths": scan.paths,
+                "total": scan.paths.count,
+                "skipped_paths": scan.skippedPaths,
                 "message": "文件列表已返回"
             ]
-        } catch {
-            return ["status": "error", "message": error.localizedDescription]
         }
     }
 
     func handleDownloadAll() async -> [String: Any] {
-        let documentsURL = StorageUtility.documentsDirectory
-
-        do {
-            logger.info("开始扫描 Documents 目录...")
-            var fileList: [[String: Any]] = []
-
-            try scanDirectory(documentsURL, baseURL: documentsURL, fileList: &fileList)
-
-            logger.info("扫描完成: \(fileList.count) 个文件")
-
+        await runDebugFileOperation { access in
+            let scan = try access.scan()
+            let files = try scan.paths.map { try access.download(path: $0) }
             return [
                 "status": "ok",
-                "files": fileList,
+                "files": files,
+                "skipped_paths": scan.skippedPaths,
                 "message": "已扫描完成"
             ]
-        } catch {
-            return ["status": "error", "message": error.localizedDescription]
         }
     }
 
@@ -185,7 +95,6 @@ extension LocalDebugServer {
     func handleDownloadAllStream() async {
         guard canContinueDebugCommand else { return }
         let token = connectionToken
-        let documentsURL = StorageUtility.documentsDirectory
 
         guard httpSession != nil else {
             logger.error("httpSession 为 nil，无法执行流式下载")
@@ -193,118 +102,42 @@ extension LocalDebugServer {
         }
 
         isTransferring = true
-        addLog("开始流式下载（暂停轮询）", type: .info)
+        addLog(NSLocalizedString("Streaming download started; polling paused.", comment: "调试流式下载日志"), type: .info)
 
         defer {
             if isCurrentConnection(token) {
                 isTransferring = false
-                addLog("流式下载结束（恢复轮询）", type: .info)
+                addLog(NSLocalizedString("Streaming download ended; polling resumed.", comment: "调试流式下载日志"), type: .info)
             }
         }
 
-        do {
-            logger.info("开始流式下载 Documents 目录...")
-
-            var filePaths: [String] = []
-            try collectFilePaths(documentsURL, baseURL: documentsURL, filePaths: &filePaths)
-
-            logger.info("发现 \(filePaths.count) 个文件，开始连续传输")
-
-            var successCount = 0
-            var failCount = 0
-
-            for (index, relativePath) in filePaths.enumerated() {
-                guard canContinueDebugCommand else { return }
-                let fileURL = documentsURL.appendingPathComponent(relativePath)
-
-                do {
-                    let data = try Data(contentsOf: fileURL)
-                    let response: [String: Any] = [
-                        "status": "ok",
-                        "path": relativePath,
-                        "data": data.base64EncodedString(),
-                        "size": data.count,
-                        "index": index + 1,
-                        "total": filePaths.count
-                    ]
-
-                    await sendHTTPResponseAsync(response)
-                    guard canContinueDebugCommand else { return }
-                    successCount += 1
-
-                    if (index + 1) % 10 == 0 || index + 1 == filePaths.count {
-                        logger.info("进度: \(index + 1)/\(filePaths.count) (成功: \(successCount), 失败: \(failCount))")
-                    }
-
-                } catch {
-                    failCount += 1
-                    logger.error("读取文件失败: \(relativePath) - \(error.localizedDescription)")
-                }
-            }
-
-            logger.info("传输统计: 成功 \(successCount), 失败 \(failCount), 总计 \(filePaths.count)")
-
-            try? await Task.sleep(nanoseconds: 500_000_000)
+        let scan = await handleListAll()
+        guard canContinueDebugCommand else { return }
+        guard scan["status"] as? String == "ok", let paths = scan["paths"] as? [String] else {
+            await sendHTTPResponseAsync(scan)
+            return
+        }
+        var successCount = 0, failCount = 0
+        for (index, path) in paths.enumerated() {
             guard canContinueDebugCommand else { return }
-
-            let completeResponse: [String: Any] = [
-                "status": "ok",
-                "message": "流式下载完成",
-                "total": filePaths.count,
-                "success_count": successCount,
-                "fail_count": failCount,
-                "stream_complete": true
-            ]
-            await sendHTTPResponseAsync(completeResponse)
-            logger.info("流式下载完成，共 \(filePaths.count) 个文件")
-
-        } catch {
-            logger.error("流式下载出错: \(error.localizedDescription)")
-            let errorResponse: [String: Any] = [
-                "status": "error",
-                "message": error.localizedDescription
-            ]
-            await sendHTTPResponseAsync(errorResponse)
-        }
-    }
-
-    /// 收集目录下所有文件的相对路径
-    func collectFilePaths(_ dirURL: URL, baseURL: URL, filePaths: inout [String]) throws {
-        let fileManager = FileManager.default
-        let contents = try fileManager.contentsOfDirectory(at: dirURL, includingPropertiesForKeys: [.isDirectoryKey])
-
-        for item in contents {
-            let resourceValues = try item.resourceValues(forKeys: [.isDirectoryKey])
-
-            if resourceValues.isDirectory == true {
-                try collectFilePaths(item, baseURL: baseURL, filePaths: &filePaths)
-            } else {
-                let relativePath = item.path.replacingOccurrences(of: baseURL.path + "/", with: "")
-                filePaths.append(relativePath)
+            var response = await handleDownload(["path": path])
+            guard canContinueDebugCommand else { return }
+            guard response["status"] as? String == "ok" else {
+                failCount += 1
+                logger.error("读取文件失败: \(path)")
+                continue
             }
+            response["index"] = index + 1
+            response["total"] = paths.count
+            await sendHTTPResponseAsync(response)
+            guard canContinueDebugCommand else { return }
+            successCount += 1
         }
-    }
-
-    func scanDirectory(_ dirURL: URL, baseURL: URL, fileList: inout [[String: Any]]) throws {
-        let fileManager = FileManager.default
-        let contents = try fileManager.contentsOfDirectory(at: dirURL, includingPropertiesForKeys: [.isDirectoryKey])
-
-        for item in contents {
-            let resourceValues = try item.resourceValues(forKeys: [.isDirectoryKey])
-
-            if resourceValues.isDirectory == true {
-                try scanDirectory(item, baseURL: baseURL, fileList: &fileList)
-            } else {
-                let data = try Data(contentsOf: item)
-                let relativePath = item.path.replacingOccurrences(of: baseURL.path + "/", with: "")
-
-                fileList.append([
-                    "path": relativePath,
-                    "data": data.base64EncodedString(),
-                    "size": data.count
-                ])
-            }
-        }
+        await sendHTTPResponseAsync([
+            "status": "ok", "message": "流式下载完成", "total": paths.count,
+            "success_count": successCount, "fail_count": failCount, "stream_complete": true,
+            "skipped_paths": scan["skipped_paths"] as? [String] ?? []
+        ])
     }
 
     func handleUploadAll(_ json: [String: Any]) async -> [String: Any] {
@@ -326,35 +159,36 @@ extension LocalDebugServer {
         }
 
         isTransferring = true
-        addLog("开始流式上传（暂停轮询）", type: .info)
+        addLog(NSLocalizedString("Streaming upload started; polling paused.", comment: "调试流式上传日志"), type: .info)
 
         defer {
             if isCurrentConnection(token) {
                 isTransferring = false
-                addLog("流式上传结束（恢复轮询）", type: .info)
+                addLog(NSLocalizedString("Streaming upload ended; polling resumed.", comment: "调试流式上传日志"), type: .info)
             }
         }
 
         logger.info("收到文件列表: \(total) 个文件")
 
-        let documentsURL = StorageUtility.documentsDirectory
-        let fileManager = FileManager.default
-
-        do {
-            logger.info("清空 Documents 目录...")
-            let contents = try fileManager.contentsOfDirectory(at: documentsURL, includingPropertiesForKeys: nil)
-            for item in contents {
-                try fileManager.removeItem(at: item)
-            }
-            logger.info("Documents 目录已清空")
-        } catch {
-            logger.error("清空目录失败: \(error.localizedDescription)")
+        let validation = await runDebugFileOperation { access in
+            try access.validateUploadPaths(paths)
+            return ["status": "ok"]
+        }
+        guard canContinueDebugCommand else { return }
+        guard validation["status"] as? String == "ok" else {
+            await sendHTTPResponseAsync(validation)
+            return
+        }
+        let cleared = await handleClearDocuments()
+        guard canContinueDebugCommand else { return }
+        guard cleared["status"] as? String == "ok" else {
+            await sendHTTPResponseAsync(cleared)
             return
         }
 
         for (index, path) in paths.enumerated() {
             guard canContinueDebugCommand else { return }
-            await fetchAndWriteFile(path: path, index: index + 1, total: total)
+            guard await fetchAndWriteFile(path: path, index: index + 1, total: total) else { return }
         }
 
         guard canContinueDebugCommand else { return }
@@ -362,17 +196,17 @@ extension LocalDebugServer {
     }
 
     /// 请求并写入单个文件
-    func fetchAndWriteFile(path: String, index: Int, total: Int) async {
-        guard canContinueDebugCommand else { return }
+    func fetchAndWriteFile(path: String, index: Int, total: Int) async -> Bool {
+        guard canContinueDebugCommand else { return false }
         let token = connectionToken
         guard let url = URL(string: "http://\(serverURL)/fetch_file") else {
             logger.error("无效的URL")
-            return
+            return false
         }
 
         guard let session = httpSession else {
             logger.error("httpSession 为 nil，无法请求文件")
-            return
+            return false
         }
 
         var request = URLRequest(url: url)
@@ -380,38 +214,33 @@ extension LocalDebugServer {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 30.0
 
-        let requestBody: [String: Any] = ["path": path]
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: requestBody) else {
-            logger.error("无法序列化请求")
-            return
-        }
-        request.httpBody = jsonData
-
         do {
-            let (data, _) = try await session.securedData(for: request)
-            guard canContinueDebugCommand, isCurrentConnection(token) else { return }
-
-            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let status = json["status"] as? String,
-                  status == "ok",
-                  let fileData = json["data"] as? String,
-                  let decodedData = Data(base64Encoded: fileData) else {
-                logger.error("无效的响应: \(path)")
-                return
+            let requestBody = LocalDebugJSONObject(value: ["path": path])
+            request.httpBody = try await Task.detached(priority: .userInitiated) { try requestBody.encoded() }.value
+            guard canContinueDebugCommand, isCurrentConnection(token) else { return false }
+            let (data, response) = try await session.securedData(for: request)
+            guard canContinueDebugCommand, isCurrentConnection(token) else { return false }
+            if let response = response as? HTTPURLResponse, response.statusCode != 200 {
+                throw URLError(.badServerResponse)
             }
-
-            let documentsURL = StorageUtility.documentsDirectory
-            let fileURL = documentsURL.appendingPathComponent(path)
-            let dirURL = fileURL.deletingLastPathComponent()
-
-            try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
-            try decodedData.write(to: fileURL)
-
-            let remaining = json["remaining"] as? Int ?? 0
-            logger.info("[\(index)/\(total)] 写入: \(path) (\(decodedData.count) bytes) [剩余 \(remaining)]")
-
+            let result = await runDebugFileOperation { access in
+                guard let json = try LocalDebugJSONObject.decode(data)?.value,
+                      json["status"] as? String == "ok", let base64 = json["data"] as? String else {
+                    throw URLError(.badServerResponse)
+                }
+                return ["status": "ok", "size": try access.upload(path: path, base64: base64)]
+            }
+            guard canContinueDebugCommand, isCurrentConnection(token) else { return false }
+            guard result["status"] as? String == "ok" else {
+                await sendHTTPResponseAsync(result)
+                return false
+            }
+            logger.info("[\(index)/\(total)] 写入: \(path)")
+            return true
         } catch {
             logger.error("请求文件失败 \(path): \(error.localizedDescription)")
+            await sendHTTPResponseAsync(["status": "error", "message": error.localizedDescription])
+            return false
         }
     }
 
@@ -422,90 +251,53 @@ extension LocalDebugServer {
             return ["status": "error", "message": "文件数据缺失"]
         }
 
-        let remaining = json["remaining"] as? Int ?? 0
-
-        let documentsURL = StorageUtility.documentsDirectory
-        let fileManager = FileManager.default
-
-        do {
-            guard let data = Data(base64Encoded: b64Data) else {
-                return ["status": "error", "message": "Base64解码失败"]
-            }
-
-            let fileURL = documentsURL.appendingPathComponent(path)
-            let dirURL = fileURL.deletingLastPathComponent()
-
-            try fileManager.createDirectory(at: dirURL, withIntermediateDirectories: true)
-            try data.write(to: fileURL)
-
-            logger.info("写入: \(path) (\(data.count) bytes) [剩余 \(remaining)]")
-
+        return await runDebugFileOperation { access in
+            try access.upload(path: path, base64: b64Data)
             return [
                 "status": "ok",
                 "message": "文件已写入",
                 "path": path
             ]
-        } catch {
-            return ["status": "error", "message": error.localizedDescription]
         }
     }
 
     /// 清空 Documents 目录
     func handleClearDocuments() async -> [String: Any] {
-        let documentsURL = StorageUtility.documentsDirectory
-        let fileManager = FileManager.default
-
-        do {
-            logger.info("清空 Documents 目录...")
-            let contents = try fileManager.contentsOfDirectory(at: documentsURL, includingPropertiesForKeys: nil)
-            for item in contents {
-                try fileManager.removeItem(at: item)
-            }
-            logger.info("Documents 目录已清空")
+        await runDebugFileOperation { access in
+            try access.clearContents()
             return ["status": "ok", "message": "目录已清空"]
-        } catch {
-            return ["status": "error", "message": error.localizedDescription]
         }
     }
 
     /// 批量上传（WebSocket 模式）
     func handleBatchUpload(files: [[String: Any]]) async -> [String: Any] {
-        let documentsURL = StorageUtility.documentsDirectory
-        let fileManager = FileManager.default
-
-        do {
-            logger.info("清空 Documents 目录...")
-            let contents = try fileManager.contentsOfDirectory(at: documentsURL, includingPropertiesForKeys: nil)
-            for item in contents {
-                try fileManager.removeItem(at: item)
-            }
-
-            logger.info("开始上传 \(files.count) 个文件...")
-            for fileInfo in files {
-                guard let relativePath = fileInfo["path"] as? String,
-                      let base64Data = fileInfo["data"] as? String,
-                      let data = Data(base64Encoded: base64Data) else {
-                    continue
+        let request = LocalDebugJSONObject(value: ["files": files])
+        let fileRoot = fileRoot
+        // 原批量覆盖一旦开始便连续完成；后台化不能引入“断开后刚清空就取消”的新窗口。
+        // 完整暂存、回滚和活动数据库协调仍需恢复层接管，不能将此处当作原子恢复。
+        let worker = Task.detached(priority: .userInitiated) {
+            do {
+                let access = LocalDebugFileAccess(root: fileRoot())
+                let files = request.value["files"] as? [[String: Any]] ?? []
+                var uploads: [(path: String, base64: String)] = []
+                for fileInfo in files {
+                    guard let relativePath = fileInfo["path"] as? String,
+                          let base64Data = fileInfo["data"] as? String,
+                          Data(base64Encoded: base64Data) != nil else {
+                        throw LocalDebugFileAccessError.invalidBase64
+                    }
+                    uploads.append((relativePath, base64Data))
                 }
-
-                let targetURL = documentsURL.appendingPathComponent(relativePath)
-
-                let parentURL = targetURL.deletingLastPathComponent()
-                if !fileManager.fileExists(atPath: parentURL.path) {
-                    try fileManager.createDirectory(at: parentURL, withIntermediateDirectories: true)
-                }
-
-                try data.write(to: targetURL)
+                // 所有路径和数据先校验；参数错误不能在删除旧目录之后才被发现。
+                try access.validateUploadPaths(uploads.map { $0.path })
+                try access.clearContents()
+                for upload in uploads { try access.upload(path: upload.path, base64: upload.base64) }
+                return LocalDebugJSONObject(value: ["status": "ok", "message": "已覆盖 Documents 目录，共 \(files.count) 个文件"])
+            } catch {
+                return LocalDebugJSONObject(value: ["status": "error", "message": error.localizedDescription])
             }
-
-            logger.info("上传完成")
-            return [
-                "status": "ok",
-                "message": "已覆盖 Documents 目录，共 \(files.count) 个文件"
-            ]
-        } catch {
-            return ["status": "error", "message": error.localizedDescription]
         }
+        return await worker.value.value
     }
 
     func handleMkdir(_ json: [String: Any]) async -> [String: Any] {
@@ -513,25 +305,9 @@ extension LocalDebugServer {
             return ["status": "error", "message": "缺少 path 参数"]
         }
 
-        let documentsURL = StorageUtility.documentsDirectory
-
-        let normalizedPath = path.trimmingCharacters(in: .whitespaces)
-        let targetURL: URL
-        if normalizedPath.isEmpty || normalizedPath == "." {
-            targetURL = documentsURL
-        } else {
-            targetURL = documentsURL.appendingPathComponent(normalizedPath)
-        }
-
-        guard targetURL.path.hasPrefix(documentsURL.path) else {
-            return ["status": "error", "message": "路径越界"]
-        }
-
-        do {
-            try FileManager.default.createDirectory(at: targetURL, withIntermediateDirectories: true)
+        return await runDebugFileOperation { access in
+            try access.makeDirectory(path: path)
             return ["status": "ok", "path": path]
-        } catch {
-            return ["status": "error", "message": error.localizedDescription]
         }
     }
 

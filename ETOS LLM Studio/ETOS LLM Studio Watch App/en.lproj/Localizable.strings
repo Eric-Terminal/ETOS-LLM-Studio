@@ -8152,3 +8152,14 @@
 "Only a permanent top-level conversation can be inserted." = "Only a permanent top-level conversation can be inserted.";
 "The captured request is missing or already being processed." = "The captured request is missing or already being processed.";
 "The provider configuration could not be saved." = "The provider configuration could not be saved.";
+
+/* 远程文件访问边界与传输日志 */
+"The file path must stay inside the app's Documents folder." = "The file path must stay inside the app's Documents folder.";
+"Symbolic links cannot be followed during remote file access." = "Symbolic links cannot be followed during remote file access.";
+"Only regular files can be downloaded." = "Only regular files can be downloaded.";
+"The uploaded file data is not valid Base64." = "The uploaded file data is not valid Base64.";
+"The upload contains duplicate or conflicting file paths." = "The upload contains duplicate or conflicting file paths.";
+"Streaming download started; polling paused." = "Streaming download started; polling paused.";
+"Streaming download ended; polling resumed." = "Streaming download ended; polling resumed.";
+"Streaming upload started; polling paused." = "Streaming upload started; polling paused.";
+"Streaming upload ended; polling resumed." = "Streaming upload ended; polling resumed.";

@@ -8145,3 +8145,14 @@
 "Only a permanent top-level conversation can be inserted." = "一時的でない最上位の会話のみ追加できます。";
 "The captured request is missing or already being processed." = "キャプチャしたリクエストが見つからないか、すでに処理中です。";
 "The provider configuration could not be saved." = "プロバイダー設定を保存できませんでした。";
+
+/* 远程文件访问边界与传输日志 */
+"The file path must stay inside the app's Documents folder." = "ファイルパスはアプリの Documents フォルダ内にある必要があります。";
+"Symbolic links cannot be followed during remote file access." = "リモートファイルアクセスではシンボリックリンクをたどれません。";
+"Only regular files can be downloaded." = "通常のファイルのみダウンロードできます。";
+"The uploaded file data is not valid Base64." = "アップロードされたファイルデータは有効な Base64 ではありません。";
+"The upload contains duplicate or conflicting file paths." = "アップロードに重複または競合するファイルパスが含まれています。";
+"Streaming download started; polling paused." = "ストリーミングダウンロードを開始しました。ポーリングを一時停止します。";
+"Streaming download ended; polling resumed." = "ストリーミングダウンロードが終了しました。ポーリングを再開します。";
+"Streaming upload started; polling paused." = "ストリーミングアップロードを開始しました。ポーリングを一時停止します。";
+"Streaming upload ended; polling resumed." = "ストリーミングアップロードが終了しました。ポーリングを再開します。";

@@ -79,6 +79,7 @@ public class LocalDebugServer: ObservableObject {
     var pendingOpenAIRequests: [PendingOpenAIRequest] = []
     var resolvingOpenAIRequestIDs: Set<UUID> = []
     let insertSession: @Sendable (ChatSession, [ChatMessage]) throws -> Void
+    var fileRoot: @Sendable () -> URL = { StorageUtility.documentsDirectory }
 
     var httpPollingTimer: Timer?
     var httpSession: URLSession?

@@ -8288,3 +8288,14 @@
 "Only a permanent top-level conversation can be inserted." = "只能插入非临时的顶层会话。";
 "The captured request is missing or already being processed." = "捕获请求不存在或正在处理。";
 "The provider configuration could not be saved." = "无法保存提供商配置。";
+
+/* 远程文件访问边界与传输日志 */
+"The file path must stay inside the app's Documents folder." = "文件路径必须位于应用的 Documents 目录内。";
+"Symbolic links cannot be followed during remote file access." = "远程文件访问不能跟随符号链接。";
+"Only regular files can be downloaded." = "只能下载普通文件。";
+"The uploaded file data is not valid Base64." = "上传的文件数据不是有效的 Base64。";
+"The upload contains duplicate or conflicting file paths." = "上传内容包含重复或相互冲突的文件路径。";
+"Streaming download started; polling paused." = "开始流式下载，暂停轮询。";
+"Streaming download ended; polling resumed." = "流式下载结束，恢复轮询。";
+"Streaming upload started; polling paused." = "开始流式上传，暂停轮询。";
+"Streaming upload ended; polling resumed." = "流式上传结束，恢复轮询。";

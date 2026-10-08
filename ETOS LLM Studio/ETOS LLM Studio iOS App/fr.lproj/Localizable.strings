@@ -8379,3 +8379,14 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "Only a permanent top-level conversation can be inserted." = "Seules les conversations permanentes de premier niveau peuvent être ajoutées.";
 "The captured request is missing or already being processed." = "La requête capturée est introuvable ou déjà en cours de traitement.";
 "The provider configuration could not be saved." = "Impossible d’enregistrer la configuration du fournisseur.";
+
+/* 远程文件访问边界与传输日志 */
+"The file path must stay inside the app's Documents folder." = "Le chemin du fichier doit rester dans le dossier Documents de l’application.";
+"Symbolic links cannot be followed during remote file access." = "Les liens symboliques ne peuvent pas être suivis lors de l’accès distant aux fichiers.";
+"Only regular files can be downloaded." = "Seuls les fichiers ordinaires peuvent être téléchargés.";
+"The uploaded file data is not valid Base64." = "Les données du fichier envoyé ne sont pas au format Base64 valide.";
+"The upload contains duplicate or conflicting file paths." = "L’envoi contient des chemins de fichiers en double ou en conflit.";
+"Streaming download started; polling paused." = "Téléchargement en flux démarré ; interrogation suspendue.";
+"Streaming download ended; polling resumed." = "Téléchargement en flux terminé ; interrogation reprise.";
+"Streaming upload started; polling paused." = "Envoi en flux démarré ; interrogation suspendue.";
+"Streaming upload ended; polling resumed." = "Envoi en flux terminé ; interrogation reprise.";

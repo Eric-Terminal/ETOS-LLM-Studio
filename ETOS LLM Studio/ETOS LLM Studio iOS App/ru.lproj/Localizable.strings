@@ -8295,3 +8295,14 @@
 "Only a permanent top-level conversation can be inserted." = "Можно добавлять только постоянные беседы верхнего уровня.";
 "The captured request is missing or already being processed." = "Перехваченный запрос отсутствует или уже обрабатывается.";
 "The provider configuration could not be saved." = "Не удалось сохранить настройки провайдера.";
+
+/* 远程文件访问边界与传输日志 */
+"The file path must stay inside the app's Documents folder." = "Путь к файлу должен оставаться внутри папки Documents приложения.";
+"Symbolic links cannot be followed during remote file access." = "При удалённом доступе к файлам нельзя переходить по символическим ссылкам.";
+"Only regular files can be downloaded." = "Скачивать можно только обычные файлы.";
+"The uploaded file data is not valid Base64." = "Данные загружаемого файла имеют недопустимый формат Base64.";
+"The upload contains duplicate or conflicting file paths." = "Загрузка содержит повторяющиеся или конфликтующие пути к файлам.";
+"Streaming download started; polling paused." = "Потоковое скачивание началось; опрос приостановлен.";
+"Streaming download ended; polling resumed." = "Потоковое скачивание завершилось; опрос возобновлён.";
+"Streaming upload started; polling paused." = "Потоковая отправка началась; опрос приостановлен.";
+"Streaming upload ended; polling resumed." = "Потоковая отправка завершилась; опрос возобновлён.";
