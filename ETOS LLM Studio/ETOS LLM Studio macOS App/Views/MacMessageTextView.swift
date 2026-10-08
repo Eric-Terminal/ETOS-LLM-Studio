@@ -14,17 +14,27 @@ struct MacMessageTextView: View {
             else if let markdown = text.markdown {
                 Markdown(markdown)
                     .markdownSoftBreakMode(.lineBreak)
-                    .markdownTextStyle { ForegroundColor(palette.body ?? fallback) }
+                    .markdownTextStyle {
+                        if let name = text.typography.bodyName { FontFamily(.custom(name)) }
+                        else { FontFamily(.system(.default)) }
+                        FontSize(CGFloat(text.typography.pointSize))
+                        ForegroundColor(palette.body ?? fallback)
+                    }
                     .markdownTextStyle(\.emphasis) {
+                        if let name = text.typography.emphasisName { FontFamily(.custom(name)) }
+                        else { FontFamily(.system(.default)) }
                         FontStyle(.italic)
                         if let color = palette.emphasis { ForegroundColor(color) }
                     }
                     .markdownTextStyle(\.strong) {
+                        if let name = text.typography.strongName { FontFamily(.custom(name)) }
+                        else { FontFamily(.system(.default)) }
                         FontWeight(.semibold)
                         if let color = palette.strong { ForegroundColor(color) }
                     }
                     .markdownTextStyle(\.code) {
-                        FontFamily(.system(.monospaced))
+                        if let name = text.typography.codeName { FontFamily(.custom(name)) }
+                        else { FontFamily(.system(.monospaced)) }
                         if let color = palette.code { ForegroundColor(color) }
                     }
                     .markdownBlockStyle(\.codeBlock) { block in
@@ -49,6 +59,8 @@ struct MacMessageTextView: View {
             } else { Text(text.plain) }
         }
         .textSelection(.enabled)
+        .font(text.typography.body)
+        .lineSpacing(CGFloat(text.typography.lineSpacing))
         .foregroundStyle(palette.body ?? fallback)
         .frame(maxWidth: .infinity, alignment: .leading)
     }

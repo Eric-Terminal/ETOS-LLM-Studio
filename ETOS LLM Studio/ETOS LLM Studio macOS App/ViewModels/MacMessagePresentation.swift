@@ -103,26 +103,32 @@ actor MacMessagePresentationStore {
     private var coloredTexts: [UUID: MacColoredTextCacheEntry] = [:]
     private var appearance = ChatAppearanceProfile.defaultProfile
     private var preparationID = UUID()
+    private var fontRevision = ""
+    private var lineSpacing = FontLibrary.defaultIOSLineSpacingEm
     private let versionIndex = ChatResponseAttemptIndexWorker()
 
     func prepare(_ messages: [ChatMessage], markdown: Bool, language: String, sessionID: UUID? = nil,
                  roleplay: RoleplayPresentationSnapshot? = nil, rules: [MessageRegexRule] = [],
                  activeResponseID: UUID? = nil,
                  userPreviewLimit: Int = ChatUserMessagePreview.defaultCharacterLimit,
-                 appearance: ChatAppearanceProfile = .defaultProfile) async throws -> [MacMessagePresentation] {
+                 appearance: ChatAppearanceProfile = .defaultProfile,
+                 lineSpacing: Double = FontLibrary.defaultIOSLineSpacingEm) async throws -> [MacMessagePresentation] {
         let revision = UUID(); preparationID = revision
         let versions = await versionIndex.prepare(messages: messages, sessionID: sessionID).entries
         try Task.checkCancellation()
         guard preparationID == revision else { throw CancellationError() }
         let palette = MacChatPalette(appearance)
+        let fontRevision = FontLibrary.adapterCacheToken()
         let usesCustomPresentation = roleplay != nil || !rules.isEmpty
         if usesMarkdown != markdown || self.language != language || self.userPreviewLimit != userPreviewLimit
-            || usesCustomPresentation || usedCustomPresentation || self.appearance != appearance {
+            || usesCustomPresentation || usedCustomPresentation || self.appearance != appearance
+            || self.fontRevision != fontRevision || self.lineSpacing != lineSpacing {
             cache.removeAll()
             usesMarkdown = markdown
             self.language = language
             self.userPreviewLimit = userPreviewLimit
             self.appearance = appearance
+            self.fontRevision = fontRevision; self.lineSpacing = lineSpacing
         }
         usedCustomPresentation = usesCustomPresentation
         var updated: [UUID: MacMessagePresentation] = [:]
@@ -142,22 +148,22 @@ actor MacMessagePresentationStore {
                 let outgoing = message.role == .user && message.authorKind == .user
                 let base = textCache.prepare(source, messageID: message.id,
                                              markdown: markdown && message.role == .assistant)
-                let text = try await prepareColors(base, outgoing: outgoing, appearance: appearance)
+                let text = try await prepareColors(base, outgoing: outgoing, appearance: appearance, fontRevision: fontRevision, lineSpacing: lineSpacing)
                 let activity = MacMessageActivity(message: message, activeResponseID: activeResponseID)
                 var reasoning: MacPreparedMessageText?
                 if let source = message.reasoningContent {
                     let base = textCache.prepare(source, messageID: message.id, reasoning: true,
                                                  markdown: markdown && !activity.suppressesReasoningContent)
                     // 活跃思考沿用纯文本预览，不触发规则匹配或额外格式化。
-                    if activity.suppressesReasoningContent { reasoning = base }
-                    else { reasoning = try await prepareColors(base, outgoing: outgoing, appearance: appearance) }
+                    reasoning = try await prepareColors(base, outgoing: outgoing, appearance: appearance,
+                        fontRevision: fontRevision, lineSpacing: lineSpacing, appliesRules: !activity.suppressesReasoningContent)
                 }
                 var preview: MacPreparedMessageText?
                 if message.role == .user {
                     let candidate = ChatUserMessagePreview(content: source, characterLimit: userPreviewLimit)
                     if candidate.isTruncated {
                         let base = textCache.prepare(candidate.content, messageID: message.id, preview: true, markdown: false)
-                        preview = try await prepareColors(base, outgoing: outgoing, appearance: appearance)
+                        preview = try await prepareColors(base, outgoing: outgoing, appearance: appearance, fontRevision: fontRevision, lineSpacing: lineSpacing)
                     }
                 }
                 row = MacMessagePresentation.prepare(message, markdown: markdown, versionInfo: versions[message.id],
@@ -165,7 +171,7 @@ actor MacMessagePresentationStore {
                                                      activeResponseID: activeResponseID, userPreviewLimit: userPreviewLimit,
                                                      preparedText: text, preparedReasoning: reasoning, preparedPreview: preview, palette: palette)
             }
-            guard preparationID == revision else { throw CancellationError() }
+            guard preparationID == revision, FontLibrary.adapterCacheToken() == fontRevision else { throw CancellationError() }
             updated[message.id] = row
             result.append(row)
             textIDs.insert(row.content.id)
@@ -182,13 +188,14 @@ actor MacMessagePresentationStore {
     func prepareWorkspace(_ messages: [ChatMessage], markdown: Bool, language: String, sessionID: UUID?,
                           scriptSessionIDs: Set<UUID>, service: ChatService,
                           userPreviewLimit: Int = ChatUserMessagePreview.defaultCharacterLimit,
-                          appearance: ChatAppearanceProfile = .defaultProfile) async throws -> MacRoleplayPresentation {
+                          appearance: ChatAppearanceProfile = .defaultProfile,
+                          lineSpacing: Double = FontLibrary.defaultIOSLineSpacingEm) async throws -> MacRoleplayPresentation {
         let worldbooks = service.loadWorldbooks()
         let context = sessionID.map { RoleplayPresentationSnapshot(sessionID: $0, messages: messages, worldbooks: worldbooks) }
         let rows = try await prepare(messages, markdown: markdown, language: language, sessionID: sessionID,
                                      roleplay: context, rules: MessageRegexRuleStore.currentRules(),
                                      activeResponseID: sessionID.flatMap { service.activeResponseMessageID(for: $0) },
-                                     userPreviewLimit: userPreviewLimit, appearance: appearance)
+                                     userPreviewLimit: userPreviewLimit, appearance: appearance, lineSpacing: lineSpacing)
         var scripts: [RoleplayPreparedDocument] = []
         for id in scriptSessionIDs {
             try Task.checkCancellation()
@@ -199,24 +206,33 @@ actor MacMessagePresentationStore {
     }
 
     private func prepareColors(_ text: MacPreparedMessageText, outgoing: Bool,
-                               appearance: ChatAppearanceProfile) async throws -> MacPreparedMessageText {
+                               appearance: ChatAppearanceProfile, fontRevision: String, lineSpacing: Double,
+                               appliesRules: Bool = true) async throws -> MacPreparedMessageText {
         let light = outgoing ? appearance.userLightTextStyles : appearance.assistantLightTextStyles
         let dark = outgoing ? appearance.userDarkTextStyles : appearance.assistantDarkTextStyles
-        if let entry = coloredTexts[text.id], entry.light == light, entry.dark == dark { return entry.text }
+        if let entry = coloredTexts[text.id], entry.light == light, entry.dark == dark,
+           entry.fontRevision == fontRevision, entry.lineSpacing == lineSpacing, entry.appliesRules == appliesRules { return entry.text }
+        let typography = await MacTextTypography.prepare(text.source, lineSpacing: lineSpacing)
+        let fontRules = appliesRules ? FontLibrary.resolvedTextFontRules() : []
         var lightText: AttributedString?, darkText: AttributedString?
-        if light.customRules.contains(where: { $0.isEnabled && $0.isConfigured }) {
+        if appliesRules && (!fontRules.isEmpty || light.customRules.contains(where: { $0.isEnabled && $0.isConfigured })) {
             lightText = await ChatAppearanceTextRuleRenderer.shared.prepare(request: .init(
-                source: text.source, usesMarkdown: text.markdown != nil, styleColors: light))
+                source: text.source, usesMarkdown: text.markdown != nil, styleColors: light, fontRules: fontRules,
+                fontPointSize: MacTextTypography.baseSize, fontScale: FontLibrary.customFontScale,
+                fontFallbackScope: FontLibrary.fallbackScope, semanticFont: .system(size: CGFloat(MacTextTypography.baseSize))))
         }
         try Task.checkCancellation()
         if dark == light { darkText = lightText }
-        else if dark.customRules.contains(where: { $0.isEnabled && $0.isConfigured }) {
+        else if appliesRules && (!fontRules.isEmpty || dark.customRules.contains(where: { $0.isEnabled && $0.isConfigured })) {
             darkText = await ChatAppearanceTextRuleRenderer.shared.prepare(request: .init(
-                source: text.source, usesMarkdown: text.markdown != nil, styleColors: dark))
+                source: text.source, usesMarkdown: text.markdown != nil, styleColors: dark, fontRules: fontRules,
+                fontPointSize: MacTextTypography.baseSize, fontScale: FontLibrary.customFontScale,
+                fontFallbackScope: FontLibrary.fallbackScope, semanticFont: .system(size: CGFloat(MacTextTypography.baseSize))))
         }
         try Task.checkCancellation()
-        let result = MacPreparedMessageText(base: text, lightRules: lightText, darkRules: darkText)
-        coloredTexts[text.id] = .init(light: light, dark: dark, text: result)
+        let result = MacPreparedMessageText(base: text, lightRules: lightText, darkRules: darkText, typography: typography)
+        coloredTexts[text.id] = .init(light: light, dark: dark, fontRevision: fontRevision, lineSpacing: lineSpacing,
+                                    appliesRules: appliesRules, text: result)
         return result
     }
 }

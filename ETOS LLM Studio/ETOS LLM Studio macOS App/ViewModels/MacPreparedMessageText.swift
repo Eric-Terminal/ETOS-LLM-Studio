@@ -10,6 +10,7 @@ struct MacPreparedMessageText: @unchecked Sendable {
     let markdown: MarkdownContent?
     let lightRules: AttributedString?
     let darkRules: AttributedString?
+    let typography: MacTextTypography
 
     init(_ source: String, markdown: Bool) {
         id = UUID()
@@ -17,11 +18,13 @@ struct MacPreparedMessageText: @unchecked Sendable {
         plain = AttributedString(source)
         self.markdown = markdown ? MarkdownContent(source) : nil
         lightRules = nil; darkRules = nil
+        typography = .system
     }
 
-    init(base: MacPreparedMessageText, lightRules: AttributedString?, darkRules: AttributedString?) {
+    init(base: MacPreparedMessageText, lightRules: AttributedString?, darkRules: AttributedString?, typography: MacTextTypography = .system) {
         id = base.id; source = base.source; plain = base.plain; markdown = base.markdown
         self.lightRules = lightRules; self.darkRules = darkRules
+        self.typography = typography
     }
 }
 
@@ -51,5 +54,8 @@ struct MacMessageTextCache {
 struct MacColoredTextCacheEntry {
     let light: ChatAppearanceTextStyleColors
     let dark: ChatAppearanceTextStyleColors
+    let fontRevision: String
+    let lineSpacing: Double
+    let appliesRules: Bool
     let text: MacPreparedMessageText
 }
