@@ -22,7 +22,7 @@ struct MacSettingsView: View {
                 .tag(Tab.tools)
             NavigationStack {
                 List {
-                    NavigationLink(NSLocalizedString("记忆", comment: "")) { MacMemorySettingsView(model: workspace.memoryModel) }
+                    NavigationLink(NSLocalizedString("记忆系统", comment: "")) { MacMemorySystemView(isActive: selectedTab == .context) }
                     NavigationLink(NSLocalizedString("跨对话记忆与画像", comment: "")) { MacConversationMemoryView(model: workspace.conversationMemoryModel) }
                     NavigationLink(NSLocalizedString("世界书", comment: "")) { MacWorldbookListView(model: workspace.worldbookModel) }
                     NavigationLink(NSLocalizedString("角色扮演与酒馆兼容", comment: "")) { MacRoleplayLibraryView(model: workspace.roleplayModel) }
@@ -120,6 +120,7 @@ private struct MacGeneralSettingsView: View {
                     MacTTSSettingsView(model: workspace.tts, isActive: isActive)
                 }
                 NavigationLink(NSLocalizedString("显示设置", comment: "")) { MacDisplaySettingsView(isActive: isActive) }
+                NavigationLink(NSLocalizedString("拓展功能", comment: "")) { MacExtendedFeaturesView(isActive: isActive) }
             }
             Section {
                 Toggle(NSLocalizedString("流式输出", comment: ""), isOn: $configuration.enableStreaming)
@@ -154,6 +155,7 @@ private struct MacGeneralSettingsView: View {
             documents: [GuideDocumentReference(id: "settings-core", title: "Core Settings"), GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
             isActive: isActive,
             settings: [
+                .readOnly("extended_features_require_navigation", label: NSLocalizedString("拓展功能", comment: ""), value: { .bool(true) }),
                 .readOnly("proxy_requires_navigation", label: NSLocalizedString("全局代理设置", comment: ""), value: { .bool(true) }),
                 .readOnly("speech_requires_navigation", label: NSLocalizedString("语音输入", comment: ""), value: { .bool(true) }),
                 .readOnly("tts_requires_navigation", label: NSLocalizedString("语音输出", comment: ""), value: { .bool(true) }),

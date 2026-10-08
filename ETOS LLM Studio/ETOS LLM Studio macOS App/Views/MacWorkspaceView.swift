@@ -21,8 +21,7 @@ struct MacWorkspaceView: View {
             MacChatView()
                 .navigationTitle(workspace.currentSession?.name ?? NSLocalizedString("新的对话", comment: ""))
                 .toolbar {
-                    ToolbarItem { MacTemporaryChatMenu() }
-                    ToolbarItem { MacDailyPulseEntry(model: workspace.dailyPulse) }
+                    ToolbarItem { MacChatQuickActionsView() }
                     Button { sessionToRoleplay = workspace.currentSession } label: {
                         Label(NSLocalizedString("会话角色绑定", comment: ""), systemImage: "person.text.rectangle")
                     }
@@ -62,7 +61,8 @@ struct MacWorkspaceView: View {
                         .disabled(!workspace.canModifyCurrentHistory)
                 }
         }
-        .disabled(workspace.isRestoringData || workspace.isMutatingHistory)
+        // 压缩工作表必须保留“停止”；历史修改仍由各操作自身的互斥检查拦截。
+        .disabled(workspace.isRestoringData || (workspace.isMutatingHistory && !workspace.contextCompression.isWorking))
         .sheet(item: $sessionToEdit) { session in
             MacSessionEditor(session: session)
         }

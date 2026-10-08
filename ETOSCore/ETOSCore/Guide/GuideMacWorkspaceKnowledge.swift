@@ -8,6 +8,8 @@ public enum GuideMacWorkspaceKnowledge {
             title: chinese ? "Mac 聊天与配置草稿" : "Mac Chat and Configuration Drafts",
             keywords: ["macOS", "Mac", "桌面", "stdio", "数据库", "草稿", "快捷键", "文件夹", "标签", "GGUF", "下载", "LoRA", "内置工具", "自动批准", "倒计时", "Skills", "技能", "快捷指令", "清单", "描述生成", "浏览器", "接管", "登录", "draft", "database", "folder", "tag", "approval", "countdown", "Shortcuts", "manifest", "browser", "WebKit"],
             content: chinese ? """
+            Mac 聊天工具栏的快捷功能沿用 iOS 的 ui.chatQuickActionIDs，可在显示设置中选择至少一项，立即保存；单选显示直接入口，多选使用原生菜单，显示顺序固定。设置打开原生 Settings 窗口，临时聊天保留记忆模式子菜单，脉冲/压缩沿用已有工作表，其余功能打开各自导航页面。浏览器绑定来源会话，来源切换后关闭；已启用本地 Linux 才能打开终端。向导只确认修改快捷功能数组，不能触发入口。记忆系统补齐三项开关和管理导航；拓展功能目前连接模型、Linux、快照、iCloud 和应用锁，其他移动端高级页面尚须继续补齐。详见 chat-quick-actions。
+
             Mac 聊天输入区提供“压缩为续聊”，选项页先改保留轮次、聊天模型和侧重点草稿，再手动创建独立会话。来源和续聊都有跳转入口；顶部可查看摘要、保留原文与工具参数/结果。移除入口仅隐藏一个方向，保留交接内容。设置的上下文标签包含提醒开关与 Token 阈值，点击通知只打开选项。选项、详情、提醒设置、介绍和移除确认各有独立向导，不能通过向导开始压缩或执行工具。详见 context-compression 文档。
 
             Mac 每日脉冲从聊天工具栏打开，卡片、任务、反馈历史、外部信号和设置使用独立标签。复用 Core 的数据库和保留规则，只展示今天的卡片，预先准备的明日内容不会提前显示。详情可喜欢、降权、隐藏、重置反馈、加入任务、保存为正式会话或继续聊；继续聊只填入草稿，不自动发送，重置反馈也不会删除历史事件。隐藏卡片可从今天的隐藏区域打开。
@@ -164,6 +166,8 @@ public enum GuideMacWorkspaceKnowledge {
 
             Mac 与 iOS/watchOS 复用数据库结构、配置编码和附件相对路径；Mac 数据目录为 Application Support/ETOS LLM Studio，不直接读写移动设备的沙盒。平台路径和本地执行环境需要分别配置。页面向导只能使用当前页面声明的工具，不能执行用户 MCP、系统命令或快捷指令，也不会从 JSON 编辑器读取已有秘密。
             """ : """
+            Mac chat quick actions reuse iOS ui.chatQuickActionIDs. Display settings require at least one entry and save immediately; one selection is shown directly and multiple selections use a native menu in a fixed order. Settings opens the system Settings window, temporary chat retains its memory submenu, and Pulse/compression reuse their sheets. Other entries open navigation pages. Browser navigation binds to its source session and closes on a source change; Linux Terminal requires an enabled runtime. The guide can confirm a selection change but cannot launch entries. Memory System adds three switches and management links. Extended Features currently connects models, Linux, snapshots, iCloud and app lock; other mobile advanced pages still need Mac work. See chat-quick-actions.
+
             Mac offers Compress to Continue beside the composer. Edit retained rounds, chat model and focus as drafts, then manually create an independent session. Source and continuation links support navigation; the handoff shows its summary, retained text and tool arguments/results. Removing a link hides only that direction and preserves the handoff. The Context settings tab contains reminders and the token threshold; notification clicks only open options. Options, details, settings, introductions and removal confirmation have independent guide contexts and cannot generate or execute tools through the guide. See context-compression.
 
             Mac Daily Pulse opens from the chat toolbar, with separate tabs for cards, tasks, feedback history, external signals and settings. It reuses Core storage and retention: only today's cards are shown, and prepared tomorrow content is not revealed early. Card details support likes, downranking, hiding, resetting feedback, tasks, conversation archiving and continuing chat. Continuing fills a draft without sending; resetting feedback does not erase history events. Hidden cards remain accessible in today's hidden section.

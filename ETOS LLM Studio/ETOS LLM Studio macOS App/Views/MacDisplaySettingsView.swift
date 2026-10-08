@@ -18,6 +18,7 @@ struct MacDisplaySettingsView: View {
                 NavigationLink(NSLocalizedString("字体设置", comment: "")) { MacFontSettingsView(model: workspace.fonts, isActive: available) }
                 NavigationLink(NSLocalizedString("聊天动画", comment: "")) { MacChatAnimationSettingsView(isActive: available) }
                 NavigationLink(NSLocalizedString("功能栏自定义", comment: "")) { MacMessageActionBarSettingsView(isActive: available) }
+                NavigationLink(NSLocalizedString("聊天快捷功能", comment: "")) { MacChatQuickActionSettingsView(isActive: available) }
             }
             Section {
                 Toggle(NSLocalizedString("Markdown 渲染", comment: ""), isOn: $configuration.enableMarkdown)
@@ -82,6 +83,7 @@ struct MacDisplaySettingsView: View {
                 .readOnly("fonts_require_navigation", label: NSLocalizedString("字体设置", comment: ""), value: { .bool(true) }),
                 .readOnly("animations_require_navigation", label: NSLocalizedString("聊天动画", comment: ""), value: { .bool(true) }),
                 .readOnly("action_bar_requires_navigation", label: NSLocalizedString("功能栏自定义", comment: ""), value: { .bool(true) }),
+                .readOnly("quick_actions_require_navigation", label: NSLocalizedString("聊天快捷功能", comment: ""), value: { .bool(true) }),
                 .bool("timeline_navigation", label: NSLocalizedString("四键消息导航", comment: ""),
                       get: { configuration.chatTimelineNavigationEnabled }, set: { configuration.chatTimelineNavigationEnabled = $0 }),
                 .bool("hide_assistant_bubble", label: NSLocalizedString("关闭助手气泡", comment: ""), get: { configuration.enableNoBubbleUI }, set: { configuration.enableNoBubbleUI = $0 }),

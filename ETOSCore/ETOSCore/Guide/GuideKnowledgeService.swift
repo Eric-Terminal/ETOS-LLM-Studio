@@ -74,6 +74,7 @@ public enum GuideDocumentCatalog {
     public static let documents: [GuideDocument] = [
         GuideMacWorkspaceKnowledge.document(),
         GuideContextCompressionKnowledge.document(),
+        GuideChatQuickActionsKnowledge.document(),
         GuideDocument(
             id: "message-tool-call-editing",
             title: "消息工具调用 JSON 编辑",
