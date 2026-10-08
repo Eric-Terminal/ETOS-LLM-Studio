@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import ETOSCore
+@preconcurrency import PhotosUI
 import UniformTypeIdentifiers
 
 @MainActor
@@ -11,12 +12,15 @@ final class MacBackgroundModel: ObservableObject {
     @Published private(set) var isWorking = false
     @Published private(set) var isSuspended = true
     @Published private(set) var isImportPanelOpen = false
+    @Published private(set) var isPhotoPickerOpen = false
+    @Published private(set) var cropDraft: MacBackgroundCropDraft?
     @Published private(set) var epoch = UUID()
     @Published var error: String?
     let playback = MacBackgroundPlayback()
     private let library: MacBackgroundLibrary
     private var loading: Task<Void, Never>?
     private var writing: Task<Void, Never>?
+    private var preparingCrop: Task<Void, Never>?
     private var subscriptions = Set<AnyCancellable>()
     private var panel: NSOpenPanel?
     private var started = false
@@ -26,7 +30,8 @@ final class MacBackgroundModel: ObservableObject {
     private var loaded = false
 
     init(library: MacBackgroundLibrary = .shared) { self.library = library }
-    var canEdit: Bool { loaded && !isLoading && !isWorking && !isSuspended && !isImportPanelOpen && AppLockManager.shared.state != .locked }
+    var isPresentingMedia: Bool { isImportPanelOpen || isPhotoPickerOpen || cropDraft != nil }
+    var canEdit: Bool { loaded && !isLoading && !isWorking && !isSuspended && !isPresentingMedia && AppLockManager.shared.state != .locked }
 
     func start() {
         guard !started else { return }
@@ -50,6 +55,7 @@ final class MacBackgroundModel: ObservableObject {
 
     func reload(preserveError: Bool = false) {
         guard !isSuspended, !isWorking, !isImportPanelOpen, AppLockManager.shared.state != .locked else { return }
+        isPhotoPickerOpen = false; cancelCrop()
         let previous = loading; previous?.cancel()
         epoch = UUID(); let epoch = epoch, library = library
         isLoading = true
@@ -114,19 +120,70 @@ final class MacBackgroundModel: ObservableObject {
         mutate(expectedEpoch: expectedEpoch) { [library] in try await library.importFile(url).id }
     }
 
+    func setPhotoPickerPresented(_ presented: Bool) {
+        guard !presented || canEdit else { return }
+        isPhotoPickerOpen = presented
+    }
+
+    func importPhoto(_ item: PhotosPickerItem, expectedEpoch: UUID) {
+        guard epoch == expectedEpoch else { return }
+        isPhotoPickerOpen = false
+        guard canEdit else { return }
+        mutate(expectedEpoch: expectedEpoch) { [library] in try await library.importPhoto(item).id }
+    }
+
+    func beginCrop(_ file: MacBackgroundFile, expectedEpoch: UUID) {
+        guard canEdit, epoch == expectedEpoch, !file.isVideo, catalog.byID[file.id] == file else { return }
+        let draft = MacBackgroundCropDraft(file: file, sourceEpoch: epoch), library = library
+        cropDraft = draft
+        let previous = preparingCrop
+        previous?.cancel()
+        preparingCrop = Task { [weak self, weak draft] in
+            await previous?.value
+            do {
+                let prepared = try await library.prepareCrop(file)
+                guard let self, let draft, cropDraft?.id == draft.id, epoch == expectedEpoch, !isSuspended, !Task.isCancelled else { return }
+                draft.prepared = prepared; draft.isPreparing = false
+            } catch {
+                guard let self, let draft, cropDraft?.id == draft.id, epoch == expectedEpoch, !isSuspended, !Task.isCancelled else { return }
+                draft.error = error.localizedDescription; draft.isPreparing = false
+            }
+        }
+    }
+
+    func canSaveCrop(_ draft: MacBackgroundCropDraft) -> Bool {
+        !isSuspended && !isLoading && !isWorking && cropDraft?.id == draft.id && epoch == draft.sourceEpoch
+            && draft.prepared != nil && !draft.isPreparing && AppLockManager.shared.state != .locked
+    }
+
+    func saveCrop(_ draft: MacBackgroundCropDraft) {
+        guard canSaveCrop(draft) else { return }
+        draft.error = nil
+        let file = draft.file, parameters = draft.parameters
+        mutate(expectedEpoch: draft.sourceEpoch, cropID: draft.id) { [library] in
+            try await library.saveCrop(file, parameters: parameters).id
+        }
+    }
+
+    func cancelCrop(id: UUID? = nil) {
+        guard id == nil || cropDraft?.id == id else { return }
+        preparingCrop?.cancel(); cropDraft = nil
+    }
+
     func delete(_ file: MacBackgroundFile, expectedEpoch: UUID) {
         guard canEdit, epoch == expectedEpoch, catalog.byID[file.id] == file else { return }
         mutate(expectedEpoch: expectedEpoch, deletedID: file.id) { [library] in try await library.delete(file); return nil }
     }
 
-    private func mutate(expectedEpoch: UUID, deletedID: String? = nil, operation: @escaping @Sendable () async throws -> String?) {
+    private func mutate(expectedEpoch: UUID, deletedID: String? = nil, cropID: UUID? = nil,
+                        operation: @escaping @Sendable () async throws -> String?) {
         isWorking = true; error = nil
         let previous = loading
         previous?.cancel()
         writing = Task { [weak self] in
             await previous?.value
             defer {
-                if let self { isWorking = false; if !isSuspended { reload(preserveError: true) } }
+                if let self { isWorking = false; if !isSuspended && cropDraft == nil { reload(preserveError: true) } }
             }
             do {
                 try Task.checkCancellation()
@@ -138,9 +195,11 @@ final class MacBackgroundModel: ObservableObject {
                 NotificationCenter.default.post(name: .syncBackgroundsUpdated, object: self)
                 guard let self, epoch == expectedEpoch, !isSuspended, !Task.isCancelled else { return }
                 if let importedID { AppConfigStore.shared.currentBackgroundImage = importedID }
+                if cropDraft?.id == cropID { cropDraft = nil }
             } catch {
                 guard let self, epoch == expectedEpoch, !isSuspended, !Task.isCancelled else { return }
-                self.error = error.localizedDescription
+                if let cropID, cropDraft?.id == cropID { cropDraft?.error = error.localizedDescription }
+                else { self.error = error.localizedDescription }
             }
         }
     }
@@ -165,16 +224,18 @@ final class MacBackgroundModel: ObservableObject {
     func suspend() {
         isSuspended = true; epoch = UUID(); loaded = false; isLoading = false
         loading?.cancel(); writing?.cancel(); playback.suspend()
+        isPhotoPickerOpen = false; cancelCrop()
         cancelImportPanel()
         catalog = MacBackgroundCatalog([]); selectedFile = nil; error = nil
     }
 
     func resume() {
+        let wasSuspended = isSuspended
         isSuspended = false
-        if !isWorking { reload() }
+        if !isWorking && (wasSuspended || !loaded) { reload() }
     }
 
     func waitForPendingOperations() async {
-        await writing?.value; await loading?.value; await playback.waitForPendingOperations()
+        await writing?.value; await preparingCrop?.value; await loading?.value; await playback.waitForPendingOperations()
     }
 }

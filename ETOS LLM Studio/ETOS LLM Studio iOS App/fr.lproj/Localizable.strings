@@ -8193,9 +8193,35 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "仅影响显示，复制、编辑和发送仍使用完整消息。" = "Seul l’affichage change. La copie, la modification et l’envoi utilisent toujours le message complet.";
 
 // Mac 背景管理
-"Mac 背景使用说明" = "Ouvrez Choisir un arrière-plan pour importer des images PNG, JPEG ou WebP, ou des vidéos MP4, MOV ou M4V, puis sélectionnez un élément. L’import copie le fichier original. Remplir recadre l’affichage au centre de la fenêtre de discussion ; Adapter montre l’image entière. Le fichier original reste inchangé. L’affichage, le flou et l’opacité sont enregistrés immédiatement.\n\nLa rotation automatique choisit un autre arrière-plan existant au démarrage de l’app, sans minuterie. La suppression demande confirmation. Supprimer l’élément sélectionné choisit un autre élément, ou le fond système si la liste est vide. Images et vidéos suivent les réglages existants de synchronisation et de sauvegarde des arrière-plans.\n\nLes vidéos tournent en boucle sans son. Lorsque la fenêtre est masquée, recouverte ou réduite, le réglage de poursuite de lecture hors discussion détermine la pause. Le passage de toute l’app à l’arrière-plan met toujours en pause ; le retour reprend la lecture. Verrouillage, sauvegarde, restauration et fermeture arrêtent la lecture et attendent les opérations sur les fichiers.\n\nLe guide peut proposer des réglages ou sélectionner un arrière-plan existant après confirmation. Importation, suppression et panneau système exigent une action manuelle. Le guide ne lit pas le contenu des images ou vidéos.";
+"Mac 背景使用说明" = "Ouvrez Choisir un arrière-plan pour importer des images PNG, JPEG ou WebP, ou des vidéos MP4, MOV ou M4V, puis sélectionnez un élément. L’import copie le fichier original. Remplir recadre l’affichage au centre de la fenêtre de discussion ; Adapter montre l’image entière. Le fichier original reste inchangé. L’affichage, le flou et l’opacité sont enregistrés immédiatement.\n\nLa rotation automatique choisit un autre arrière-plan existant au démarrage de l’app, sans minuterie. La suppression demande confirmation. Supprimer l’élément sélectionné choisit un autre élément, ou le fond système si la liste est vide. Images et vidéos suivent les réglages existants de synchronisation et de sauvegarde des arrière-plans.\n\nLes vidéos tournent en boucle sans son. Lorsque la fenêtre est masquée, recouverte ou réduite, le réglage de poursuite de lecture hors discussion détermine la pause. Le passage de toute l’app à l’arrière-plan met toujours en pause ; le retour reprend la lecture. Verrouillage, sauvegarde, restauration et fermeture arrêtent la lecture et attendent les opérations sur les fichiers.\n\nLe guide peut proposer des réglages ou sélectionner un arrière-plan existant après confirmation. Importation, suppression et panneau système exigent une action manuelle. Le guide ne lit pas le contenu des images ou vidéos.\n\nVous pouvez aussi choisir des images ou vidéos avec Importer depuis Photos. L’orientation des photos est normalisée avant leur enregistrement en PNG ; les vidéos sont transférées sous forme de fichiers. Choisissez Recadrer à côté d’une image pour régler les proportions, le zoom et la position, puis enregistrez manuellement un nouvel arrière-plan en conservant l’original. Le recadrage reste un brouillon ; annuler ne crée aucun fond. Le guide peut ajuster le brouillon après confirmation, mais l’enregistrement reste manuel.";
 "导入背景" = "Importer un arrière-plan";
 "无法读取背景媒体，请选择有效的图片或视频。" = "Impossible de lire ce média. Choisissez une image ou une vidéo valide.";
 "背景文件已变化，请刷新列表后重试。" = "Le fichier a changé. Actualisez la liste puis réessayez.";
 "视频背景静音循环播放，App 进入后台时暂停。" = "Les vidéos tournent en boucle sans son et se mettent en pause quand l’app passe à l’arrière-plan.";
 "暂无背景，请先导入图片或视频。" = "Aucun arrière-plan. Importez une image ou une vidéo.";
+
+"原始比例" = "Proportions d’origine";
+
+"桌面比例" = "Proportions d’un écran";
+
+"正方形" = "Carré";
+
+"裁切" = "Recadrer";
+
+"水平位置" = "Position horizontale";
+
+"垂直位置" = "Position verticale";
+
+"裁切预览" = "Aperçu du recadrage";
+
+"重置位置与缩放" = "Réinitialiser la position et le zoom";
+
+"正在保存…" = "Enregistrement…";
+
+"保存为新背景" = "Enregistrer comme nouvel arrière-plan";
+
+"从照片图库导入" = "Importer depuis Photos";
+
+"拖动图片调整位置，保存后生成新背景。" = "Faites glisser l’image pour la positionner. L’enregistrement crée un nouvel arrière-plan.";
+
+"Mac 背景裁切使用说明" = "Choisissez un rapport, puis cadrez l’image avec le zoom. Faites-la glisser ou utilisez les curseurs de position. Écran correspond à 16:10, Téléphone à 9:16 et Watch à 0,82. Les proportions d’origine conservent l’orientation et le rapport de l’image. La position horizontale va de gauche à droite, la verticale de haut en bas ; le milieu centre l’image. Réinitialiser conserve le rapport et restaure la position et le zoom.\n\nLes ajustements restent un brouillon jusqu’à Enregistrer comme nouvel arrière-plan. Un PNG en pleine résolution est créé à partir de l’original puis sélectionné, et le fond précédent est conservé. Annuler abandonne le brouillon. L’aperçu est réduit pour l’affichage ; l’enregistrement utilise les pixels d’origine.\n\nLe guide peut proposer des changements de rapport, de zoom et de position après confirmation. Il ne peut ni lire l’image ni enregistrer à votre place. Vérifiez l’aperçu puis enregistrez manuellement. Les modifications du catalogue, le verrouillage ou la sortie de la page invalident les anciens brouillons et propositions.";

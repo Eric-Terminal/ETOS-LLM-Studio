@@ -131,7 +131,7 @@ struct MacChatView: View {
             documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace"),
                         GuideDocumentReference(id: "local-models", title: "Local Models"), GuideDocumentReference(id: "tts", title: "Text to Speech")],
             isActive: isVisible && workspace.canManageLocalModels && !importing && editingMessage == nil
-                && rewritingMessage == nil && deletingMessage == nil && !showsRequestControls && !showsBrowser && linuxJobsTarget == nil && speechSource == nil && !workspace.tts.isExportPanelOpen && !workspace.backgrounds.isImportPanelOpen,
+                && rewritingMessage == nil && deletingMessage == nil && !showsRequestControls && !showsBrowser && linuxJobsTarget == nil && speechSource == nil && !workspace.tts.isExportPanelOpen && !workspace.backgrounds.isPresentingMedia,
             settings: [
                 .readOnly("attachment_count", label: NSLocalizedString("附件", comment: ""), value: { .int(workspace.attachments.count) }),
                 .readOnly("has_audio_draft", label: NSLocalizedString("语音输入", comment: ""), value: { .bool(workspace.audioAttachment != nil) }),

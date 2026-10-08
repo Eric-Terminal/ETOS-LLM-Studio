@@ -8116,9 +8116,35 @@
 "仅影响显示，复制、编辑和发送仍使用完整消息。" = "Only affects display. Copying, editing and sending still use the complete message.";
 
 // Mac 背景管理
-"Mac 背景使用说明" = "Open Choose Background to import PNG, JPEG or WebP images, or MP4, MOV or M4V videos, then select a background. Import copies the original file. Fill crops the displayed frame to the chat window; Fit shows the whole frame. Neither changes the original file. Display, blur and opacity settings save immediately.\n\nAutomatic rotation chooses another existing background when the app starts; it does not run on a timer. Deletion requires confirmation. Deleting the selected background chooses a remaining item, or the system background if none remain. Images and videos use the existing background sync and backup settings.\n\nVideos loop silently. When the window is hidden, covered or minimized, Keep Playing Away from Chat determines whether playback pauses. The whole app moving to the background always pauses playback; returning resumes it. Lock, backup, restore and quit stop playback and wait for file operations.\n\nThe guide can propose changes to this page or select an existing item on Choose Background, with confirmation. Import, deletion and the system file panel require manual action. The guide cannot read image or video content.";
+"Mac 背景使用说明" = "Open Choose Background to import PNG, JPEG or WebP images, or MP4, MOV or M4V videos, then select a background. Import copies the original file. Fill crops the displayed frame to the chat window; Fit shows the whole frame. Neither changes the original file. Display, blur and opacity settings save immediately.\n\nAutomatic rotation chooses another existing background when the app starts; it does not run on a timer. Deletion requires confirmation. Deleting the selected background chooses a remaining item, or the system background if none remain. Images and videos use the existing background sync and backup settings.\n\nVideos loop silently. When the window is hidden, covered or minimized, Keep Playing Away from Chat determines whether playback pauses. The whole app moving to the background always pauses playback; returning resumes it. Lock, backup, restore and quit stop playback and wait for file operations.\n\nThe guide can propose changes to this page or select an existing item on Choose Background, with confirmation. Import, deletion and the system file panel require manual action. The guide cannot read image or video content.\n\nYou can also choose images or videos with Import from Photos. Photo library images are normalized for orientation and saved as PNG; videos transfer as files. Choose Crop beside an existing image to adjust its ratio, zoom and position, then manually save a separate new background while keeping the original. Crop parameters remain drafts; cancellation creates no background. The guide can adjust the draft after confirmation, but saving remains manual.";
 "导入背景" = "Import Background";
 "无法读取背景媒体，请选择有效的图片或视频。" = "Unable to read the background media. Choose a valid image or video.";
 "背景文件已变化，请刷新列表后重试。" = "The background file has changed. Refresh the list and try again.";
 "视频背景静音循环播放，App 进入后台时暂停。" = "Video backgrounds loop silently and pause when the app is in the background.";
 "暂无背景，请先导入图片或视频。" = "No backgrounds yet. Import an image or video.";
+
+"原始比例" = "Original Ratio";
+
+"桌面比例" = "Desktop Ratio";
+
+"正方形" = "Square";
+
+"裁切" = "Crop";
+
+"水平位置" = "Horizontal Position";
+
+"垂直位置" = "Vertical Position";
+
+"裁切预览" = "Crop Preview";
+
+"重置位置与缩放" = "Reset Position and Zoom";
+
+"正在保存…" = "Saving…";
+
+"保存为新背景" = "Save as New Background";
+
+"从照片图库导入" = "Import from Photos";
+
+"拖动图片调整位置，保存后生成新背景。" = "Drag the image to position it. Saving creates a new background.";
+
+"Mac 背景裁切使用说明" = "Choose a crop ratio, then use the zoom slider to frame the image. Drag the image or use the position sliders to move it. Desktop is 16:10, Phone is 9:16 and Watch is 0.82. Original keeps the image’s orientation and ratio. Horizontal position runs left to right; vertical runs top to bottom. The middle centers the image. Reset keeps the selected ratio while restoring position and zoom.\n\nAdjustments remain a draft until you choose Save as New Background. Saving creates and selects a full-resolution PNG from the original image and keeps the previous background. Cancel discards the draft. The preview is reduced for display; saving always uses the original pixels.\n\nThe guide can propose ratio, zoom and position changes for confirmation. It cannot read the image or save for you. Review the preview and save manually. Catalog changes, locking or leaving the page invalidate old proposals and drafts.";

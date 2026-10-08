@@ -8016,9 +8016,37 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "仅影响显示，复制、编辑和发送仍使用完整消息。" = "Solo afecta a la visualización. Copiar, editar y enviar siguen usando el mensaje completo.";
 
 // Mac 背景管理
-"Mac 背景使用说明" = "Abra Elegir fondo para importar imágenes PNG, JPEG o WebP, o vídeos MP4, MOV o M4V, y seleccione un fondo. La importación copia el archivo original. Rellenar recorta la vista desde el centro para ajustarla a la ventana de chat; Ajustar muestra la imagen completa. El archivo original no cambia. La visualización, el desenfoque y la opacidad se guardan inmediatamente.\n\nLa rotación automática elige otro fondo existente al iniciar la app, sin temporizador. Eliminar requiere confirmación. Al eliminar el fondo seleccionado se elige uno restante, o el fondo del sistema si no queda ninguno. Las imágenes y los vídeos usan los ajustes existentes de sincronización y copia de seguridad de fondos.\n\nLos vídeos se repiten sin sonido. Al ocultar, cubrir o minimizar la ventana, el ajuste para seguir reproduciendo fuera del chat determina si se pausa. Si toda la app pasa a segundo plano, la reproducción siempre se pausa y continúa al volver. Bloquear, hacer una copia, restaurar o salir detiene la reproducción y espera las operaciones de archivos.\n\nLa guía puede proponer ajustes o seleccionar un fondo existente con confirmación. La importación, la eliminación y el panel de archivos del sistema requieren una acción manual. La guía no lee el contenido de imágenes o vídeos.";
+"Mac 背景使用说明" = "Abra Elegir fondo para importar imágenes PNG, JPEG o WebP, o vídeos MP4, MOV o M4V, y seleccione un fondo. La importación copia el archivo original. Rellenar recorta la vista desde el centro para ajustarla a la ventana de chat; Ajustar muestra la imagen completa. El archivo original no cambia. La visualización, el desenfoque y la opacidad se guardan inmediatamente.\n\nLa rotación automática elige otro fondo existente al iniciar la app, sin temporizador. Eliminar requiere confirmación. Al eliminar el fondo seleccionado se elige uno restante, o el fondo del sistema si no queda ninguno. Las imágenes y los vídeos usan los ajustes existentes de sincronización y copia de seguridad de fondos.\n\nLos vídeos se repiten sin sonido. Al ocultar, cubrir o minimizar la ventana, el ajuste para seguir reproduciendo fuera del chat determina si se pausa. Si toda la app pasa a segundo plano, la reproducción siempre se pausa y continúa al volver. Bloquear, hacer una copia, restaurar o salir detiene la reproducción y espera las operaciones de archivos.\n\nLa guía puede proponer ajustes o seleccionar un fondo existente con confirmación. La importación, la eliminación y el panel de archivos del sistema requieren una acción manual. La guía no lee el contenido de imágenes o vídeos.\n\nTambién puede elegir imágenes o vídeos con Importar desde Fotos. Las imágenes se guardan como PNG con la orientación corregida; los vídeos se transfieren como archivos. Elija Recortar junto a una imagen para ajustar proporción, zoom y posición, y guarde manualmente un fondo nuevo conservando el original. El recorte queda como borrador; cancelar no crea ningún fondo. La guía puede ajustar el borrador tras confirmar, pero guardar sigue siendo manual.";
 "导入背景" = "Importar fondo";
 "无法读取背景媒体，请选择有效的图片或视频。" = "No se puede leer el fondo. Elija una imagen o un vídeo válido.";
 "背景文件已变化，请刷新列表后重试。" = "El archivo de fondo ha cambiado. Actualice la lista e inténtelo de nuevo.";
 "视频背景静音循环播放，App 进入后台时暂停。" = "Los fondos de vídeo se repiten sin sonido y se pausan cuando la app pasa a segundo plano.";
 "暂无背景，请先导入图片或视频。" = "Aún no hay fondos. Importe una imagen o un vídeo.";
+
+"原始比例" = "Proporción original";
+
+"桌面比例" = "Proporción de escritorio";
+
+"正方形" = "Cuadrado";
+
+"裁切" = "Recortar";
+
+"水平位置" = "Posición horizontal";
+
+"垂直位置" = "Posición vertical";
+
+"裁切预览" = "Vista previa del recorte";
+
+"重置位置与缩放" = "Restablecer posición y zoom";
+
+"正在保存…" = "Guardando…";
+
+"保存为新背景" = "Guardar como fondo nuevo";
+
+"从照片图库导入" = "Importar desde Fotos";
+
+"拖动图片调整位置，保存后生成新背景。" = "Arrastre la imagen para colocarla. Al guardar se crea un fondo nuevo.";
+
+"Mac 背景裁切使用说明" = "Elija una proporción y encuadre con el zoom. Arrastre la imagen o use los controles de posición. Escritorio usa 16:10, Teléfono 9:16 y Watch 0,82. Original mantiene la orientación y proporción de la imagen. La posición horizontal va de izquierda a derecha y la vertical de arriba abajo; el punto medio centra la imagen. Restablecer conserva la proporción y restaura la posición y el zoom.\n\nLos cambios quedan como borrador hasta elegir Guardar como fondo nuevo. Se crea y selecciona un PNG a resolución completa desde la imagen original, conservando el fondo anterior. Cancelar descarta el borrador. La vista previa se reduce para mostrarla; al guardar se usan los píxeles originales.\n\nLa guía puede proponer cambios de proporción, zoom y posición que requieren confirmación. No puede leer la imagen ni guardarla por usted. Revise la vista previa y guarde manualmente. Los cambios del catálogo, el bloqueo o salir de la página invalidan los borradores y propuestas anteriores.";
+
+"缩放" = "Zoom";

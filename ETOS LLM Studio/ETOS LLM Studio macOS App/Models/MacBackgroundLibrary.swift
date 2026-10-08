@@ -96,10 +96,14 @@ actor MacBackgroundLibrary {
 
     func delete(_ expected: MacBackgroundFile) throws {
         try Task.checkCancellation()
+        try validate(expected)
+        try FileManager.default.removeItem(at: expected.url)
+    }
+
+    func validate(_ expected: MacBackgroundFile) throws {
         guard expected.id == URL(fileURLWithPath: expected.id).lastPathComponent,
               expected.url.standardizedFileURL == root.appendingPathComponent(expected.id).standardizedFileURL,
               try Self.describe(expected.url) == expected else { throw LibraryError.changed }
-        try FileManager.default.removeItem(at: expected.url)
     }
 
     private static func describe(_ url: URL) throws -> MacBackgroundFile? {
