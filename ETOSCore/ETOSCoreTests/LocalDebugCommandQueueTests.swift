@@ -45,6 +45,20 @@ struct LocalDebugCommandQueueTests {
         #expect(events == ["first", "second", "drained"])
     }
 
+    @Test("原生确认的保存即使尚未开始也不能被断开丢弃")
+    func confirmedWriteSurvivesQueueCancellation() async {
+        let queue = LocalDebugCommandQueue(), gate = LocalDebugQueueGate()
+        var events: [String] = []
+        queue.enqueue { await gate.pause(); events.append("first") }
+        queue.enqueue(discardOnCancellation: false) { events.append("confirmed-write") }
+        queue.enqueue { events.append("remote-command") }
+        await gate.waitForArrival()
+        queue.cancel()
+        await gate.release()
+        await queue.waitForCompletion()
+        #expect(events == ["first", "confirmed-write"])
+    }
+
     @Test("可等待断开立即清除连接状态，返回前等待实际命令完成")
     func disconnectWaitsForAcceptedCommand() async {
         let server = LocalDebugServer(), gate = LocalDebugQueueGate()

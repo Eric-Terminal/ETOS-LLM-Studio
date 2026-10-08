@@ -8287,3 +8287,10 @@
 "Debug response failed: %@" = "偵錯回應傳送失敗：%@";
 "Debug poll failed: %@" = "偵錯輪詢失敗：%@";
 "Disconnected after %d failed polls." = "連續 %d 次輪詢失敗，已中斷連線。";
+
+/* 本地调试数据保存错误 */
+"The conversation could not be saved." = "無法儲存對話。";
+"A conversation with this identifier already exists." = "具有此識別碼的對話已存在。";
+"Only a permanent top-level conversation can be inserted." = "只能插入非臨時的頂層對話。";
+"The captured request is missing or already being processed." = "擷取的請求不存在或正在處理。";
+"The provider configuration could not be saved." = "無法儲存供應商設定。";

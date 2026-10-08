@@ -8138,3 +8138,10 @@
 "Debug response failed: %@" = "Не удалось отправить ответ отладки: %@";
 "Debug poll failed: %@" = "Ошибка опроса отладки: %@";
 "Disconnected after %d failed polls." = "Соединение закрыто после %d неудачных опросов подряд.";
+
+/* 本地调试数据保存错误 */
+"The conversation could not be saved." = "Не удалось сохранить беседу.";
+"A conversation with this identifier already exists." = "Беседа с таким идентификатором уже существует.";
+"Only a permanent top-level conversation can be inserted." = "Можно добавлять только постоянные беседы верхнего уровня.";
+"The captured request is missing or already being processed." = "Перехваченный запрос отсутствует или уже обрабатывается.";
+"The provider configuration could not be saved." = "Не удалось сохранить настройки провайдера.";

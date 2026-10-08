@@ -7,11 +7,11 @@ final class LocalDebugCommandQueue {
     private var tail: Task<Void, Never>?
     var isEmpty: Bool { operations.isEmpty }
 
-    func enqueue(_ operation: @escaping @MainActor () async -> Void) {
+    func enqueue(discardOnCancellation: Bool = true, _ operation: @escaping @MainActor () async -> Void) {
         let previous = tail, id = UUID()
         let task = Task { [weak self] in
             await previous?.value
-            if !Task.isCancelled { await operation() }
+            if !discardOnCancellation || !Task.isCancelled { await operation() }
             self?.operations.removeValue(forKey: id)
         }
         operations[id] = task

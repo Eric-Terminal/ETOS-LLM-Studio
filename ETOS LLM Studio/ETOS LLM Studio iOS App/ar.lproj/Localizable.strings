@@ -8372,3 +8372,10 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "Debug response failed: %@" = "تعذّر إرسال استجابة التصحيح: %@";
 "Debug poll failed: %@" = "فشل استطلاع التصحيح: %@";
 "Disconnected after %d failed polls." = "تم قطع الاتصال بعد فشل %d عمليات استطلاع متتالية.";
+
+/* 本地调试数据保存错误 */
+"The conversation could not be saved." = "تعذّر حفظ المحادثة.";
+"A conversation with this identifier already exists." = "توجد بالفعل محادثة بهذا المعرّف.";
+"Only a permanent top-level conversation can be inserted." = "لا يمكن إدراج سوى المحادثات الدائمة ذات المستوى الأعلى.";
+"The captured request is missing or already being processed." = "الطلب الملتقط غير موجود أو قيد المعالجة بالفعل.";
+"The provider configuration could not be saved." = "تعذّر حفظ إعدادات المزوّد.";

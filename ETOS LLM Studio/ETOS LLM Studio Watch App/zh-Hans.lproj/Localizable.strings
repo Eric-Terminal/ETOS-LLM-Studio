@@ -8131,3 +8131,10 @@
 "Debug response failed: %@" = "调试响应发送失败：%@";
 "Debug poll failed: %@" = "调试轮询失败：%@";
 "Disconnected after %d failed polls." = "连续 %d 次轮询失败，已断开连接。";
+
+/* 本地调试数据保存错误 */
+"The conversation could not be saved." = "无法保存会话。";
+"A conversation with this identifier already exists." = "具有此标识的会话已存在。";
+"Only a permanent top-level conversation can be inserted." = "只能插入非临时的顶层会话。";
+"The captured request is missing or already being processed." = "捕获请求不存在或正在处理。";
+"The provider configuration could not be saved." = "无法保存提供商配置。";

@@ -8222,3 +8222,10 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "Debug response failed: %@" = "Échec de l’envoi de la réponse de débogage : %@";
 "Debug poll failed: %@" = "Échec de l’interrogation de débogage : %@";
 "Disconnected after %d failed polls." = "Déconnexion après %d échecs consécutifs d’interrogation.";
+
+/* 本地调试数据保存错误 */
+"The conversation could not be saved." = "Impossible d’enregistrer la conversation.";
+"A conversation with this identifier already exists." = "Une conversation avec cet identifiant existe déjà.";
+"Only a permanent top-level conversation can be inserted." = "Seules les conversations permanentes de premier niveau peuvent être ajoutées.";
+"The captured request is missing or already being processed." = "La requête capturée est introuvable ou déjà en cours de traitement.";
+"The provider configuration could not be saved." = "Impossible d’enregistrer la configuration du fournisseur.";

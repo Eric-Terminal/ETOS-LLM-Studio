@@ -40,16 +40,20 @@ extension LocalDebugServer {
             targetID = nil
         }
 
-        guard let resolved = resolvePendingOpenAIRequest(targetID: targetID, save: shouldSave) else {
-            return ["status": "error", "message": "队列中未找到对应请求"]
+        guard let pending = reservePendingOpenAIRequest(targetID: targetID) else {
+            return ["status": "error", "message": NSLocalizedString("The captured request is missing or already being processed.", comment: "调试捕获请求不可用")]
         }
-
-        return [
-            "status": "ok",
-            "message": shouldSave ? "已保存捕获请求" : "已忽略捕获请求",
-            "resolved_id": resolved.id.uuidString,
-            "remaining": pendingOpenAIRequests.count
-        ]
+        do {
+            try await finishPendingOpenAIRequest(pending, save: shouldSave)
+            return [
+                "status": "ok",
+                "message": shouldSave ? "已保存捕获请求" : "已忽略捕获请求",
+                "resolved_id": pending.id.uuidString,
+                "remaining": pendingOpenAIRequests.count
+            ]
+        } catch {
+            return ["status": "error", "message": error.localizedDescription]
+        }
     }
 
     func handleOpenAICapture(_ json: [String: Any]) async -> [String: Any] {
@@ -77,11 +81,16 @@ extension LocalDebugServer {
     }
 
     public func resolvePendingOpenAIRequest(save: Bool) {
-        _ = resolvePendingOpenAIRequest(targetID: nil, save: save)
+        guard let pending = reservePendingOpenAIRequest(targetID: nil) else { return }
+        let token = connectionToken
+        // 用户已经确认的保存必须完成；断开可以丢弃远端排队命令，不能丢弃这次原生确认。
+        commandQueue.enqueue(discardOnCancellation: false) { [self] in
+            do { try await finishPendingOpenAIRequest(pending, save: save) }
+            catch { if isCurrentConnection(token) { errorMessage = error.localizedDescription } }
+        }
     }
 
-    @discardableResult
-    func resolvePendingOpenAIRequest(targetID: UUID?, save: Bool) -> PendingOpenAIRequest? {
+    private func reservePendingOpenAIRequest(targetID: UUID?) -> PendingOpenAIRequest? {
         guard !pendingOpenAIRequests.isEmpty else { return nil }
 
         let targetIndex: Int
@@ -94,12 +103,17 @@ extension LocalDebugServer {
             targetIndex = 0
         }
 
-        let pending = pendingOpenAIRequests.remove(at: targetIndex)
-        if save {
-            saveCapturedOpenAIRequest(pending)
-        }
-        updatePendingOpenAIState()
+        let pending = pendingOpenAIRequests[targetIndex]
+        guard resolvingOpenAIRequestIDs.insert(pending.id).inserted else { return nil }
         return pending
+    }
+
+    private func finishPendingOpenAIRequest(_ pending: PendingOpenAIRequest, save: Bool) async throws {
+        defer { resolvingOpenAIRequestIDs.remove(pending.id) }
+        if save { try await saveCapturedOpenAIRequest(pending) }
+        // 保存失败时保留原请求供重试；断开已清空的旧队列不会因此重新出现。
+        pendingOpenAIRequests.removeAll { $0.id == pending.id }
+        updatePendingOpenAIState()
     }
 
     nonisolated func parseOpenAIChatCompletions(_ json: [String: Any]) -> PendingOpenAIRequest? {
@@ -159,19 +173,14 @@ extension LocalDebugServer {
         return ""
     }
 
-    func saveCapturedOpenAIRequest(_ pending: PendingOpenAIRequest) {
-        let session = ChatSession(
-            id: UUID(),
-            name: formatSessionTitle(for: pending.receivedAt),
-            topicPrompt: pending.systemPrompt,
-            enhancedPrompt: nil,
-            isTemporary: false
-        )
-
-        Persistence.saveMessages(pending.messages, for: session.id)
-        var sessions = Persistence.loadChatSessions()
-        sessions.insert(session, at: 0)
-        Persistence.saveChatSessions(sessions)
+    func saveCapturedOpenAIRequest(_ pending: PendingOpenAIRequest) async throws {
+        let insertSession = insertSession
+        let session = try await Task.detached(priority: .userInitiated) {
+            let session = ChatSession(id: UUID(), name: self.formatSessionTitle(for: pending.receivedAt),
+                topicPrompt: pending.systemPrompt, enhancedPrompt: nil, isTemporary: false)
+            try insertSession(session, pending.messages)
+            return session
+        }.value
 
         let chatService = ChatService.shared
         var liveSessions = chatService.chatSessionsSubject.value
@@ -179,7 +188,7 @@ extension LocalDebugServer {
         chatService.chatSessionsSubject.send(liveSessions)
     }
 
-    func formatSessionTitle(for date: Date) -> String {
+    nonisolated func formatSessionTitle(for date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = .autoupdatingCurrent
         formatter.dateStyle = .medium

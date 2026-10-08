@@ -28,13 +28,13 @@ extension LocalDebugServer {
         return formatter.string(from: value)
     }
 
-    func makeWebConsoleJSONEncoder() -> JSONEncoder {
+    nonisolated func makeWebConsoleJSONEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         return encoder
     }
 
-    func makeWebConsoleJSONDecoder() -> JSONDecoder {
+    nonisolated func makeWebConsoleJSONDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
@@ -59,17 +59,21 @@ extension LocalDebugServer {
         return decoder
     }
 
-    func encodeWebConsoleJSONObject<T: Encodable>(_ value: T) throws -> Any {
+    nonisolated func encodeWebConsoleJSONObject<T: Encodable>(_ value: T) throws -> Any {
         let data = try makeWebConsoleJSONEncoder().encode(value)
         return try JSONSerialization.jsonObject(with: data)
     }
 
-    func decodeWebConsoleObject<T: Decodable>(_ raw: Any, as type: T.Type) throws -> T {
+    nonisolated func decodeWebConsoleObject<T: Decodable>(_ raw: Any, as type: T.Type) throws -> T {
         let data = try JSONSerialization.data(withJSONObject: raw)
         return try makeWebConsoleJSONDecoder().decode(type, from: data)
     }
 
     func handleProvidersList() async -> [String: Any] {
+        await runDebugDataOperation { self.readDebugProviders() }
+    }
+
+    nonisolated private func readDebugProviders() -> [String: Any] {
         let providers = ConfigLoader.loadProviders()
         do {
             let payload = try encodeWebConsoleJSONObject(providers)
@@ -80,30 +84,33 @@ extension LocalDebugServer {
     }
 
     func handleProvidersSave(_ json: [String: Any]) async -> [String: Any] {
+        let request = LocalDebugJSONObject(value: json)
+        return await runDebugDataOperation { self.replaceDebugProviders(request.value) }
+    }
+
+    nonisolated private func replaceDebugProviders(_ json: [String: Any]) -> [String: Any] {
         guard let providersRaw = json["providers"] else {
             return ["status": "error", "message": "缺少 providers 参数"]
         }
 
         do {
             let providers = try decodeWebConsoleObject(providersRaw, as: [Provider].self)
-            let existingProviders = ConfigLoader.loadProviders()
-            let incomingIDs = Set(providers.map(\.id))
-
-            for oldProvider in existingProviders where !incomingIDs.contains(oldProvider.id) {
-                ConfigLoader.deleteProvider(oldProvider)
+            let result = LocalDebugProviderStore.perform { current in
+                current = providers
+                return ["status": "ok", "message": "提供商配置已保存", "count": providers.count]
             }
-            for provider in providers {
-                ConfigLoader.saveProvider(provider)
-            }
-            ChatService.shared.reloadProviders()
-
-            return ["status": "ok", "message": "提供商配置已保存", "count": providers.count]
+            if result["status"] as? String == "ok" { ChatService.shared.reloadProviders() }
+            return result
         } catch {
             return ["status": "error", "message": "保存提供商失败：\(error.localizedDescription)"]
         }
     }
 
     func handleSessionsList() async -> [String: Any] {
+        await runDebugDataOperation { self.readDebugSessions() }
+    }
+
+    nonisolated private func readDebugSessions() -> [String: Any] {
         let sessions = Persistence.loadChatSessions()
         do {
             let payload = try encodeWebConsoleJSONObject(sessions)
@@ -114,6 +121,11 @@ extension LocalDebugServer {
     }
 
     func handleSessionGet(_ json: [String: Any]) async -> [String: Any] {
+        let request = LocalDebugJSONObject(value: json)
+        return await runDebugDataOperation { self.readDebugSession(request.value) }
+    }
+
+    nonisolated private func readDebugSession(_ json: [String: Any]) -> [String: Any] {
         guard let sessionIDString = json["session_id"] as? String,
               let sessionID = UUID(uuidString: sessionIDString.trimmingCharacters(in: .whitespacesAndNewlines)) else {
             return ["status": "error", "message": "缺少或无效的 session_id"]
@@ -140,39 +152,34 @@ extension LocalDebugServer {
     }
 
     func handleSessionCreate(_ json: [String: Any]) async -> [String: Any] {
-        let rawName = (json["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let name = (rawName?.isEmpty == false)
-            ? rawName!
-            : NSLocalizedString("新的对话", comment: "Default new chat session name")
-        let topicPrompt = json["topic_prompt"] as? String
-        let enhancedPrompt = json["enhanced_prompt"] as? String
-
-        let session = ChatSession(
-            id: UUID(),
-            name: name,
-            topicPrompt: topicPrompt,
-            enhancedPrompt: enhancedPrompt,
-            isTemporary: false
-        )
-
-        var sessions = Persistence.loadChatSessions()
-        sessions.insert(session, at: 0)
-        Persistence.saveChatSessions(sessions)
-        Persistence.saveMessages([], for: session.id)
-
-        var liveSessions = ChatService.shared.chatSessionsSubject.value
-        liveSessions.insert(session, at: 0)
-        ChatService.shared.chatSessionsSubject.send(liveSessions)
-
+        let request = LocalDebugJSONObject(value: json)
+        let insertSession = insertSession
         do {
-            let payload = try encodeWebConsoleJSONObject(session)
-            return ["status": "ok", "message": "会话已创建", "session": payload]
+            let created = try await Task.detached(priority: .userInitiated) {
+                let rawName = (request.value["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let name = rawName?.isEmpty == false ? rawName! : NSLocalizedString("新的对话", comment: "新会话默认名称")
+                let session = ChatSession(id: UUID(), name: name, topicPrompt: request.value["topic_prompt"] as? String,
+                    enhancedPrompt: request.value["enhanced_prompt"] as? String, isTemporary: false)
+                let response = LocalDebugJSONObject(value: ["status": "ok", "message": "会话已创建",
+                    "session": try self.encodeWebConsoleJSONObject(session)])
+                try insertSession(session, [])
+                return (session, response)
+            }.value
+            var liveSessions = ChatService.shared.chatSessionsSubject.value
+            liveSessions.insert(created.0, at: 0)
+            ChatService.shared.chatSessionsSubject.send(liveSessions)
+            return created.1.value
         } catch {
-            return ["status": "error", "message": "会话序列化失败：\(error.localizedDescription)"]
+            return ["status": "error", "message": error.localizedDescription]
         }
     }
 
     func handleSessionDelete(_ json: [String: Any]) async -> [String: Any] {
+        let request = LocalDebugJSONObject(value: json)
+        return await runDebugDataOperation { self.deleteDebugSession(request.value) }
+    }
+
+    nonisolated private func deleteDebugSession(_ json: [String: Any]) -> [String: Any] {
         guard let sessionIDString = json["session_id"] as? String,
               let sessionID = UUID(uuidString: sessionIDString.trimmingCharacters(in: .whitespacesAndNewlines)) else {
             return ["status": "error", "message": "缺少或无效的 session_id"]
@@ -188,6 +195,11 @@ extension LocalDebugServer {
     }
 
     func handleSessionUpdateMeta(_ json: [String: Any]) async -> [String: Any] {
+        let request = LocalDebugJSONObject(value: json)
+        return await runDebugDataOperation { self.updateDebugSessionMetadata(request.value) }
+    }
+
+    nonisolated private func updateDebugSessionMetadata(_ json: [String: Any]) -> [String: Any] {
         guard let sessionRaw = json["session"] else {
             return ["status": "error", "message": "缺少 session 参数"]
         }
@@ -208,6 +220,11 @@ extension LocalDebugServer {
     }
 
     func handleSessionUpdateMessages(_ json: [String: Any]) async -> [String: Any] {
+        let request = LocalDebugJSONObject(value: json)
+        return await runDebugDataOperation { await self.updateDebugSessionMessages(request.value) }
+    }
+
+    nonisolated private func updateDebugSessionMessages(_ json: [String: Any]) async -> [String: Any] {
         guard let sessionIDString = json["session_id"] as? String,
               let sessionID = UUID(uuidString: sessionIDString.trimmingCharacters(in: .whitespacesAndNewlines)) else {
             return ["status": "error", "message": "缺少或无效的 session_id"]
@@ -219,6 +236,7 @@ extension LocalDebugServer {
         do {
             let messages = try decodeWebConsoleObject(messagesRaw, as: [ChatMessage].self)
             Persistence.saveMessages(messages, for: sessionID)
+            await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
 
             if ChatService.shared.currentSessionSubject.value?.id == sessionID {
                 ChatService.shared.reloadCurrentSessionMessagesFromPersistence()
@@ -231,6 +249,10 @@ extension LocalDebugServer {
     }
 
     func handleMemoriesList() async -> [String: Any] {
+        await runDebugDataOperation { await self.readDebugMemories() }
+    }
+
+    nonisolated private func readDebugMemories() async -> [String: Any] {
         let memories = await MemoryManager.shared.getAllMemories()
         do {
             let payload = try encodeWebConsoleJSONObject(memories)
@@ -247,6 +269,11 @@ extension LocalDebugServer {
     }
 
     func handleMemoryUpdate(_ json: [String: Any]) async -> [String: Any] {
+        let request = LocalDebugJSONObject(value: json)
+        return await runDebugDataOperation { await self.updateDebugMemory(request.value) }
+    }
+
+    nonisolated private func updateDebugMemory(_ json: [String: Any]) async -> [String: Any] {
         guard let memoryIDString = json["memory_id"] as? String,
               let memoryID = UUID(uuidString: memoryIDString.trimmingCharacters(in: .whitespacesAndNewlines)) else {
             return ["status": "error", "message": "缺少或无效的 memory_id"]
@@ -313,6 +340,10 @@ extension LocalDebugServer {
     }
 
     func handleMemoriesReembedAll() async -> [String: Any] {
+        await runDebugDataOperation { await self.reembedDebugMemories() }
+    }
+
+    nonisolated private func reembedDebugMemories() async -> [String: Any] {
         do {
             let summary = try await MemoryManager.shared.reembedAllMemories()
             return [

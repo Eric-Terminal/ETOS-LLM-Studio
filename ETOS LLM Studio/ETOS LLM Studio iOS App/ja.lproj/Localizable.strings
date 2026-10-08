@@ -8288,3 +8288,10 @@
 "Debug response failed: %@" = "デバッグ応答の送信に失敗：%@";
 "Debug poll failed: %@" = "デバッグのポーリングに失敗：%@";
 "Disconnected after %d failed polls." = "ポーリングが %d 回連続で失敗したため、接続を切断しました。";
+
+/* 本地调试数据保存错误 */
+"The conversation could not be saved." = "会話を保存できませんでした。";
+"A conversation with this identifier already exists." = "この識別子の会話はすでに存在します。";
+"Only a permanent top-level conversation can be inserted." = "一時的でない最上位の会話のみ追加できます。";
+"The captured request is missing or already being processed." = "キャプチャしたリクエストが見つからないか、すでに処理中です。";
+"The provider configuration could not be saved." = "プロバイダー設定を保存できませんでした。";

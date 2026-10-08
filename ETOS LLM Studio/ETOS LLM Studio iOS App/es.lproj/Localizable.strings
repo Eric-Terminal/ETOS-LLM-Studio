@@ -8372,3 +8372,10 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "Debug response failed: %@" = "Error al enviar la respuesta de depuración: %@";
 "Debug poll failed: %@" = "Error de sondeo de depuración: %@";
 "Disconnected after %d failed polls." = "Desconectado tras %d sondeos fallidos consecutivos.";
+
+/* 本地调试数据保存错误 */
+"The conversation could not be saved." = "No se pudo guardar la conversación.";
+"A conversation with this identifier already exists." = "Ya existe una conversación con este identificador.";
+"Only a permanent top-level conversation can be inserted." = "Solo se pueden insertar conversaciones permanentes de nivel superior.";
+"The captured request is missing or already being processed." = "La solicitud capturada no existe o ya se está procesando.";
+"The provider configuration could not be saved." = "No se pudo guardar la configuración del proveedor.";

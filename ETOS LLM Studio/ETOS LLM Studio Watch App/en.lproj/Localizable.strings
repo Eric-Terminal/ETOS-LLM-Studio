@@ -8145,3 +8145,10 @@
 "Debug response failed: %@" = "Debug response failed: %@";
 "Debug poll failed: %@" = "Debug poll failed: %@";
 "Disconnected after %d failed polls." = "Disconnected after %d failed polls.";
+
+/* 本地调试数据保存错误 */
+"The conversation could not be saved." = "The conversation could not be saved.";
+"A conversation with this identifier already exists." = "A conversation with this identifier already exists.";
+"Only a permanent top-level conversation can be inserted." = "Only a permanent top-level conversation can be inserted.";
+"The captured request is missing or already being processed." = "The captured request is missing or already being processed.";
+"The provider configuration could not be saved." = "The provider configuration could not be saved.";

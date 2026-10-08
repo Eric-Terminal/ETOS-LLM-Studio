@@ -77,6 +77,8 @@ public class LocalDebugServer: ObservableObject {
     var wsConnection: NWConnection?
     let queue = DispatchQueue(label: "com.etos.localdebug", qos: .userInitiated)
     var pendingOpenAIRequests: [PendingOpenAIRequest] = []
+    var resolvingOpenAIRequestIDs: Set<UUID> = []
+    let insertSession: @Sendable (ChatSession, [ChatMessage]) throws -> Void
 
     var httpPollingTimer: Timer?
     var httpSession: URLSession?
@@ -101,5 +103,11 @@ public class LocalDebugServer: ObservableObject {
 
     let maxLogEntries = 100
 
-    public init() {}
+    public init() {
+        insertSession = { try Persistence.insertChatSession($0, messages: $1) }
+    }
+
+    init(insertSession: @escaping @Sendable (ChatSession, [ChatMessage]) throws -> Void) {
+        self.insertSession = insertSession
+    }
 }

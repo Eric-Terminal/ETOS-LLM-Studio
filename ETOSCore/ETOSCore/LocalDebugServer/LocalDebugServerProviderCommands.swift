@@ -10,13 +10,21 @@ import Foundation
 
 extension LocalDebugServer {
     func handleProviderUpsert(_ json: [String: Any]) async -> [String: Any] {
+        let request = LocalDebugJSONObject(value: json)
+        return await runDebugDataOperation {
+            let response = LocalDebugProviderStore.perform { providers in self.upsertDebugProvider(request.value, providers: &providers) }
+            if response["status"] as? String == "ok" { ChatService.shared.reloadProviders() }
+            return response
+        }
+    }
+
+    nonisolated func upsertDebugProvider(_ json: [String: Any], providers: inout [Provider]) -> [String: Any] {
         let providerID = parseDebugUUID(json["provider_id"] ?? json["id"])
         let name = trimmedDebugString(json["name"])
         let baseURL = trimmedDebugString(json["base_url"] ?? json["baseURL"])
         let chatEndpointPath = trimmedDebugString(json["chat_endpoint_path"] ?? json["chatEndpointPath"] ?? json["chat_completions_path"] ?? json["chatCompletionsPath"])
         let apiFormat = trimmedDebugString(json["api_format"] ?? json["apiFormat"])
 
-        var providers = ConfigLoader.loadProviders()
         let existingIndex = providerID.flatMap { id in providers.firstIndex(where: { $0.id == id }) }
         var provider: Provider
 
@@ -62,9 +70,6 @@ extension LocalDebugServer {
         } else {
             providers.append(provider)
         }
-        ConfigLoader.saveProvider(provider)
-        ChatService.shared.reloadProviders()
-
         do {
             return [
                 "status": "ok",
@@ -78,11 +83,19 @@ extension LocalDebugServer {
     }
 
     func handleProviderModelUpsert(_ json: [String: Any]) async -> [String: Any] {
+        let request = LocalDebugJSONObject(value: json)
+        return await runDebugDataOperation {
+            let response = LocalDebugProviderStore.perform { providers in self.upsertDebugModel(request.value, providers: &providers) }
+            if response["status"] as? String == "ok" { ChatService.shared.reloadProviders() }
+            return response
+        }
+    }
+
+    nonisolated func upsertDebugModel(_ json: [String: Any], providers: inout [Provider]) -> [String: Any] {
         guard let providerID = parseDebugUUID(json["provider_id"] ?? json["providerID"]) else {
             return debugProviderError("缺少或无效的 provider_id")
         }
 
-        var providers = ConfigLoader.loadProviders()
         guard let providerIndex = providers.firstIndex(where: { $0.id == providerID }) else {
             return debugProviderError("未找到 Provider")
         }
@@ -176,9 +189,6 @@ extension LocalDebugServer {
             provider.models.append(model)
         }
         providers[providerIndex] = provider
-        ConfigLoader.saveProvider(provider)
-        ChatService.shared.reloadProviders()
-
         do {
             return [
                 "status": "ok",
@@ -191,18 +201,18 @@ extension LocalDebugServer {
         }
     }
 
-    private func parseDebugUUID(_ value: Any?) -> UUID? {
+    nonisolated private func parseDebugUUID(_ value: Any?) -> UUID? {
         guard let raw = trimmedDebugString(value), !raw.isEmpty else { return nil }
         return UUID(uuidString: raw)
     }
 
-    private func trimmedDebugString(_ value: Any?) -> String? {
+    nonisolated private func trimmedDebugString(_ value: Any?) -> String? {
         guard let value else { return nil }
         if value is NSNull { return nil }
         return "\(value)".trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func debugStringArray(_ value: Any?) -> [String]? {
+    nonisolated private func debugStringArray(_ value: Any?) -> [String]? {
         switch value {
         case let values as [String]:
             return values.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -220,7 +230,7 @@ extension LocalDebugServer {
         }
     }
 
-    private func debugStringDictionary(_ value: Any?) -> [String: String]? {
+    nonisolated private func debugStringDictionary(_ value: Any?) -> [String: String]? {
         if let dictionary = value as? [String: String] {
             return dictionary
         }
@@ -230,7 +240,7 @@ extension LocalDebugServer {
         }
     }
 
-    private func decodeDebugNetworkProxyConfiguration(_ value: Any?) -> (configuration: NetworkProxyConfiguration?, isValid: Bool) {
+    nonisolated private func decodeDebugNetworkProxyConfiguration(_ value: Any?) -> (configuration: NetworkProxyConfiguration?, isValid: Bool) {
         guard let value else { return (nil, true) }
         if value is NSNull { return (nil, true) }
 
@@ -252,7 +262,7 @@ extension LocalDebugServer {
         return (decoded, true)
     }
 
-    private func debugModelModalities(_ value: Any?, outputOnly: Bool) -> [ModelModality]? {
+    nonisolated private func debugModelModalities(_ value: Any?, outputOnly: Bool) -> [ModelModality]? {
         guard let rawValues = debugStringArray(value) else { return nil }
         var modalities: [ModelModality] = []
         for rawValue in rawValues {
@@ -266,7 +276,7 @@ extension LocalDebugServer {
         return modalities
     }
 
-    private func tryDecodeDebugJSONValueDictionary(_ value: Any?) -> [String: JSONValue]? {
+    nonisolated private func tryDecodeDebugJSONValueDictionary(_ value: Any?) -> [String: JSONValue]? {
         guard let value else { return nil }
         if value is NSNull { return [:] }
         if let dictionary = value as? [String: JSONValue] {
@@ -285,7 +295,7 @@ extension LocalDebugServer {
         return try? makeWebConsoleJSONDecoder().decode([String: JSONValue].self, from: data)
     }
 
-    private func decodeDebugModelPricing(_ value: Any?) -> (pricing: ModelPricing?, isValid: Bool) {
+    nonisolated private func decodeDebugModelPricing(_ value: Any?) -> (pricing: ModelPricing?, isValid: Bool) {
         guard let value else { return (nil, true) }
         if value is NSNull { return (nil, true) }
 
@@ -308,7 +318,7 @@ extension LocalDebugServer {
         return (normalized.isEffectivelyEmpty ? nil : normalized, true)
     }
 
-    private func decodeDebugRequestBodyControls(_ value: Any?) -> (controls: [ModelRequestBodyControl], isValid: Bool) {
+    nonisolated private func decodeDebugRequestBodyControls(_ value: Any?) -> (controls: [ModelRequestBodyControl], isValid: Bool) {
         guard let value else { return ([], true) }
         if value is NSNull { return ([], true) }
 
@@ -330,7 +340,7 @@ extension LocalDebugServer {
         return (decoded, true)
     }
 
-    private func debugProviderBool(_ value: Any?) -> Bool? {
+    nonisolated private func debugProviderBool(_ value: Any?) -> Bool? {
         switch value {
         case let value as Bool:
             return value
@@ -346,7 +356,7 @@ extension LocalDebugServer {
         }
     }
 
-    private func debugProviderError(_ message: String) -> [String: Any] {
+    nonisolated private func debugProviderError(_ message: String) -> [String: Any] {
         [
             "status": "error",
             "error_code": "INVALID_ARGS",
