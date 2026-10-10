@@ -11,20 +11,26 @@ struct MacWorkspaceView: View {
     @State private var sessionToDelete: ChatSession?
     @State private var sessionToBind: ChatSession?
     @State private var sessionToRoleplay: ChatSession?
+    @State private var sessionToAnalyze: ChatSession?
     @State private var columnVisibility = NavigationSplitViewVisibility.all
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             MacSessionLibrarySidebar(model: workspace.sessionLibrary)
         } content: {
-            MacSessionListView(model: workspace.sessionLibrary, edit: { sessionToEdit = $0 }, delete: { sessionToDelete = $0 })
+            MacSessionListView(model: workspace.sessionLibrary, edit: { sessionToEdit = $0 }, delete: { sessionToDelete = $0 }, analyze: showAnalytics)
         } detail: {
             MacChatView(showSessions: {
                 workspace.sessionLibrary.scope = .all; workspace.sessionLibrary.query = ""; columnVisibility = .all
-            })
+            }, showsSessionAnalytics: sessionToAnalyze != nil)
                 .navigationTitle(workspace.currentSession?.name ?? NSLocalizedString("新的对话", comment: ""))
                 .toolbar {
                     ToolbarItem { MacChatQuickActionsView() }
+                    Button {
+                        if let session = workspace.currentSession { showAnalytics(session) }
+                    } label: {
+                        Label(NSLocalizedString("session_usage.title", value: "Conversation Analytics", comment: "会话分析统计入口"), systemImage: "chart.bar.xaxis")
+                    }.disabled(workspace.currentSession == nil || !workspace.canManageLocalModels)
                     Button { sessionToRoleplay = workspace.currentSession } label: {
                         Label(NSLocalizedString("会话角色绑定", comment: ""), systemImage: "person.text.rectangle")
                     }
@@ -71,6 +77,7 @@ struct MacWorkspaceView: View {
         }
         .sheet(item: $sessionToBind) { MacWorldbookBindingView(model: workspace.worldbookModel, session: $0) }
         .sheet(item: $sessionToRoleplay) { MacRoleplayBindingView(session: $0) }
+        .sheet(item: $sessionToAnalyze) { MacSessionUsageAnalyticsSheet(session: $0) }
         .sheet(item: Binding(
             get: { appLock.state == .locked ? nil : permissions.activeRequest },
             set: { _ in }
@@ -99,7 +106,11 @@ struct MacWorkspaceView: View {
         }
         .onChange(of: appLock.state) { _, state in
             permissions.setAutoPresentationBlocked(state == .locked, reason: "mac-app-lock")
+            if state == .locked { sessionToAnalyze = nil }
         }
+        .onChange(of: workspace.canManageLocalModels) { _, available in if !available { sessionToAnalyze = nil } }
+        .onChange(of: workspace.currentSession?.id) { _, _ in sessionToAnalyze = nil }
+        .onDisappear { sessionToAnalyze = nil }
         .onAppear {
             permissions.setAutoPresentationBlocked(appLock.state == .locked, reason: "mac-app-lock")
         }
@@ -108,5 +119,10 @@ struct MacWorkspaceView: View {
             workspace.refreshMessagePresentation()
         }
         .onChange(of: configuration.enableMarkdown) { _, _ in workspace.refreshMessagePresentation() }
+    }
+
+    private func showAnalytics(_ session: ChatSession) {
+        guard workspace.canManageLocalModels, appLock.state != .locked else { return }
+        sessionToAnalyze = session
     }
 }

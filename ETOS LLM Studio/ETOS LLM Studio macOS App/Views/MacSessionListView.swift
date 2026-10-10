@@ -6,6 +6,7 @@ struct MacSessionListView: View {
     @ObservedObject var model: MacSessionLibraryModel
     let edit: (ChatSession) -> Void
     let delete: (ChatSession) -> Void
+    let analyze: (ChatSession) -> Void
 
     var body: some View {
         List(selection: Binding(get: { workspace.currentSession?.id }, set: { workspace.selectSession($0) })) {
@@ -32,6 +33,9 @@ struct MacSessionListView: View {
                 .tag(row.id)
                 .contextMenu {
                     Button(NSLocalizedString("编辑", comment: "")) { edit(row.session) }
+                    Button { analyze(row.session) } label: {
+                        Label(NSLocalizedString("session_usage.title", value: "Conversation Analytics", comment: "会话分析统计入口"), systemImage: "chart.bar.xaxis")
+                    }.disabled(!workspace.canManageLocalModels)
                     Menu(NSLocalizedString("移动到文件夹", comment: "")) {
                         Button(NSLocalizedString("未分类", comment: "")) { model.moveSession(row.session, to: nil) }
                         ForEach(model.snapshot.folders) { folder in

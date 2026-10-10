@@ -8406,3 +8406,5 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 /* 远程文件的活动数据库保护 */
 "Active database files and their parent folders must be changed through database tools or a full restore." = "يجب تعديل قواعد البيانات النشطة ومجلداتها الأصلية باستخدام أدوات قواعد البيانات أو الاستعادة الكاملة.";
 "Download the database file instead of its WAL, SHM, or journal files." = "نزّل ملف قاعدة البيانات بدلاً من ملفات WAL أو SHM أو journal التابعة لها.";
+
+"session_usage.below_cost" = "< %@";

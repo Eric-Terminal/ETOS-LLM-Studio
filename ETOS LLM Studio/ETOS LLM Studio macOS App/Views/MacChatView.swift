@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 @MainActor
 struct MacChatView: View {
     let showSessions: () -> Void
+    let showsSessionAnalytics: Bool
     @State private var viewportHeight: CGFloat = 0
     @State private var viewportBounds = CGRect.zero
     @State private var composerBounds = CGRect.zero
@@ -144,7 +145,7 @@ struct MacChatView: View {
             documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace"),
                         GuideDocumentReference(id: "local-models", title: "Local Models"), GuideDocumentReference(id: "tts", title: "Text to Speech"),
                         GuideDocumentReference(id: "slash-commands", title: "Quick Commands")],
-            isActive: isVisible && workspace.canManageLocalModels && !importing && editingMessage == nil
+            isActive: isVisible && workspace.canManageLocalModels && !showsSessionAnalytics && !importing && editingMessage == nil
                 && rewritingMessage == nil && deletingMessage == nil && !showsRequestControls && !showsBrowser && linuxJobsTarget == nil && speechSource == nil && !workspace.tts.isExportPanelOpen && !workspace.backgrounds.isPresentingMedia && !workspace.fonts.isImportPanelOpen
                 && workspace.contextCompression.optionsSession == nil && !workspace.contextCompression.showsDetails && slashDestination == nil && !showsSlashModelPicker,
             settings: [

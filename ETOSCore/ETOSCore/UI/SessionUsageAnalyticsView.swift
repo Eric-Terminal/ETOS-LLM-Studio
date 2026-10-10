@@ -3,32 +3,71 @@ import SwiftUI
 public struct SessionUsageAnalyticsView: View {
     private let sessionID: UUID
     private let sessionName: String
+    private let isActive: Bool
     @StateObject private var viewModel: SessionUsageAnalyticsViewModel
+    @State private var isVisible = false
+    @ObservedObject private var configuration = AppConfigStore.shared
+    @ObservedObject private var appLock = AppLockManager.shared
     @Environment(\.dismiss) private var dismiss
 
-    public init(sessionID: UUID, sessionName: String) {
+    public init(sessionID: UUID, sessionName: String, isActive: Bool = true) {
         self.sessionID = sessionID
         self.sessionName = sessionName
+        self.isActive = isActive
         _viewModel = StateObject(wrappedValue: SessionUsageAnalyticsViewModel(sessionID: sessionID))
     }
 
+    private var available: Bool { isActive && appLock.state != .locked }
+    private var locale: Locale { Locale(identifier: AppLanguagePreference.resolved(rawValue: configuration.appLanguage).localeIdentifier) }
+
     public var body: some View {
+        Group {
+            if available { analyticsList }
+            else { Color.clear }
+        }
+        .navigationTitle(NSLocalizedString("session_usage.title", value: "Conversation Analytics", comment: "会话分析统计标题"))
+        .onAppear { isVisible = true; viewModel.setActive(available, locale: locale) }
+        .onDisappear { isVisible = false; viewModel.setActive(false) }
+        .onChange(of: available) { _, active in viewModel.setActive(isVisible && active, locale: locale) }
+        .onChange(of: configuration.appLanguage) { _, _ in viewModel.refresh(locale: locale) }
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "session-usage-analytics.\(sessionID.uuidString).\(viewModel.revision.uuidString).\(configuration.appLanguage)"),
+            title: NSLocalizedString("session_usage.title", value: "Conversation Analytics", comment: "会话分析统计标题"),
+            documents: [GuideDocumentReference(id: "usage-analytics", title: NSLocalizedString("用量统计", comment: ""))],
+            isActive: isVisible && available,
+            settings: [
+                .readOnly("session", label: NSLocalizedString("会话信息", comment: ""), value: {
+                    .dictionary(["id": .string(sessionID.uuidString), "name": .string(sessionName)])
+                }),
+                .readOnly("summary", label: NSLocalizedString("用量总览", comment: ""), value: {
+                    viewModel.presentation?.guideSnapshot ?? .null
+                }),
+                .readOnly("loading", label: NSLocalizedString("正在加载", comment: ""), value: { .bool(viewModel.presentation == nil) })
+            ]
+        )
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button(NSLocalizedString("完成", comment: "")) { dismiss() }
+            }
+        }
+        #endif
+    }
+
+    private var analyticsList: some View {
         List {
             settingsIntroCard
-            if let summary = viewModel.summary {
-                if summary.requestCount == 0 {
+            if let presentation = viewModel.presentation {
+                if presentation.isEmpty {
                     Text(NSLocalizedString("session_usage.empty", value: "No recorded requests for this conversation yet.", comment: "会话统计空状态"))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
                 Section {
-                    metric(NSLocalizedString("总 Token", comment: ""), value: summary.totalTokens.formatted())
-                    metric(NSLocalizedString("估算费用", comment: ""), value: summary.pricedRequestCount > 0
-                        ? (summary.estimatedCost > 0 && summary.estimatedCost < 0.000001
-                            ? "<0.000001" : summary.estimatedCost.formatted(.number.precision(.fractionLength(2...6))))
-                        : NSLocalizedString("session_usage.unavailable", value: "Unavailable", comment: "无法估算会话费用"))
-                    if summary.pricedRequestCount < summary.requestCount {
-                        Text(String(format: NSLocalizedString("session_usage.missing_cost", value: "%d requests could not be priced.", comment: "会话费用数据缺失提示"), summary.requestCount - summary.pricedRequestCount))
+                    ForEach(presentation.overview) { metric($0.title, value: $0.value) }
+                    if let note = presentation.missingCostNote {
+                        Text(note)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -40,13 +79,9 @@ public struct SessionUsageAnalyticsView: View {
                         .foregroundStyle(.secondary)
                 }
                 Section {
-                    metric(NSLocalizedString("输入 Token", comment: ""), value: summary.inputTokens.formatted())
-                    metric(NSLocalizedString("输出 Token", comment: ""), value: summary.outputTokens.formatted())
-                    metric(NSLocalizedString("思考 Tokens", comment: ""), value: summary.thinkingTokens.formatted())
-                    metric(NSLocalizedString("缓存读取 Tokens", comment: ""), value: summary.cacheReadTokens.formatted())
-                    metric(NSLocalizedString("缓存写入 Tokens", comment: ""), value: summary.cacheWriteTokens.formatted())
-                    if summary.usageReportedRequestCount < summary.requestCount {
-                        Text(String(format: NSLocalizedString("session_usage.missing_usage", value: "%d requests did not report token usage.", comment: "会话 Token 数据缺失提示"), summary.requestCount - summary.usageReportedRequestCount))
+                    ForEach(presentation.tokens) { metric($0.title, value: $0.value) }
+                    if let note = presentation.missingUsageNote {
+                        Text(note)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -56,37 +91,12 @@ public struct SessionUsageAnalyticsView: View {
                         .foregroundStyle(.secondary)
                 }
                 Section {
-                    metric(NSLocalizedString("session_usage.request_count", value: "Requests", comment: "会话请求总数"), value: summary.requestCount.formatted())
-                    metric(NSLocalizedString("成功", comment: ""), value: summary.successCount.formatted())
-                    metric(NSLocalizedString("失败", comment: ""), value: summary.failedCount.formatted())
-                    metric(NSLocalizedString("已取消", comment: ""), value: summary.cancelledCount.formatted())
+                    ForEach(presentation.requests) { metric($0.title, value: $0.value) }
                 }
             } else {
                 ProgressView(NSLocalizedString("正在加载", comment: ""))
             }
         }
-        .navigationTitle(NSLocalizedString("session_usage.title", value: "Conversation Analytics", comment: "会话分析统计标题"))
-        .guideSettingsPageContext(
-            id: GuidePageID(rawValue: "session-usage-analytics.\(sessionID.uuidString)"),
-            title: NSLocalizedString("session_usage.title", value: "Conversation Analytics", comment: "会话分析统计标题"),
-            documents: [GuideDocumentReference(id: "usage-analytics", title: NSLocalizedString("用量统计", comment: ""))],
-            settings: [
-                .readOnly("session", label: NSLocalizedString("会话信息", comment: ""), value: {
-                    .dictionary(["id": .string(sessionID.uuidString), "name": .string(sessionName)])
-                }),
-                .readOnly("summary", label: NSLocalizedString("用量总览", comment: ""), value: {
-                    viewModel.summary?.guideSnapshot ?? .null
-                })
-            ]
-        )
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(NSLocalizedString("完成", comment: "")) { dismiss() }
-            }
-        }
-        #endif
     }
 
     private var settingsIntroCard: some View {

@@ -8173,3 +8173,5 @@
 /* 远程文件的活动数据库保护 */
 "Active database files and their parent folders must be changed through database tools or a full restore." = "Изменяйте активные базы данных и их родительские папки через инструменты баз данных или полное восстановление.";
 "Download the database file instead of its WAL, SHM, or journal files." = "Скачайте файл базы данных вместо её файлов WAL, SHM или journal.";
+
+"session_usage.below_cost" = "< %@";

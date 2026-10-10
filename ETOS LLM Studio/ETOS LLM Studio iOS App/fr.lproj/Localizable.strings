@@ -8406,3 +8406,5 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 /* 远程文件的活动数据库保护 */
 "Active database files and their parent folders must be changed through database tools or a full restore." = "Les bases de données actives et leurs dossiers parents doivent être modifiés avec les outils de base de données ou une restauration complète.";
 "Download the database file instead of its WAL, SHM, or journal files." = "Téléchargez la base de données plutôt que ses fichiers WAL, SHM ou journal.";
+
+"session_usage.below_cost" = "< %@";

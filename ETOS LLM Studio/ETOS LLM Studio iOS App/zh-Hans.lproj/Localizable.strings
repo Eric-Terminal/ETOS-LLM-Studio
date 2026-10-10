@@ -8315,3 +8315,5 @@
 /* 远程文件的活动数据库保护 */
 "Active database files and their parent folders must be changed through database tools or a full restore." = "活动数据库及其父文件夹必须通过数据库工具或完整恢复来修改。";
 "Download the database file instead of its WAL, SHM, or journal files." = "请下载数据库文件，不要单独下载其 WAL、SHM 或 journal 文件。";
+
+"session_usage.below_cost" = "< %@";
