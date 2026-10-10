@@ -1,6 +1,10 @@
 # macOS 工程接入记录
 
-本文件记录原生 Mac 源码的接入条件。当前尚未创建 Mac target/scheme，也没有运行构建或测试；不能据此认定客户端已可发布。工程文件需在完整 Xcode 环境恢复后通过 Xcode 配置，不手工改写 `.xcodeproj`。
+2026-10-10：已通过 Xcode 工具和原生工程编辑器创建 `ETOS LLM Studio macOS App` target 与共享 Scheme，选择原生 `My Mac`。本次没有手工改写 `.pbxproj`，没有运行 Python 冒烟、构建或测试；工程接入不代表已经通过编译或运行验收。下方历史记录中的“待创建 target”描述以本段最新状态为准。
+
+已接入 271 个 Mac Swift 源文件及共享的 iOS 代码高亮文件，链接现有 MarkdownUI 和 ETOSCore，并将 ETOSCore 设为 Embed & Sign；Scheme 启用隐式依赖构建。资源引用复用 iOS 八语言 Localizable/InfoPlist、Assets、隐私清单和全部十项 LocalLinux 资源，没有复制第三份本地化或 seed。Mac 使用 macOS 26.0、Swift 5、nonisolated 默认隔离和独立包标识 `com.ericterminal.els.mac`；为本机 MCP stdio 运行用户安装的程序，当前桌面 target 不启用 App Sandbox。
+
+独立 Info.plist 注册 GGUF、普通附件、快捷指令回调和 Bonjour 服务，并配置已接入功能的权限用途说明；签名声明复用现有 iCloud 容器、App Group 和共享钥匙串。开发者账号中的 Mac 配置及系统权限仍需实际构建、运行验证。当前工作区没有 `Dependencies/llama-build/products/macosx-Debug` 或 `macosx-Release` 产物，原生静态依赖尚待构建；Mac 测试 target 尚待接入。
 
 ## Target 与源码
 
@@ -18,7 +22,7 @@
 ## 资源与签名
 
 - Mac target 共享 iOS 目录下八种 `*.lproj/Localizable.strings`，保持 `en` 为开发语言。不复制第三份本地化表；本次新增文案已同步到 iOS/watchOS 资源。
-- 共享需要的图片、字体、默认配置、许可证和向导源码包。检查 iOS 的资源构建步骤后逐项选择，不直接复制移动端 Info.plist、扩展、Watch App 或移动端 entitlements。
+- 共享已有图片和 LocalLinux 许可证资源；默认配置继续由 Core 提供，向导源码包沿用 `GuideSourcePackStore` 按 commit 懒下载，不要求额外内置源码归档。不直接复制移动端 Info.plist、扩展、Watch App 或移动端 entitlements。
 - Mac target 复用 iOS `Resources/LocalLinux` 整个资源目录，包括原 AArch64 seed/metadata、迁移清单及全部合规文件。可保留 `LocalLinux` 文件夹引用；Core 也支持 bundle 顶层查找。不要只添加压缩包，或为 Intel Mac 换成宿主 x86_64 RootFS：两种宿主都通过 iSH 运行同一 AArch64 guest。无需维护第三份 seed。发布 ELS 前必须先推送对应 iSH 提交，目前新增 iSH 提交仍只在本地。
 - 新建独立的 Mac bundle identifier 和对应的签名配置。iCloud 如要读取现有云端容器，继续使用项目现有容器 `iCloud.com.ericterminal.els`，并在开发者账号中为 Mac App 启用所需能力。钥匙串访问组和 App Group 必须与实际签名配置匹配。
 - 本机 stdio 需要运行用户安装的可执行文件及访问其依赖。当前实现面向具有这些权限的原生桌面进程；启用 App Sandbox 后不能假定任意 `node`／`uvx` 程序及其数据路径均可访问。发布签名与沙盒策略确定后需实际验证，不能用移动端 Linux 的 workspace/mount 字段充当本机隔离措施。
@@ -33,7 +37,11 @@
 
 Mac 根目录为 `Application Support/ETOS LLM Studio`，通过 `StorageUtility.documentsDirectory` 获取。数据库 schema、文件名、提供商/MCP 编码及附件相对路径继续共用 ETOSCore，不建立独立的 Mac 数据库版本。
 
-工具链恢复并获得明确授权后，需要分别构建和测试。新 Mac scheme 的具体命令应在 target 创建后确定，当前不提供一个不存在的 scheme 命令。已有 iOS/watchOS 的构建和测试命令继续以仓库 AGENTS.md 为准，编译授权与测试授权分开。
+工具链已恢复，获得明确编译授权后使用以下 Mac 命令。已有 iOS/watchOS 的命令继续以仓库 AGENTS.md 为准，编译授权与测试授权分开；本次仅核对 Xcode 配置和差异格式，不新增针对工程 XML 的脚本测试。
+
+```sh
+env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio macOS App' -destination 'platform=macOS' build
+```
 
 待验证项目包括：
 

@@ -29,6 +29,9 @@
 		07BEEE0D2FB6DB57000D31FC /* ETOSCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 07BEEE0B2FB6DB57000D31FC /* ETOSCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		07BEEE0F2FB6DB5E000D31FC /* ETOSCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 07BEEE0E2FB6DB5E000D31FC /* ETOSCore.framework */; };
 		07BEEE102FB6DB5E000D31FC /* ETOSCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 07BEEE0E2FB6DB5E000D31FC /* ETOSCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		07CE334D307A6860003E244E /* ETOSCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 07CE334C307A6860003E244E /* ETOSCore.framework */; };
+		07CE334E307A6860003E244E /* ETOSCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 07CE334C307A6860003E244E /* ETOSCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		07CE3351307A6883003E244E /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 07CE3350307A6883003E244E /* MarkdownUI */; };
 		07E153EA2FC0EBA90056CC91 /* CepheusKeyboardKit in Frameworks */ = {isa = PBXBuildFile; productRef = 07E153E92FC0EBA90056CC91 /* CepheusKeyboardKit */; };
 		09A06C4C2F75031D0089D1E1 /* SwiftMath in Frameworks */ = {isa = PBXBuildFile; productRef = 09A06C4B2F75031D0089D1E1 /* SwiftMath */; };
 /* End PBXBuildFile section */
@@ -143,6 +146,17 @@
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		07CE334F307A6861003E244E /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				07CE334E307A6860003E244E /* ETOSCore.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -163,8 +177,11 @@
 		0796794F2F1278F2006562BC /* ETOS LLM Studio Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ETOS LLM Studio Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		0796795B2F1278F5006562BC /* ETOS LLM Studio Watch AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "ETOS LLM Studio Watch AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		07B81F0F302B56450028B43A /* ETOSCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = ETOSCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		07BB6116307A667600780EDE /* ETOS LLM Studio macOS App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ETOS LLM Studio macOS App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		07BB6344307A67A200780EDE /* ETOS-LLM-Studio-macOS-App-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "ETOS-LLM-Studio-macOS-App-Info.plist"; sourceTree = "<group>"; };
 		07BEEE0B2FB6DB57000D31FC /* ETOSCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = ETOSCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		07BEEE0E2FB6DB5E000D31FC /* ETOSCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = ETOSCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		07CE334C307A6860003E244E /* ETOSCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = ETOSCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		07FA9DC12FD6C92600C6EEE9 /* ETOS LLM Studio AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "ETOS LLM Studio AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -204,11 +221,35 @@
 			);
 			target = 0743415B302B4A2F00F29D76 /* ETOS Agent Watch WidgetsExtension */;
 		};
+		07CE335C307A6910003E244E /* Exceptions for "ETOS LLM Studio iOS App" folder in "ETOS LLM Studio macOS App" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"/Localized: InfoPlist.strings",
+				"/Localized: Localizable.strings",
+				Assets.xcassets,
+				PrivacyInfo.xcprivacy,
+				Resources/LocalLinux/ETOSLocalLinuxRootFSMigrations.json,
+				Resources/LocalLinux/ETOSLocalLinuxRootFSSeed.json,
+				Resources/LocalLinux/ETOSLocalLinuxRootFSSeed.tar.gz,
+				"Resources/LocalLinux/iSH-PROJECT-LICENSES.txt",
+				"Resources/LocalLinux/LocalLinuxRootFS-Compliance.json",
+				"Resources/LocalLinux/LocalLinuxRootFS-Packages.tsv",
+				"Resources/LocalLinux/LocalLinuxRootFS-SBOM.spdx.json",
+				"Resources/LocalLinux/LocalLinuxRootFS-Source-Assets.tsv",
+				"Resources/LocalLinux/LocalLinuxRootFS-Source-Offer.txt",
+				"Resources/LocalLinux/LocalLinuxRootFS-Third-Party-Notices.txt",
+				Views/ETAdvancedMarkdownRendererCodeHighlighting.swift,
+			);
+			target = 07BB6115307A667600780EDE /* ETOS LLM Studio macOS App */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		073CA6DD2E8CFD65004516A0 /* ETOS LLM Studio iOS App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				07CE335C307A6910003E244E /* Exceptions for "ETOS LLM Studio iOS App" folder in "ETOS LLM Studio macOS App" target */,
+			);
 			path = "ETOS LLM Studio iOS App";
 			sourceTree = "<group>";
 		};
@@ -255,6 +296,11 @@
 		0796795E2F1278F5006562BC /* ETOS LLM Studio Watch AppTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "ETOS LLM Studio Watch AppTests";
+			sourceTree = "<group>";
+		};
+		07BB6117307A667600780EDE /* ETOS LLM Studio macOS App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "ETOS LLM Studio macOS App";
 			sourceTree = "<group>";
 		};
 		07FA9DC22FD6C92600C6EEE9 /* ETOS LLM Studio AppTests */ = {
@@ -331,6 +377,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		07BB6113307A667600780EDE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				07CE334D307A6860003E244E /* ETOSCore.framework in Frameworks */,
+				07CE3351307A6883003E244E /* MarkdownUI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		07FA9DBE2FD6C92600C6EEE9 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -344,6 +399,7 @@
 		073CA6D22E8CFD65004516A0 = {
 			isa = PBXGroup;
 			children = (
+				07BB6344307A67A200780EDE /* ETOS-LLM-Studio-macOS-App-Info.plist */,
 				07434172302B4FD800F29D76 /* ETOS Agent Watch WidgetsExtensionDebug.entitlements */,
 				0743416F302B4B1B00F29D76 /* ETOS Agent Watch WidgetsExtensionRelease.entitlements */,
 				0743408B302B092800F29D76 /* ETOS LLM Studio AppRelease.entitlements */,
@@ -355,6 +411,7 @@
 				074340AA302B0DB800F29D76 /* ETOS Agent Widgets */,
 				074340C3302B0EC100F29D76 /* ETOS Workspace Provider */,
 				0743415F302B4A3100F29D76 /* ETOS Agent Watch Widgets */,
+				07BB6117307A667600780EDE /* ETOS LLM Studio macOS App */,
 				07BEEE082FB6DAB8000D31FC /* Frameworks */,
 				073CA6DC2E8CFD65004516A0 /* Products */,
 			);
@@ -371,6 +428,7 @@
 				074340A5302B0DB700F29D76 /* ETOS Agent Widgets.appex */,
 				074340C0302B0EC000F29D76 /* ETOS Workspace Provider.appex */,
 				0743415C302B4A2F00F29D76 /* ETOS Agent Watch WidgetsExtension.appex */,
+				07BB6116307A667600780EDE /* ETOS LLM Studio macOS App.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -378,6 +436,7 @@
 		07BEEE082FB6DAB8000D31FC /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				07CE334C307A6860003E244E /* ETOSCore.framework */,
 				07B81F0F302B56450028B43A /* ETOSCore.framework */,
 				0743414A302B414600F29D76 /* ETOSCore.framework */,
 				07434146302B40CF00F29D76 /* ETOSCore.framework */,
@@ -566,6 +625,30 @@
 			productReference = 0796795B2F1278F5006562BC /* ETOS LLM Studio Watch AppTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		07BB6115307A667600780EDE /* ETOS LLM Studio macOS App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 07BB6120307A667C00780EDE /* Build configuration list for PBXNativeTarget "ETOS LLM Studio macOS App" */;
+			buildPhases = (
+				07BB6112307A667600780EDE /* Sources */,
+				07BB6113307A667600780EDE /* Frameworks */,
+				07BB6114307A667600780EDE /* Resources */,
+				07CE334F307A6861003E244E /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				07BB6117307A667600780EDE /* ETOS LLM Studio macOS App */,
+			);
+			name = "ETOS LLM Studio macOS App";
+			packageProductDependencies = (
+				07CE3350307A6883003E244E /* MarkdownUI */,
+			);
+			productName = "ETOS LLM Studio macOS App";
+			productReference = 07BB6116307A667600780EDE /* ETOS LLM Studio macOS App.app */;
+			productType = "com.apple.product-type.application";
+		};
 		07FA9DC02FD6C92600C6EEE9 /* ETOS LLM Studio AppTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 07FA9DC92FD6C92600C6EEE9 /* Build configuration list for PBXNativeTarget "ETOS LLM Studio AppTests" */;
@@ -596,7 +679,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2660;
+				LastSwiftUpdateCheck = 2700;
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					073CA6DA2E8CFD65004516A0 = {
@@ -620,6 +703,9 @@
 					0796795A2F1278F5006562BC = {
 						CreatedOnToolsVersion = 26.2;
 						TestTargetID = 0796794E2F1278F2006562BC;
+					};
+					07BB6115307A667600780EDE = {
+						CreatedOnToolsVersion = 27.0;
 					};
 					07FA9DC02FD6C92600C6EEE9 = {
 						CreatedOnToolsVersion = 26.5;
@@ -662,6 +748,7 @@
 				074340A4302B0DB700F29D76 /* ETOS Agent Widgets */,
 				074340BF302B0EC000F29D76 /* ETOS Workspace Provider */,
 				0743415B302B4A2F00F29D76 /* ETOS Agent Watch WidgetsExtension */,
+				07BB6115307A667600780EDE /* ETOS LLM Studio macOS App */,
 			);
 		};
 /* End PBXProject section */
@@ -710,6 +797,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		079679592F1278F5006562BC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		07BB6114307A667600780EDE /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -769,6 +863,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		079679572F1278F5006562BC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		07BB6112307A667600780EDE /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -1473,6 +1574,136 @@
 			};
 			name = Release;
 		};
+		07BB611E307A667C00780EDE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "ETOS LLM Studio macOS App/ETOS LLM Studio macOS App.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "ETOS-LLM-Studio-macOS-App-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Reads, creates, and updates authorized events when you explicitly use a Calendar tool.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Uses the camera to create an image for the model when you choose to take a photo.";
+				INFOPLIST_KEY_NSContactsUsageDescription = "Reads or changes authorized contacts only when you explicitly use a contacts tool.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Connects to local debugging services and LAN tools you choose.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Records audio when you use voice input.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Saves a generated or selected image to Photos after you confirm.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Reads and manages authorized photos when you select an image or explicitly use a Photos tool.";
+				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Reads, creates, and updates authorized reminders when you explicitly use a Reminders tool.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Converts speech to text when you use voice input or explicitly use transcription.";
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ericterminal.els.mac;
+				PRODUCT_MODULE_NAME = ETOS_LLM_Studio_macOS_App;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = NO;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "";
+			};
+			name = Debug;
+		};
+		07BB611F307A667C00780EDE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "ETOS LLM Studio macOS App/ETOS LLM Studio macOS App.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "ETOS-LLM-Studio-macOS-App-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Reads, creates, and updates authorized events when you explicitly use a Calendar tool.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Uses the camera to create an image for the model when you choose to take a photo.";
+				INFOPLIST_KEY_NSContactsUsageDescription = "Reads or changes authorized contacts only when you explicitly use a contacts tool.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Connects to local debugging services and LAN tools you choose.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Records audio when you use voice input.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Saves a generated or selected image to Photos after you confirm.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Reads and manages authorized photos when you select an image or explicitly use a Photos tool.";
+				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Reads, creates, and updates authorized reminders when you explicitly use a Reminders tool.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Converts speech to text when you use voice input or explicitly use transcription.";
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ericterminal.els.mac;
+				PRODUCT_MODULE_NAME = ETOS_LLM_Studio_macOS_App;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = NO;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "";
+			};
+			name = Release;
+		};
 		07FA9DC72FD6C92600C6EEE9 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1592,6 +1823,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		07BB6120307A667C00780EDE /* Build configuration list for PBXNativeTarget "ETOS LLM Studio macOS App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				07BB611E307A667C00780EDE /* Debug */,
+				07BB611F307A667C00780EDE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		07FA9DC92FD6C92600C6EEE9 /* Build configuration list for PBXNativeTarget "ETOS LLM Studio AppTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -1663,6 +1903,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 07BEEE052FB6DAAA000D31FC /* XCRemoteSwiftPackageReference "SQLCipher.swift" */;
 			productName = SQLCipher;
+		};
+		07CE3350307A6883003E244E /* MarkdownUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 077CD2602E962D8D00AD6556 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
+			productName = MarkdownUI;
 		};
 		07E153E92FC0EBA90056CC91 /* CepheusKeyboardKit */ = {
 			isa = XCSwiftPackageProductDependency;
