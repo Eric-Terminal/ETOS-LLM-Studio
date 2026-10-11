@@ -1,5 +1,7 @@
 # macOS 工程接入记录
 
+2026-10-11 启动修正：Mac target 已通过 Xcode 原生工程编辑器添加现有 `SQLCipher` 包产品依赖，确保 App 的 `Contents/Frameworks` 嵌入 SQLCipher.framework。此前只依赖 ETOSCore 会通过链接，但启动时 dyld 因找不到 SQLCipher 退出。修复后 Mac arm64 Debug 增量构建成功，已实际打开并确认“对话”窗口；构建日志为 `/tmp/etos-macos-sqlcipher-build.log`。以下“未启动 App”仅代表此前验证状态，功能测试尚未执行。
+
 2026-10-11 功能对齐复核：按原目标补齐了本轮核对的桌面缺项源码，包含反馈提交/工单动态/评论/关联提交、助手图片相册、隐藏成就记录与 UI 触发入口、流式逐字淡入、关于/更新/公告、官方数据同步预览与确认、应用日志、Agent 工具/用户终端聊天预览、消息思考与工具调用 JSON 编辑、正文图片提取，以及完整/截至某条/选中消息的 PDF/Markdown/TXT/PNG 导出。已有原生 MCP stdin/stdout、数据库共享、Linux、Skills、浏览器、角色扮演、备份同步等接入保持使用。各新页面同步声明向导和八语言文案；敏感正文不进入向导。以下较早的“未接入”“尚需补齐”均是历史记录，不能作为当前缺项重复开工。
 
 用户要求所有实现完成后才统一 Mac 编译，禁止测试和 Python 冒烟。中途构建已停止，全部实现与资源收尾后再执行 Mac arm64 Debug 构建，使用 `-jobs 2 CODE_SIGNING_ALLOWED=NO`。最终于 2026-10-11 获得 `BUILD SUCCEEDED`，日志为 `/tmp/etos-macos-parity-final-build-2.log`。修正聊天视图类型推断超时和闭包显式捕获后，最终构建无源码错误；仍有既有 swift-cmark umbrella header 与 AppIntents 元数据跳过提示，前一轮 Core 重编译也记录了既有收据 API 弃用警告。没有运行测试、Python 冒烟或 App；新增反馈展示、图片删除关联和 Unicode 流式淡入的六项用例仅为测试源码。后续获单独授权后再进行 UI、网络、数据库跨端往返和签名运行验收，普通签名构建仍需本机配置 Mac 开发描述文件。

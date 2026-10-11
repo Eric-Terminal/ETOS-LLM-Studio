@@ -22,6 +22,7 @@
 		077CD2622E962D8D00AD6556 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 077CD2612E962D8D00AD6556 /* MarkdownUI */; };
 		0796796F2F1278F5006562BC /* ETOS LLM Studio Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 0796794F2F1278F2006562BC /* ETOS LLM Studio Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		079679BE2F1279C8006562BC /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 079679BD2F1279C8006562BC /* MarkdownUI */; };
+		07B50FB8307B711D00A5CC32 /* SQLCipher in Frameworks */ = {isa = PBXBuildFile; productRef = 07B50FB7307B711D00A5CC32 /* SQLCipher */; };
 		07B81F10302B56450028B43A /* ETOSCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 07B81F0F302B56450028B43A /* ETOSCore.framework */; };
 		07BEEE072FB6DAAB000D31FC /* SQLCipher in Frameworks */ = {isa = PBXBuildFile; productRef = 07BEEE062FB6DAAB000D31FC /* SQLCipher */; };
 		07BEEE0A2FB6DAB8000D31FC /* SQLCipher in Frameworks */ = {isa = PBXBuildFile; productRef = 07BEEE092FB6DAB8000D31FC /* SQLCipher */; };
@@ -381,6 +382,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				07B50FB8307B711D00A5CC32 /* SQLCipher in Frameworks */,
 				07CE334D307A6860003E244E /* ETOSCore.framework in Frameworks */,
 				07CE3351307A6883003E244E /* MarkdownUI in Frameworks */,
 			);
@@ -644,6 +646,7 @@
 			name = "ETOS LLM Studio macOS App";
 			packageProductDependencies = (
 				07CE3350307A6883003E244E /* MarkdownUI */,
+				07B50FB7307B711D00A5CC32 /* SQLCipher */,
 			);
 			productName = "ETOS LLM Studio macOS App";
 			productReference = 07BB6116307A667600780EDE /* ETOS LLM Studio macOS App.app */;
@@ -1893,6 +1896,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 077CD2602E962D8D00AD6556 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
 			productName = MarkdownUI;
+		};
+		07B50FB7307B711D00A5CC32 /* SQLCipher */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 07BEEE052FB6DAAA000D31FC /* XCRemoteSwiftPackageReference "SQLCipher.swift" */;
+			productName = SQLCipher;
 		};
 		07BEEE062FB6DAAB000D31FC /* SQLCipher */ = {
 			isa = XCSwiftPackageProductDependency;
