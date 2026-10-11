@@ -110,7 +110,7 @@ struct MacLinuxJobDetails: Sendable {
         add("reason", NSLocalizedString("完成原因", comment: ""), job.completionReason?.displayName)
         add("exit", NSLocalizedString("退出码", comment: ""), job.exitCode.map(String.init))
         add("signal", NSLocalizedString("信号", comment: ""), job.terminationSignal.map(String.init))
-        add("errno", NSLocalizedString("Linux 错误码", comment: ""), job.linuxError.map(String.init))
+        add("errno", NSLocalizedString("错误", comment: ""), job.linuxError.map(String.init))
         add("diagnostic", NSLocalizedString("诊断编号", comment: ""), job.diagnosticID?.uuidString)
         if let match = job.request.commandRuleMatch {
             add("rule", NSLocalizedString("规则", comment: ""), match.ruleName)
@@ -144,7 +144,7 @@ struct MacLinuxDiagnosticDetails: Sendable {
         add("reason", NSLocalizedString("完成原因", comment: ""), diagnostic.completionReason?.displayName)
         add("exit", NSLocalizedString("退出码", comment: ""), diagnostic.exitCode.map(String.init))
         add("signal", NSLocalizedString("信号", comment: ""), diagnostic.signal.map(String.init))
-        add("errno", NSLocalizedString("Linux 错误码", comment: ""), diagnostic.linuxError.map(String.init))
+        add("errno", NSLocalizedString("错误", comment: ""), diagnostic.linuxError.map(String.init))
         add("syscall", NSLocalizedString("系统调用", comment: ""), diagnostic.systemCallName)
         add("syscall_id", NSLocalizedString("系统调用编号", comment: ""), diagnostic.systemCallNumber.map(String.init))
         add("pc", NSLocalizedString("指令地址", comment: ""), diagnostic.guestProgramCounter.map { String(format: "0x%016llx", $0) })

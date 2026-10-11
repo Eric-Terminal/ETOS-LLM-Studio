@@ -15,7 +15,7 @@ struct MacLinuxSettingsView: View {
         Form {
             Section {
                 MacSettingsIntroCard(id: "linux-settings", title: NSLocalizedString("使用说明", comment: ""),
-                    details: NSLocalizedString("Mac 本地 Linux 使用说明", comment: ""), documentID: "macos-workspace",
+                    details: NSLocalizedString("mac.shell.help", comment: ""), documentID: "macos-workspace",
                     isActive: isActive && workspace.canManageLocalModels && !model.isSuspended)
                 Picker(NSLocalizedString("默认终端 Shell", comment: ""), selection: $configuration.localLinuxDefaultShellPath) {
                     ForEach(model.shellPaths, id: \.self) { shell in Text(shell).tag(shell) }
@@ -60,7 +60,7 @@ struct MacLinuxSettingsView: View {
         .onChange(of: active) { _, value in if value { model.observe() } }
         .guideSettingsPageContext(
             id: GuidePageID(rawValue: "mac-linux-settings-\(model.epoch)"), title: NSLocalizedString("配置", comment: ""),
-            documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux"), GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
+            documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
             isActive: active && model.canOperate,
             settings: [
                 .string("preview_mode", label: NSLocalizedString("聊天预览内容", value: "Preview content", comment: ""), allowedValues: ["off", "agent_tools", "user_terminal"], get: { configuration.localLinuxChatPreviewMode }, set: { configuration.localLinuxChatPreviewMode = $0 }),

@@ -52,7 +52,7 @@ struct MacLinuxRulesView: View {
         .sheet(item: $editor) { target in MacLinuxRuleEditor(target: target, isActive: active, model: model) }
         .guideSettingsPageContext(
             id: GuidePageID(rawValue: "mac-linux-rules-\(model.lease)-\(runtime.epoch)"), title: NSLocalizedString("命令规则", comment: ""),
-            documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux"), GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
+            documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
             isActive: active && editor == nil && !model.isWorking,
             settings: [
                 .bool("enabled", label: NSLocalizedString("启用命令安全策略", comment: ""), get: { configuration.localLinuxCommandSafetyEnabled }, set: { configuration.localLinuxCommandSafetyEnabled = $0 }),
@@ -125,7 +125,7 @@ private struct MacLinuxRuleEditor: View {
             }
             .guideSettingsPageContext(
                 id: GuidePageID(rawValue: "mac-linux-rule-editor-\(target.id)-\(model.lease)"), title: NSLocalizedString("命令规则", comment: ""),
-                documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux"), GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
+                documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
                 isActive: visible && isActive && !model.isWorking && !deleting,
                 settings: [
                     .string("name", label: NSLocalizedString("规则名称", comment: ""), get: { draft.name }, set: { draft.name = $0 }),

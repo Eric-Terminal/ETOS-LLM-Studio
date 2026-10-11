@@ -47,7 +47,7 @@ struct MacLinuxEnvironmentView: View {
         .sheet(item: $editor) { target in MacLinuxEnvironmentEditor(target: target, isActive: active, model: model) }
         .guideSettingsPageContext(
             id: GuidePageID(rawValue: "mac-linux-environment-\(model.lease)-\(runtime.epoch)"), title: NSLocalizedString("环境变量", comment: ""),
-            documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux"), GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
+            documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
             isActive: active && editor == nil && !model.isWorking,
             settings: [.readOnly("variables", label: NSLocalizedString("变量", comment: ""), value: { model.catalog?.guideVariables ?? .array([]) })])
     }
@@ -82,7 +82,7 @@ private struct MacLinuxEnvironmentEditor: View {
                     TextField(NSLocalizedString("备注（可选）", comment: ""), text: $draft.note, axis: .vertical).lineLimit(1...4)
                     Toggle(NSLocalizedString("启用", comment: ""), isOn: $draft.isEnabled)
                 } footer: {
-                    Text(NSLocalizedString("变量只在新建 Linux 进程、终端或本地 MCP 时注入；不会写入 shell 配置文件，也不会自动加入模型上下文。", comment: "")).font(.footnote).foregroundStyle(.secondary)
+                    Text(NSLocalizedString("变量只在进程启动时注入，不会写入 .profile，也不会自动发送给模型。", comment: "")).font(.footnote).foregroundStyle(.secondary)
                 }
                 if target.original != nil {
                     Section { Button(NSLocalizedString("删除变量", comment: ""), role: .destructive) { deleting = true } }
@@ -109,7 +109,7 @@ private struct MacLinuxEnvironmentEditor: View {
             }
             .guideSettingsPageContext(
                 id: GuidePageID(rawValue: "mac-linux-variable-editor-\(target.id)-\(model.lease)"), title: NSLocalizedString("环境变量", comment: ""),
-                documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux"), GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
+                documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
                 isActive: visible && isActive && !model.isWorking && !deleting,
                 settings: [
                     .string("name", label: NSLocalizedString("名称", comment: ""), allowsEmpty: false, get: { draft.name }, set: { draft.name = $0 }),

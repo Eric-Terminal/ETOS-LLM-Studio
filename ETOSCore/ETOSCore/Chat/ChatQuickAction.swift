@@ -36,7 +36,12 @@ public enum ChatQuickAction: String, CaseIterable, Identifiable, Sendable {
         case .worldbook: return NSLocalizedString("世界书", comment: "聊天快捷功能标题")
         case .extendedFeatures: return NSLocalizedString("拓展功能", comment: "聊天快捷功能标题")
         case .browser: return NSLocalizedString("浏览器", comment: "聊天快捷功能标题")
-        case .localTerminal: return NSLocalizedString("Linux 终端", comment: "聊天快捷功能标题")
+        case .localTerminal:
+            #if os(macOS)
+            return NSLocalizedString("终端", comment: "聊天快捷功能标题")
+            #else
+            return NSLocalizedString("Linux 终端", comment: "聊天快捷功能标题")
+            #endif
         }
     }
 

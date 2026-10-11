@@ -15,7 +15,7 @@ struct MacLinuxWorkspacesView: View {
         List {
             Section {
                 MacSettingsIntroCard(id: "linux-workspaces", title: NSLocalizedString("使用说明", comment: ""),
-                    details: NSLocalizedString("Mac Linux 工作区使用说明", comment: ""), documentID: "macos-workspace", isActive: allowed)
+                    details: NSLocalizedString("mac.shell.workspaces.help", comment: ""), documentID: "macos-workspace", isActive: allowed)
                 Picker(NSLocalizedString("会话删除后的工作区", comment: ""), selection: $configuration.localLinuxWorkspaceCleanupPolicy) {
                     Text(NSLocalizedString("保留并手动清理", comment: "")).tag("manual")
                     Text(NSLocalizedString("随会话自动删除", comment: "")).tag("automatic")
@@ -29,7 +29,7 @@ struct MacLinuxWorkspacesView: View {
             }
             Section(NSLocalizedString("工作区", comment: "")) {
                 if let catalog = model.catalog {
-                    if catalog.workspaces.isEmpty { Text(NSLocalizedString("还没有 Linux 工作区。", comment: "")).font(.footnote).foregroundStyle(.secondary) }
+                    if catalog.workspaces.isEmpty { Text(NSLocalizedString("暂无数据", comment: "")).font(.footnote).foregroundStyle(.secondary) }
                     ForEach(catalog.workspaces) { row in
                         NavigationLink {
                             MacLinuxWorkspaceDetailView(workspaceID: row.id, isActive: isActive, runtime: runtime)
@@ -54,7 +54,7 @@ struct MacLinuxWorkspacesView: View {
         .onChange(of: configuration.appLanguage) { _, _ in model.reload() }
         .guideSettingsPageContext(
             id: GuidePageID(rawValue: "mac-linux-workspaces-\(model.lease)-\(runtime.epoch)"), title: NSLocalizedString("工作区", comment: ""),
-            documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux"), GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
+            documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
             isActive: active && !model.isWorking,
             settings: [
                 .string("cleanup_policy", label: NSLocalizedString("会话删除后的工作区", comment: ""), allowedValues: ["manual", "automatic"],
@@ -95,13 +95,13 @@ struct MacLinuxWorkspaceDetailView: View {
         Form {
             Section {
                 MacSettingsIntroCard(id: "linux-workspace-detail", title: NSLocalizedString("使用说明", comment: ""),
-                    details: NSLocalizedString("Mac Linux 工作区使用说明", comment: ""), documentID: "macos-workspace", isActive: allowed && deleting == nil)
+                    details: NSLocalizedString("mac.shell.workspaces.help", comment: ""), documentID: "macos-workspace", isActive: allowed && deleting == nil)
                 Button(NSLocalizedString("刷新", comment: "")) { model.error = nil; model.reload() }.disabled(model.isLoading || model.isWorking)
             }
             if let row = model.catalog?.workspaceByID[workspaceID] {
                 Section(NSLocalizedString("工作区", comment: "")) {
                     LabeledContent(NSLocalizedString("名称", comment: ""), value: row.title)
-                    LabeledContent(NSLocalizedString("Linux 路径", comment: ""), value: row.workspace.guestPath).textSelection(.enabled)
+                    LabeledContent(NSLocalizedString("工作目录", comment: ""), value: row.workspace.guestPath).textSelection(.enabled)
                     LabeledContent(NSLocalizedString("大小", comment: ""), value: row.size)
                     LabeledContent(NSLocalizedString("活动任务", comment: ""), value: "\(row.activeJobCount)")
                     if let id = row.workspace.sessionID { LabeledContent(NSLocalizedString("会话", comment: ""), value: id.uuidString) }
@@ -133,10 +133,10 @@ struct MacLinuxWorkspaceDetailView: View {
         ), titleVisibility: .visible, presenting: deleting) { target in
             Button(NSLocalizedString("停止相关任务并删除", comment: ""), role: .destructive) { remove(target) }
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) { deleting = nil }
-        } message: { _ in Text(NSLocalizedString("工作区文件与其中的完整输出将被删除，RootFS、Home、Shared 和外部挂载不受影响。", comment: "")) }
+        } message: { _ in Text(NSLocalizedString("mac.shell.workspace.delete", value: "The workspace files and saved output will be deleted. Files outside this workspace are unaffected.", comment: "Mac 工作区删除确认")) }
         .guideSettingsPageContext(
             id: GuidePageID(rawValue: "mac-linux-workspace-\(workspaceID)-\(model.lease)-\(runtime.epoch)"), title: NSLocalizedString("工作区详情", comment: ""),
-            documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux"), GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
+            documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
             isActive: active && deleting == nil && !model.isWorking,
             settings: [
                 .readOnly("workspace_id", label: NSLocalizedString("工作区", comment: ""), value: { .string(workspaceID.uuidString) }),

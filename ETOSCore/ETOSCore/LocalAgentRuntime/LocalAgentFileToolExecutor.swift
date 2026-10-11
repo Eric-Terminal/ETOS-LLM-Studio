@@ -862,6 +862,11 @@ public actor LocalAgentFileToolExecutor {
 
     private func route(_ rawPath: String) throws -> RoutedPath {
         let value = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        #if os(macOS)
+        if value.hasPrefix("linux://") || value.hasPrefix("mount://") {
+            throw LocalLinuxRuntimeError.invalidPath(rawPath)
+        }
+        #endif
         if value.hasPrefix("linux://") {
             return RoutedPath(backend: .linux, original: rawPath, path: try normalizedGuestPath(String(value.dropFirst("linux://".count))))
         }

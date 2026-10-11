@@ -58,7 +58,7 @@ struct MacAgentPromptEditor: View {
             }
             .guideSettingsPageContext(
                 id: GuidePageID(rawValue: "mac-agent-prompt-editor-\(target.id)-\(epoch)"), title: NSLocalizedString("编辑提示词", comment: ""),
-                documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux")], isActive: active && !resetting,
+                documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")], isActive: active && !resetting,
                 settings: [
                     .string("title", label: NSLocalizedString("提示词名称", comment: ""), get: { draft.title }, set: { draft.title = $0 }),
                     .string("content", label: NSLocalizedString("提示词内容", comment: ""), get: { draft.content }, set: { draft.content = $0 }),

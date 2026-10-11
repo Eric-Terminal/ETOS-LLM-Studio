@@ -29,8 +29,8 @@ struct MacToolCenterView: View {
                     MacAgentPromptsView(isActive: isActive, model: workspace.agentPrompts)
                 } label: { Label(NSLocalizedString("Agent 提示词", comment: ""), systemImage: "text.bubble") }
                 NavigationLink {
-                    MacLinuxView(isActive: isActive, model: workspace.linux)
-                } label: { Label(NSLocalizedString("本地 Linux", comment: ""), systemImage: "terminal") }
+                    MacShellView(isActive: isActive, model: workspace.linux)
+                } label: { Label(NSLocalizedString("mac.shell.title", value: "Local Shell", comment: ""), systemImage: "terminal") }
                 NavigationLink {
                     MacBrowserView(sessionID: workspace.currentSession?.id, isTemporary: workspace.temporaryChatMemoryMode != nil,
                                    isActive: isActive && workspace.canManageLocalModels, model: workspace.browser)
@@ -54,7 +54,7 @@ struct MacToolCenterView: View {
                 .readOnly("shortcuts_requires_navigation", label: NSLocalizedString("快捷指令工具", comment: ""), value: { .bool(true) }),
                 .readOnly("skills_requires_navigation", label: NSLocalizedString("Agent Skills", comment: ""), value: { .bool(true) }),
                 .readOnly("agent_prompts_requires_navigation", label: NSLocalizedString("Agent 提示词", comment: ""), value: { .bool(true) }),
-                .readOnly("linux_requires_navigation", label: NSLocalizedString("本地 Linux", comment: ""), value: { .bool(true) }),
+                .readOnly("shell_requires_navigation", label: NSLocalizedString("mac.shell.title", value: "Local Shell", comment: ""), value: { .bool(true) }),
                 .readOnly("browser_requires_navigation", label: NSLocalizedString("浏览器", comment: ""), value: { .bool(true) }),
                 .readOnly("approval_requires_navigation", label: NSLocalizedString("审批自动化", comment: ""), value: { .bool(true) })
             ]

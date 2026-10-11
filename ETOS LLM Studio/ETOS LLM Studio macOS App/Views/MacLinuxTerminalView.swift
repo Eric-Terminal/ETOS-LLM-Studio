@@ -27,7 +27,7 @@ struct MacLinuxTerminalView: View {
                 Spacer()
                 NavigationLink {
                     Form {
-                        Text(NSLocalizedString("Mac Linux 终端使用说明", comment: "")).textSelection(.enabled)
+                        Text(NSLocalizedString("mac.shell.terminal.help", value: "Create or select a native macOS terminal. Input runs in the system Shell. Closing this page keeps the task running; End Terminal stops it. The guide cannot type commands.", comment: "")).textSelection(.enabled)
                     }.formStyle(.grouped)
                         .navigationTitle(NSLocalizedString("使用说明", comment: ""))
                         .guideSettingsPageContext(id: "mac-linux-terminal-introduction", title: NSLocalizedString("使用说明", comment: ""),
@@ -40,7 +40,7 @@ struct MacLinuxTerminalView: View {
                 ScrollView([.vertical, .horizontal]) {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if model.output.isEmpty {
-                            Text(NSLocalizedString("Mac Linux 终端空状态", comment: "")).foregroundStyle(.secondary)
+                            Text(NSLocalizedString("mac.shell.terminal.empty", value: "Create or select a terminal to use the macOS Shell.", comment: "")).foregroundStyle(.secondary)
                         }
                         ForEach(model.output) { line in Text(line.displayText).frame(maxWidth: .infinity, alignment: .leading) }
                     }
@@ -91,7 +91,7 @@ struct MacLinuxTerminalView: View {
         }
         .guideSettingsPageContext(
             id: GuidePageID(rawValue: "mac-linux-terminal-\(model.lease)-\(runtime.epoch)"), title: NSLocalizedString("终端", comment: ""),
-            documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux"), GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
+            documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
             isActive: active && !endingTerminal,
             settings: [
                 .readOnly("job_id", label: NSLocalizedString("终端", comment: ""), value: { .string(model.job?.id.uuidString ?? "") }),

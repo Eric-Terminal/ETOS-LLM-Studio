@@ -58,7 +58,7 @@ struct MacLinuxShortcutsView: View {
         }
         .guideSettingsPageContext(
             id: GuidePageID(rawValue: "mac-linux-shortcuts-\(model.lease)-\(runtime.epoch)"), title: NSLocalizedString("终端快捷键", comment: ""),
-            documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux"), GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
+            documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
             isActive: active && editor == nil && confirmation == nil && !model.isWorking,
             settings: [.readOnly("shortcuts", label: NSLocalizedString("终端快捷键列表", comment: ""), value: { model.catalog?.guideShortcuts ?? .array([]) })])
     }
@@ -162,7 +162,7 @@ private struct MacLinuxShortcutEditor: View {
             .onChange(of: configuration.appLanguage) { _, _ in if visible { draft.refresh() } }
             .guideSettingsPageContext(
                 id: GuidePageID(rawValue: "mac-linux-shortcut-editor-\(target.id)-\(model.lease)"), title: NSLocalizedString("编辑快捷键", comment: ""),
-                documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux"), GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
+                documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
                 isActive: visible && isActive && !model.isWorking && !draft.isPreparing,
                 settings: [
                     .json("keys", label: NSLocalizedString("快捷键组合", comment: ""), schema: GuideLocalLinuxTerminalShortcutSettingsSupport.keyListSchema,

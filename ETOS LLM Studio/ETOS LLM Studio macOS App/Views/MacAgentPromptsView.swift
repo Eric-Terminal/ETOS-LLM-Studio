@@ -53,7 +53,7 @@ struct MacAgentPromptsView: View {
                 if model.isLoading || model.isWorking { ProgressView(NSLocalizedString("处理中", comment: "")) }
                 if let error = model.error { Text(error).font(.footnote).foregroundStyle(.secondary) }
             } header: { Text(NSLocalizedString("提示词列表", comment: "")) }
-            footer: { Text(NSLocalizedString("仅用于 Agent 的 Linux 操作说明，不替代会话提示词。", comment: "")).font(.footnote).foregroundStyle(.secondary) }
+            footer: { Text(NSLocalizedString("mac.shell.prompts.footer", value: "Instructions for Agent operations; they do not replace the conversation prompt.", comment: "")).font(.footnote).foregroundStyle(.secondary) }
         }
         .navigationTitle(NSLocalizedString("Agent 提示词", comment: ""))
         .disabled(!active)
@@ -71,7 +71,7 @@ struct MacAgentPromptsView: View {
         } message: { _ in Text(NSLocalizedString("删除后无法撤销；选用项被删除时恢复默认提示词。", comment: "")) }
         .guidePageContext(
             descriptor: GuidePageDescriptor(id: pageID, title: NSLocalizedString("Agent 提示词", comment: ""),
-                documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux")],
+                documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
                 tools: [GuidePageTool(definition: selectionTool, access: .proposeChange)]),
             isActive: active && model.canWrite && editor == nil && deleting == nil,
             snapshot: { GuidePageSnapshot(fields: [

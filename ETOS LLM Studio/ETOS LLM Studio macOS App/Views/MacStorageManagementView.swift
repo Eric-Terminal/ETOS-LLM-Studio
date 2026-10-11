@@ -51,8 +51,8 @@ struct MacStorageManagementView: View {
                 }
             }
             Section {
-                NavigationLink { MacLinuxMountsView(isActive: isActive, runtime: workspace.linux) }
-                    label: { Label(NSLocalizedString("工作区与挂载", comment: ""), systemImage: "externaldrive") }
+                NavigationLink { MacLinuxWorkspacesView(isActive: isActive, runtime: workspace.linux) }
+                    label: { Label(NSLocalizedString("管理工作区", comment: ""), systemImage: "externaldrive") }
             }
             if let report = actions.report { Text(report).font(.footnote).textSelection(.enabled) }
             if let error = actions.error ?? model.error { Text(error).font(.footnote).foregroundStyle(.red) }

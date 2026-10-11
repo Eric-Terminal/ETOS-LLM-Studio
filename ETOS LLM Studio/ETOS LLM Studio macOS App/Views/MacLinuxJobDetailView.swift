@@ -17,7 +17,7 @@ struct MacLinuxJobDetailView: View {
         Form {
             Section {
                 MacSettingsIntroCard(id: "linux-job-detail", title: NSLocalizedString("使用说明", comment: ""),
-                    details: NSLocalizedString("Mac Linux 任务使用说明", comment: ""), documentID: "macos-workspace",
+                    details: NSLocalizedString("mac.shell.jobs.help", comment: ""), documentID: "macos-workspace",
                     isActive: isActive && workspace.canManageLocalModels && !runtime.isSuspended && cancellation == nil)
                 Button(NSLocalizedString("刷新", comment: "")) { model.reload() }.disabled(model.isLoading)
             }
@@ -82,7 +82,7 @@ struct MacLinuxJobDetailView: View {
         } message: { target in Text(target.action.confirmation) }
         .guideSettingsPageContext(
             id: GuidePageID(rawValue: "mac-linux-job-\(jobID)-\(model.lease)-\(runtime.epoch)"), title: NSLocalizedString("任务详情", comment: ""),
-            documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux"), GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
+            documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
             isActive: active && cancellation == nil,
             settings: [
                 .readOnly("job_id", label: NSLocalizedString("任务", comment: ""), value: { .string(jobID.uuidString) }),
@@ -113,7 +113,7 @@ struct MacLinuxDiagnosticView: View {
         Form {
             Section {
                 MacSettingsIntroCard(id: "linux-diagnostic", title: NSLocalizedString("使用说明", comment: ""),
-                    details: NSLocalizedString("Mac Linux 任务使用说明", comment: ""), documentID: "macos-workspace",
+                    details: NSLocalizedString("mac.shell.jobs.help", comment: ""), documentID: "macos-workspace",
                     isActive: isActive && workspace.canManageLocalModels && !runtime.isSuspended)
                 Button(NSLocalizedString("刷新", comment: "")) { model.reload() }.disabled(model.isLoading)
             }
@@ -140,7 +140,7 @@ struct MacLinuxDiagnosticView: View {
         .onChange(of: configuration.appLanguage) { _, _ in if active { model.reload() } }
         .guideSettingsPageContext(
             id: GuidePageID(rawValue: "mac-linux-diagnostic-\(jobID)-\(model.lease)-\(runtime.epoch)"), title: NSLocalizedString("诊断详情", comment: ""),
-            documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux"), GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
+            documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
             isActive: active,
             settings: [
                 .readOnly("job_id", label: NSLocalizedString("任务", comment: ""), value: { .string(jobID.uuidString) }),

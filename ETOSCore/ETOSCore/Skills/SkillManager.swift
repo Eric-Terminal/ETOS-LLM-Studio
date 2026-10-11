@@ -658,11 +658,17 @@ public final class SkillManager: ObservableObject {
                 return lhs.name < rhs.name
             }
         guard !available.isEmpty else { return [] }
+        #if os(macOS)
+        let scriptDescription = NSLocalizedString("mac.shell.tool.run", comment: "Mac 本机命令") + " "
+            + NSLocalizedString("仅 Agent 模式可执行 scripts/；Skill 只读，工作区可写。", comment: "Skill 执行范围")
+        #else
+        let scriptDescription = NSLocalizedString("在当前 Agent Run 的本地 Linux 中执行 scripts/ 内脚本；Skill 只读，工作区可写，且可能需要用户授权。", comment: "Skill execute script action description sent to model")
+        #endif
         let actionDescription = [
             "\(SkillToolAction.readInstructions.rawValue): \(NSLocalizedString("读取 SKILL.md 正文说明。", comment: "Skill tool action description sent to model"))",
             "\(SkillToolAction.listResources.rawValue): \(NSLocalizedString("列出技能包内可发现资源。", comment: "Skill tool action description sent to model"))",
             "\(SkillToolAction.readResource.rawValue): \(NSLocalizedString("读取技能包内可读资源；文本文件原样读取，docx/pptx/xlsx 与支持平台上的 PDF 会抽取纯文本。", comment: "Skill tool action description sent to model"))",
-            "\(SkillToolAction.executeScript.rawValue): \(NSLocalizedString("在当前 Agent Run 的本地 Linux 中执行 scripts/ 内脚本；Skill 只读，工作区可写，且可能需要用户授权。", comment: "Skill execute script action description sent to model"))"
+            "\(SkillToolAction.executeScript.rawValue): \(scriptDescription)"
         ].joined(separator: "\n")
         let parameters = JSONValue.dictionary([
             "type": .string("object"),

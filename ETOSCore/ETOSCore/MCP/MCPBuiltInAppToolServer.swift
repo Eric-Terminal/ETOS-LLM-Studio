@@ -204,7 +204,11 @@ public enum MCPBuiltInAppToolServer {
         case .custom:
             return NSLocalizedString("内建自定义工具", comment: "Built-in app tool custom MCP server name")
         case .linux:
+            #if os(macOS)
+            return NSLocalizedString("mac.shell.title", value: "Local Shell", comment: "")
+            #else
             return NSLocalizedString("内建本地 Linux", comment: "Built-in local Linux MCP server name")
+            #endif
         case .browser:
             return NSLocalizedString("内建 Browser Agent", comment: "Built-in Browser Agent MCP server name")
         case .deviceOperations:
@@ -227,13 +231,21 @@ public enum MCPBuiltInAppToolServer {
         case .memory:
             return NSLocalizedString("提供长期记忆的查看、编辑、归档与恢复工具。", comment: "Built-in app tool memory MCP server notes")
         case .file:
+            #if os(macOS)
+            return NSLocalizedString("mac.shell.files.help", value: "Relative paths and app:// access the app's Documents. Native Shell commands use macOS paths and permissions.", comment: "")
+            #else
             return NSLocalizedString("提供统一文件工具：相对路径和 app:// 访问 Documents；Agent 模式还可通过 linux:// 与 mount:// 访问 Linux 和授权挂载。", comment: "Built-in app tool file MCP server notes")
+            #endif
         case .database:
             return NSLocalizedString("提供聊天、配置与记忆数据库的表结构查看、只读查询和受限写入工具。", comment: "Built-in app tool database MCP server notes")
         case .custom:
             return NSLocalizedString("提供 JavaScript 执行器以及由 AI 创建的可复用脚本工具。", comment: "Built-in app tool custom MCP server notes")
         case .linux:
+            #if os(macOS)
+            return NSLocalizedString("mac.shell.tool.process", value: "Manage this conversation's native macOS tasks and PTYs: list, start, read, write, resize, interrupt, cancel or finish input.", comment: "")
+            #else
             return NSLocalizedString("在 Agent 模式中提供 Linux 命令、Shell 与交互式进程管理；不会自动安装软件。", comment: "Built-in local Linux MCP server notes")
+            #endif
         case .browser:
             return NSLocalizedString("提供按会话隔离的网页导航、读取和交互；用户可接管同一标签页。", comment: "Built-in Browser Agent MCP server notes")
         case .deviceOperations:

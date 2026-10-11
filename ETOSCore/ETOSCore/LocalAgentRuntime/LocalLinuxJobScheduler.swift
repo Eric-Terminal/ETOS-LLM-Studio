@@ -14,7 +14,7 @@ public actor LocalLinuxJobScheduler {
 
     private struct ActiveCommand {
         var job: LocalLinuxJob
-        let session: iSHAppleBridgeCommandSession
+        let session: any LocalCommandSession
         let collector: LocalLinuxOutputCollector
         let mountLeases: [LocalLinuxMountLease]
         let diagnosticTask: Task<Void, Never>
@@ -24,7 +24,7 @@ public actor LocalLinuxJobScheduler {
     private struct ActiveTerminal {
         let activity: LocalLinuxActivityLease
         var job: LocalLinuxJob
-        let session: iSHAppleBridgeTerminalSession
+        let session: any LocalTerminalSession
         let collector: LocalLinuxOutputCollector
         let mountLeases: [LocalLinuxMountLease]
         let diagnosticTask: Task<Void, Never>
@@ -256,6 +256,11 @@ public actor LocalLinuxJobScheduler {
             workingDirectory: workingDirectory,
             requestID: requestID
         )
+        #if os(macOS)
+        let directory = workingDirectory.map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? FileManager.default.homeDirectoryForCurrentUser
+        return try? MCPMacStdioProcess.resolveExecutable(resolved, environment: environment, workingDirectory: directory).path
+        #else
         guard let info = try? await bridge.statGuestFile(
             path: resolved,
             requestID: requestID,
@@ -264,6 +269,7 @@ public actor LocalLinuxJobScheduler {
             return nil
         }
         return resolved
+        #endif
     }
 
     public func runCommand(
@@ -353,6 +359,9 @@ public actor LocalLinuxJobScheduler {
                 modelByteLimit: UInt64(AppConfigStore.integerValue(for: .localLinuxOutputPreviewBytes)),
                 rawOutputChanged: { [jobID = job.id] in LocalLinuxJobNotifications.outputChanged(jobID: jobID) }
             )
+            #if os(macOS)
+            leases = []
+            #else
             let mountIDs: [UUID]
             if let context {
                 mountIDs = context.mountIDs
@@ -360,6 +369,7 @@ public actor LocalLinuxJobScheduler {
                 mountIDs = try await mountManager.activeExternalMountIDs()
             }
             leases = try await mountManager.acquireLeases(ids: mountIDs)
+            #endif
         } catch {
             job.state = .failed
             job.completionReason = .runtimeFailure
@@ -369,17 +379,18 @@ public actor LocalLinuxJobScheduler {
         }
         do {
             try activity.checkCancellation()
+            let receiveOutput: @Sendable (LocalLinuxOutputStream, Data, Int32) -> Void = { stream, data, terminalError in
+                collector.append(stream: stream, data: data, terminalError: terminalError, streamEnded: data.isEmpty)
+            }
+            #if os(macOS)
+            let session = try MacNativeProcess.start(requestID: requestID, request: resolvedRequest, onOutput: receiveOutput)
+            #else
             let session = try await bridge.startCommand(
                 requestID: requestID,
-                request: resolvedRequest
-            ) { stream, data, terminalError in
-                collector.append(
-                    stream: stream,
-                    data: data,
-                    terminalError: terminalError,
-                    streamEnded: data.isEmpty
-                )
-            }
+                request: resolvedRequest,
+                onOutput: receiveOutput
+            )
+            #endif
             job.state = .running
             _ = Persistence.saveLocalLinuxJob(job)
             let diagnosticTask = diagnosticDrainTask(scope: 2, requestID: requestID, jobID: job.id)
@@ -522,6 +533,9 @@ public actor LocalLinuxJobScheduler {
                 terminalResponseHandler: { terminalResponseRelay.enqueue($0) },
                 rawOutputChanged: { [jobID = job.id] in LocalLinuxJobNotifications.outputChanged(jobID: jobID) }
             )
+            #if os(macOS)
+            leases = []
+            #else
             let mountIDs: [UUID]
             if let context {
                 mountIDs = context.mountIDs
@@ -529,6 +543,7 @@ public actor LocalLinuxJobScheduler {
                 mountIDs = try await mountManager.activeExternalMountIDs()
             }
             leases = try await mountManager.acquireLeases(ids: mountIDs)
+            #endif
         } catch {
             job.state = .failed
             job.completionReason = .runtimeFailure
@@ -538,7 +553,7 @@ public actor LocalLinuxJobScheduler {
         }
         do {
             try activity.checkCancellation()
-            let session = try await bridge.startTerminal(request: terminalRequest) { data, dropped in
+            let receiveOutput: @Sendable (Data, UInt64) -> Void = { data, dropped in
                 collector.append(stream: .terminal, data: data)
                 if dropped != 0 {
                     let droppedMessage = String(
@@ -551,6 +566,11 @@ public actor LocalLinuxJobScheduler {
                     )
                 }
             }
+            #if os(macOS)
+            let session = try MacNativeTerminalSession(request: terminalRequest, onOutput: receiveOutput)
+            #else
+            let session = try await bridge.startTerminal(request: terminalRequest, onOutput: receiveOutput)
+            #endif
             terminalResponseRelay.bind(to: session)
             job.state = .running
             _ = Persistence.saveLocalLinuxJob(job)
@@ -922,6 +942,10 @@ public actor LocalLinuxJobScheduler {
         jobID: UUID,
         onEvents: (@Sendable ([LocalLinuxBridgeDiagnosticEvent]) -> Void)? = nil
     ) -> Task<Void, Never> {
+        #if os(macOS)
+        // 原生进程直接报告退出码和信号，不启动 iSH 的诊断轮询。
+        return Task { }
+        #else
         let bridge = bridge
         let diagnostics = diagnostics
         return Task.detached(priority: .utility) {
@@ -937,6 +961,7 @@ public actor LocalLinuxJobScheduler {
                 try? await Task<Never, Never>.sleep(nanoseconds: 200_000_000)
             }
         }
+        #endif
     }
 
     private func drainRemainingDiagnostics(
@@ -944,6 +969,9 @@ public actor LocalLinuxJobScheduler {
         requestID: UInt64,
         jobID: UUID
     ) async -> [LocalLinuxBridgeDiagnosticEvent] {
+        #if os(macOS)
+        return []
+        #else
         var drained: [LocalLinuxBridgeDiagnosticEvent] = []
         while let events = try? await bridge.drainDiagnostics(
             scope: scope,
@@ -954,6 +982,7 @@ public actor LocalLinuxJobScheduler {
             drained.append(contentsOf: events)
         }
         return drained
+        #endif
     }
 
     private func makeJob(
@@ -1024,6 +1053,19 @@ public actor LocalLinuxJobScheduler {
         _ request: LocalLinuxBridgeTerminalRequest,
         requestID: UInt64
     ) async throws {
+        #if os(macOS)
+        var isShellDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: request.executable, isDirectory: &isShellDirectory),
+              !isShellDirectory.boolValue, FileManager.default.isExecutableFile(atPath: request.executable) else {
+            throw LocalLinuxRuntimeError.terminalShellUnavailable(request.executable)
+        }
+        if let directory = request.workingDirectory {
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: directory, isDirectory: &isDirectory), isDirectory.boolValue else {
+                throw LocalLinuxRuntimeError.terminalWorkingDirectoryUnavailable(directory)
+            }
+        }
+        #else
         do {
             let shell = try await bridge.statGuestFile(
                 path: request.executable,
@@ -1056,6 +1098,7 @@ public actor LocalLinuxJobScheduler {
             }
             throw error
         }
+        #endif
     }
 
     /// 公共 CommandSession 接收 execve 风格路径，不替调用方搜索 PATH。
@@ -1066,6 +1109,11 @@ public actor LocalLinuxJobScheduler {
         workingDirectory: String?,
         requestID: UInt64
     ) async -> String {
+        #if os(macOS)
+        let directory = workingDirectory.map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? FileManager.default.homeDirectoryForCurrentUser
+        return (try? MCPMacStdioProcess.resolveExecutable(command, environment: environment, workingDirectory: directory).path) ?? command
+        #else
         for candidate in Self.executableSearchCandidates(
             command: command,
             environment: environment,
@@ -1081,6 +1129,7 @@ public actor LocalLinuxJobScheduler {
             }
         }
         return command
+        #endif
     }
 
     static func executableSearchCandidates(
@@ -1109,6 +1158,7 @@ public actor LocalLinuxJobScheduler {
     /// 用户可以从 shell、终端或文件页主动破坏 RootFS。guest 任务结束后只探测
     /// 启动所必需的系统路径；缺失时停止接纳新任务，但仍保留用户自行重置的自由。
     public func verifyCriticalSystemPathsAfterGuestTask() async {
+        #if !os(macOS)
         let criticalPaths = ["/bin/sh", "/etc", "/lib", "/sbin", "/usr"]
         for path in criticalPaths {
             do {
@@ -1130,6 +1180,7 @@ public actor LocalLinuxJobScheduler {
                 return
             }
         }
+        #endif
     }
 
     private func registerRuntimeCancellationIfNeeded() async {

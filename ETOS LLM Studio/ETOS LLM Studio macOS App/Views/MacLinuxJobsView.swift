@@ -17,7 +17,7 @@ struct MacLinuxJobsView: View {
         List {
             Section {
                 MacSettingsIntroCard(id: "linux-jobs", title: NSLocalizedString("使用说明", comment: ""),
-                    details: NSLocalizedString("Mac Linux 任务使用说明", comment: ""), documentID: "macos-workspace",
+                    details: NSLocalizedString("mac.shell.jobs.help", comment: ""), documentID: "macos-workspace",
                     isActive: isActive && workspace.canManageLocalModels && !runtime.isSuspended && cancellation == nil)
                 LabeledContent(NSLocalizedString("范围", comment: ""), value: sessionID == nil
                     ? NSLocalizedString("全部任务", comment: "") : NSLocalizedString("当前会话", comment: ""))
@@ -88,7 +88,7 @@ struct MacLinuxJobsView: View {
         } message: { target in Text(target.action.confirmation) }
         .guideSettingsPageContext(
             id: GuidePageID(rawValue: "mac-linux-jobs-\(model.lease)-\(runtime.epoch)"), title: NSLocalizedString("任务与终端", comment: ""),
-            documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux"), GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
+            documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
             isActive: active && cancellation == nil,
             settings: [
                 .readOnly("session_id", label: NSLocalizedString("会话", comment: ""), value: { .string(sessionID?.uuidString ?? "") }),

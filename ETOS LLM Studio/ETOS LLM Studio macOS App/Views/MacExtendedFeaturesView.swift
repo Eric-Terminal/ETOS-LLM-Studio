@@ -28,8 +28,8 @@ struct MacExtendedFeaturesView: View {
                     label: { Label(NSLocalizedString("快速指令", comment: ""), systemImage: "command") }
                 NavigationLink { MacLocalModelLibraryView(isActive: available, library: workspace.localModels) }
                     label: { Label(NSLocalizedString("本地模型", comment: ""), systemImage: "cpu") }
-                NavigationLink { MacLinuxView(isActive: available, model: workspace.linux) }
-                    label: { Label(NSLocalizedString("本地 Linux", comment: ""), systemImage: "terminal") }
+                NavigationLink { MacShellView(isActive: available, model: workspace.linux) }
+                    label: { Label(NSLocalizedString("mac.shell.title", value: "Local Shell", comment: ""), systemImage: "terminal") }
             }
             Section(NSLocalizedString("数据管理", comment: "")) {
                 NavigationLink { MacImageGalleryView(isActive: available) }
@@ -71,7 +71,7 @@ struct MacExtendedFeaturesView: View {
                 .readOnly("gallery_requires_navigation", label: NSLocalizedString("图片相册", comment: ""), value: { .bool(true) }),
                 .readOnly("slash_commands_require_navigation", label: NSLocalizedString("快速指令", comment: ""), value: { .bool(true) }),
                 .readOnly("local_models_require_navigation", label: NSLocalizedString("本地模型", comment: ""), value: { .bool(true) }),
-                .readOnly("linux_requires_navigation", label: NSLocalizedString("本地 Linux", comment: ""), value: { .bool(true) }),
+                .readOnly("shell_requires_navigation", label: NSLocalizedString("mac.shell.title", value: "Local Shell", comment: ""), value: { .bool(true) }),
                 .readOnly("backup_requires_navigation", label: NSLocalizedString("快照备份", comment: ""), value: { .bool(true) }),
                 .readOnly("sync_requires_navigation", label: NSLocalizedString("iCloud 漫游同步", comment: ""), value: { .bool(true) }),
                 .readOnly("import_requires_navigation", label: NSLocalizedString("导入数据", comment: ""), value: { .bool(true) }),

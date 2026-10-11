@@ -894,7 +894,11 @@ public enum LocalLinuxRuntimeError: LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .featureDisabled:
+            #if os(macOS)
+            return NSLocalizedString("mac.shell.disabled", value: "Local Shell is not enabled.", comment: "")
+            #else
             return NSLocalizedString("本地 Linux 尚未启用。", comment: "Local Linux feature disabled error")
+            #endif
         case .unsupportedPlatform:
             return NSLocalizedString("当前平台不支持本地 Linux。", comment: "Local Linux unsupported platform error")
         case .seedResourceMissing:
@@ -933,15 +937,23 @@ public enum LocalLinuxRuntimeError: LocalizedError, Equatable {
         case .terminalInputOwned:
             return NSLocalizedString("此终端的输入当前由另一方控制，请先接管输入。", comment: "Linux terminal input ownership error")
         case .terminalShellUnavailable(let path):
+            #if os(macOS)
+            return String(format: NSLocalizedString("mac.shell.missing", value: "Cannot launch shell: %@. Select an installed executable in Shell settings.", comment: ""), path)
+            #else
             return String(
                 format: NSLocalizedString("无法启动终端：Linux 系统中找不到 Shell“%@”。请重置本地 Linux 后重试。", comment: "Linux terminal shell missing error"),
                 path
             )
+            #endif
         case .terminalWorkingDirectoryUnavailable(let path):
+            #if os(macOS)
+            return String(format: NSLocalizedString("mac.shell.directory.missing", value: "The working directory is unavailable: %@.", comment: ""), path)
+            #else
             return String(
                 format: NSLocalizedString("无法启动终端：工作目录“%@”尚不可用。请重试；如果问题持续，请重置本地 Linux。", comment: "Linux terminal working directory missing error"),
                 path
             )
+            #endif
         case .bridgeFailure(let operation, let linuxError):
             return String(
                 format: NSLocalizedString("Linux 操作失败（%@，错误码 %d）。", comment: "Local Linux bridge error"),

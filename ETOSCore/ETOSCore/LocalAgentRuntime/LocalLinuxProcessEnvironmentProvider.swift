@@ -30,6 +30,16 @@ public struct LocalLinuxRedactionResult: Equatable, Sendable {
 public actor LocalLinuxProcessEnvironmentProvider {
     public static let shared = LocalLinuxProcessEnvironmentProvider()
 
+    #if os(macOS)
+    static var baseEnvironment: [String: String] {
+        var values = MCPMacStdioTransport.baseEnvironment
+        values["TERM"] = "xterm-256color"
+        values["COLORTERM"] = "truecolor"
+        values["TERM_PROGRAM"] = LocalLinuxTerminalIdentity.programName
+        values["TERM_PROGRAM_VERSION"] = LocalLinuxTerminalIdentity.programVersion
+        return values
+    }
+    #else
     static let baseEnvironment: [String: String] = [
         "HOME": "/home/etos",
         "USER": "etos",
@@ -44,6 +54,7 @@ public actor LocalLinuxProcessEnvironmentProvider {
         "LC_TERMINAL": LocalLinuxTerminalIdentity.programName,
         "LC_TERMINAL_VERSION": LocalLinuxTerminalIdentity.programVersion
     ]
+    #endif
 
     public func variables() -> [LocalLinuxEnvironmentVariable] {
         Persistence.loadLocalLinuxEnvironmentVariables()

@@ -9,9 +9,15 @@
 import Foundation
 
 enum LocalLinuxToolName: String, CaseIterable {
+    #if os(macOS)
+    case run = "native_run"
+    case shell = "native_shell"
+    case process = "native_process"
+    #else
     case run = "linux_run"
     case shell = "linux_shell"
     case process = "linux_process"
+    #endif
 }
 
 enum LocalLinuxToolDefinitions {
@@ -42,21 +48,18 @@ enum LocalLinuxToolDefinitions {
     private static var run: InternalToolDefinition {
         InternalToolDefinition(
             name: LocalLinuxToolName.run.rawValue,
-            description: NSLocalizedString(
-                "直接执行 Linux 程序并等待完成，返回退出状态、诊断和有界输出；不会自动安装缺失的软件。",
-                comment: "Linux run tool description"
-            ),
+            description: runDescription,
             parameters: .dictionary([
                 "type": .string("object"),
                 "properties": .dictionary([
-                    "executable": stringProperty(NSLocalizedString("Linux 可执行文件路径或 PATH 中的命令名。", comment: "Linux executable argument")),
+                    "executable": stringProperty(executableDescription),
                     "arguments": .dictionary([
                         "type": .string("array"),
                         "items": .dictionary(["type": .string("string")]),
                         "description": .string(NSLocalizedString("不含 executable 的参数数组。", comment: "Linux command arguments"))
                     ]),
                     "environment": stringMapProperty(),
-                    "working_directory": stringProperty(NSLocalizedString("可选 guest 工作目录；默认使用当前会话工作区。", comment: "Linux working directory")),
+                    "working_directory": stringProperty(directoryDescription),
                     "timeout_seconds": numberProperty(NSLocalizedString("可选超时秒数；0 表示不设超时。", comment: "Linux timeout")),
                     "output_limit_bytes": integerProperty(NSLocalizedString("可选原始输出终止阈值；0 表示不设上限。", comment: "Linux output limit"))
                 ]),
@@ -77,7 +80,7 @@ enum LocalLinuxToolDefinitions {
                 "properties": .dictionary([
                     "script": stringProperty(NSLocalizedString("传给 /bin/sh -lc 的脚本文本。", comment: "Linux shell script")),
                     "environment": stringMapProperty(),
-                    "working_directory": stringProperty(NSLocalizedString("可选 guest 工作目录；默认使用当前会话工作区。", comment: "Linux shell working directory")),
+                    "working_directory": stringProperty(directoryDescription),
                     "timeout_seconds": numberProperty(NSLocalizedString("可选超时秒数；0 表示不设超时。", comment: "Linux shell timeout")),
                     "output_limit_bytes": integerProperty(NSLocalizedString("可选原始输出终止阈值；0 表示不设上限。", comment: "Linux shell output limit"))
                 ]),
@@ -89,10 +92,7 @@ enum LocalLinuxToolDefinitions {
     private static var process: InternalToolDefinition {
         InternalToolDefinition(
             name: LocalLinuxToolName.process.rawValue,
-            description: NSLocalizedString(
-                "管理本会话的 Linux 任务和交互式 PTY：列出、启动终端、读取输出、写入、缩放、中断、取消或结束输入。",
-                comment: "Linux process tool description"
-            ),
+            description: processDescription,
             parameters: .dictionary([
                 "type": .string("object"),
                 "properties": .dictionary([
@@ -117,6 +117,35 @@ enum LocalLinuxToolDefinitions {
 
     private static func stringProperty(_ description: String) -> JSONValue {
         .dictionary(["type": .string("string"), "description": .string(description)])
+    }
+
+    private static var runDescription: String {
+        #if os(macOS)
+        NSLocalizedString("mac.shell.tool.run", value: "Run a native macOS program and wait for its exit status and bounded output. Missing software is not installed automatically.", comment: "")
+        #else
+        NSLocalizedString("直接执行 Linux 程序并等待完成，返回退出状态、诊断和有界输出；不会自动安装缺失的软件。", comment: "")
+        #endif
+    }
+    private static var executableDescription: String {
+        #if os(macOS)
+        NSLocalizedString("mac.shell.tool.executable", value: "A macOS executable path or a command in PATH.", comment: "")
+        #else
+        NSLocalizedString("Linux 可执行文件路径或 PATH 中的命令名。", comment: "")
+        #endif
+    }
+    private static var directoryDescription: String {
+        #if os(macOS)
+        NSLocalizedString("mac.shell.tool.directory", value: "Optional absolute macOS working directory; defaults to this conversation's workspace.", comment: "")
+        #else
+        NSLocalizedString("可选 guest 工作目录；默认使用当前会话工作区。", comment: "")
+        #endif
+    }
+    private static var processDescription: String {
+        #if os(macOS)
+        NSLocalizedString("mac.shell.tool.process", value: "Manage this conversation's native macOS tasks and PTYs: list, start, read, write, resize, interrupt, cancel or finish input.", comment: "")
+        #else
+        NSLocalizedString("管理本会话的 Linux 任务和交互式 PTY：列出、启动终端、读取输出、写入、缩放、中断、取消或结束输入。", comment: "")
+        #endif
     }
 
     private static func numberProperty(_ description: String) -> JSONValue {

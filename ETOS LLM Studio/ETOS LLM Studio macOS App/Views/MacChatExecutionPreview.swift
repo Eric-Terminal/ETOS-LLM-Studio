@@ -103,7 +103,7 @@ struct MacChatExecutionPreview: View {
                             }
                         }.formStyle(.grouped)
                             .guideSettingsPageContext(id: "mac-tool-execution-preview", title: mode.displayName,
-                                documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux")], isActive: active,
+                                documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")], isActive: active,
                                 settings: [.readOnly("tool_name", label: NSLocalizedString("工具", comment: ""), value: { .string(tool.toolName) }),
                                            .readOnly("running", label: NSLocalizedString("运行中", comment: ""), value: { .bool(tool.state == .running) })])
                     }

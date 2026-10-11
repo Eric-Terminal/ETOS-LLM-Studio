@@ -105,6 +105,10 @@ public actor LocalLinuxRuntimeController {
             updateSnapshot(phase: .disabled, progress: nil, error: nil)
             return snapshotValue
         }
+        #if os(macOS)
+        updateSnapshot(phase: .ready, progress: nil, error: nil)
+        return snapshotValue
+        #else
         guard iSHAppleBridgeAdapter.isAvailable else {
             updateSnapshot(
                 phase: .failed,
@@ -155,6 +159,7 @@ public actor LocalLinuxRuntimeController {
             updateSnapshot(phase: .failed, progress: nil, error: error.localizedDescription)
         }
         return snapshotValue
+        #endif
     }
 
     public func ensureReady(trigger: LocalLinuxRuntimeTrigger) async throws -> LocalLinuxRuntimeSnapshot {
@@ -179,6 +184,12 @@ public actor LocalLinuxRuntimeController {
         guard AppConfigStore.boolValue(for: .localLinuxEnabled) else {
             throw LocalLinuxRuntimeError.featureDisabled
         }
+        #if os(macOS)
+        _ = try await storage.prepareLayout()
+        runtimeStarted = true
+        updateSnapshot(phase: .ready, progress: nil, error: nil)
+        return snapshotValue
+        #else
         guard snapshotValue.phase != .requiresRelaunch else {
             throw LocalLinuxRuntimeError.requiresRelaunch
         }
@@ -221,6 +232,7 @@ public actor LocalLinuxRuntimeController {
             }
             throw error
         }
+        #endif
     }
 
     public func cancelPreparation() {
@@ -265,6 +277,9 @@ public actor LocalLinuxRuntimeController {
         try await stopRuntimeForMaintenance()
         // 恢复的数据库可能包含其他设备的运行态；下一次读取时重新收敛为已中断。
         didRecoverPersistedJobs = false
+        #if os(macOS)
+        let phase: LocalLinuxRuntimePhase = .ready
+        #else
         let integrity = await storage.systemIntegrity()
         let phase: LocalLinuxRuntimePhase
         switch integrity {
@@ -272,6 +287,7 @@ public actor LocalLinuxRuntimeController {
         case .installed: phase = .installed
         case .damaged: phase = .degraded
         }
+        #endif
         updateSnapshot(phase: AppConfigStore.boolValue(for: .localLinuxEnabled) ? phase : .disabled, progress: nil, error: nil)
     }
 
@@ -341,11 +357,13 @@ public actor LocalLinuxRuntimeController {
         }
         if let cancelActiveWork { await cancelActiveWork() }
 
+        #if !os(macOS)
         let bridgePhase = await bridge.runtimePhase()
         if runtimeStarted || bridgePhase != 0 {
             updateSnapshot(phase: .starting, progress: nil, error: nil)
             try await bridge.stopRuntime()
         }
+        #endif
         await mountManager.runtimeDidStop()
         runtimeStarted = false
         snapshotValue.capabilities = nil

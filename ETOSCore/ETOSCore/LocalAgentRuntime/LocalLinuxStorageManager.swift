@@ -239,6 +239,11 @@ public actor LocalLinuxStorageManager {
 
     /// 直接检查持久化 RootFS，避免用户只是打开设置页时就启动 Linux。
     public func availableTerminalShellPaths() -> [String] {
+        #if os(macOS)
+        let contents = try? String(contentsOfFile: "/etc/shells", encoding: .utf8)
+        return LocalLinuxTerminalShellConfiguration.candidatePaths(shellsFileContents: contents)
+            .filter { fileManager.isExecutableFile(atPath: $0) }
+        #else
         let shellsFileURL = layout.rootFSData
             .appendingPathComponent("etc", isDirectory: true)
             .appendingPathComponent("shells", isDirectory: false)
@@ -257,13 +262,22 @@ public actor LocalLinuxStorageManager {
             return availablePaths
         }
         return [LocalLinuxTerminalShellConfiguration.defaultPath] + availablePaths
+        #endif
+    }
+
+    private func executionWorkspacePath(_ relativePath: String) -> String {
+        #if os(macOS)
+        return layout.root.appendingPathComponent(relativePath, isDirectory: true).path
+        #else
+        return Self.guestWorkspacePath(forHostRelativePath: relativePath)
+        #endif
     }
 
     public func workspace(sessionID: UUID, profileID: UUID? = nil) throws -> LocalAgentWorkspace {
         if var existing = Persistence.loadLocalAgentWorkspaces(sessionID: sessionID).first {
             let directory = layout.root.appendingPathComponent(existing.hostRelativePath, isDirectory: true)
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-            existing.guestPath = Self.guestWorkspacePath(forHostRelativePath: existing.hostRelativePath)
+            existing.guestPath = executionWorkspacePath(existing.hostRelativePath)
             existing.lastUsedAt = Date()
             _ = Persistence.saveLocalAgentWorkspace(existing)
             return existing
@@ -278,7 +292,7 @@ public actor LocalLinuxStorageManager {
             id: id,
             sessionID: sessionID,
             profileID: profileID,
-            guestPath: Self.guestWorkspacePath(forHostRelativePath: relativePath),
+            guestPath: executionWorkspacePath(relativePath),
             hostRelativePath: relativePath
         )
         guard Persistence.saveLocalAgentWorkspace(workspace) else {
@@ -297,7 +311,7 @@ public actor LocalLinuxStorageManager {
         }) {
             let directory = layout.root.appendingPathComponent(existing.hostRelativePath, isDirectory: true)
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-            existing.guestPath = Self.guestWorkspacePath(forHostRelativePath: existing.hostRelativePath)
+            existing.guestPath = executionWorkspacePath(existing.hostRelativePath)
             existing.lastUsedAt = Date()
             guard Persistence.saveLocalAgentWorkspace(existing) else {
                 throw LocalLinuxRuntimeError.runtimeUnavailable(
@@ -314,7 +328,7 @@ public actor LocalLinuxStorageManager {
             id: Self.interactiveUserWorkspaceID,
             sessionID: nil,
             profileID: nil,
-            guestPath: Self.guestWorkspacePath(forHostRelativePath: relativePath),
+            guestPath: executionWorkspacePath(relativePath),
             hostRelativePath: relativePath
         )
         guard Persistence.saveLocalAgentWorkspace(workspace) else {
@@ -333,7 +347,7 @@ public actor LocalLinuxStorageManager {
         }
         let directory = layout.root.appendingPathComponent(workspace.hostRelativePath, isDirectory: true)
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        workspace.guestPath = Self.guestWorkspacePath(forHostRelativePath: workspace.hostRelativePath)
+        workspace.guestPath = executionWorkspacePath(workspace.hostRelativePath)
         workspace.lastUsedAt = Date()
         guard Persistence.saveLocalAgentWorkspace(workspace) else {
             throw LocalLinuxRuntimeError.runtimeUnavailable(
@@ -355,7 +369,7 @@ public actor LocalLinuxStorageManager {
         }) {
             let directory = layout.root.appendingPathComponent(existing.hostRelativePath, isDirectory: true)
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-            existing.guestPath = Self.guestWorkspacePath(forHostRelativePath: existing.hostRelativePath)
+            existing.guestPath = executionWorkspacePath(existing.hostRelativePath)
             existing.lastUsedAt = Date()
             _ = Persistence.saveLocalAgentWorkspace(existing)
             return existing
@@ -370,7 +384,7 @@ public actor LocalLinuxStorageManager {
         let workspace = LocalAgentWorkspace(
             sessionID: nil,
             profileID: serverID,
-            guestPath: Self.guestWorkspacePath(forHostRelativePath: relativePath),
+            guestPath: executionWorkspacePath(relativePath),
             hostRelativePath: relativePath
         )
         guard Persistence.saveLocalAgentWorkspace(workspace) else {
@@ -398,10 +412,15 @@ public actor LocalLinuxStorageManager {
         let resolved = try checkedDescendant(url, of: workspaceURL)
         let relativePath = String(resolved.path.dropFirst(workspaceURL.standardizedFileURL.path.count))
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        #if os(macOS)
+        let workspacePath = layout.root.lastPathComponent + "/" + workspace.hostRelativePath
+        return "app://" + workspacePath + (relativePath.isEmpty ? "" : "/" + relativePath)
+        #else
         let guestPath = relativePath.isEmpty
             ? workspace.guestPath
             : workspace.guestPath + "/" + relativePath
         return "linux://" + guestPath
+        #endif
     }
 
     public func outputURLs(jobID: UUID, workspace: LocalAgentWorkspace) throws -> (raw: URL, model: URL) {
