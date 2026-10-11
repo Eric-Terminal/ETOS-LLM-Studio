@@ -1,5 +1,7 @@
 # macOS 工程接入记录
 
+2026-10-11 界面调整：主窗口改为会话侧栏与聊天内容两栏，新建和搜索位于会话列表上方、设置固定在侧栏底部，文件夹/标签/颜色由筛选菜单和分类管理页进入。聊天顶部保留模型、导出与会话菜单；输入框改为与消息等宽的独立输入区域，工具按钮集中在底部。设置从六个标签改为侧栏，核心分类沿用移动端“模型管理、会话、提示词、输出、背景与视觉、同步与备份”，拓展能力也保留原名称和顺序。新核心配置页与教程同步声明独立向导，八语言文案齐全。参考 [Cherry Studio 的设置导航](https://github.com/CherryHQ/cherry-studio/blob/main/src/renderer/pages/settings/SettingsPage.tsx) 和 [DeepSeek Harness 的会话结构](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/client/ui-conversation/src/client/skeleton/ConversationMainPanel.tsx)，使用本项目原生 SwiftUI 实现。
+
 2026-10-11 启动修正：Mac target 已通过 Xcode 原生工程编辑器添加现有 `SQLCipher` 包产品依赖，确保 App 的 `Contents/Frameworks` 嵌入 SQLCipher.framework。此前只依赖 ETOSCore 会通过链接，但启动时 dyld 因找不到 SQLCipher 退出。修复后 Mac arm64 Debug 增量构建成功，已实际打开并确认“对话”窗口；构建日志为 `/tmp/etos-macos-sqlcipher-build.log`。以下“未启动 App”仅代表此前验证状态，功能测试尚未执行。
 
 2026-10-11 功能对齐复核：按原目标补齐了本轮核对的桌面缺项源码，包含反馈提交/工单动态/评论/关联提交、助手图片相册、隐藏成就记录与 UI 触发入口、流式逐字淡入、关于/更新/公告、官方数据同步预览与确认、应用日志、Agent 工具/用户终端聊天预览、消息思考与工具调用 JSON 编辑、正文图片提取，以及完整/截至某条/选中消息的 PDF/Markdown/TXT/PNG 导出。已有原生 MCP stdin/stdout、数据库共享、Linux、Skills、浏览器、角色扮演、备份同步等接入保持使用。各新页面同步声明向导和八语言文案；敏感正文不进入向导。以下较早的“未接入”“尚需补齐”均是历史记录，不能作为当前缺项重复开工。

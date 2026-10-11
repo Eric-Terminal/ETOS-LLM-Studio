@@ -8434,3 +8434,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "聊天预览位置" = "Ubicación de la vista previa";
 "聊天预览内容" = "Contenido de la vista previa";
 "选择消息" = "Seleccionar mensajes";
+// macOS 核心设置分组说明。
+"mac.settings.conversation.help" = "El nombre automático, el límite del historial y la memoria se aplican a las solicitudes de la conversación. Los cambios se guardan inmediatamente. Abre Compresión del contexto para configurar avisos; iniciar una continuación requiere tu confirmación.";
+"mac.settings.prompts.help" = "El mensaje del sistema da instrucciones a las próximas solicitudes. Los mensajes específicos de la conversación pueden sustituirlo. La opción de hora añade la hora actual al mensaje. Los mensajes de Agent tienen su propio editor. Los cambios se guardan inmediatamente sin enviar mensajes.";
+"mac.settings.output.help" = "La transmisión muestra la respuesta a medida que llega. Temperature y Top P solo se envían cuando sus opciones están activadas; los intervalos admitidos dependen del modelo. Los cambios se guardan inmediatamente y se aplican a las próximas solicitudes.";

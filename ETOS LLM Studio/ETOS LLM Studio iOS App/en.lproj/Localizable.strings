@@ -8357,3 +8357,7 @@
 "聊天预览位置" = "Preview placement";
 "聊天预览内容" = "Preview content";
 "选择消息" = "Select messages";
+// macOS 核心设置分组说明。
+"mac.settings.conversation.help" = "Automatic naming, history limits and memory switches apply to conversation requests. These settings save immediately. Open Context Compression to configure reminders; starting a continuation still requires your confirmation.";
+"mac.settings.prompts.help" = "The system prompt provides instructions for future requests. Conversation-specific prompts can override it. The time switch adds the current time to the prompt. Agent prompts have their own editor. Changes here save immediately and do not send a message.";
+"mac.settings.output.help" = "Streaming displays a reply as it arrives. Temperature and Top P are sent only when their switches are enabled; supported ranges depend on the model. Changes save immediately and apply to future requests.";

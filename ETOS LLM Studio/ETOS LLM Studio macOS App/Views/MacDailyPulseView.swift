@@ -25,6 +25,7 @@ struct MacDailyPulseHost: ViewModifier {
 struct MacDailyPulseView: View {
     private enum Tab: String { case cards, tasks, feedback, signals, settings }
     @ObservedObject var model: MacDailyPulseModel
+    var isEmbeddedInSettings = false
     @EnvironmentObject private var workspace: MacWorkspaceModel
     @ObservedObject private var appLock = AppLockManager.shared
     @State private var tab = Tab.cards
@@ -60,7 +61,9 @@ struct MacDailyPulseView: View {
                         .disabled(!available || !model.canEdit || model.manager?.isDailyPulseEnabled != true)
                 }
                 Button { showsGuide.toggle() } label: { Label(NSLocalizedString("页面向导", comment: ""), systemImage: "sparkles") }
-                Button(NSLocalizedString("完成", comment: "")) { model.showsWindow = false }
+                if !isEmbeddedInSettings {
+                    Button(NSLocalizedString("完成", comment: "")) { model.showsWindow = false }
+                }
             }
             .inspector(isPresented: $showsGuide) { MacGuideView().inspectorColumnWidth(min: 300, ideal: 360, max: 500) }
             .confirmationDialog(NSLocalizedString("确认删除", comment: ""), isPresented: Binding(

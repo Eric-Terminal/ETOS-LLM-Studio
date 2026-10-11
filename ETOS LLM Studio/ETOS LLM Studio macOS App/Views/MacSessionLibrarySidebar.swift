@@ -52,7 +52,6 @@ struct MacSessionLibrarySidebar: View {
                 Button(NSLocalizedString("新建文件夹", comment: "")) { editor = .folder(nil, parentID: nil) }
                 Button(NSLocalizedString("新建标签", comment: "")) { editor = .tag(nil) }
             } label: { Label(NSLocalizedString("添加", comment: ""), systemImage: "plus") }
-            SettingsLink { Label(NSLocalizedString("设置", comment: ""), systemImage: "gearshape") }
         }
         .disabled(model.isWorking || workspace.isRestoringData || workspace.isMutatingHistory)
         .sheet(item: $editor) { editor in

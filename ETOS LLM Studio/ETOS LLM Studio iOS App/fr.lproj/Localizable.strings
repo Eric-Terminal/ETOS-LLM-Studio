@@ -8434,3 +8434,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "聊天预览位置" = "Position de l’aperçu";
 "聊天预览内容" = "Contenu de l’aperçu";
 "选择消息" = "Sélectionner des messages";
+// macOS 核心设置分组说明。
+"mac.settings.conversation.help" = "La dénomination automatique, la limite d’historique et la mémoire s’appliquent aux requêtes de conversation. Les modifications sont enregistrées immédiatement. Ouvrez Compression du contexte pour régler les rappels ; la création d’une suite nécessite votre confirmation.";
+"mac.settings.prompts.help" = "Le prompt système fournit des instructions aux prochaines requêtes. Un prompt propre à la conversation peut le remplacer. L’option d’heure ajoute l’heure actuelle au prompt. Les prompts Agent ont leur propre éditeur. Les modifications sont enregistrées immédiatement sans envoyer de message.";
+"mac.settings.output.help" = "Le streaming affiche la réponse à mesure qu’elle arrive. Temperature et Top P ne sont envoyés que si leurs options sont activées ; les plages acceptées dépendent du modèle. Les modifications sont enregistrées immédiatement pour les prochaines requêtes.";

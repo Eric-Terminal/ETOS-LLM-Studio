@@ -37,7 +37,7 @@ struct MacChatView: View {
         VStack(spacing: 0) {
             MacChatTimeline(isActive: isVisible && workspace.canManageLocalModels, hasMessages: !workspace.messages.isEmpty, sendRevision: sendRevision,
                 onUserInteraction: { sendMotion.cancel() }, viewportHeight: $viewportHeight, viewportBounds: $viewportBounds) {
-                    LazyVStack(alignment: .leading) {
+                    LazyVStack(alignment: .leading, spacing: 24) {
                         MacContinuationHeader(model: workspace.contextCompression)
                         if workspace.messages.isEmpty && workspace.contextCompression.presentation?.context == nil {
                             ContentUnavailableView {
@@ -45,6 +45,8 @@ struct MacChatView: View {
                             } description: {
                                 Text(NSLocalizedString("选择模型后发送消息。", comment: ""))
                             }
+                            // 消息列表左对齐，空白提示需要占满宽度才能以聊天区为中心。
+                            .frame(maxWidth: .infinity, minHeight: max(180, viewportHeight * 0.65))
                         }
                         ForEach(workspace.messages) { row in
                             MacMessageRow(row: row, viewportHeight: viewportHeight)
@@ -104,7 +106,7 @@ struct MacChatView: View {
                         }
                     }
                     .padding()
-                    .frame(maxWidth: 900)
+                    .frame(maxWidth: 820)
                     .frame(maxWidth: .infinity)
             }
             .id(workspace.currentSession?.id)
@@ -114,7 +116,6 @@ struct MacChatView: View {
                     MacChatExecutionPreview(isActive: isVisible && workspace.canManageLocalModels).padding()
                 }
             }
-            Divider()
             if LocalLinuxChatPreviewPlacement.normalized(configuration.localLinuxChatPreviewPlacement) == .aboveInput {
                 MacChatExecutionPreview(isActive: isVisible && workspace.canManageLocalModels).padding(.horizontal)
             }
@@ -131,6 +132,9 @@ struct MacChatView: View {
                 MacQuestionnaireView(model: model)
             } else {
                 composer.modifier(MacComposerAppearance())
+                    .frame(maxWidth: 820)
+                    .padding([.horizontal, .bottom])
+                    .frame(maxWidth: .infinity)
                     .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(MacMessageEntryMotion.coordinateSpace)) } action: { composerBounds = $0 }
             }
         }
@@ -381,7 +385,16 @@ struct MacChatView: View {
                     slashComposer.dismissSuggestions(); return .handled
                 }
                 .font(.body)
-                .frame(minHeight: 60, maxHeight: 140)
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: 64, maxHeight: 140)
+                .overlay(alignment: .topLeading) {
+                    if workspace.draft.isEmpty {
+                        Text(NSLocalizedString("消息", comment: ""))
+                            .foregroundStyle(.tertiary)
+                            .padding(.leading, 5).padding(.top, 1)
+                            .allowsHitTesting(false)
+                    }
+                }
                 .accessibilityLabel(NSLocalizedString("消息", comment: ""))
             HStack {
                 Button {
@@ -390,22 +403,32 @@ struct MacChatView: View {
                     Label(NSLocalizedString("添加附件", comment: ""), systemImage: "paperclip")
                 }
                 .disabled(workspace.isImportingAttachments || !workspace.canManageLocalModels)
+                .help(NSLocalizedString("添加附件", comment: ""))
                 if configuration.enableSpeechInput {
                     Button { openSpeechRecorder() } label: { Label(NSLocalizedString("语音输入", comment: ""), systemImage: "mic") }
                         .disabled(!workspace.canManageLocalModels || workspace.currentSession == nil)
+                        .help(NSLocalizedString("语音输入", comment: ""))
                 }
                 if workspace.isImportingAttachments { ProgressView().controlSize(.small) }
-                Button { showsRequestControls = true } label: {
-                    Label(NSLocalizedString("聊天控制", comment: ""), systemImage: "slider.horizontal.3")
-                }
-                .disabled(workspace.effectiveModelName == nil || !workspace.canEditRequestControls)
-                MacContextCompressionEntry(model: workspace.contextCompression)
+                MacChatQuickActionsView()
+                    .help(NSLocalizedString("聊天快捷功能", comment: ""))
                 Button { showsBrowser = true } label: { Label(NSLocalizedString("浏览器", comment: ""), systemImage: "safari") }
                     .disabled(workspace.currentSession == nil || !workspace.canManageLocalModels || workspace.browser.isSuspended)
-                Button {
-                    if let sessionID = workspace.currentSession?.id { linuxJobsTarget = MacLinuxJobsTarget(sessionID: sessionID) }
-                } label: { Label(NSLocalizedString("任务与终端", comment: ""), systemImage: "list.bullet.rectangle") }
-                    .disabled(workspace.currentSession == nil || !workspace.canManageLocalModels || workspace.linux.isSuspended)
+                    .help(NSLocalizedString("浏览器", comment: ""))
+                Menu {
+                    Button { showsRequestControls = true } label: {
+                        Label(NSLocalizedString("聊天控制", comment: ""), systemImage: "slider.horizontal.3")
+                    }.disabled(workspace.effectiveModelName == nil || !workspace.canEditRequestControls)
+                    MacContextCompressionEntry(model: workspace.contextCompression)
+                    Button {
+                        if let sessionID = workspace.currentSession?.id { linuxJobsTarget = MacLinuxJobsTarget(sessionID: sessionID) }
+                    } label: { Label(NSLocalizedString("任务与终端", comment: ""), systemImage: "list.bullet.rectangle") }
+                        .disabled(workspace.currentSession == nil || !workspace.canManageLocalModels || workspace.linux.isSuspended)
+                } label: {
+                    Label(NSLocalizedString("聊天控制", comment: ""), systemImage: "slider.horizontal.3")
+                }
+                .menuIndicator(.hidden)
+                .help(NSLocalizedString("聊天控制", comment: ""))
                 Spacer()
                 if configuration.enableSlashCommands && workspace.draft.first == "/" {
                     Button(slashComposer.input?.recognized == nil ? NSLocalizedString("发送", comment: "") : NSLocalizedString("执行指令", comment: ""), action: submitComposer)
@@ -423,8 +446,12 @@ struct MacChatView: View {
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.return, modifiers: .command)
                     .disabled(!workspace.canSend)
+                    .help(NSLocalizedString("发送", comment: ""))
                 }
             }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .controlSize(.large)
         }
         .padding()
     }
@@ -498,7 +525,10 @@ private struct MacMessageRow: View {
         .tint(outgoing ? Color.white : Color.accentColor)
         .environment(\.macChatTextPalette, textPalette)
         .padding()
+        .frame(maxWidth: outgoing ? 620 : .infinity, alignment: .leading)
         .background { MacMessageBubbleBackground(outgoing: outgoing, isError: row.message.role == .error, palette: row.palette) }
+        .frame(maxWidth: .infinity, alignment: outgoing ? .trailing : .leading)
+        .textSelection(.enabled)
         .onChange(of: row.content.id) { _, _ in showsFullContent = false }
     }
 }

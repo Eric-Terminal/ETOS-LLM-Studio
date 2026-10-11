@@ -34,14 +34,17 @@ extension EnvironmentValues {
     }
 }
 
-/// 输入区域使用原生玻璃底层；减少透明度时保留系统实色以保证可读性。
+/// 输入框与消息共享阅读宽度；使用独立的系统材质承载输入，避免整条窗口底栏抢占注意力。
 struct MacComposerAppearance: ViewModifier {
     @ObservedObject private var configuration = AppConfigStore.shared
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
         if configuration.enableLiquidGlass && !reduceTransparency {
-            content.background(Color(nsColor: .windowBackgroundColor).opacity(configuration.liquidGlassTintOpacity))
-                .glassEffect(.clear, in: Rectangle())
-        } else { content.background(Color(nsColor: .windowBackgroundColor)) }
+            content.background(Color(nsColor: .controlBackgroundColor).opacity(configuration.liquidGlassTintOpacity), in: shape)
+                .glassEffect(.regular, in: shape)
+        } else {
+            content.background(Color(nsColor: .controlBackgroundColor), in: shape)
+        }
     }
 }
