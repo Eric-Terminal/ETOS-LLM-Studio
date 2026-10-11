@@ -53,6 +53,11 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_etos-debug._tcp</string>
