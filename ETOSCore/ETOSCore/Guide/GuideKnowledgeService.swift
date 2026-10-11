@@ -78,11 +78,37 @@ public enum GuideDocumentCatalog {
         GuideDataImportKnowledge.document(),
         GuideRemoteAccessKnowledge.document(),
         GuideDocument(
+            id: "mac-app-information", title: "Mac 应用信息、更新与日志",
+            keywords: ["Mac", "关于", "公告", "更新", "Commit", "官方数据", "日志", "同步"],
+            content: """
+            Mac 在设置→通用→关于中显示应用版本、Git 提交、开发者、社群、文档、隐私政策和开源协议。检查更新页复用更新服务，可控制自动检查与自动总结、手动刷新、清空本机更新缓存、查看 Commit 的完整说明和链接；AI 摘要会使用当前聊天模型发送请求。公告按 macOS 平台过滤，可查看全文或选择不再显示。通知中的更新、反馈、隐藏记录会打开对应独立页面。
+
+            同步官方数据先准备只读预览，显示下载文件、提供商操作和新增、更新、移除的模型。每项说明是否保留本机凭据、代理和模型启用状态；必须在原生预览中手动确认才会下载和修改数据库。不可用的预览不能确认。向导只能读取数量、状态，不能读取秘密或替用户同步。
+
+            应用日志按日期和本次运行组织；运行详情支持用户/开发者通道、级别、关键词、分类和仅配置变更过滤，单条详情分页展示全文与参数并允许复制。API 请求日志、请求明文消息分别开关；明文开关应按实际排查需求决定。删除日期、运行记录或清空全部日志必须原生确认，删除无法撤销。向导只能获取开关和过滤状态、条数，不能读取日志正文、参数或关键词。各根页、详情、预览与介绍均独立声明上下文。系统保存面板、外部网页不是 App 配置页。
+
+            macOS 使用后台任务读取与准备日志、Markdown 和更新缓存；锁定、恢复和退出停止页面任务，官方同步及缓存持久化在数据恢复前收尾。iOS 的 MetricKit 遥测属于平台专有能力，Mac 不显示没有接入的开关。
+
+            On macOS, About provides update history, announcements, official-data synchronization and local logs. Synchronization requires review and native confirmation of a prepared preview. Log contents, request payloads, credentials and feedback bodies are private to their native pages, never readable by the page guide. Log deletion is irreversible and always requires confirmation.
+            """
+        ),
+        GuideDocument(
+            id: "mac-image-gallery", title: "Mac 会话图片相册",
+            keywords: ["图片", "相册", "导出", "删除", "Mac", "gallery"],
+            content: """
+            Mac 从设置的拓展功能进入图片相册，集中展示当前会话中助手返回并保存到本机的图片。点击缩略图预览，导出通过系统保存面板选择目录并保存原始文件。删除需要原生确认，维护消息中的图片与模型排除标记；图片仍被其他会话引用时保留文件。切换会话后关闭旧预览和确认，生成或恢复期间不能删除。
+
+            根页、预览和介绍各自声明只读向导上下文，只提供图片数量、导出状态和只读标记，不公开图片、提示词、文件路径，也不允许向导删除或导出。系统保存面板不属于 App 配置页。
+
+            On macOS, open Extended Features and Image Gallery to view assistant images from the current conversation. Preview an image or export its original file using the system save panel. Deletion requires native confirmation and preserves files referenced elsewhere. The guide receives only counts and status, never images, prompts or file paths.
+            """
+        ),
+        GuideDocument(
             id: "message-tool-call-editing",
             title: "消息工具调用 JSON 编辑",
             keywords: ["工具调用", "JSON", "编辑消息", "参数", "arguments", "result", "空消息"],
             content: """
-            iOS 与 watchOS 在消息“更多”→“编辑消息”中提供“工具调用 JSON”。助手和工具结果消息可进入此编辑器。正文或思考为空不会阻止保存；助手消息可以从 [] 开始添加调用。点击“添加工具调用”会生成带唯一 id 的草稿，必须填写 toolName 后才能保存；arguments 接受 JSON 对象或包含对象的字符串。result 是字符串，resultDisposition 可选 completed、failed、rejected，providerSpecificFields 保留服务商专有字段。不支持的字段、重复 id、错误类型及无效 JSON 会阻止保存。[] 清空调用，单个工具结果消息只能关联一个调用，多个调用应添加到助手消息。
+            iOS 与 watchOS 在消息“更多”→“编辑消息”中提供“工具调用 JSON”；macOS 从消息右键菜单的“编辑”进入。助手和工具结果消息可进入此编辑器。正文或思考为空不会阻止保存；助手消息可以从 [] 开始添加调用。点击“添加工具调用”会生成带唯一 id 的草稿，必须填写 toolName 后才能保存；arguments 接受 JSON 对象或包含对象的字符串。result 是字符串，resultDisposition 可选 completed、failed、rejected，providerSpecificFields 保留服务商专有字段。不支持的字段、重复 id、错误类型及无效 JSON 会阻止保存。[] 清空调用，单个工具结果消息只能关联一个调用，多个调用应添加到助手消息。
 
             从 JSON 编辑器返回不会保存，只有父消息编辑器的原生“保存”才更新记录，取消会丢弃草稿。编辑或添加调用不会执行工具。保留调用 id 可以维持结果关联；修改助手调用的结果会同步同轮对话、同次回复的结果消息，移除调用会移除其结果，手工填写的新结果会补充到聊天历史。编辑工具结果正文会同步对应助手调用。若消息或会话在保存期间变化，则要求重新打开编辑器，避免覆盖新内容。被编辑的响应不再复用旧 Responses 输出缓存。
 
@@ -111,6 +137,8 @@ public enum GuideDocumentCatalog {
             反馈助手位于设置的拓展功能中。新建反馈填写标题与详细描述，问题反馈还可填写复现步骤、预期与实际行为；提交后在“我的反馈”中查看工单。反馈正文及处理动态中的评论支持 Markdown 标题、列表、加粗、链接和代码块，iOS 与 watchOS 正文完整展开；列表标题和关联 Commit 卡片只作摘要，点击工单或 Commit 可查看详情。
 
             列表顶部的“反馈与处理进度”介绍卡保留简短摘要，点击“进一步了解…”进入独立介绍页阅读教程。介绍页只有只读向导上下文，不读取工单内容或提供提交操作；手表也有页面向导入口。
+
+            Mac 的拓展功能也提供反馈助手，复用相同工单数据库、提交接口、状态、评论和关联提交。工单正文在后台准备后完整展示；本机删除只移除记录，不关闭远端工单。工单、提交详情和介绍均有独立只读向导；点击通知在解锁后进入目标工单。Mac supports the same ticket submission, comments, status and linked commits. Local deletion does not close the remote ticket; the guide cannot read ticket bodies or credentials, or submit feedback.
 
             开发者在提交信息中引用工单编号（例如 #133），GitHub 识别后的关联提交会进入处理动态，即使没有评论也可以提醒。引用代码不代表已发布或问题已解决，实际进度以工单状态和正式版本为准。提醒在 App 启动或用户刷新工单、成功获取新动态后通过本地通知发出，需要允许系统通知；并非 App 关闭后的即时远程推送。相同引用只提醒一次。已关闭工单不参与启动自动刷新，仍可手动刷新。
 

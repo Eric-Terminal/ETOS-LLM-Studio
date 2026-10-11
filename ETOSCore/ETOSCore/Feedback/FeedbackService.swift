@@ -116,13 +116,15 @@ public final class FeedbackService: ObservableObject {
         session: URLSession = NetworkSessionConfiguration.shared,
         config: FeedbackServiceConfig = .default,
         decoder: JSONDecoder = FeedbackDateCodec.makeJSONDecoder(),
-        encoder: JSONEncoder = FeedbackDateCodec.makeJSONEncoder()
+        encoder: JSONEncoder = FeedbackDateCodec.makeJSONEncoder(),
+        initialTickets: [FeedbackTicket]? = nil
     ) {
         self.session = session
         self.config = config
         self.decoder = decoder
         self.encoder = encoder
-        self.tickets = FeedbackStore.loadTickets()
+        // 桌面宿主在后台预载缓存，避免首次进入页面时同步读取数据库。
+        self.tickets = initialTickets ?? FeedbackStore.loadTickets()
 
         notificationObserver = NotificationCenter.default.addObserver(
             forName: .feedbackTicketsUpdated,
@@ -144,6 +146,10 @@ public final class FeedbackService: ObservableObject {
 
     public func reloadTickets() {
         tickets = FeedbackStore.loadTickets()
+    }
+
+    public func reloadTicketsInBackground() async {
+        tickets = await Task.detached(priority: .utility) { FeedbackStore.loadTickets() }.value
     }
 
     public func listTickets() -> [FeedbackTicket] {
@@ -232,7 +238,7 @@ public final class FeedbackService: ObservableObject {
         }
 
         let (data, response) = try await session.securedData(for: request)
-        try validateHTTPResponse(response, data: data)
+        try await validateHTTPResponse(response, data: data)
 
         let submitResponse: SubmitIssueResponse
         do {
@@ -295,7 +301,7 @@ public final class FeedbackService: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         let (data, response) = try await session.securedData(for: request)
-        try validateHTTPResponse(response, data: data)
+        try await validateHTTPResponse(response, data: data)
 
         let statusResponse: IssueStatusResponse
         do {
@@ -351,8 +357,10 @@ public final class FeedbackService: ObservableObject {
         }
 
         let challenge = try await requestChallenge()
-        let payload = SubmitCommentPayload(body: FeedbackTextSanitizer.redact(sanitizedBody))
-        let bodyData = try encoder.encode(payload)
+        let encoder = encoder
+        let bodyData = try await Task.detached(priority: .userInitiated) {
+            try encoder.encode(SubmitCommentPayload(body: FeedbackTextSanitizer.redact(sanitizedBody)))
+        }.value
 
         let commentPath = "\(config.issuesPath)/\(ticket.issueNumber)/comments"
         var request = try buildRequest(
@@ -396,11 +404,14 @@ public final class FeedbackService: ObservableObject {
         }
 
         let (data, response) = try await session.securedData(for: request)
-        try validateHTTPResponse(response, data: data)
+        try await validateHTTPResponse(response, data: data)
 
         let submitResponse: SubmitCommentResponse
         do {
-            submitResponse = try decoder.decode(SubmitCommentResponse.self, from: data)
+            let decoder = decoder
+            submitResponse = try await Task.detached(priority: .userInitiated) {
+                try decoder.decode(SubmitCommentResponse.self, from: data)
+            }.value
         } catch {
             logger.error("解析评论响应失败: \(error.localizedDescription)")
             throw FeedbackServiceError.decodeFailed
@@ -413,8 +424,11 @@ public final class FeedbackService: ObservableObject {
                 updated.moderationBlocked = true
                 updated.moderationMessage = submitResponse.moderationMessage ?? updated.moderationMessage
                 updated.archiveID = submitResponse.archiveID ?? updated.archiveID
-                FeedbackStore.upsertTicket(updated)
-                tickets = FeedbackStore.loadTickets()
+                let blockedTicket = updated
+                tickets = await Task.detached(priority: .utility) {
+                    FeedbackStore.upsertTicket(blockedTicket)
+                    return FeedbackStore.loadTickets()
+                }.value
             }
         }
 
@@ -425,11 +439,13 @@ public final class FeedbackService: ObservableObject {
     }
 
     public func refreshAllTickets() async {
-        await refreshTickets(FeedbackStore.loadTickets())
+        let cached = await Task.detached(priority: .utility) { FeedbackStore.loadTickets() }.value
+        await refreshTickets(cached)
     }
 
     public func refreshTicketsOnLaunch() async {
-        await refreshTickets(Self.ticketsForLaunchRefresh(FeedbackStore.loadTickets()))
+        let cached = await Task.detached(priority: .utility) { Self.ticketsForLaunchRefresh(FeedbackStore.loadTickets()) }.value
+        await refreshTickets(cached)
     }
 
     // MARK: - 私有请求
@@ -440,13 +456,14 @@ public final class FeedbackService: ObservableObject {
 
     private func refreshTickets(_ current: [FeedbackTicket]) async {
         for ticket in current {
+            guard !Task.isCancelled else { break }
             do {
                 _ = try await fetchStatus(ticket: ticket)
             } catch {
                 logger.warning("刷新工单 #\(ticket.issueNumber) 失败: \(error.localizedDescription)")
             }
         }
-        tickets = FeedbackStore.loadTickets()
+        await reloadTicketsInBackground()
     }
 
     private func makeTimelineEvents(
@@ -469,10 +486,13 @@ public final class FeedbackService: ObservableObject {
         request.httpBody = Data("{}".utf8)
 
         let (data, response) = try await session.securedData(for: request)
-        try validateHTTPResponse(response, data: data)
+        try await validateHTTPResponse(response, data: data)
 
         do {
-            return try decoder.decode(ChallengeResponse.self, from: data)
+            let decoder = decoder
+            return try await Task.detached(priority: .userInitiated) {
+                try decoder.decode(ChallengeResponse.self, from: data)
+            }.value
         } catch {
             logger.error("解析 challenge 响应失败: \(error.localizedDescription)")
             throw FeedbackServiceError.decodeFailed
@@ -513,7 +533,7 @@ public final class FeedbackService: ObservableObject {
         return "ETOS LLM Studio/\(snapshot.appVersion) (\(snapshot.platform); \(snapshot.osVersion); \(snapshot.deviceModel))"
     }
 
-    private func validateHTTPResponse(_ response: URLResponse, data: Data) throws {
+    private func validateHTTPResponse(_ response: URLResponse, data: Data) async throws {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw FeedbackServiceError.invalidResponse
         }
@@ -523,7 +543,11 @@ public final class FeedbackService: ObservableObject {
                 throw FeedbackServiceError.signatureRejected
             }
 
-            if let envelope = try? decoder.decode(APIErrorEnvelope.self, from: data),
+            let decoder = decoder
+            let envelope = await Task.detached(priority: .utility) {
+                try? decoder.decode(APIErrorEnvelope.self, from: data)
+            }.value
+            if let envelope,
                !envelope.error.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 throw FeedbackServiceError.serverError(envelope.error)
             }

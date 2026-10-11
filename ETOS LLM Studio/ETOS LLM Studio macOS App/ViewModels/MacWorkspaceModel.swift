@@ -33,7 +33,7 @@ final class MacWorkspaceModel: ObservableObject {
     @Published private(set) var isRestoringData = false
     @Published private(set) var isExportingSnapshot = false
     @Published private var isEditingHistory = false
-    private(set) var isMutatingHistory: Bool {
+    var isMutatingHistory: Bool {
         get { isEditingHistory || contextCompression.isWorking || slashCommands.actions.isWorking }
         set { isEditingHistory = newValue }
     }
@@ -389,6 +389,7 @@ final class MacWorkspaceModel: ObservableObject {
     }
 
     func prepareForTermination() async {
+        await MacAppInformationModel.shared.suspend()
         dailyPulse.suspend(); contextCompression.suspend(); slashCommands.suspend(); connectionSecurity.suspend(); remoteAccess.suspend()
         isClosingRoleplay = true
         externalOpenRevision = UUID()
@@ -666,7 +667,7 @@ final class MacWorkspaceModel: ObservableObject {
         flushToolSupplements()
     }
 
-    private func flushToolSupplements() {
+    func flushToolSupplements() {
         guard !isRestoringData, !isMutatingHistory, !sessionLibrary.isWorking, AppLockManager.shared.state != .locked, let service else { return }
         for sessionID in Array(pendingSupplements.keys) {
             guard !service.runningSessionIDsSubject.value.contains(sessionID), !sendingSessionIDs.contains(sessionID),
@@ -777,13 +778,11 @@ final class MacWorkspaceModel: ObservableObject {
         }
     }
 
-    func updateMessage(_ message: ChatMessage, content: String, sessionID: UUID) async throws {
+    func updateMessage(_ edited: ChatMessage, original: ChatMessage, sessionID: UUID) async throws {
         guard canModifyCurrentHistory, currentSession?.id == sessionID, let service else { throw MessageToolCallEditingError.messageChanged }
         isMutatingHistory = true
         defer { isMutatingHistory = false; flushToolSupplements() }
-        var edited = message
-        edited.content = content
-        try await service.updateEditedMessage(edited, original: message, targetSessionID: sessionID)
+        try await service.updateEditedMessage(edited, original: original, targetSessionID: sessionID)
     }
 
     func deleteMessage(_ target: MacMessageDeletionTarget) {
@@ -897,6 +896,7 @@ final class MacWorkspaceModel: ObservableObject {
         }
         await modelTests.cancelAndWait(); await dataImportOperations.cancelAndWaitForPreviews()
         for sessionID in service.runningSessionIDsSubject.value { await service.cancelRequest(for: sessionID) }
+        await MacAppInformationModel.shared.suspend()
         await dailyPulse.waitForPendingOperations(); await contextCompression.waitForPendingOperations(); await slashCommands.waitForPendingOperations(); await connectionSecurity.waitForPendingOperations(); if !remoteAccessCommand { await remoteAccess.waitForPendingOperations() }
         await localModels.waitForPendingWrites()
         await shortcutTools.waitForPendingWrites()

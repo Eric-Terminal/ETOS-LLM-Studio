@@ -497,6 +497,13 @@ public final class AchievementCenter: ObservableObject {
     public static let shared = AchievementCenter()
 
     public nonisolated static let storageKeyPrefix = "achievementJournal.unlock."
+    public nonisolated static let didChangeNotification = Notification.Name("com.ETOS.achievementJournal.updated")
+
+    /// 供桌面宿主在后台读取同一份记录，不需要在页面构造期间初始化单例。
+    public nonisolated static func journalSnapshot() -> [AchievementJournalEntry] {
+        makeJournalEntries(records: loadUnlockRecords(from: .standard),
+            definitionsByID: Dictionary(uniqueKeysWithValues: AchievementCatalog.definitions.map { ($0.id, $0) }))
+    }
 
     @Published public private(set) var journalEntries: [AchievementJournalEntry]
     @Published public private(set) var hasUnlockedAchievements: Bool
@@ -580,6 +587,7 @@ public final class AchievementCenter: ObservableObject {
         journalEntries = entries
         hasUnlockedAchievements = !entries.isEmpty
         unlockedAchievementIDs = Set(entries.map(\.achievementID))
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: nil)
     }
 
     private func observeDefaultsChanges() {

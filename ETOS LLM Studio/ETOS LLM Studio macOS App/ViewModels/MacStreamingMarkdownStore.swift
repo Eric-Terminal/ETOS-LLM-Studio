@@ -10,6 +10,7 @@ struct MacStreamingMarkdownSnapshot: @unchecked Sendable {
     let blocks: [Block]
     let active: ETStreamingMarkdownActiveBlock?
     let activeText: AttributedString?
+    let reveal: MacStreamingReveal?
 }
 
 /// 每个窗口拥有独立管线，取消、重试和不同窗口的同一消息不会争用活动块。
@@ -18,6 +19,7 @@ actor MacStreamingMarkdownStore {
     private var blocks: [ETStreamingMarkdownBlockID: MacPreparedMessageText] = [:]
     private var advanced = false
     private var revision = UUID()
+    private var reveals: [ETStreamingMarkdownBlockID: MacStreamingReveal] = [:]
 
     func prepare(_ source: String, messageID: UUID, advanced: Bool) async throws -> MacPreparedMessageText {
         let revision = UUID(); self.revision = revision
@@ -33,12 +35,21 @@ actor MacStreamingMarkdownStore {
             retained[block.id] = text
         }
         blocks = retained
+        let reveal = snapshot.activeBlock.map { active -> MacStreamingReveal in
+            if let previous = reveals[active.id], previous.source == active.displayText { return previous }
+            let prepared = MacStreamingReveal(source: active.displayText, previous: reveals[active.id])
+            reveals[active.id] = prepared
+            return prepared
+        }
+        let activeID = snapshot.activeBlock?.id
+        reveals = reveals.filter { $0.key.messageID != messageID || $0.key == activeID }
         return MacPreparedMessageText(source, stream: .init(blocks: items, active: snapshot.activeBlock,
-            activeText: snapshot.activeBlock.map { AttributedString($0.displayText) }))
+            activeText: snapshot.activeBlock.map { AttributedString($0.displayText) }, reveal: reveal))
     }
 
     func retain(_ messageIDs: Set<UUID>) async {
         blocks = blocks.filter { messageIDs.contains($0.key.messageID) }
+        reveals = reveals.filter { messageIDs.contains($0.key.messageID) }
         await pipeline.retain(messageIDs: messageIDs)
     }
 }

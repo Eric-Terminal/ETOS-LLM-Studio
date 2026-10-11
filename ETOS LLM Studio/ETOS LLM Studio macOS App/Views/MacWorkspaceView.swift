@@ -93,6 +93,8 @@ struct MacWorkspaceView: View {
         }
         .networkConnectionApprovalHost(isEnabled: workspace.canManageLocalModels)
         .modifier(MacDailyPulseHost(model: workspace.dailyPulse))
+        .modifier(MacFeedbackNotificationHost())
+        .modifier(MacAppInformationHost())
         .overlay { if appLock.state == .locked { AppLockOverlayView() } }
     }
 

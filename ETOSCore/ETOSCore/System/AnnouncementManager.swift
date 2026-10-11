@@ -485,6 +485,8 @@ public class AnnouncementManager: ObservableObject {
         let currentPlatform = "iOS"
         #elseif os(watchOS)
         let currentPlatform = "watchOS"
+        #elseif os(macOS)
+        let currentPlatform = "macOS"
         #else
         let currentPlatform = "unknown"
         #endif

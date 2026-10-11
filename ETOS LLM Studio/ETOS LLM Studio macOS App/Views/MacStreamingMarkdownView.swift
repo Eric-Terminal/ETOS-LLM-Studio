@@ -16,10 +16,10 @@ struct MacStreamingMarkdownView: View {
             if let active = snapshot.active, let text = snapshot.activeText {
                 Group {
                     switch active.presentation {
-                    case .markdownSource: Text(text)
+                    case .markdownSource: activeText(text)
                     case .code, .mermaidSource:
                         ScrollView(.horizontal) {
-                            Text(text)
+                            activeText(text)
                                 .font(typography.codeName.map { Font.custom($0, size: CGFloat(typography.pointSize)) }
                                       ?? Font.system(size: CGFloat(typography.pointSize), design: .monospaced))
                                 .fixedSize(horizontal: true, vertical: true)
@@ -30,5 +30,10 @@ struct MacStreamingMarkdownView: View {
                 .padding(.top, CGFloat(active.leadingSpacingEm * typography.pointSize))
             }
         }
+    }
+
+    @ViewBuilder private func activeText(_ plain: AttributedString) -> some View {
+        if let prepared = snapshot.reveal { MacStreamingRevealingText(prepared: prepared) }
+        else { Text(plain) }
     }
 }

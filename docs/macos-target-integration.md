@@ -1,5 +1,11 @@
 # macOS 工程接入记录
 
+2026-10-11 功能对齐复核：按原目标补齐了本轮核对的桌面缺项源码，包含反馈提交/工单动态/评论/关联提交、助手图片相册、隐藏成就记录与 UI 触发入口、流式逐字淡入、关于/更新/公告、官方数据同步预览与确认、应用日志、Agent 工具/用户终端聊天预览、消息思考与工具调用 JSON 编辑、正文图片提取，以及完整/截至某条/选中消息的 PDF/Markdown/TXT/PNG 导出。已有原生 MCP stdin/stdout、数据库共享、Linux、Skills、浏览器、角色扮演、备份同步等接入保持使用。各新页面同步声明向导和八语言文案；敏感正文不进入向导。以下较早的“未接入”“尚需补齐”均是历史记录，不能作为当前缺项重复开工。
+
+用户要求所有实现完成后才统一 Mac 编译，禁止测试和 Python 冒烟。中途构建已停止，全部实现与资源收尾后再执行 Mac arm64 Debug 构建，使用 `-jobs 2 CODE_SIGNING_ALLOWED=NO`。最终于 2026-10-11 获得 `BUILD SUCCEEDED`，日志为 `/tmp/etos-macos-parity-final-build-2.log`。修正聊天视图类型推断超时和闭包显式捕获后，最终构建无源码错误；仍有既有 swift-cmark umbrella header 与 AppIntents 元数据跳过提示，前一轮 Core 重编译也记录了既有收据 API 弃用警告。没有运行测试、Python 冒烟或 App；新增反馈展示、图片删除关联和 Unicode 流式淡入的六项用例仅为测试源码。后续获单独授权后再进行 UI、网络、数据库跨端往返和签名运行验收，普通签名构建仍需本机配置 Mac 开发描述文件。
+
+平台差异：Mac 用原生窗口、Settings、文件面板和向导检查器；移动端后台位置/音频保活、桌面图标选择、WatchConnectivity 配对与 iOS MetricKit 不提供无效的桌面开关。Mac 普通后台窗口可继续请求，不能承诺系统睡眠时继续执行。系统文件面板和外部网页不属于 App 向导配置页。
+
 2026-10-11：按用户“只继续 Mac 编译修错，不运行测试”的范围，原生 macOS arm64 Debug 已完成编译和链接，生成 `ETOS LLM Studio macOS App.app`。使用下方 Mac 构建命令，并追加 `-jobs 4 CODE_SIGNING_ALLOWED=NO`、在 destination 指定 `arch=arm64`；未运行测试或启动 App。普通签名构建仍因 `com.ericterminal.els.mac` 缺少 Mac App Development 描述文件失败，本次成功不代表签名或运行验收通过。
 
 本轮修正共享模块显式导入、移动端专用 UI 编译条件、闭包捕获与隔离、跨文件/模块访问级别，以及 Mac 照片选择、语音 JSON、WebKit 调用和工具栏类型构建。llama 与 iSH 的本机 arm64 静态库已生成于现有忽略目录；iSH 只构建生产库并按公共 SDK 合并符号，没有调用含测试的完整九切片门禁。Mac 网络 plist 同步移动端的 ATS 配置。最终增量构建仍提示 cmark-gfm 包缺少 umbrella header、AppIntents 元数据提取被跳过；本轮完整编译还暴露既有 UpdateTimelineManager 的收据 API 弃用警告，未改造其渠道检测逻辑。测试与运行验证等待单独授权，功能完全对齐仍未验证。
@@ -8,7 +14,7 @@
 
 已接入 271 个 Mac Swift 源文件及共享的 iOS 代码高亮文件，链接现有 MarkdownUI 和 ETOSCore，并将 ETOSCore 设为 Embed & Sign；Scheme 启用隐式依赖构建。资源引用复用 iOS 八语言 Localizable/InfoPlist、Assets、隐私清单和全部十项 LocalLinux 资源，没有复制第三份本地化或 seed。Mac 使用 macOS 26.0、Swift 5、nonisolated 默认隔离和独立包标识 `com.ericterminal.els.mac`；为本机 MCP stdio 运行用户安装的程序，当前桌面 target 不启用 App Sandbox。
 
-独立 Info.plist 注册 GGUF、普通附件、快捷指令回调和 Bonjour 服务，并配置已接入功能的权限用途说明；签名声明复用现有 iCloud 容器、App Group 和共享钥匙串。开发者账号中的 Mac 配置及系统权限仍需实际构建、运行验证。当前工作区没有 `Dependencies/llama-build/products/macosx-Debug` 或 `macosx-Release` 产物，原生静态依赖尚待构建；Mac 测试 target 尚待接入。
+独立 Info.plist 注册 GGUF、普通附件、快捷指令回调和 Bonjour 服务，并配置已接入功能的权限用途说明；签名声明复用现有 iCloud 容器、App Group 和共享钥匙串。开发者账号中的 Mac 配置及系统权限仍需实际签名、运行验证。`Dependencies/llama-build/products/macosx-Debug` 已具备本机 arm64 的 llama 和 iSH 生产静态库；其他架构及 Release 未验证。Mac 测试 target 尚待接入，测试未获本次授权。
 
 ## Target 与源码
 

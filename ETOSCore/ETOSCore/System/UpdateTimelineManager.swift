@@ -248,6 +248,23 @@ public final class UpdateTimelineManager: ObservableObject {
     private let encoder: JSONEncoder
     private var startupProbeCompleted = false
     private var refreshTask: Task<Void, Never>?
+    #if os(macOS)
+    private var persistenceTask: Task<Void, Never>?
+
+    public static func makeWithPreparedCache() async -> UpdateTimelineManager {
+        let cached = await Task.detached(priority: .utility) {
+            loadPersistedState(decoder: timelineJSONDecoder())
+        }.value
+        return UpdateTimelineManager(initialState: cached)
+    }
+
+    public func suspendAndFlush() async {
+        refreshTask?.cancel()
+        await refreshTask?.value
+        refreshTask = nil
+        await persistenceTask?.value
+    }
+    #endif
 
     public var autoCheckEnabled: Bool {
         get { AppConfigStore.boolValue(for: .updateTimelineAutoCheckEnabled) }
@@ -276,7 +293,8 @@ public final class UpdateTimelineManager: ObservableObject {
 
     public init(
         session: URLSession = NetworkSessionConfiguration.makeSession(minimumRequestTimeout: 45),
-        feedbackBaseURL: URL = FeedbackServiceConfig.default.baseURL
+        feedbackBaseURL: URL = FeedbackServiceConfig.default.baseURL,
+        initialState: UpdateTimelineState? = nil
     ) {
         self.session = session
         timelineURL = feedbackBaseURL.appendingPathComponent("v1/updates/timeline")
@@ -284,7 +302,7 @@ public final class UpdateTimelineManager: ObservableObject {
         decoder.dateDecodingStrategy = .iso8601
         encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        let loadedState = Self.loadPersistedState(decoder: decoder)
+        let loadedState = initialState ?? Self.loadPersistedState(decoder: decoder)
         state = loadedState
         displayedCommits = loadedState.timelineCommits
         applyStartupProbeIfNeeded()
@@ -345,6 +363,7 @@ public final class UpdateTimelineManager: ObservableObject {
                     appStoreLookup: lookup
                 )
             }.value
+            try Task.checkCancellation()
             var updated = state
             updated.cachedCommits = payload.commits
             updated.latestRemoteSHA = payload.commits.first?.oid
@@ -369,7 +388,10 @@ public final class UpdateTimelineManager: ObservableObject {
             if autoSummaryEnabled {
                 await generateSummaryIfNeeded()
             }
+        } catch is CancellationError {
+            return
         } catch {
+            guard !Task.isCancelled else { return }
             var updated = state
             updated.lastCheckedAt = Date()
             updated.lastErrorMessage = localizedDescription(for: error)
@@ -418,6 +440,7 @@ public final class UpdateTimelineManager: ObservableObject {
                 runnableModel: model,
                 requestSource: .updateTimelineSummary
             )
+            try Task.checkCancellation()
             var updated = state
             updated.summaryKey = summaryKey(for: state)
             updated.summaryText = raw
@@ -425,7 +448,10 @@ public final class UpdateTimelineManager: ObservableObject {
             updated.lastErrorMessage = nil
             state = updated
             persistState()
+        } catch is CancellationError {
+            return
         } catch {
+            guard !Task.isCancelled else { return }
             setError(error)
         }
     }
@@ -745,8 +771,20 @@ public final class UpdateTimelineManager: ObservableObject {
     }
 
     private func persistState() {
+        #if os(macOS)
+        let snapshot = state, preceding = persistenceTask
+        // 桌面缓存写入有序执行；宿主退出与换库会等待最后一次写入。
+        persistenceTask = Task.detached(priority: .utility) {
+            await preceding?.value
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            guard let data = try? encoder.encode(snapshot) else { return }
+            Persistence.writeAppConfig(key: Self.stateKey, data: data)
+        }
+        #else
         guard let data = try? encoder.encode(state) else { return }
         Persistence.writeAppConfig(key: Self.stateKey, data: data)
+        #endif
     }
 
     nonisolated private static func timelineJSONDecoder() -> JSONDecoder {
@@ -759,7 +797,7 @@ public final class UpdateTimelineManager: ObservableObject {
         (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
     }
 
-    private static func loadPersistedState(decoder: JSONDecoder) -> UpdateTimelineState {
+    nonisolated private static func loadPersistedState(decoder: JSONDecoder) -> UpdateTimelineState {
         guard let data = Persistence.readAppConfigData(key: stateKey),
               let decoded = try? decoder.decode(UpdateTimelineState.self, from: data) else {
             return .empty

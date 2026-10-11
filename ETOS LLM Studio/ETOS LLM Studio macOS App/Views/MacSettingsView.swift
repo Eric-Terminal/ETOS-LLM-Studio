@@ -86,6 +86,7 @@ struct MacSettingsView: View {
         }
         .overlay { if appLock.state == .locked { AppLockOverlayView() } }
         .networkConnectionApprovalHost(isEnabled: workspace.canManageLocalModels)
+        .modifier(MacSettingsAchievementTriggers())
         .onChange(of: configuration.appLanguage) { _, language in
             AppLanguageRuntime.apply(rawValue: language)
         }
@@ -117,6 +118,14 @@ private struct MacGeneralSettingsView: View {
                 }
                 NavigationLink(NSLocalizedString("显示设置", comment: "")) { MacDisplaySettingsView(isActive: isActive) }
                 NavigationLink(NSLocalizedString("拓展功能", comment: "")) { MacExtendedFeaturesView(isActive: isActive) }
+                NavigationLink(NSLocalizedString("页面向导与隐私", comment: "")) {
+                    Form { Text(NSLocalizedString("guide.privacy.details", comment: "")).textSelection(.enabled) }
+                        .formStyle(.grouped).navigationTitle(NSLocalizedString("页面向导与隐私", comment: ""))
+                        .guideSettingsPageContext(id: "mac-guide-privacy", title: NSLocalizedString("页面向导与隐私", comment: ""),
+                            documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")], isActive: isActive,
+                            settings: [.readOnly("read_only", label: NSLocalizedString("使用说明", comment: ""), value: { .bool(true) })])
+                }
+                NavigationLink(NSLocalizedString("关于 ETOS LLM Studio", comment: "")) { MacAboutView(isActive: isActive) }
             }
             Section {
                 Toggle(NSLocalizedString("流式输出", comment: ""), isOn: $configuration.enableStreaming)

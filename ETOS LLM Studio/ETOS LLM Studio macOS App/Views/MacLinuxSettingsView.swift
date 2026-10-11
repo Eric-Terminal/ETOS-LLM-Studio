@@ -45,6 +45,14 @@ struct MacLinuxSettingsView: View {
             } footer: {
                 Text(NSLocalizedString("开启后，命令与本地 MCP 输出中出现已启用环境变量的值时，只会在发送给模型前替换；用户终端和原始日志保持不变。关闭后会原样发送。", comment: "")).font(.footnote).foregroundStyle(.secondary)
             }
+            Section(NSLocalizedString("聊天预览", value: "Chat preview", comment: "")) {
+                Picker(NSLocalizedString("聊天预览内容", value: "Preview content", comment: ""), selection: $configuration.localLinuxChatPreviewMode) {
+                    ForEach(LocalLinuxChatPreviewMode.allCases) { Text($0.displayName).tag($0.rawValue) }
+                }
+                Picker(NSLocalizedString("聊天预览位置", value: "Preview placement", comment: ""), selection: $configuration.localLinuxChatPreviewPlacement) {
+                    ForEach(LocalLinuxChatPreviewPlacement.allCases) { Text($0.displayName).tag($0.rawValue) }
+                }
+            }
         }
         .formStyle(.grouped).navigationTitle(NSLocalizedString("配置", comment: ""))
         .disabled(!isActive || !workspace.canManageLocalModels || model.isSuspended || model.isWorking)
@@ -55,6 +63,8 @@ struct MacLinuxSettingsView: View {
             documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux"), GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
             isActive: active && model.canOperate,
             settings: [
+                .string("preview_mode", label: NSLocalizedString("聊天预览内容", value: "Preview content", comment: ""), allowedValues: ["off", "agent_tools", "user_terminal"], get: { configuration.localLinuxChatPreviewMode }, set: { configuration.localLinuxChatPreviewMode = $0 }),
+                .string("preview_placement", label: NSLocalizedString("聊天预览位置", value: "Preview placement", comment: ""), allowedValues: ["floating", "above_input"], get: { configuration.localLinuxChatPreviewPlacement }, set: { configuration.localLinuxChatPreviewPlacement = $0 }),
                 .string("default_shell_path", label: NSLocalizedString("默认终端 Shell", comment: ""), allowedValues: model.shellPaths, allowsEmpty: false, get: { configuration.localLinuxDefaultShellPath }, set: { configuration.localLinuxDefaultShellPath = $0 }),
                 .string("default_session_mode", label: NSLocalizedString("新会话默认模式", comment: ""), allowedValues: [LocalAgentMode.chat.rawValue, LocalAgentMode.agent.rawValue], get: { configuration.localLinuxDefaultSessionMode }, set: { configuration.localLinuxDefaultSessionMode = $0 }),
                 .integer("default_timeout_seconds", label: NSLocalizedString("默认命令超时（秒）", comment: ""), range: 0...4_294_967, get: { timeout.wrappedValue }, set: { timeout.wrappedValue = $0 }),

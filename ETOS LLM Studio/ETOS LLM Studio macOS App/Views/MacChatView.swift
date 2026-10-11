@@ -31,8 +31,9 @@ struct MacChatView: View {
     @State private var showsBrowser = false
     @State private var linuxJobsTarget: MacLinuxJobsTarget?
     @State private var speechSource: MacSpeechInputSource?
+    @State private var transcriptExport: MacTranscriptExportTarget?
 
-    var body: some View {
+    private var conversationContent: some View {
         VStack(spacing: 0) {
             MacChatTimeline(isActive: isVisible && workspace.canManageLocalModels, hasMessages: !workspace.messages.isEmpty, sendRevision: sendRevision,
                 onUserInteraction: { sendMotion.cancel() }, viewportHeight: $viewportHeight, viewportBounds: $viewportBounds) {
@@ -60,6 +61,16 @@ struct MacChatView: View {
                                         if let sessionID = workspace.currentSession?.id { editingMessage = MacMessageEditTarget(message: row.message, sessionID: sessionID) }
                                     }
                                         .disabled(!workspace.canModifyCurrentHistory)
+                                    Button(NSLocalizedString("导出至此消息", comment: "")) {
+                                        if let session = workspace.currentSession { transcriptExport = .init(session: session, upToMessageID: row.id) }
+                                    }
+                                    Button(NSLocalizedString("提取正文图片", value: "Extract inline images", comment: "")) {
+                                        guard let sessionID = workspace.currentSession?.id else { return }
+                                        Task {
+                                            do { try await workspace.extractMarkdownImages(from: row.message, sessionID: sessionID) }
+                                            catch { workspace.errorMessage = error.localizedDescription }
+                                        }
+                                    }.disabled(!workspace.canModifyCurrentHistory)
                                     if row.message.role != .system {
                                         Button(NSLocalizedString("重新生成", comment: "")) { workspace.retryMessage(row.message) }
                                             .disabled(!workspace.canModifyCurrentHistory || workspace.effectiveModelName == nil)
@@ -98,7 +109,15 @@ struct MacChatView: View {
             }
             .id(workspace.currentSession?.id)
             .background { MacChatBackgroundView(model: workspace.backgrounds) }
+            .overlay(alignment: .bottomTrailing) {
+                if LocalLinuxChatPreviewPlacement.normalized(configuration.localLinuxChatPreviewPlacement) == .floating {
+                    MacChatExecutionPreview(isActive: isVisible && workspace.canManageLocalModels).padding()
+                }
+            }
             Divider()
+            if LocalLinuxChatPreviewPlacement.normalized(configuration.localLinuxChatPreviewPlacement) == .aboveInput {
+                MacChatExecutionPreview(isActive: isVisible && workspace.canManageLocalModels).padding(.horizontal)
+            }
             MacTTSPlaybackView(model: workspace.tts, isActive: workspace.canManageLocalModels).padding(.horizontal)
             MacRoleplayScriptHost(runtime: workspace.roleplayRuntime).padding(.horizontal)
             if configuration.localModelPerformanceMonitorEnabled && workspace.selectedModelIsLocal && workspace.canManageLocalModels {
@@ -115,7 +134,12 @@ struct MacChatView: View {
                     .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(MacMessageEntryMotion.coordinateSpace)) } action: { composerBounds = $0 }
             }
         }
+    }
+
+    private var interactiveConversation: some View {
+        conversationContent
         .coordinateSpace(name: MacMessageEntryMotion.coordinateSpace)
+        .modifier(MacSessionAchievementTriggers())
         .onAppear { isVisible = true; workspace.setRoleplayHostVisible(true); refreshSlashCommands() }
         .onDisappear { isVisible = false; sendMotion.cancel(); importing = false; showsBrowser = false; linuxJobsTarget = nil; speechSource = nil; workspace.setRoleplayHostVisible(false); slashComposer.invalidate(); slashDestination = nil; showsSlashModelPicker = false }
         .onChange(of: workspace.currentSession?.id) { _, _ in sendMotion.cancel(); showsBrowser = false; linuxJobsTarget = nil; speechSource = nil; slashComposer.invalidate(); refreshSlashCommands() }
@@ -128,10 +152,7 @@ struct MacChatView: View {
         .onChange(of: configuration.chatSendAnimationEnabled) { _, enabled in if !enabled { sendMotion.cancel() } }
         .onChange(of: workspace.linux.epoch) { _, _ in linuxJobsTarget = nil }
         .onChange(of: workspace.incomingDocuments.contextID) { _, _ in importing = false; importContext = nil }
-        .dropDestination(for: URL.self) { urls, _ in
-            guard isVisible, workspace.canManageLocalModels else { return false }
-            return workspace.receiveDocuments(urls)
-        }
+        .dropDestination(for: URL.self, action: receiveDroppedDocuments)
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             guard isVisible, workspace.canManageLocalModels, importContext == workspace.incomingDocuments.contextID else { return }
             switch result {
@@ -139,15 +160,17 @@ struct MacChatView: View {
             case .failure(let error): workspace.errorMessage = error.localizedDescription
             }
         }
+    }
+
+    var body: some View {
+        interactiveConversation
         .guideSettingsPageContext(
             id: GuidePageID(rawValue: "mac-chat-\(workspace.currentSession?.id.uuidString ?? "none")"),
             title: NSLocalizedString("对话", comment: ""),
             documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace"),
                         GuideDocumentReference(id: "local-models", title: "Local Models"), GuideDocumentReference(id: "tts", title: "Text to Speech"),
                         GuideDocumentReference(id: "slash-commands", title: "Quick Commands")],
-            isActive: isVisible && workspace.canManageLocalModels && !showsSessionAnalytics && !importing && editingMessage == nil
-                && rewritingMessage == nil && deletingMessage == nil && !showsRequestControls && !showsBrowser && linuxJobsTarget == nil && speechSource == nil && !workspace.tts.isExportPanelOpen && !workspace.backgrounds.isPresentingMedia && !workspace.fonts.isImportPanelOpen
-                && workspace.contextCompression.optionsSession == nil && !workspace.contextCompression.showsDetails && slashDestination == nil && !showsSlashModelPicker,
+            isActive: chatGuideActive,
             settings: [
                 .readOnly("attachment_count", label: NSLocalizedString("附件", comment: ""), value: { .int(workspace.attachments.count) }),
                 .readOnly("has_audio_draft", label: NSLocalizedString("语音输入", comment: ""), value: { .bool(workspace.audioAttachment != nil) }),
@@ -159,6 +182,12 @@ struct MacChatView: View {
         )
         .sheet(item: $editingMessage) { target in
             MacMessageEditor(message: target.message, sessionID: target.sessionID)
+        }
+        .sheet(item: $transcriptExport) { MacTranscriptExportView(target: $0) }
+        .toolbar {
+            Button { if let session = workspace.currentSession { transcriptExport = .init(session: session) } } label: {
+                Label(NSLocalizedString("导出对话", comment: ""), systemImage: "square.and.arrow.up")
+            }.disabled(!workspace.canManageLocalModels || workspace.currentSession == nil)
         }
         .sheet(item: $rewritingMessage) { MacMessageRewriteView(target: $0) }
         .sheet(item: $speechSource) { MacSpeechRecorderView(model: workspace.speechInput, source: $0) }
@@ -201,6 +230,20 @@ struct MacChatView: View {
                 .readOnly("operation", label: NSLocalizedString("删除", comment: ""), value: { .string(deletingMessage?.kind.rawValue ?? "") })
             ]
         )
+    }
+
+    private var chatGuideActive: Bool {
+        guard isVisible, workspace.canManageLocalModels, !showsSessionAnalytics, !importing,
+              editingMessage == nil, transcriptExport == nil, rewritingMessage == nil,
+              deletingMessage == nil, !showsRequestControls, !showsBrowser,
+              linuxJobsTarget == nil, speechSource == nil, slashDestination == nil, !showsSlashModelPicker else { return false }
+        return !workspace.tts.isExportPanelOpen && !workspace.backgrounds.isPresentingMedia && !workspace.fonts.isImportPanelOpen
+            && workspace.contextCompression.optionsSession == nil && !workspace.contextCompression.showsDetails
+    }
+
+    private func receiveDroppedDocuments(_ urls: [URL], _ location: CGPoint) -> Bool {
+        guard isVisible, workspace.canManageLocalModels else { return false }
+        return workspace.receiveDocuments(urls)
     }
 
     private func openSpeechRecorder() {
@@ -460,14 +503,15 @@ private struct MacMessageRow: View {
     }
 }
 
-private struct MacAttachmentImage: View {
+struct MacAttachmentImage: View {
     let url: URL
+    var maximumHeight: CGFloat = 320
     @State private var image: NSImage?
     @State private var didFinishLoading = false
     var body: some View {
         Group {
             if let image {
-                Image(nsImage: image).resizable().scaledToFit().frame(maxHeight: 320)
+                Image(nsImage: image).resizable().scaledToFit().frame(maxHeight: maximumHeight)
             } else if didFinishLoading {
                 Label(NSLocalizedString("无法加载图片", comment: ""), systemImage: "photo.badge.exclamationmark")
                     .font(.caption).foregroundStyle(.secondary)
@@ -477,7 +521,7 @@ private struct MacAttachmentImage: View {
             didFinishLoading = false
             image = nil
             let result = await DisplayImageLoader.shared.image(
-                at: url, target: DisplayImageTarget(size: CGSize(width: 600, height: 320), scale: 2, fillsBounds: false)
+                at: url, target: DisplayImageTarget(size: CGSize(width: 600, height: maximumHeight), scale: 2, fillsBounds: false)
             )
             guard !Task.isCancelled else { return }
             image = result?.image
@@ -492,6 +536,10 @@ private struct MacMessageEditor: View {
     let message: ChatMessage
     let sessionID: UUID
     @State private var content: String
+    @State private var reasoning: String
+    @State private var toolJSON = "[]"
+    @State private var isPrepared = false
+    @State private var showsTools = false
     @State private var isSaving = false
     @State private var error: String?
 
@@ -499,42 +547,78 @@ private struct MacMessageEditor: View {
         self.message = message
         self.sessionID = sessionID
         _content = State(initialValue: message.content)
+        _reasoning = State(initialValue: message.reasoningContent ?? "")
     }
 
     var body: some View {
-        VStack {
+        NavigationStack {
+          VStack {
             Text(NSLocalizedString("编辑消息", comment: "")).font(.headline)
             TextEditor(text: $content).font(.body)
+            if message.role == .assistant {
+                DisclosureGroup(NSLocalizedString("思考过程", comment: "")) {
+                    TextEditor(text: $reasoning).font(.body).frame(minHeight: 120)
+                }
+            }
+            if message.role == .assistant || message.role == .tool {
+                Button(NSLocalizedString("工具调用 JSON", comment: "")) { showsTools = true }
+                    .disabled(!isPrepared)
+            }
             if let error { Text(error).font(.footnote).foregroundStyle(.red) }
             HStack {
                 Button(NSLocalizedString("取消", comment: ""), role: .cancel) { dismiss() }
                 Spacer()
                 Button(NSLocalizedString("保存", comment: "")) {
                     isSaving = true
+                    let text = content, reasoning = reasoning, json = toolJSON
                     Task {
                         defer { isSaving = false }
-                        do { try await workspace.updateMessage(message, content: content, sessionID: sessionID); dismiss() }
+                        do {
+                            let edited = try await Task.detached(priority: .userInitiated) {
+                                var edited = message
+                                edited.content = text
+                                edited.reasoningContent = reasoning.isEmpty ? nil : reasoning
+                                if message.role == .assistant || message.role == .tool {
+                                    let calls = try MessageToolCallEditingSupport.parse(json)
+                                    edited.toolCalls = calls.isEmpty ? nil : calls
+                                }
+                                return edited
+                            }.value
+                            try await workspace.updateMessage(edited, original: message, sessionID: sessionID); dismiss()
+                        }
                         catch { self.error = error.localizedDescription }
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(isSaving)
+                .disabled(isSaving || !isPrepared)
             }
         }
         .padding()
-        .disabled(isSaving || workspace.isRestoringData)
+        .disabled(isSaving || !workspace.canModifyCurrentHistory || workspace.currentSession?.id != sessionID)
+        .navigationDestination(isPresented: $showsTools) { MessageToolCallsEditor(json: $toolJSON) }
+        .task {
+            guard !isPrepared else { return }
+            do {
+                let json = try await Task.detached(priority: .utility) { try MessageToolCallEditingSupport.editableJSON(message.toolCalls) }.value
+                if !Task.isCancelled { toolJSON = json; isPrepared = true }
+            } catch { self.error = error.localizedDescription }
+        }
         .guidePageContext(
             descriptor: GuidePageDescriptor(
                 id: GuidePageID(rawValue: "mac-message-editor-\(sessionID)-\(message.id)"),
                 title: NSLocalizedString("编辑消息", comment: ""),
-                documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")]
+                documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace"),
+                            GuideDocumentReference(id: "message-tool-call-editing", title: NSLocalizedString("工具调用 JSON", comment: ""))]
             ),
+            isActive: !showsTools && workspace.canModifyCurrentHistory && workspace.currentSession?.id == sessionID,
             snapshot: { GuidePageSnapshot(fields: [
                 "content": GuideSnapshotField(label: NSLocalizedString("消息", comment: ""), value: .string(GuideSnapshotField.hiddenValue), access: .writeOnly),
+                "reasoning": GuideSnapshotField(label: NSLocalizedString("思考过程", comment: ""), value: .string(GuideSnapshotField.hiddenValue), access: .writeOnly),
                 "editing_mode": GuideSnapshotField(label: NSLocalizedString("编辑方式", comment: ""), value: .string("manual_draft_until_save"), access: .readOnly),
                 "saving": GuideSnapshotField(label: NSLocalizedString("保存中", comment: ""), value: .bool(isSaving), access: .readOnly)
             ]) }
         )
+          }
         .modifier(MacGuideInspector())
         .interactiveDismissDisabled(isSaving)
         .frame(minWidth: 500, minHeight: 350)
