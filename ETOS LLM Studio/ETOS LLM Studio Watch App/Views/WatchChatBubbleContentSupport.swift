@@ -36,6 +36,7 @@ extension ChatBubble {
         if messageState.isUserContentTruncated {
             VStack(alignment: .leading) {
                 Text(content)
+                    .etFont(.body, sampleText: content)
                 if let onOpenFullContent, !isSelectionMode {
                     Button {
                         // 预览只用于气泡，全文页始终读取未截断的原始消息。

@@ -9,6 +9,7 @@ public actor ETFontResolver {
     public static let shared = ETFontResolver()
     private var revision = ""
     private var cache: [Request: Font] = [:]
+    private var cacheOrder: [Request] = []
 
     struct Request: Hashable {
         let descriptor: ETFont
@@ -26,19 +27,25 @@ public actor ETFontResolver {
         if revision != currentRevision {
             revision = currentRevision
             cache.removeAll(keepingCapacity: true)
+            cacheOrder.removeAll(keepingCapacity: true)
         }
-        let request = Request(descriptor: descriptor, sample: sampleText.map(Self.sample), sizeCategory: sizeCategory, scaledBasePointSize: scaledBasePointSize)
+        let sample = FontLibrary.fallbackScope == .character ? nil : sampleText.map(Self.sample)
+        let request = Request(descriptor: descriptor, sample: sample, sizeCategory: sizeCategory, scaledBasePointSize: scaledBasePointSize)
         if let cached = cache[request] { return cached }
         let font = resolve(request)
-        if cache.count >= 512 { cache.removeAll(keepingCapacity: true) }
+        if cacheOrder.count >= 512 {
+            cache.removeValue(forKey: cacheOrder.removeFirst())
+        }
         cache[request] = font
+        cacheOrder.append(request)
         return font
     }
 
     func font(for request: ETFontPreparationRequest) -> Font? {
         guard let descriptor = request.descriptor else { return nil }
         var sampleText = request.sampleText
-        if sampleText == nil, let text = request.text, FontLibrary.isCustomFontEnabled {
+        if sampleText == nil, let text = request.text, FontLibrary.isCustomFontEnabled,
+           FontLibrary.fallbackScope == .segment {
             var environment = EnvironmentValues()
             environment.locale = request.locale
             environment.calendar = request.calendar

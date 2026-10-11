@@ -12,6 +12,7 @@ struct ETFontPreparationRequest: Equatable, Sendable {
     let sizeCategory: ContentSizeCategory
     let revision: String
     var scaledBasePointSize: CGFloat? = nil
+    var textFontSnapshot: ETTextFontSnapshot? = nil
 }
 
 @MainActor
@@ -26,9 +27,17 @@ final class ETPreparedFontState: ObservableObject, ETExportFontPreparing {
     var request: ETFontPreparationRequest?
     private var preparedRequest: ETFontPreparationRequest?
 
-    var needsPreparation: Bool { request != preparedRequest }
+    var needsPreparation: Bool { request != preparedRequest && snapshotFont == nil }
+
+    private var snapshotFont: Font? {
+        guard let request, let descriptor = request.descriptor,
+              let snapshot = request.textFontSnapshot,
+              snapshot.revision == request.revision else { return nil }
+        return snapshot.font(for: descriptor)
+    }
 
     var displayFont: Font? {
+        if let snapshotFont { return snapshotFont }
         // 配置或字号变化后不能短暂借用旧字体；文字变化仍保留已准备的语义字体。
         guard preparedRequest?.descriptor == request?.descriptor,
               preparedRequest?.revision == request?.revision,
@@ -41,12 +50,14 @@ final class ETPreparedFontState: ObservableObject, ETExportFontPreparing {
 
     @discardableResult
     func prepare() async throws -> Bool {
-        guard let request, request != preparedRequest else { return false }
+        guard needsPreparation, let request else { return false }
         let resolved = await ETFontResolver.shared.font(for: request)
         try Task.checkCancellation()
         guard self.request == request else { return false }
+        let needsDisplayUpdate = displayFont != resolved
         preparedRequest = request
-        font = resolved
+        // 版本变化时当前显示的可能是初始字体；即使结果与旧缓存相同，也必须通知视图切回来。
+        if font != resolved || needsDisplayUpdate { font = resolved }
         return true
     }
 }
@@ -85,6 +96,7 @@ private struct PreparedETFont: @preconcurrency DynamicProperty {
     @Environment(\.timeZone) private var timeZone
     @Environment(\.sizeCategory) private var sizeCategory
     @Environment(\.etFontExportPreparation) private var exportPreparation
+    @Environment(\.etTextFontSnapshot) private var textFontSnapshot
     @StateObject private var state = ETPreparedFontState()
     @ScaledMetric private var scaledBasePointSize: CGFloat
     let descriptor: ETFont?
@@ -102,6 +114,10 @@ private struct PreparedETFont: @preconcurrency DynamicProperty {
     var isExporting: Bool { exportPreparation != nil }
 
     mutating func update() {
+        let revision = FontLibrary.adapterCacheToken()
+        let snapshot = sampleText.flatMap { sample in
+            textFontSnapshot.flatMap { $0.matches(sampleText: sample, revision: revision) ? $0 : nil }
+        }
         state.request = ETFontPreparationRequest(
             descriptor: descriptor,
             sampleText: sampleText,
@@ -110,8 +126,9 @@ private struct PreparedETFont: @preconcurrency DynamicProperty {
             calendar: calendar,
             timeZone: timeZone,
             sizeCategory: sizeCategory,
-            revision: FontLibrary.adapterCacheToken(),
-            scaledBasePointSize: scaledBasePointSize
+            revision: revision,
+            scaledBasePointSize: scaledBasePointSize,
+            textFontSnapshot: snapshot
         )
         // 登记在属性更新阶段完成；body 不解析文字、不查询字形，也不创建 CoreText 字体。
         exportPreparation?.register(state)

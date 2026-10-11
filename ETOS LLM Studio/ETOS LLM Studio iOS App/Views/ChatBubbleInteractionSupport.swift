@@ -92,7 +92,7 @@ extension ChatBubble {
                 audioPlayerView(fileName: audioFileName)
             } else {
                 renderContent(message.content)
-                    .etFont(.body)
+                    .etFont(.body, sampleText: message.content)
                     .foregroundStyle(textForegroundColor)
                     .textSelection(.enabled)
             }

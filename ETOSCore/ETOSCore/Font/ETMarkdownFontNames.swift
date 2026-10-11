@@ -30,6 +30,7 @@ public struct ETMarkdownFontNames: Equatable, Sendable {
 struct ETMarkdownFontRequest: Equatable, Sendable {
     let sampleText: String
     let revision: String
+    var textFontSnapshot: ETTextFontSnapshot? = nil
 }
 
 @MainActor
@@ -38,13 +39,20 @@ final class ETPreparedMarkdownFontState: ObservableObject, ETExportFontPreparing
     private var preparedRequest: ETMarkdownFontRequest?
     @Published private var names: ETMarkdownFontNames?
 
-    var needsPreparation: Bool { request != preparedRequest }
+    var needsPreparation: Bool { request != preparedRequest && snapshotNames == nil }
+    private var snapshotNames: ETMarkdownFontNames? {
+        guard let request, let snapshot = request.textFontSnapshot,
+              snapshot.revision == request.revision else { return nil }
+        return snapshot.names
+    }
     var displayNames: ETMarkdownFontNames {
-        preparedRequest == request ? names ?? .current : .current
+        if let snapshotNames { return snapshotNames }
+        // 同一配置下文字变化时沿用上一份结果，不退回首选字体再切回来。
+        return preparedRequest?.revision == request?.revision ? names ?? .current : .current
     }
 
     func prepare() async throws -> Bool {
-        guard let request, request != preparedRequest else { return false }
+        guard needsPreparation, let request else { return false }
         let task = Task.detached(priority: .userInitiated) {
             ETMarkdownFontNames.resolve(sampleText: request.sampleText)
         }
@@ -55,8 +63,9 @@ final class ETPreparedMarkdownFontState: ObservableObject, ETExportFontPreparing
         }
         try Task.checkCancellation()
         guard self.request == request else { return false }
+        let needsDisplayUpdate = displayNames != resolved
         preparedRequest = request
-        names = resolved
+        if names != resolved || needsDisplayUpdate { names = resolved }
         return true
     }
 }
@@ -64,6 +73,7 @@ final class ETPreparedMarkdownFontState: ObservableObject, ETExportFontPreparing
 @MainActor
 private struct PreparedMarkdownFonts: @preconcurrency DynamicProperty {
     @Environment(\.etFontExportPreparation) private var exportPreparation
+    @Environment(\.etTextFontSnapshot) private var textFontSnapshot
     @StateObject private var state = ETPreparedMarkdownFontState()
     let sampleText: String
 
@@ -75,7 +85,12 @@ private struct PreparedMarkdownFonts: @preconcurrency DynamicProperty {
     var isExporting: Bool { exportPreparation != nil }
 
     mutating func update() {
-        state.request = ETMarkdownFontRequest(sampleText: sampleText, revision: FontLibrary.adapterCacheToken())
+        let revision = FontLibrary.adapterCacheToken()
+        state.request = ETMarkdownFontRequest(
+            sampleText: sampleText,
+            revision: revision,
+            textFontSnapshot: textFontSnapshot.flatMap { $0.matches(sampleText: sampleText, revision: revision) ? $0 : nil }
+        )
         exportPreparation?.register(state)
     }
 }

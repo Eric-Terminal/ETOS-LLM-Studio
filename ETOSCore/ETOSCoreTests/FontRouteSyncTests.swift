@@ -864,7 +864,7 @@ struct FontRouteSyncTests {
         #expect(decoded.isEnabled == true)
     }
 
-    private func withIsolatedFontStore(_ body: () async throws -> Void) async throws {
+    func withIsolatedFontStore(_ body: () async throws -> Void) async throws {
         let fileManager = FileManager.default
         let fontDirectory = Persistence.getFontDirectory()
         let backupRoot = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
