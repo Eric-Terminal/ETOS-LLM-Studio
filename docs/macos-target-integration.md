@@ -31,6 +31,7 @@
 
 ## 资源与签名
 
+- Mac 与 iOS 共用 iOS 目录的 `Assets.xcassets/AppIcon.appiconset`。该图标集同时声明 iOS 1024 像素原图及 macOS 16、32、128、256、512 点的 1x/2x 图标；Mac 小尺寸 PNG 由同一原图缩放，1024 像素直接复用原图。更换品牌图标时同步更新这些尺寸及 watchOS 图标，不另建同名 Mac 图标集。2026-10-11 已通过 Mac 增量构建，确认产物包含 `AppIcon.icns` 和 `CFBundleIconFile = AppIcon`。
 - Mac target 共享 iOS 目录下八种 `*.lproj/Localizable.strings`，保持 `en` 为开发语言。不复制第三份本地化表；本次新增文案已同步到 iOS/watchOS 资源。
 - 共享已有图片和 LocalLinux 许可证资源；默认配置继续由 Core 提供，向导源码包沿用 `GuideSourcePackStore` 按 commit 懒下载，不要求额外内置源码归档。不直接复制移动端 Info.plist、扩展、Watch App 或移动端 entitlements。
 - Mac target 复用 iOS `Resources/LocalLinux` 整个资源目录，包括原 AArch64 seed/metadata、迁移清单及全部合规文件。可保留 `LocalLinux` 文件夹引用；Core 也支持 bundle 顶层查找。不要只添加压缩包，或为 Intel Mac 换成宿主 x86_64 RootFS：两种宿主都通过 iSH 运行同一 AArch64 guest。无需维护第三份 seed。发布 ELS 前必须先推送对应 iSH 提交，目前新增 iSH 提交仍只在本地。
