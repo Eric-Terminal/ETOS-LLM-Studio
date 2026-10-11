@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import ETOSCore
 @preconcurrency import PhotosUI
+import SwiftUI
 import UniformTypeIdentifiers
 
 @MainActor

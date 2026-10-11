@@ -132,7 +132,7 @@ private struct MacSlashCommandEditor: View {
                         guard available, let replacement = draft.replacement else { return }
                         Task {
                             do { try await model.replace(replacement, original: draft.target.original, expectedEpoch: draft.target.epoch); dismiss() }
-                            catch { error = error.localizedDescription }
+                            catch { self.error = error.localizedDescription }
                         }
                     }.disabled(!available || draft.replacement == nil || draft.isValidating)
                 }
@@ -173,7 +173,7 @@ private struct MacSlashCommandDeletionView: View {
                         guard available, let command = target.command else { return }
                         Task {
                             do { try await model.delete(command, original: target.original, expectedEpoch: target.epoch); dismiss() }
-                            catch { error = error.localizedDescription }
+                            catch { self.error = error.localizedDescription }
                         }
                     }.disabled(!available)
                 }

@@ -26,7 +26,7 @@ struct MacRemoteAccessView: View {
             }
             if !model.connectionRequested {
                 Section(NSLocalizedString("连接配置", comment: "")) {
-                    Toggle(NSLocalizedString("HTTP 轮询", comment: ""), isOn: Binding(get: { model.useHTTP }, set: model.setHTTP))
+                    Toggle(NSLocalizedString("HTTP 轮询", comment: ""), isOn: Binding(get: { model.useHTTP }, set: { model.setHTTP($0) }))
                     TextField(NSLocalizedString("服务器地址", comment: ""), text: $model.address).autocorrectionDisabled()
                     Button(NSLocalizedString("连接", comment: ""), action: model.connect).disabled(!model.canConnect)
                 }.disabled(!model.canEdit)

@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import SwiftUI
 
 /// 预览在后台准备，列表滚动和跑马灯布局不重复扫描提示词正文。
@@ -35,3 +36,4 @@ public struct GlobalSystemPromptSelectionLabel: View {
         }
     }
 }
+#endif

@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 /// 网页持有生成时的消息索引和角色来源；追加消息不改变旧索引，编辑、删除和改绑会使它失效。
 public struct RoleplayBridgeSourceSnapshot: Sendable {

@@ -36,8 +36,8 @@ final class MacTTSModel: ObservableObject {
     private let saveSnapshot: @Sendable (TTSConfigurationSnapshot, TTSConfigurationSnapshot) async throws -> TTSConfigurationSnapshot
     private let loadVoices: @Sendable () -> [MacTTSVoiceRow]
 
-    init(loadSnapshot: @escaping @Sendable () async throws -> TTSConfigurationSnapshot = { try await TTSConfigurationLibrary.shared.snapshot() },
-         saveSnapshot: @escaping @Sendable (TTSConfigurationSnapshot, TTSConfigurationSnapshot) async throws -> TTSConfigurationSnapshot = { try await TTSConfigurationLibrary.shared.save($0, replacing: $1) },
+    init(loadSnapshot: @escaping @Sendable () async throws -> TTSConfigurationSnapshot = { try TTSConfigurationLibrary.shared.snapshot() },
+         saveSnapshot: @escaping @Sendable (TTSConfigurationSnapshot, TTSConfigurationSnapshot) async throws -> TTSConfigurationSnapshot = { try TTSConfigurationLibrary.shared.save($0, replacing: $1) },
          loadVoices: @escaping @Sendable () -> [MacTTSVoiceRow] = { MacTTSPresentation.voices() }) {
         self.loadSnapshot = loadSnapshot; self.saveSnapshot = saveSnapshot; self.loadVoices = loadVoices
     }

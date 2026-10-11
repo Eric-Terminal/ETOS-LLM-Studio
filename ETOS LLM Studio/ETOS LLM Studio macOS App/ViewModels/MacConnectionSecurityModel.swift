@@ -62,7 +62,7 @@ final class MacConnectionSecurityModel: ObservableObject {
     init(
         observeChanges: Bool = true,
         read: @escaping @Sendable () async -> MacConnectionSecurityPresentation = {
-            MacConnectionSecurityPresentation(state: await NetworkConnectionSecurity.shared.snapshot())
+            MacConnectionSecurityPresentation(state: NetworkConnectionSecurity.shared.snapshot())
         },
         update: @escaping @Sendable (MacConnectionSecurityMutation) async throws -> Void = { try await $0.apply() }
     ) {

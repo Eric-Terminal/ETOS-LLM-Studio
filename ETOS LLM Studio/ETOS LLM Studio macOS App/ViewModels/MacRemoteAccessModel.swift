@@ -60,7 +60,7 @@ final class MacRemoteAccessModel: ObservableObject {
     private var hasAddress = false
     private var subscriptions: Set<AnyCancellable> = []
 
-    init(server: LocalDebugServer = LocalDebugServer(), discovery: LocalDebugServerDiscovery = LocalDebugServerDiscovery(),
+    init(server: LocalDebugServer? = nil, discovery: LocalDebugServerDiscovery? = nil,
          readAddress: @escaping @Sendable () -> String = { AppConfigStore.textValue(for: .localDebugLastServerAddress) },
          saveAddress: @escaping @Sendable (String) throws -> Void = { value in
              AppConfigStore.persistSynchronously(.text(value), for: .localDebugLastServerAddress, quickSync: false)
@@ -69,6 +69,8 @@ final class MacRemoteAccessModel: ObservableObject {
              }
          },
          connectServer: @escaping @MainActor (LocalDebugServer, String) -> Void = { $0.connect(to: $1) }) {
+        let server = server ?? LocalDebugServer()
+        let discovery = discovery ?? LocalDebugServerDiscovery()
         self.server = server; self.discovery = discovery
         self.readAddress = readAddress; self.saveAddress = saveAddress; self.connectServer = connectServer
         server.objectWillChange.receive(on: DispatchQueue.main).sink { [weak self] _ in

@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 public extension DailyPulseManager {
     /// 桌面归档先在后台创建会话，已接受的归档须等到关联卡片也落库后才能恢复数据库或退出。

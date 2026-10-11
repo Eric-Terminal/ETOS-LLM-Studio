@@ -20,7 +20,9 @@ public struct ModelPricingTimeTextField: View {
                 .foregroundStyle(.secondary)
             TextField(title, text: $draft)
                 .monospacedDigit()
+                #if !os(macOS)
                 .textInputAutocapitalization(.never)
+                #endif
                 .autocorrectionDisabled()
                 .accessibilityLabel(title)
                 #if os(iOS)

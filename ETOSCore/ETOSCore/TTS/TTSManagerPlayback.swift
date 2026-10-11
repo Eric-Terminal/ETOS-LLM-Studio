@@ -367,7 +367,7 @@ extension TTSManager {
 }
 #endif
 
-private extension Float {
+extension Float {
     func ttsClamped(to range: ClosedRange<Float>) -> Float {
         min(max(self, range.lowerBound), range.upperBound)
     }

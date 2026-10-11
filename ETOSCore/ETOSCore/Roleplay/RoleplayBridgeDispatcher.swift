@@ -71,7 +71,9 @@ public enum RoleplayBridgeDispatcher {
         // 生成会等待网页返回宏和提示词；这些响应不能排在生成后面，否则形成互相等待。
         if let action = payload["action"] as? String,
            ["generate_text", "macro_expansion_response", "prompt_mutation_response"].contains(action) {
-            return Task.detached(priority: .utility, operation: operation)
+            return Task.detached(priority: .utility) {
+                await operation()
+            }
         }
         return mutationQueue.enqueue(operation)
     }

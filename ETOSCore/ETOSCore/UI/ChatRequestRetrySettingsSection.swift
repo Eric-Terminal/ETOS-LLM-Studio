@@ -16,7 +16,9 @@ public struct ChatRequestRetrySettingsSection: View {
                     .foregroundStyle(.secondary)
                 TextField(NSLocalizedString("最大重试次数", comment: ""), text: $maximumRetriesDraft)
                     .monospacedDigit()
+                    #if !os(macOS)
                     .textInputAutocapitalization(.never)
+                    #endif
                     .autocorrectionDisabled()
                     #if os(iOS)
                     .keyboardType(.numberPad)

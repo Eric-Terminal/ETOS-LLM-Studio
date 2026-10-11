@@ -81,7 +81,7 @@ struct MacStorageManagementView: View {
     private func reload() {
         guard active else { model.close(clearContent: visible); return }
         guard !model.isLoading else { return }
-        model.load(workspace: workspace, operation: MacStorageOverview.load)
+        model.load(workspace: workspace, operation: { try MacStorageOverview.load() })
     }
 }
 

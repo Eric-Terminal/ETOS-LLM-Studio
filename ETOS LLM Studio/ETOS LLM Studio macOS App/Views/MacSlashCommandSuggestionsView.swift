@@ -9,7 +9,7 @@ struct MacSlashCommandSuggestionsView: View {
     var body: some View {
         if let input = model.input, !input.rows.isEmpty {
             ScrollViewReader { proxy in
-                List(selection: Binding(get: { model.selectedSuggestion()?.id }, set: model.selectID)) {
+                List(selection: Binding(get: { model.selectedSuggestion()?.id }, set: { model.selectID($0) })) {
                     ForEach(input.rows) { row in
                         Button { choose(row.suggestion, input.text, input.sessionID) } label: { MacSlashCommandLabel(row: row) }
                             .buttonStyle(.plain).tag(row.id).id(row.id)

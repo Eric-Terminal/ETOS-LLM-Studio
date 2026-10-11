@@ -94,7 +94,7 @@ extension MemoryManager {
             guard let self else { return }
             defer {
                 autoRetryStateQueue.sync {
-                    consistencyCheckScheduled = false
+                    self.consistencyCheckScheduled = false
                 }
             }
             if delay > 0 {

@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 extension ChatService {
     public func roleplayDataDraft(sessionID: UUID, target: RoleplayDataTarget) throws -> RoleplayDataDraft {

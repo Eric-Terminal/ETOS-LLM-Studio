@@ -230,7 +230,7 @@ struct MacShortcutToolEditor: View {
                 let text = try await model.generateDescription(for: row.tool, expectedEpoch: epoch)
                 if visible, epoch == model.epoch { generatedDescription = text }
             } catch is CancellationError { }
-            catch { if epoch == model.epoch { error = error.localizedDescription } }
+            catch { if epoch == model.epoch { self.error = error.localizedDescription } }
         }
     }
 }

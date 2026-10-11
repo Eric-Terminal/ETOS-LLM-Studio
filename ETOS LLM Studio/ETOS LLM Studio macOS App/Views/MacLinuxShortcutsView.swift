@@ -166,7 +166,7 @@ private struct MacLinuxShortcutEditor: View {
                 isActive: visible && isActive && !model.isWorking && !draft.isPreparing,
                 settings: [
                     .json("keys", label: NSLocalizedString("快捷键组合", comment: ""), schema: GuideLocalLinuxTerminalShortcutSettingsSupport.keyListSchema,
-                        get: { draft.guideKeys }, normalize: GuideLocalLinuxTerminalShortcutSettingsSupport.normalizeKeys,
+                        get: { draft.guideKeys }, normalize: { try GuideLocalLinuxTerminalShortcutSettingsSupport.normalizeKeys($0) },
                         set: { draft.replace(try GuideLocalLinuxTerminalShortcutSettingsSupport.keys(from: $0)) }),
                     .readOnly("requires_save", label: NSLocalizedString("应用方式", comment: ""), value: { .string(NSLocalizedString("修改后需要保存", comment: "")) })
                 ])

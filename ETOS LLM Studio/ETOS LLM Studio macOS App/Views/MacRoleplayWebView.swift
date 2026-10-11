@@ -166,7 +166,7 @@ final class MacRoleplayWebCoordinator: NSObject, WKScriptMessageHandler, WKNavig
             guard !Task.isCancelled else { return }
             let javaScript = await Task.detached(priority: .utility) { call.source() }.value
             guard let self, !Task.isCancelled, active, let javaScript else { return }
-            if ready { webView?.evaluateJavaScript(javaScript) }
+            if ready { _ = try? await webView?.evaluateJavaScript(javaScript) }
             else { pendingCalls.append(javaScript) }
         }
     }

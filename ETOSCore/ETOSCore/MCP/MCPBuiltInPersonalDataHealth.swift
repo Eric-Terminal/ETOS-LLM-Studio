@@ -300,7 +300,7 @@ private extension MCPBuiltInPersonalDataHealthExecutor {
                 "duration_seconds": workout.duration,
                 "activity_type": workoutActivityName(workout.workoutActivityType),
                 "activity_raw_value": workout.workoutActivityType.rawValue,
-                "total_energy_kcal": workout.totalEnergyBurned?.doubleValue(for: .kilocalorie()) ?? NSNull(),
+                "total_energy_kcal": workout.statistics(for: HKQuantityType(.activeEnergyBurned))?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? NSNull(),
                 "total_distance_meters": workout.totalDistance?.doubleValue(for: .meter()) ?? NSNull(),
                 "source": workout.sourceRevision.source.name
             ]

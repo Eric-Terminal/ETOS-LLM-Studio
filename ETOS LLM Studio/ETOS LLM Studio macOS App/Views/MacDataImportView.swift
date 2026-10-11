@@ -17,7 +17,7 @@ struct MacDataImportView: View {
             Section {
                 MacSettingsIntroCard(id: "data-import", title: NSLocalizedString("导入数据", comment: ""),
                     details: NSLocalizedString("Mac 数据导入说明正文", comment: ""), documentID: "data-import", isActive: available)
-                Picker(NSLocalizedString("导入来源", comment: ""), selection: Binding(get: { model.source }, set: model.changeSource)) {
+                Picker(NSLocalizedString("导入来源", comment: ""), selection: Binding(get: { model.source }, set: { model.changeSource($0) })) {
                     ForEach(ThirdPartyImportSource.allCases, id: \.rawValue) { source in Text(source.displayName).tag(source) }
                 }.disabled(!model.canEdit)
             } footer: {

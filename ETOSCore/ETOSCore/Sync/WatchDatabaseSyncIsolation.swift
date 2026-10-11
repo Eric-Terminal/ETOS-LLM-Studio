@@ -6,8 +6,8 @@ final class WatchDatabaseSyncIsolation {
     private(set) var operationID: UUID?
     private var holders = 0
 
-    init(cloud: CloudSyncManager = .shared) {
-        self.cloud = cloud
+    init(cloud: CloudSyncManager? = nil) {
+        self.cloud = cloud ?? .shared
     }
 
     func begin(_ id: UUID) -> Bool {

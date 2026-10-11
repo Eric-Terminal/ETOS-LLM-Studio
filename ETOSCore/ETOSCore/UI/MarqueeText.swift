@@ -8,7 +8,9 @@
 // - 当文本内容超过容器宽度时，会自动启动循环滚动动画
 // ============================================================================
 
+#if canImport(UIKit)
 import SwiftUI
+import UIKit
 
 public struct MarqueeText: View {
     // MARK: - 属性
@@ -165,3 +167,4 @@ private struct MarqueeScrollingText: View {
         }
     }
 }
+#endif

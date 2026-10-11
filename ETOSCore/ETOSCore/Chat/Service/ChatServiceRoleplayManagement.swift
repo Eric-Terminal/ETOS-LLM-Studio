@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import os
 
 extension ChatService {
     public func loadRoleplayCharacters() -> [RoleplayCharacter] {

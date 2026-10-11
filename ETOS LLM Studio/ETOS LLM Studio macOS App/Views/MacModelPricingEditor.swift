@@ -196,7 +196,7 @@ private struct MacModelPricingTimeEditor: View {
                 .string("start_time", label: NSLocalizedString("开始时间", comment: ""), get: { time.start }, set: { time.start = $0 }),
                 .string("end_time", label: NSLocalizedString("结束时间", comment: ""), get: { time.end }, set: { time.end = $0 }),
                 .json("weekdays", label: NSLocalizedString("重复日", comment: ""), schema: GuideModelPricingSettingsSupport.weekdaysSchema,
-                      get: { GuideModelPricingSettingsSupport.weekdaysValue(time.weekdays) }, normalize: GuideModelPricingSettingsSupport.normalizeWeekdays,
+                      get: { GuideModelPricingSettingsSupport.weekdaysValue(time.weekdays) }, normalize: { try GuideModelPricingSettingsSupport.normalizeWeekdays($0) },
                       set: { time.weekdays = try GuideModelPricingSettingsSupport.weekdays(from: $0) })
             ] + MacModelPriceForm.settings($time.prices, anthropic: anthropic) : [])
         )
@@ -228,7 +228,7 @@ private struct MacModelPriceForm: View {
               get: {
             do { return try MacModelPriceFields.price(text.wrappedValue).map(JSONValue.double) ?? .null }
             catch { return .string(text.wrappedValue) }
-        }, normalize: GuideModelPricingSettingsSupport.normalizePrice,
+        }, normalize: { try GuideModelPricingSettingsSupport.normalizePrice($0) },
               set: { value in
             // Double 的往返字符串不截断到固定小数位，保留很低的 Token 单价。
             switch try GuideModelPricingSettingsSupport.normalizePrice(value) {

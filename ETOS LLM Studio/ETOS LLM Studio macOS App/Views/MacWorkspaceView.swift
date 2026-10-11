@@ -14,7 +14,7 @@ struct MacWorkspaceView: View {
     @State private var sessionToAnalyze: ChatSession?
     @State private var columnVisibility = NavigationSplitViewVisibility.all
 
-    var body: some View {
+    private var navigationContent: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             MacSessionLibrarySidebar(model: workspace.sessionLibrary)
         } content: {
@@ -26,50 +26,47 @@ struct MacWorkspaceView: View {
                 .navigationTitle(workspace.currentSession?.name ?? NSLocalizedString("新的对话", comment: ""))
                 .toolbar {
                     ToolbarItem { MacChatQuickActionsView() }
-                    Button {
-                        if let session = workspace.currentSession { showAnalytics(session) }
-                    } label: {
-                        Label(NSLocalizedString("session_usage.title", value: "Conversation Analytics", comment: "会话分析统计入口"), systemImage: "chart.bar.xaxis")
-                    }.disabled(workspace.currentSession == nil || !workspace.canManageLocalModels)
-                    Button { sessionToRoleplay = workspace.currentSession } label: {
-                        Label(NSLocalizedString("会话角色绑定", comment: ""), systemImage: "person.text.rectangle")
-                    }
-                    .disabled(workspace.currentSession == nil)
-                    if configuration.modelPickerWorldbookShortcutEnabled {
-                        Button { sessionToBind = workspace.currentSession } label: {
-                            Label(NSLocalizedString("绑定世界书", comment: ""), systemImage: "books.vertical")
+                    ToolbarItemGroup {
+                        Button {
+                            if let session = workspace.currentSession { showAnalytics(session) }
+                        } label: {
+                            Label(NSLocalizedString("session_usage.title", value: "Conversation Analytics", comment: "会话分析统计入口"), systemImage: "chart.bar.xaxis")
+                        }.disabled(workspace.currentSession == nil || !workspace.canManageLocalModels)
+                        Button { sessionToRoleplay = workspace.currentSession } label: {
+                            Label(NSLocalizedString("会话角色绑定", comment: ""), systemImage: "person.text.rectangle")
+                        }
+                        .disabled(workspace.currentSession == nil)
+                        if configuration.modelPickerWorldbookShortcutEnabled {
+                            Button { sessionToBind = workspace.currentSession } label: {
+                                Label(NSLocalizedString("绑定世界书", comment: ""), systemImage: "books.vertical")
+                            }
                         }
                     }
                     ToolbarItem(placement: .principal) {
-                        Picker(NSLocalizedString("全局模型", comment: ""), selection: Binding(
-                            get: { workspace.selectedModelID },
-                            set: { workspace.selectModel($0) }
-                        )) {
-                            Text(NSLocalizedString("选择模型", comment: "")).tag(String?.none)
-                            ForEach(workspace.models) { model in
-                                Text(model.model.displayName).tag(Optional(model.id))
-                            }
+                        modelPicker
+                    }
+                    ToolbarItemGroup {
+                        if workspace.currentSession?.preferredModelIdentifier != nil, let name = workspace.effectiveModelName {
+                            LabeledContent(NSLocalizedString("当前模型", comment: ""), value: name)
+                                .font(.caption).foregroundStyle(.secondary)
                         }
-                        .labelsHidden()
-                        .frame(maxWidth: 320)
-                        .help(NSLocalizedString("会话首选模型优先于全局选择；可在会话设置中修改。", comment: ""))
+                        Button {
+                            sessionToEdit = workspace.currentSession
+                        } label: {
+                            Label(NSLocalizedString("会话设置", comment: ""), systemImage: "slider.horizontal.3")
+                        }
+                        Menu {
+                            Button(NSLocalizedString("分支提示词和对话记录", comment: "")) { workspace.branchSession() }
+                            Button(NSLocalizedString("仅分支提示词", comment: "")) { workspace.branchSession(copyMessages: false) }
+                        } label: { Label(NSLocalizedString("创建分支", comment: ""), systemImage: "arrow.triangle.branch") }
+                            .disabled(!workspace.canModifyCurrentHistory)
                     }
-                    if workspace.currentSession?.preferredModelIdentifier != nil, let name = workspace.effectiveModelName {
-                        LabeledContent(NSLocalizedString("当前模型", comment: ""), value: name)
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    Button {
-                        sessionToEdit = workspace.currentSession
-                    } label: {
-                        Label(NSLocalizedString("会话设置", comment: ""), systemImage: "slider.horizontal.3")
-                    }
-                    Menu {
-                        Button(NSLocalizedString("分支提示词和对话记录", comment: "")) { workspace.branchSession() }
-                        Button(NSLocalizedString("仅分支提示词", comment: "")) { workspace.branchSession(copyMessages: false) }
-                    } label: { Label(NSLocalizedString("创建分支", comment: ""), systemImage: "arrow.triangle.branch") }
-                        .disabled(!workspace.canModifyCurrentHistory)
                 }
         }
+    }
+
+    private var presentedContent: some View {
+        navigationContent
         // 压缩工作表必须保留“停止”；历史修改仍由各操作自身的互斥检查拦截。
         .disabled(workspace.isRestoringData || (workspace.isMutatingHistory && !workspace.contextCompression.isWorking))
         .sheet(item: $sessionToEdit) { session in
@@ -97,6 +94,10 @@ struct MacWorkspaceView: View {
         .networkConnectionApprovalHost(isEnabled: workspace.canManageLocalModels)
         .modifier(MacDailyPulseHost(model: workspace.dailyPulse))
         .overlay { if appLock.state == .locked { AppLockOverlayView() } }
+    }
+
+    var body: some View {
+        presentedContent
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
             appLock.handleSceneDidEnterBackground()
             Task { await configuration.flushPendingWrites() }
@@ -119,6 +120,21 @@ struct MacWorkspaceView: View {
             workspace.refreshMessagePresentation()
         }
         .onChange(of: configuration.enableMarkdown) { _, _ in workspace.refreshMessagePresentation() }
+    }
+
+    private var modelPicker: some View {
+        Picker(NSLocalizedString("全局模型", comment: ""), selection: Binding<String?>(
+            get: { workspace.selectedModelID },
+            set: { workspace.selectModel($0) }
+        )) {
+            Text(NSLocalizedString("选择模型", comment: "")).tag(String?.none)
+            ForEach(workspace.models) { model in
+                Text(model.model.displayName).tag(Optional(model.id))
+            }
+        }
+        .labelsHidden()
+        .frame(maxWidth: 320)
+        .help(NSLocalizedString("会话首选模型优先于全局选择；可在会话设置中修改。", comment: ""))
     }
 
     private func showAnalytics(_ session: ChatSession) {

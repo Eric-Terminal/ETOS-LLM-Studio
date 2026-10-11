@@ -6,6 +6,7 @@
 // ============================================================================
 
 import Foundation
+import GRDB
 
 struct MCPManagerStoreSnapshot {
     let servers: [MCPServerConfiguration]

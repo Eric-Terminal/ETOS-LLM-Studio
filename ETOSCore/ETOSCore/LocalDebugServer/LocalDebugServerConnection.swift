@@ -373,9 +373,9 @@ extension LocalDebugServer {
             isProcessingCommand = true
             defer { if isCurrentConnection(token) { isProcessingCommand = false } }
             await LocalDebugCommandContext.$connectionToken.withValue(token) {
-                addLog(String(format: NSLocalizedString("Debug command received: %@", comment: "调试命令接收日志"), command), type: .receive)
-                let response = await executeDebugCommand(command, json: decoded.value)
-                if let response { await sendResponse(response, requestID: decoded.value["request_id"] as? String) }
+                self.addLog(String(format: NSLocalizedString("Debug command received: %@", comment: "调试命令接收日志"), command), type: .receive)
+                let response = await self.executeDebugCommand(command, json: decoded.value)
+                if let response { await self.sendResponse(response, requestID: decoded.value["request_id"] as? String) }
             }
         }
     }

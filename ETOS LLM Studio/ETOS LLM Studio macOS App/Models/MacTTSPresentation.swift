@@ -27,7 +27,7 @@ struct MacTTSPresentation: Sendable {
         return .init(snapshot: snapshot, rows: rows,
             servicesByID: Dictionary(uniqueKeysWithValues: snapshot.services.map { ($0.id, $0) }),
             selected: snapshot.selectedService, guideValue: .array(rows.map {
-                .object(["id": .string($0.id.uuidString), "name": .string($0.title), "provider": .string($0.kind), "ready": .bool($0.ready)])
+                .dictionary(["id": .string($0.id.uuidString), "name": .string($0.title), "provider": .string($0.kind), "ready": .bool($0.ready)])
             }), identifiers: rows.map { $0.id.uuidString })
     }
 

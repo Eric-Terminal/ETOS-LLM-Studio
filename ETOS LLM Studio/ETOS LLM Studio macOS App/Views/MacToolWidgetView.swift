@@ -37,7 +37,7 @@ struct MacToolWidgetView: View {
                 InlineHTMLActionsView(content: content, onCopy: { text in
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(text, forType: .string)
-                }, onExport: MacInlineHTMLExport.save) { EmptyView() }
+                }, onExport: { try await MacInlineHTMLExport.save($0, $1) }) { EmptyView() }
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button(NSLocalizedString("完成", comment: "")) { showsActions = false }

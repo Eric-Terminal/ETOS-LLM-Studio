@@ -79,7 +79,7 @@ final class MacRequestParameterModel: ObservableObject {
             if suggestion != nil { suggestionBaseline = converted }
             draft = converted
             await preparation?.value
-        } catch { if token == revision { busy = false; error = error.localizedDescription } }
+        } catch { if token == revision { busy = false; self.error = error.localizedDescription } }
     }
 
     func replace(with values: [String: JSONValue]?, mode: Model.RequestBodyOverrideMode? = nil, expectedRevision: UUID) async throws {

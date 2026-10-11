@@ -163,16 +163,17 @@ private extension MCPNativeMapsExecutor {
     #if canImport(MapKit)
     func mapItem(at coordinate: CLLocationCoordinate2D) -> MKMapItem {
         let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        if #available(iOS 26.0, watchOS 26.0, *) {
+        if #available(iOS 26.0, watchOS 26.0, macOS 26.0, *) {
             return MKMapItem(location: location, address: nil)
+        } else {
+            return MKMapItem(placemark: MKPlacemark(coordinate: coordinate))
         }
-        return MKMapItem(placemark: MKPlacemark(coordinate: coordinate))
     }
 
     func mapItemPayload(_ item: MKMapItem) -> [String: Any] {
         let location: CLLocation
         let address: String
-        if #available(iOS 26.0, watchOS 26.0, *) {
+        if #available(iOS 26.0, watchOS 26.0, macOS 26.0, *) {
             location = item.location
             address = item.address?.fullAddress ?? ""
         } else {

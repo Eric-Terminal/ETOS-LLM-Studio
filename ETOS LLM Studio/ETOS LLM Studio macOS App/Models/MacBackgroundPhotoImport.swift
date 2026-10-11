@@ -2,6 +2,7 @@
 import Foundation
 import ImageIO
 @preconcurrency import PhotosUI
+import SwiftUI
 import UniformTypeIdentifiers
 
 extension MacBackgroundLibrary {

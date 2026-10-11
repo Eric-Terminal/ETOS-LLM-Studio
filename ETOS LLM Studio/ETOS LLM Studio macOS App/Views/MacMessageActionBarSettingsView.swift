@@ -105,7 +105,7 @@ struct MacMessageActionBarSettingsView: View {
                 .json("items", label: NSLocalizedString("已启用项目", comment: ""),
                       schema: GuideDisplayActionSettingsSupport.messageActionItemsSchema(for: role),
                       get: { GuideDisplayActionSettingsSupport.messageActionItemsValue(items) },
-                      normalize: GuideDisplayActionSettingsSupport.normalizeMessageActionItems,
+                      normalize: { try GuideDisplayActionSettingsSupport.normalizeMessageActionItems($0) },
                       set: { value in
                           let items = try GuideDisplayActionSettingsSupport.messageActionItems(from: value)
                           let supported = Set(MessageActionBarItem.supportedItems(for: role))

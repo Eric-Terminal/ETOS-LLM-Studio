@@ -1,5 +1,9 @@
 # macOS 工程接入记录
 
+2026-10-11：按用户“只继续 Mac 编译修错，不运行测试”的范围，原生 macOS arm64 Debug 已完成编译和链接，生成 `ETOS LLM Studio macOS App.app`。使用下方 Mac 构建命令，并追加 `-jobs 4 CODE_SIGNING_ALLOWED=NO`、在 destination 指定 `arch=arm64`；未运行测试或启动 App。普通签名构建仍因 `com.ericterminal.els.mac` 缺少 Mac App Development 描述文件失败，本次成功不代表签名或运行验收通过。
+
+本轮修正共享模块显式导入、移动端专用 UI 编译条件、闭包捕获与隔离、跨文件/模块访问级别，以及 Mac 照片选择、语音 JSON、WebKit 调用和工具栏类型构建。llama 与 iSH 的本机 arm64 静态库已生成于现有忽略目录；iSH 只构建生产库并按公共 SDK 合并符号，没有调用含测试的完整九切片门禁。Mac 网络 plist 同步移动端的 ATS 配置。最终增量构建仍提示 cmark-gfm 包缺少 umbrella header、AppIntents 元数据提取被跳过；本轮完整编译还暴露既有 UpdateTimelineManager 的收据 API 弃用警告，未改造其渠道检测逻辑。测试与运行验证等待单独授权，功能完全对齐仍未验证。
+
 2026-10-10：已通过 Xcode 工具和原生工程编辑器创建 `ETOS LLM Studio macOS App` target 与共享 Scheme，选择原生 `My Mac`。本次没有手工改写 `.pbxproj`，没有运行 Python 冒烟、构建或测试；工程接入不代表已经通过编译或运行验收。下方历史记录中的“待创建 target”描述以本段最新状态为准。
 
 已接入 271 个 Mac Swift 源文件及共享的 iOS 代码高亮文件，链接现有 MarkdownUI 和 ETOSCore，并将 ETOSCore 设为 Embed & Sign；Scheme 启用隐式依赖构建。资源引用复用 iOS 八语言 Localizable/InfoPlist、Assets、隐私清单和全部十项 LocalLinux 资源，没有复制第三份本地化或 seed。Mac 使用 macOS 26.0、Swift 5、nonisolated 默认隔离和独立包标识 `com.ericterminal.els.mac`；为本机 MCP stdio 运行用户安装的程序，当前桌面 target 不启用 App Sandbox。
