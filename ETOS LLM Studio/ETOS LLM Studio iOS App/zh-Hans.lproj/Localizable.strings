@@ -8317,3 +8317,7 @@
 "Download the database file instead of its WAL, SHM, or journal files." = "请下载数据库文件，不要单独下载其 WAL、SHM 或 journal 文件。";
 
 "session_usage.below_cost" = "< %@";
+
+// 数据库覆盖与手表确认
+"请将 iPhone 与 Apple Watch 上的 App 都更新后再覆盖数据。" = "请将 iPhone 与 Apple Watch 上的 App 都更新后再覆盖数据。";
+"库级覆盖 Skills 说明" = "Skills 文件和启用状态跟随配置数据库所选的来源。覆盖前会创建安全快照，期间暂停 iCloud 同步；完成后重新核对云端数据，若存在差异，需要再次选择保留哪份。";

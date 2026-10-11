@@ -5,6 +5,36 @@ import Testing
 @Suite("快照恢复与云同步互斥", .serialized)
 struct CloudSyncLocalRestoreTests {
     @MainActor
+    @Test("Watch 覆盖期间云同步互斥，之后丢弃旧基线以重新核对来源")
+    func watchOverwriteInvalidatesBaseline() async throws {
+        let suite = "watch-overwrite-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let manager = CloudSyncManager(userDefaults: defaults, safetyBackupCreator: {})
+        await manager.savePublishedState(CloudSyncPublishedState(
+            generationID: "old-watch-generation", hasCompletedInitialPull: true
+        ))
+        let isolation = WatchDatabaseSyncIsolation(cloud: manager)
+        let id = UUID()
+        #expect(isolation.begin(id))
+        #expect(isolation.begin(id))
+        #expect(!isolation.begin(UUID()))
+        try await isolation.prepare()
+        await manager.performSync(options: .fullSync)
+        #expect(!manager.isPerformingSync)
+        isolation.finish(UUID())
+        #expect(manager.isRestoringLocalData)
+        isolation.finish(id)
+        #expect(manager.isRestoringLocalData)
+        isolation.finish(id)
+        #expect(!manager.isRestoringLocalData)
+        let state = await manager.loadPublishedState()
+        #expect(!state.hasCompletedInitialPull)
+        #expect(state.generationID == nil)
+        #expect(state.recordsByKey.isEmpty)
+    }
+
+    @MainActor
     @Test("恢复期间同步入口不启动网络或首次裁决")
     func restoreExcludesSync() async {
         let manager = CloudSyncManager()

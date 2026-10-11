@@ -267,6 +267,8 @@ private extension SnapshotRestoreService {
             rootURL = Persistence.getImageDirectory()
         case "FileAttachments":
             rootURL = Persistence.getFileDirectory()
+        case "Skills":
+            rootURL = SkillStore.skillsDirectory
         case "FontFiles":
             rootURL = Persistence.getFontDirectory()
         case "Memory":

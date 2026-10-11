@@ -97,4 +97,23 @@ extension PersistenceTests {
             #expect(try store.dbPool.read { try String.fetchOne($0, sql: "PRAGMA quick_check") } == "ok")
         }
     }
+
+    @Test("完整安全快照包含 Skills 文件，恢复可找回覆盖前的技能正文")
+    func fullSnapshotPreservesSkills() throws {
+        try #require(ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil)
+        let name = "snapshot-skill-\(UUID().uuidString.lowercased())"
+        let directory = SkillStore.skillsDirectory.appendingPathComponent(name)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("SKILL.md")
+        let original = Data("覆盖前需要保留的技能内容".utf8)
+        try original.write(to: file)
+
+        let snapshot = try SnapshotBuilder.buildSnapshotResult(kind: .full)
+        defer { removeIfExists(snapshot.fileURL) }
+        #expect(snapshot.includedFilePaths.contains("Skills/\(name)/SKILL.md"))
+        try Data("另一端的内容".utf8).write(to: file)
+        try SnapshotRestoreService.restorePlainSnapshot(from: snapshot.fileURL)
+        #expect(try Data(contentsOf: file) == original)
+    }
 }

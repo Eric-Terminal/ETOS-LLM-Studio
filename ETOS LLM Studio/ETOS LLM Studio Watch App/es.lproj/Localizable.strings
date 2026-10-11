@@ -4159,7 +4159,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "正在使用 iCloud 数据替换此设备…" = "Reemplazando los datos de este dispositivo con los de iCloud…";
 "正在使用此设备数据重建 iCloud…" = "Reconstruyendo iCloud con los datos de este dispositivo…";
 "iCloud 新数据集校验失败，原有同步基线未被替换。" = "No se pudo verificar el nuevo conjunto de datos de iCloud. La base de sincronización actual no se ha reemplazado.";
-"iCloud 首次同步裁决说明" = "Comprobar y sincronizar ahora recibe cambios de otros dispositivos y después sube los locales. Úsalo para ponerte al día tras estar sin conexión; no reemplaza un lado entero por el otro.\n\nAl conectar por primera vez, si los datos locales y de iCloud difieren, la app pregunta qué copia conservar. Elegir iCloud reemplaza los datos sincronizados del dispositivo. Elegir este dispositivo reemplaza los datos de la nube y los demás dispositivos los adoptarán después. Debes decidir aunque un lado esté vacío.\n\nAntes de sobrescribir, la app crea una instantánea de seguridad y pide escribir la confirmación mostrada. Comprueba qué copia contiene lo que quieres conservar.";
+"iCloud 首次同步裁决说明" = "La comprobación y sincronización recibe cambios de la nube y envía cambios locales. Sin una base fiable, incluso después de sobrescribir bases de datos, las diferencias requieren elegir un origen, aunque una copia esté vacía.\n\nElegir iCloud sustituye los datos de este dispositivo. Elegir este dispositivo sustituye los datos de la nube, que adoptarán los demás dispositivos.\n\nAntes se crea una copia de seguridad. En Apple Watch, comprueba la dirección, activa el interruptor de confirmación y pulsa el botón de sobrescritura. No necesitas escribir.";
 "iCloud 漫游同步已关闭" = "iCloud Roaming Sync is Off";
 
 "当前 .elsbackup 快照已加密。导入数据入口暂不支持解密合并，请改用“从快照恢复”入口，或选择未加密快照。" = "Esta instantánea .elsbackup está cifrada. La entrada de importación de datos aún no puede descifrarla y fusionarla; usa Restaurar desde instantánea o elige una instantánea sin cifrar.";
@@ -8259,3 +8259,10 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "Download the database file instead of its WAL, SHM, or journal files." = "Descarga la base de datos en lugar de sus archivos WAL, SHM o journal.";
 
 "session_usage.below_cost" = "< %@";
+
+// 数据库覆盖与手表确认
+"请将 iPhone 与 Apple Watch 上的 App 都更新后再覆盖数据。" = "Actualiza la app tanto en el iPhone como en el Apple Watch antes de sobrescribir datos.";
+"库级覆盖 Skills 说明" = "Los archivos de Skills y su activación siguen el origen elegido para la base de configuración. Se crea una copia de seguridad antes de sobrescribir y se pausa la sincronización de iCloud durante la operación. Después se comparan de nuevo los datos con la nube; si difieren, debes elegir qué copia conservar.";
+"我已确认覆盖方向" = "He comprobado la dirección de sobrescritura";
+"此操作会用 iCloud 的完整同步数据替换本机同步数据。执行前会自动创建安全快照。" = "Los datos sincronizados de este dispositivo se sustituirán por todos los datos de iCloud. Primero se creará una copia de seguridad.";
+"此操作会用本机完整数据替换 iCloud 同步数据，其他设备随后会以本机数据为准。执行前会自动创建安全快照。" = "Los datos sincronizados de iCloud se sustituirán por todos los datos de este dispositivo. Los demás dispositivos adoptarán después esta copia. Primero se creará una copia de seguridad.";

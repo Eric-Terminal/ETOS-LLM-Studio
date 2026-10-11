@@ -8408,3 +8408,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "Download the database file instead of its WAL, SHM, or journal files." = "Descarga la base de datos en lugar de sus archivos WAL, SHM o journal.";
 
 "session_usage.below_cost" = "< %@";
+
+// 数据库覆盖与手表确认
+"请将 iPhone 与 Apple Watch 上的 App 都更新后再覆盖数据。" = "Actualiza la app tanto en el iPhone como en el Apple Watch antes de sobrescribir datos.";
+"库级覆盖 Skills 说明" = "Los archivos de Skills y su activación siguen el origen elegido para la base de configuración. Se crea una copia de seguridad antes de sobrescribir y se pausa la sincronización de iCloud durante la operación. Después se comparan de nuevo los datos con la nube; si difieren, debes elegir qué copia conservar.";

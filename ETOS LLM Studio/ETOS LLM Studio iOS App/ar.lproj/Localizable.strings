@@ -8408,3 +8408,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "Download the database file instead of its WAL, SHM, or journal files." = "نزّل ملف قاعدة البيانات بدلاً من ملفات WAL أو SHM أو journal التابعة لها.";
 
 "session_usage.below_cost" = "< %@";
+
+// 数据库覆盖与手表确认
+"请将 iPhone 与 Apple Watch 上的 App 都更新后再覆盖数据。" = "حدّث التطبيق على كل من iPhone وApple Watch قبل استبدال البيانات.";
+"库级覆盖 Skills 说明" = "تتبع ملفات Skills وحالة تفعيلها المصدر المختار لقاعدة بيانات الإعدادات. تُنشأ لقطة أمان قبل الاستبدال وتتوقف مزامنة iCloud مؤقتًا أثناء العملية. تُقارَن البيانات بالسحابة مجددًا بعد ذلك، وإذا اختلفت فعليك اختيار النسخة المراد الاحتفاظ بها.";

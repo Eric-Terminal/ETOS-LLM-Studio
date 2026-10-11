@@ -4135,7 +4135,7 @@
 "正在使用 iCloud 数据替换此设备…" = "Replacing this device with iCloud data…";
 "正在使用此设备数据重建 iCloud…" = "Rebuilding iCloud from this device…";
 "iCloud 新数据集校验失败，原有同步基线未被替换。" = "The new iCloud data set could not be verified. The existing sync baseline was not replaced.";
-"iCloud 首次同步裁决说明" = "Check and Sync Now receives changes from other devices, then uploads local changes. Use it to catch up after being offline. It does not replace one side wholesale with the other.\n\nWhen first connecting, if local and iCloud data differ, the app asks which copy to keep. Choosing iCloud replaces this device’s synced data. Choosing this device replaces cloud data, which other devices will then follow. You must choose even if one side is empty.\n\nBefore overwriting, the app creates a safety snapshot and asks you to type the confirmation shown on screen. Check which copy contains the information you want to keep.";
+"iCloud 首次同步裁决说明" = "Check and Sync Now receives cloud changes and uploads local changes. When there is no trusted baseline, including after database overwrite, differing local and iCloud copies require you to choose a source, even if one copy is empty.\n\nUsing iCloud replaces this device’s synced data. Using this device replaces cloud data, which other devices will then follow.\n\nBefore overwriting, a safety snapshot is created. On Apple Watch, check the direction, turn on the confirmation switch, then tap Execute Overwrite. No typing is required.";
 "iCloud 漫游同步已关闭" = "iCloud Roaming Sync is Off";
 
 "当前 .elsbackup 快照已加密。导入数据入口暂不支持解密合并，请改用“从快照恢复”入口，或选择未加密快照。" = "This .elsbackup snapshot is encrypted. The data import entry cannot decrypt and merge it yet; use Restore from Snapshot, or choose an unencrypted snapshot.";
@@ -8182,3 +8182,10 @@
 "Download the database file instead of its WAL, SHM, or journal files." = "Download the database file instead of its WAL, SHM, or journal files.";
 
 "session_usage.below_cost" = "< %@";
+
+// 数据库覆盖与手表确认
+"请将 iPhone 与 Apple Watch 上的 App 都更新后再覆盖数据。" = "Please update the app on both iPhone and Apple Watch before overwriting data.";
+"库级覆盖 Skills 说明" = "Skills files and enabled states follow the selected source for the configuration database. A safety snapshot is created before overwriting. iCloud sync pauses during the operation and checks the resulting data again afterward. If the copies differ, you must choose which to keep.";
+"我已确认覆盖方向" = "I have checked the overwrite direction";
+"此操作会用 iCloud 的完整同步数据替换本机同步数据。执行前会自动创建安全快照。" = "This replaces this device’s synced data with the complete iCloud data. A safety snapshot will be created first.";
+"此操作会用本机完整数据替换 iCloud 同步数据，其他设备随后会以本机数据为准。执行前会自动创建安全快照。" = "This replaces the iCloud synced data with this device’s complete data. Other devices will then follow this copy. A safety snapshot will be created first.";

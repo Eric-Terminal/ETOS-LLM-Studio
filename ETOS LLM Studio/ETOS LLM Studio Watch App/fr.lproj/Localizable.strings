@@ -4160,7 +4160,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "正在使用 iCloud 数据替换此设备…" = "Remplacement des données de cet appareil par celles d’iCloud…";
 "正在使用此设备数据重建 iCloud…" = "Reconstruction d’iCloud à partir de cet appareil…";
 "iCloud 新数据集校验失败，原有同步基线未被替换。" = "Le nouvel ensemble de données iCloud n’a pas pu être vérifié. La base de synchronisation actuelle n’a pas été remplacée.";
-"iCloud 首次同步裁决说明" = "Vérifier et synchroniser reçoit les changements des autres appareils, puis envoie les changements locaux. Cette action rattrape une période hors ligne sans remplacer intégralement un côté par l’autre.\n\nÀ la première connexion, si les données locales et iCloud diffèrent, l’app demande quelle copie garder. Choisir iCloud remplace les données synchronisées de cet appareil. Choisir cet appareil remplace les données du cloud, que les autres appareils adopteront ensuite. Vous devez choisir même si un côté est vide.\n\nAvant l’écrasement, l’app crée un instantané de sécurité et demande de saisir la confirmation affichée. Vérifiez quelle copie contient les informations à conserver.";
+"iCloud 首次同步裁决说明" = "La vérification et la synchronisation reçoivent les changements du nuage et envoient les changements locaux. Sans base fiable, notamment après un remplacement des bases, toute différence nécessite de choisir une source, même si une copie est vide.\n\nChoisir iCloud remplace les données de cet appareil. Choisir cet appareil remplace les données du nuage, que les autres appareils adopteront ensuite.\n\nUn instantané de sécurité est créé au préalable. Sur Apple Watch, vérifiez le sens, activez le commutateur de confirmation puis touchez le bouton de remplacement. Aucune saisie n’est nécessaire.";
 "iCloud 漫游同步已关闭" = "iCloud Roaming Sync is Off";
 
 "当前 .elsbackup 快照已加密。导入数据入口暂不支持解密合并，请改用“从快照恢复”入口，或选择未加密快照。" = "Cet instantané .elsbackup est chiffré. L’entrée d’import de données ne peut pas encore le déchiffrer et le fusionner ; utilisez Restaurer depuis un instantané, ou choisissez un instantané non chiffré.";
@@ -8259,3 +8259,10 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "Download the database file instead of its WAL, SHM, or journal files." = "Téléchargez la base de données plutôt que ses fichiers WAL, SHM ou journal.";
 
 "session_usage.below_cost" = "< %@";
+
+// 数据库覆盖与手表确认
+"请将 iPhone 与 Apple Watch 上的 App 都更新后再覆盖数据。" = "Mettez à jour l’app sur l’iPhone et l’Apple Watch avant de remplacer les données.";
+"库级覆盖 Skills 说明" = "Les fichiers Skills et leur activation suivent la source choisie pour la base de configuration. Un instantané de sécurité est créé avant le remplacement et la synchronisation iCloud est suspendue pendant l’opération. Les données sont ensuite comparées au nuage ; en cas de différence, choisissez à nouveau la copie à conserver.";
+"我已确认覆盖方向" = "J’ai vérifié le sens du remplacement";
+"此操作会用 iCloud 的完整同步数据替换本机同步数据。执行前会自动创建安全快照。" = "Les données synchronisées de cet appareil seront remplacées par toutes les données iCloud. Un instantané de sécurité sera créé au préalable.";
+"此操作会用本机完整数据替换 iCloud 同步数据，其他设备随后会以本机数据为准。执行前会自动创建安全快照。" = "Les données synchronisées iCloud seront remplacées par toutes les données de cet appareil. Les autres appareils adopteront ensuite cette copie. Un instantané de sécurité sera créé au préalable.";

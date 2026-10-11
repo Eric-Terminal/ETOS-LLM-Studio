@@ -8331,3 +8331,7 @@
 "Download the database file instead of its WAL, SHM, or journal files." = "Download the database file instead of its WAL, SHM, or journal files.";
 
 "session_usage.below_cost" = "< %@";
+
+// 数据库覆盖与手表确认
+"请将 iPhone 与 Apple Watch 上的 App 都更新后再覆盖数据。" = "Please update the app on both iPhone and Apple Watch before overwriting data.";
+"库级覆盖 Skills 说明" = "Skills files and enabled states follow the selected source for the configuration database. A safety snapshot is created before overwriting. iCloud sync pauses during the operation and checks the resulting data again afterward. If the copies differ, you must choose which to keep.";
