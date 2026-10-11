@@ -120,8 +120,7 @@ public final class iSHAppleBridgeCommandSession: @unchecked Sendable {
             )
         }
         let timeout = try timeoutMilliseconds(request.timeoutSeconds)
-        let outputLimit = request.outputLimitBytes.flatMap { $0 == 0 ? nil : $0 }
-            ?? LocalLinuxBridgeConstants.outputLimitDisabled
+        let outputLimit = try outputLimitBytes(request.outputLimitBytes)
         let environment = request.environment.keys.sorted().map { key in
             "\(key)=\(request.environment[key] ?? "")"
         }
@@ -232,16 +231,27 @@ public final class iSHAppleBridgeCommandSession: @unchecked Sendable {
         guard let seconds else { return 0 }
         guard seconds.isFinite, seconds >= 0 else {
             throw LocalLinuxRuntimeError.runtimeUnavailable(
-                NSLocalizedString("Linux 命令超时时间无效。", comment: "Linux timeout validation error")
+                NSLocalizedString("Linux 命令超时时间无效。", value: "Linux command timeout is invalid.", comment: "Linux timeout validation error")
             )
         }
         if seconds == 0 { return LocalLinuxBridgeConstants.timeoutDisabled }
         let milliseconds = (seconds * 1_000).rounded(.up)
-        guard milliseconds < Double(LocalLinuxBridgeConstants.timeoutDisabled) else {
+        // UInt32 能容纳的值仍可能被 iSH 的参数校验拒绝，必须遵循 SDK 的实际上限。
+        guard milliseconds <= Double(LocalLinuxBridgeConstants.maximumTimeoutMilliseconds) else {
             throw LocalLinuxRuntimeError.runtimeUnavailable(
-                NSLocalizedString("Linux 命令超时时间超出桥接可表示范围；设为 0 可关闭超时。", comment: "Linux timeout bridge range error")
+                NSLocalizedString("Linux 命令超时时间不能超过 3600 秒；设为 0 可关闭超时。", value: "Linux command timeout must not exceed 3600 seconds. Set it to 0 to disable the timeout.", comment: "Linux timeout bridge limit error")
             )
         }
         return UInt32(milliseconds)
+    }
+
+    static func outputLimitBytes(_ bytes: UInt64?) throws -> UInt64 {
+        guard let bytes, bytes != 0 else { return LocalLinuxBridgeConstants.outputLimitDisabled }
+        guard bytes <= LocalLinuxBridgeConstants.maximumOutputLimitBytes else {
+            throw LocalLinuxRuntimeError.runtimeUnavailable(
+                NSLocalizedString("Linux 命令输出上限不能超过 67108864 字节（64 MiB）；设为 0 可关闭上限。", value: "Linux command output limit must not exceed 67108864 bytes (64 MiB). Set it to 0 to disable the limit.", comment: "Linux output bridge limit error")
+            )
+        }
+        return bytes
     }
 }

@@ -5799,7 +5799,8 @@
 "Linux 命令必须包含与 executable 一致的 argv[0]。" = "Linux commands must contain argv[0] consistent with the executable.";
 "Linux 命令缺少 argv。" = "Linux command is missing argv.";
 "Linux 命令超时时间无效。" = "Linux command timeout is invalid.";
-"Linux 命令超时时间超出桥接可表示范围；设为 0 可关闭超时。" = "The Linux command timeout exceeds the bridge's representable range. Set it to 0 to disable the timeout.";
+"Linux 命令超时时间不能超过 3600 秒；设为 0 可关闭超时。" = "Linux command timeout must not exceed 3600 seconds. Set it to 0 to disable the timeout.";
+"Linux 命令输出上限不能超过 67108864 字节（64 MiB）；设为 0 可关闭上限。" = "Linux command output limit must not exceed 67108864 bytes (64 MiB). Set it to 0 to disable the limit.";
 "Linux 工具缺少可信运行上下文。" = "Linux tools lack a trusted runtime context.";
 "Linux 操作失败（%@，错误码 %d）。" = "Linux operation failed (%@, error code %d).";
 "Linux 文件" = "Linux files";

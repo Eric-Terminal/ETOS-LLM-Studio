@@ -60,8 +60,8 @@ enum LocalLinuxToolDefinitions {
                     ]),
                     "environment": stringMapProperty(),
                     "working_directory": stringProperty(directoryDescription),
-                    "timeout_seconds": numberProperty(NSLocalizedString("可选超时秒数；0 表示不设超时。", comment: "Linux timeout")),
-                    "output_limit_bytes": integerProperty(NSLocalizedString("可选原始输出终止阈值；0 表示不设上限。", comment: "Linux output limit"))
+                    "timeout_seconds": commandTimeoutProperty,
+                    "output_limit_bytes": commandOutputLimitProperty
                 ]),
                 "required": .array([.string("executable")])
             ])
@@ -81,8 +81,8 @@ enum LocalLinuxToolDefinitions {
                     "script": stringProperty(NSLocalizedString("传给 /bin/sh -lc 的脚本文本。", comment: "Linux shell script")),
                     "environment": stringMapProperty(),
                     "working_directory": stringProperty(directoryDescription),
-                    "timeout_seconds": numberProperty(NSLocalizedString("可选超时秒数；0 表示不设超时。", comment: "Linux shell timeout")),
-                    "output_limit_bytes": integerProperty(NSLocalizedString("可选原始输出终止阈值；0 表示不设上限。", comment: "Linux shell output limit"))
+                    "timeout_seconds": commandTimeoutProperty,
+                    "output_limit_bytes": commandOutputLimitProperty
                 ]),
                 "required": .array([.string("script")])
             ])
@@ -148,8 +148,34 @@ enum LocalLinuxToolDefinitions {
         #endif
     }
 
-    private static func numberProperty(_ description: String) -> JSONValue {
-        .dictionary(["type": .string("number"), "minimum": .int(0), "description": .string(description)])
+    private static var commandTimeoutProperty: JSONValue {
+        let property: [String: JSONValue] = [
+            "type": .string("number"),
+            "minimum": .int(0),
+            "description": .string(NSLocalizedString("可选超时秒数；0 表示不设超时。", comment: "Linux timeout"))
+        ]
+        #if os(macOS)
+        return .dictionary(property)
+        #else
+        var boundedProperty = property
+        boundedProperty["maximum"] = .int(Int(LocalLinuxBridgeConstants.maximumTimeoutMilliseconds / 1_000))
+        return .dictionary(boundedProperty)
+        #endif
+    }
+
+    private static var commandOutputLimitProperty: JSONValue {
+        let property: [String: JSONValue] = [
+            "type": .string("integer"),
+            "minimum": .int(0),
+            "description": .string(NSLocalizedString("可选原始输出终止阈值；0 表示不设上限。", comment: "Linux output limit"))
+        ]
+        #if os(macOS)
+        return .dictionary(property)
+        #else
+        var boundedProperty = property
+        boundedProperty["maximum"] = .int(Int(LocalLinuxBridgeConstants.maximumOutputLimitBytes))
+        return .dictionary(boundedProperty)
+        #endif
     }
 
     private static func integerProperty(_ description: String) -> JSONValue {

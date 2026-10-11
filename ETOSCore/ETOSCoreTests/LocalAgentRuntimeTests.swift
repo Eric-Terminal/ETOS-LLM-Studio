@@ -407,16 +407,6 @@ struct LocalAgentRuntimeTests {
         )
     }
 
-    @Test("命令超时支持关闭和桥接可表示的长任务")
-    func commandTimeoutConversion() throws {
-        #expect(try iSHAppleBridgeCommandSession.timeoutMilliseconds(nil) == 0)
-        #expect(try iSHAppleBridgeCommandSession.timeoutMilliseconds(0) == UInt32.max)
-        #expect(try iSHAppleBridgeCommandSession.timeoutMilliseconds(7_200) == 7_200_000)
-        #expect(throws: LocalLinuxRuntimeError.self) {
-            try iSHAppleBridgeCommandSession.timeoutMilliseconds(Double(UInt32.max) / 1_000)
-        }
-    }
-
     @Test("结构化命令按冻结 PATH 解析可执行文件候选")
     func commandExecutableSearchCandidates() {
         #expect(

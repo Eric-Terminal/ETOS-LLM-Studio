@@ -219,6 +219,9 @@ enum LocalLinuxBridgeConstants {
     static let linuxEAGAIN: Int32 = -11
     static let linuxESHUTDOWN: Int32 = -108
     static let linuxESTALE: Int32 = -116
+    // 与 iSHAppleCommand.h 的有限额度保持一致；DISABLED 哨兵单独表示不限制。
+    static let maximumTimeoutMilliseconds: UInt32 = 3_600_000
+    static let maximumOutputLimitBytes: UInt64 = 67_108_864
     static let timeoutDisabled = UInt32.max
     static let outputLimitDisabled = UInt64.max
     static let outputChunkBytes = 16_384
