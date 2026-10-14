@@ -17,7 +17,7 @@ extension MCPManager {
     }
 
     public func refreshMetadata(for server: MCPServerConfiguration) {
-        guard let client = clients[server.id], case .ready = status(for: server).connectionState else {
+        guard !isRestoringDatabase, let client = clients[server.id], case .ready = status(for: server).connectionState else {
             return
         }
         mcpManagerLogger.info("刷新 MCP 元数据：\(server.displayName, privacy: .public)")
@@ -30,11 +30,15 @@ extension MCPManager {
     }
 
     func refreshMetadata(for serverID: UUID, client: MCPClient, serverInfo: MCPServerInfo?) async {
+        let macUsage = beginMacStdioUse(serverID: serverID)
+        defer { endMacStdioUse(serverID: serverID, usage: macUsage) }
         do {
             let tools = try await client.listTools()
             let resources = try await listResourcesIfSupported(client: client)
             let resourceTemplates = try await listResourceTemplatesIfSupported(client: client)
             let prompts = try await listPromptsIfSupported(client: client)
+            // 断连、传输切换或数据库恢复后，旧客户端的迟到结果不能写入新目录。
+            guard !isRestoringDatabase, clients[serverID] === client else { return }
             // roots/list 是服务器向客户端发起的请求，不属于可主动拉取的服务器元数据。
             let roots: [MCPRoot] = []
             if let server = servers.first(where: { $0.id == serverID }) {
@@ -58,7 +62,13 @@ extension MCPManager {
                 prompts: prompts,
                 roots: roots
             )
+            #if os(macOS)
+            guard let server = servers.first(where: { $0.id == serverID }),
+                  await configurationPersistenceWorker.saveMetadata(cache, server: server),
+                  !isRestoringDatabase, clients[serverID] === client else { return }
+            #else
             MCPServerStore.saveMetadata(cache, for: serverID)
+            #endif
 
             updateStatus(for: serverID) {
                 $0.tools = tools
@@ -82,6 +92,7 @@ extension MCPManager {
             )
             persistResumptionToken(for: serverID)
         } catch {
+            guard !isRestoringDatabase, clients[serverID] === client else { return }
             if let server = servers.first(where: { $0.id == serverID }) {
                 mcpManagerLogger.error("MCP 元数据刷新失败：\(server.displayName, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
             } else {

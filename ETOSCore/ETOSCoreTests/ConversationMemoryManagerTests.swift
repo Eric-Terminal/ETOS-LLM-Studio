@@ -52,7 +52,7 @@ struct ConversationMemoryManagerTests {
         )
     }
 
-    @Test("persist user profile in memory json")
+    @Test("保存画像并保护草稿版本及并发修改")
     func persistUserProfileInMemoryJSON() async throws {
         let previousProfile = ConversationMemoryManager.loadUserProfile()
         defer {
@@ -95,8 +95,46 @@ struct ConversationMemoryManagerTests {
         let snapshot = await ConversationMemoryManager.loadStateSnapshotAsync()
         #expect(snapshot.userProfile == loaded)
 
+        #expect(throws: ConversationProfileDraftError.emptyContent) {
+            try ConversationMemoryManager.saveUserProfileDraft(content: " \n ", expectedProfile: loaded)
+        }
+        #expect(ConversationMemoryManager.loadUserProfile() == loaded)
+        #expect(throws: ConversationProfileDraftError.changedExternally) {
+            try ConversationMemoryManager.saveUserProfileDraft(content: "过期的新建草稿", expectedProfile: nil)
+        }
+
+        try ConversationMemoryManager.saveUserProfileDraft(content: "  手动更新画像  ", expectedProfile: loaded)
+        let edited = try #require(ConversationMemoryManager.loadUserProfile())
+        #expect(edited.content == "手动更新画像")
+        #expect(edited.facts == [fact])
+        #expect(throws: ConversationProfileDraftError.changedExternally) {
+            try ConversationMemoryManager.saveUserProfileDraft(content: "旧编辑器内容", expectedProfile: loaded)
+        }
+
+        // 两个窗口拿到同一版本时，仅一个草稿可以保存，另一份不能覆盖刚写入的版本。
+        async let firstSave: Bool = Task.detached {
+            do {
+                try ConversationMemoryManager.saveUserProfileDraft(content: "窗口一", expectedProfile: edited)
+                return true
+            } catch { return false }
+        }.value
+        async let secondSave: Bool = Task.detached {
+            do {
+                try ConversationMemoryManager.saveUserProfileDraft(content: "窗口二", expectedProfile: edited)
+                return true
+            } catch { return false }
+        }.value
+        let (firstResult, secondResult) = await (firstSave, secondSave)
+        #expect(firstResult != secondResult)
+
         try ConversationMemoryManager.clearUserProfile()
         #expect(ConversationMemoryManager.loadUserProfile() == nil)
+        #expect(throws: ConversationProfileDraftError.changedExternally) {
+            try ConversationMemoryManager.saveUserProfileDraft(content: "已删除画像的旧草稿", expectedProfile: edited)
+        }
+        #expect(ConversationMemoryManager.loadUserProfile() == nil)
+        try ConversationMemoryManager.saveUserProfileDraft(content: "重新创建", expectedProfile: nil)
+        #expect(ConversationMemoryManager.loadUserProfile()?.content == "重新创建")
     }
 
     @Test("解析结构化用户画像并生成分区提示词")

@@ -46,9 +46,15 @@ extension ChatService {
         aiTemperature: Double,
         sessionID: UUID? = nil,
         referenceVersions: [MessageRewriteReferenceVersion] = [],
-        selectionTarget: MessageRewriteSelectionTarget? = nil
+        selectionTarget: MessageRewriteSelectionTarget? = nil,
+        runnableModel: RunnableModel? = nil,
+        expectedMessage: ChatMessage? = nil
     ) async throws {
+        // 初始化和取消旧请求都会挂起，先固定用户提交时的来源与模型。
+        let requestedSessionID = sessionID ?? currentSessionSubject.value?.id
+        let requestedModel = runnableModel ?? detachedChatCompletionFallbackModel()
         await waitForInitialPersistenceStateIfNeeded()
+        try Task.checkCancellation()
 
         let trimmedInstruction = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedInstruction.isEmpty else {
@@ -56,7 +62,7 @@ extension ChatService {
         }
 
         let resolvedSessionID: UUID
-        if let sessionID {
+        if let sessionID = requestedSessionID {
             resolvedSessionID = sessionID
         } else if let currentSessionID = currentSessionSubject.value?.id {
             resolvedSessionID = currentSessionID
@@ -74,17 +80,21 @@ extension ChatService {
         }
 
         let originalMessage = messages[messageIndex]
+        if let expectedMessage, originalMessage != expectedMessage { throw MessageToolCallEditingError.messageChanged }
         guard !originalMessage.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw MessageRewriteError.emptyOriginalContent
         }
 
+        guard let targetModel = requestedModel ?? detachedChatCompletionFallbackModel() else { throw DetachedCompletionError.noAvailableModel }
         await cancelRequest(for: resolvedSessionID)
+        try Task.checkCancellation()
 
         var updatedMessages = messagesSnapshot(for: resolvedSessionID)
         guard let refreshedMessageIndex = updatedMessages.firstIndex(where: { $0.id == message.id }) else {
             throw MessageRewriteError.messageNotFound
         }
         let refreshedMessage = updatedMessages[refreshedMessageIndex]
+        if let expectedMessage, refreshedMessage != expectedMessage { throw MessageToolCallEditingError.messageChanged }
         guard refreshedMessage.role == .assistant else {
             throw MessageRewriteError.unsupportedMessageRole
         }
@@ -130,8 +140,6 @@ extension ChatService {
 
         let loadingMessageID = loadingMessage.id
         let loadingRequestedAt = loadingMessage.requestedAt
-        let fallbackModelReference = refreshedMessage.modelReference
-        let fallbackCostEstimate = refreshedMessage.costEstimate
 
         let requestToken = UUID()
         emitSessionRequestStatus(.started, sessionID: resolvedSessionID)
@@ -147,12 +155,10 @@ extension ChatService {
 
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
-            let targetModel = self.detachedChatCompletionFallbackModel()
-            if let targetModel {
-                await self.prepareThinkingSweepAppearance(
-                    for: targetModel, messageID: loadingMessageID, sessionID: resolvedSessionID
-                )
-            }
+            try Task.checkCancellation()
+            await self.prepareThinkingSweepAppearance(
+                for: targetModel, messageID: loadingMessageID, sessionID: resolvedSessionID
+            )
             let sanitizedContent: String
             if let selectionTarget {
                 let replacement = try await self.generatePartialRewriteReplacement(
@@ -187,15 +193,14 @@ extension ChatService {
                     throw MessageRewriteError.emptyRewriteResult
                 }
             }
-            let modelReference = targetModel.map {
-                MessageModelReference(
-                    providerID: $0.provider.id,
-                    providerName: $0.provider.name,
-                    modelUUID: $0.model.id,
-                    modelName: $0.model.modelName,
-                    modelDisplayName: $0.model.displayName
-                )
-            }
+            try Task.checkCancellation()
+            let modelReference = MessageModelReference(
+                providerID: targetModel.provider.id,
+                providerName: targetModel.provider.name,
+                modelUUID: targetModel.model.id,
+                modelName: targetModel.model.modelName,
+                modelDisplayName: targetModel.model.displayName
+            )
             var rewrittenMessage = ChatMessage(
                 role: .assistant,
                 content: sanitizedContent,
@@ -205,8 +210,7 @@ extension ChatService {
                 responseAttemptIndex: attemptMetadata.attemptIndex,
                 selectedResponseAttemptID: attemptMetadata.attemptID
             )
-            rewrittenMessage.modelReference = modelReference ?? fallbackModelReference
-            rewrittenMessage.costEstimate = modelReference == nil ? fallbackCostEstimate : nil
+            rewrittenMessage.modelReference = modelReference
             await self.applyRewriteResult(
                 rewrittenMessage,
                 loadingMessageID: loadingMessageID,
@@ -220,12 +224,15 @@ extension ChatService {
         }
 
         do {
-            try await requestTask.value
+            // 外层编辑器/窗口取消后，也必须等待真正的网络任务退出再清理占位版本。
+            try await withTaskCancellationHandler { try await requestTask.value } onCancel: { requestTask.cancel() }
             emitSessionRequestStatus(.finished, sessionID: resolvedSessionID)
-        } catch is CancellationError {
-            throw CancellationError()
         } catch {
             if isCancellationError(error) {
+                await removeMessage(withID: loadingMessageID, in: resolvedSessionID)
+                if self.loadingMessageID(for: resolvedSessionID) == loadingMessageID {
+                    emitSessionRequestStatus(.cancelled, sessionID: resolvedSessionID)
+                }
                 throw CancellationError()
             }
             await removeMessage(withID: loadingMessageID, in: resolvedSessionID)

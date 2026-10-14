@@ -81,6 +81,8 @@ public actor NetworkConnectionSecurity {
     private var state: NetworkConnectionSecurityState?
     private let persistent: Bool
     private var installationSecret = ""
+    private var databaseAvailable = true
+    private var databaseRevision = UUID()
     private let ask:
         @Sendable (NetworkConnectionOrigin, NetworkConnectionExceptionKind, String, String?) async ->
             NetworkConnectionDecision
@@ -99,11 +101,29 @@ public actor NetworkConnectionSecurity {
     }
 
     public func snapshot() -> NetworkConnectionSecurityState {
+        guard databaseAvailable else { return NetworkConnectionSecurityState() }
         loadIfNeeded()
         return state ?? NetworkConnectionSecurityState()
     }
 
+    /// 恢复期间不再读写旧库；已经展示或正在退场的授权也不能写入替换后的数据库。
+    public func prepareForDatabaseRestore() {
+        databaseAvailable = false
+        databaseRevision = UUID()
+        state = nil
+        if persistent { NetworkSessionConfiguration.cancelConnections() }
+    }
+
+    public func finishDatabaseRestore() {
+        state = nil
+        installationSecret = ""
+        databaseAvailable = true
+        databaseRevision = UUID()
+        NotificationCenter.default.post(name: .networkConnectionSecurityDidChange, object: nil)
+    }
+
     public func setEnabled(_ enabled: Bool, for kind: NetworkConnectionExceptionKind) throws {
+        guard databaseAvailable else { throw NetworkConnectionSecurityError.denied }
         var next = snapshot()
         switch kind {
         case .http: next.allowsHTTPExceptions = enabled
@@ -114,6 +134,7 @@ public actor NetworkConnectionSecurity {
     }
 
     public func removeException(id: UUID) throws {
+        guard databaseAvailable else { throw NetworkConnectionSecurityError.denied }
         var next = snapshot()
         let removed = next.exceptions.first { $0.id == id }
         next.exceptions.removeAll { $0.id == id }
@@ -124,7 +145,8 @@ public actor NetworkConnectionSecurity {
     public func authorizeHTTP(_ url: URL?) async throws {
         try Task.checkCancellation()
         guard let url, let origin = NetworkConnectionOrigin(url: url), origin.scheme == "http" else { return }
-        guard !origin.isAppService else { throw NetworkConnectionSecurityError.denied }
+        guard databaseAvailable, !origin.isAppService else { throw NetworkConnectionSecurityError.denied }
+        let revision = databaseRevision
         let current = snapshot()
         if current.allowsHTTPExceptions,
             current.exceptions.contains(where: { $0.origin == origin && $0.kind == .http })
@@ -133,7 +155,9 @@ public actor NetworkConnectionSecurity {
         }
         let decision = await ask(origin, .http, "", nil)
         try Task.checkCancellation()
-        guard decision != .cancel else { throw NetworkConnectionSecurityError.denied }
+        guard databaseAvailable, databaseRevision == revision, decision != .cancel else {
+            throw NetworkConnectionSecurityError.denied
+        }
         if decision == .remember {
             try remember(origin: origin, kind: .http, trustExceptions: nil)
         }
@@ -141,6 +165,8 @@ public actor NetworkConnectionSecurity {
 
     /// 默认验证成功的服务器不需要例外；已有例外必须重新通过系统评估。
     func accepts(_ trust: SecTrust, origin: NetworkConnectionOrigin) async -> Bool {
+        guard databaseAvailable else { return false }
+        let revision = databaseRevision
         if SecTrustEvaluateWithError(trust, nil) { return true }
         guard !origin.isAppService, !Task.isCancelled else { return false }
         let current = snapshot()
@@ -164,7 +190,7 @@ public actor NetworkConnectionSecurity {
                 .map { String(format: "%02x", $0) }.joined()
         }.joined(separator: ":")
         let decision = await ask(origin, .certificate, detail, certificateIdentity)
-        guard decision != .cancel, !Task.isCancelled,
+        guard databaseAvailable, databaseRevision == revision, decision != .cancel, !Task.isCancelled,
             let exceptions = SecTrustCopyExceptions(trust),
             SecTrustSetExceptions(trust, exceptions),
             SecTrustEvaluateWithError(trust, nil)
@@ -182,7 +208,7 @@ public actor NetworkConnectionSecurity {
 
     func remember(origin: NetworkConnectionOrigin, kind: NetworkConnectionExceptionKind, trustExceptions: Data?) throws
     {
-        guard !origin.isAppService else { throw NetworkConnectionSecurityError.denied }
+        guard databaseAvailable, !origin.isAppService else { throw NetworkConnectionSecurityError.denied }
         var next = snapshot()
         next.exceptions.removeAll { $0.origin == origin && $0.kind == kind }
         next.exceptions.append(

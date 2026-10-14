@@ -223,7 +223,6 @@ extension AppConfigStore {
              .skillsEnabledNames,
              .messageRegexRules,
              .customChatSlashCommands,
-             .shortcutOfficialImportShortcutName,
              .localDebugLastServerAddress:
             Self.persistSynchronously(.text(value), for: key, quickSync: false)
         case .systemPrompt: systemPrompt = value
@@ -284,6 +283,7 @@ extension AppConfigStore {
         case .chatComposerDraft: chatComposerDraft = value
         case .backgroundCropTarget: backgroundCropTarget = value
         case .shortcutBridgeShortcutName: shortcutBridgeShortcutName = value
+        case .shortcutOfficialImportShortcutName: shortcutOfficialImportShortcutName = value
         case .guidePreferredRoute: guidePreferredRoute = value
         case .guidePreferredModelIdentifier: guidePreferredModelIdentifier = value
         case .systemTimeInjectionPosition: systemTimeInjectionPosition = value

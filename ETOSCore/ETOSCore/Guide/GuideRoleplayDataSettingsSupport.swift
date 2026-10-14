@@ -9,32 +9,22 @@
 import Foundation
 
 public enum GuideRoleplayDataSettingsSupport {
-    public static let macrosSchema: JSONValue = .dictionary([
+    public static var macrosSchema: JSONValue { .dictionary([
         "type": .string("object"),
-        "description": .string("完整自定义宏对象，键为不含花括号的宏名称，值为替换文本"),
+        "description": .string(NSLocalizedString("完整自定义宏对象，键为不含花括号的宏名称，值为替换文本", comment: "")),
         "additionalProperties": .dictionary(["type": .string("string")])
-    ])
+    ]) }
 
-    public static let variablesSchema: JSONValue = .dictionary([
+    public static var variablesSchema: JSONValue { .dictionary([
         "type": .string("object"),
-        "description": .string("当前所选作用域的完整变量对象"),
+        "description": .string(NSLocalizedString("当前所选作用域的完整变量对象", comment: "")),
         "additionalProperties": .bool(true)
-    ])
+    ]) }
 
     public static func normalizeMacros(_ value: JSONValue) throws -> JSONValue {
         guard case .dictionary(let object) = value else { throw GuideError.invalidToolArguments }
-        var normalized: [String: JSONValue] = [:]
-        for (rawName, rawValue) in object {
-            let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty,
-                  !name.contains("{{"),
-                  !name.contains("}}"),
-                  case .string(let text) = rawValue else {
-                throw GuideError.invalidToolArguments
-            }
-            normalized[name] = .string(text)
-        }
-        return .dictionary(normalized)
+        do { return .dictionary(try RoleplayDataDraft.normalizeMacros(object)) }
+        catch { throw GuideError.invalidToolArguments }
     }
 
     public static func macros(from value: JSONValue) throws -> [String: String] {

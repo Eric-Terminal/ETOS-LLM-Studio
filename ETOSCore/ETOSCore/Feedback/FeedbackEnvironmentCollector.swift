@@ -48,6 +48,8 @@ public enum FeedbackEnvironmentCollector {
         return "iOS"
 #elseif os(watchOS)
         return "watchOS"
+#elseif os(macOS)
+        return "macOS"
 #else
         return "unknown"
 #endif

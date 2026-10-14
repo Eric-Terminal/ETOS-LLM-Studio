@@ -30,6 +30,16 @@ public struct LocalLinuxRedactionResult: Equatable, Sendable {
 public actor LocalLinuxProcessEnvironmentProvider {
     public static let shared = LocalLinuxProcessEnvironmentProvider()
 
+    #if os(macOS)
+    static var baseEnvironment: [String: String] {
+        var values = MCPMacStdioTransport.baseEnvironment
+        values["TERM"] = "xterm-256color"
+        values["COLORTERM"] = "truecolor"
+        values["TERM_PROGRAM"] = LocalLinuxTerminalIdentity.programName
+        values["TERM_PROGRAM_VERSION"] = LocalLinuxTerminalIdentity.programVersion
+        return values
+    }
+    #else
     static let baseEnvironment: [String: String] = [
         "HOME": "/home/etos",
         "USER": "etos",
@@ -44,6 +54,7 @@ public actor LocalLinuxProcessEnvironmentProvider {
         "LC_TERMINAL": LocalLinuxTerminalIdentity.programName,
         "LC_TERMINAL_VERSION": LocalLinuxTerminalIdentity.programVersion
     ]
+    #endif
 
     public func variables() -> [LocalLinuxEnvironmentVariable] {
         Persistence.loadLocalLinuxEnvironmentVariables()
@@ -98,7 +109,8 @@ public actor LocalLinuxProcessEnvironmentProvider {
         additional: [String: String] = [:],
         frozenGlobalValues: [String: String]? = nil,
         frozenReferences: [LocalLinuxEnvironmentReferenceSnapshot]? = nil,
-        frozenRedactionValues: [String]? = nil
+        frozenRedactionValues: [String]? = nil,
+        baseValues: [String: String]? = nil
     ) throws -> LocalLinuxEnvironmentSnapshot {
         let allVariables = variables()
         var environment: [String: String]
@@ -108,7 +120,7 @@ public actor LocalLinuxProcessEnvironmentProvider {
                 environment = frozenGlobalValues
                 redactionValues = frozenRedactionValues ?? []
             } else {
-                environment = Self.baseEnvironment
+                environment = baseValues ?? Self.baseEnvironment
                 let enabled = allVariables.filter(\.isEnabled)
                 for variable in enabled {
                     environment[variable.name] = variable.value
@@ -116,8 +128,8 @@ public actor LocalLinuxProcessEnvironmentProvider {
                 redactionValues = enabled.map(\.value)
             }
         } else {
-            // 即使不继承用户变量，仍保留 Linux 进程启动所需的基础 PATH/HOME。
-            environment = Self.baseEnvironment
+            // 即使不继承用户变量，仍保留所选执行环境启动所需的基础 PATH/HOME。
+            environment = baseValues ?? Self.baseEnvironment
             redactionValues = []
         }
 

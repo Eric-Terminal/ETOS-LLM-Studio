@@ -103,6 +103,7 @@ public actor LocalLinuxMountManager {
     private let bridge: any LocalLinuxMountBridge
     private var mutatingMountIDs: Set<UUID> = []
     private var scopedResources: [UUID: LocalLinuxDirectoryAccess] = [:]
+    private var runtimeGeneration = UUID()
     private struct TransientSkillMount {
         let id: UUID
         let canonicalHostPath: String
@@ -191,7 +192,8 @@ public actor LocalLinuxMountManager {
     public func reauthorize(
         id: UUID,
         with url: URL,
-        access: LocalLinuxMountAccess
+        access: LocalLinuxMountAccess,
+        expected: LocalLinuxMountRecord? = nil
     ) async throws -> LocalLinuxMountRecord {
         try beginMutation(id: id)
         defer { mutatingMountIDs.remove(id) }
@@ -199,6 +201,7 @@ public actor LocalLinuxMountManager {
             throw LocalLinuxRuntimeError.invalidPath(id.uuidString)
         }
         let original = record
+        try validateExpected(expected, current: record)
         record.bookmark = try LocalLinuxExternalDirectory.createBookmark(for: url)
         record.displayName = url.lastPathComponent
         record.access = access
@@ -231,12 +234,13 @@ public actor LocalLinuxMountManager {
         return records().first(where: { $0.id == id }) ?? record
     }
 
-    public func setEnabled(_ isEnabled: Bool, id: UUID) async throws -> LocalLinuxMountRecord {
+    public func setEnabled(_ isEnabled: Bool, id: UUID, expected: LocalLinuxMountRecord? = nil) async throws -> LocalLinuxMountRecord {
         try beginMutation(id: id)
         defer { mutatingMountIDs.remove(id) }
         guard var record = records().first(where: { $0.id == id }) else {
             throw LocalLinuxRuntimeError.invalidPath(id.uuidString)
         }
+        try validateExpected(expected, current: record)
         guard record.isEnabled != isEnabled else { return record }
         if await bridge.runtimePhase() == 2 {
             if isEnabled {
@@ -267,9 +271,10 @@ public actor LocalLinuxMountManager {
         return records().first(where: { $0.id == id }) ?? record
     }
 
-    public func delete(id: UUID, force: Bool) async throws {
+    public func delete(id: UUID, force: Bool, expected: LocalLinuxMountRecord? = nil) async throws {
         try beginMutation(id: id)
         defer { mutatingMountIDs.remove(id) }
+        if let expected { try validateExpected(expected, current: records().first { $0.id == id }) }
         if force {
             await LocalLinuxJobScheduler.shared.cancelJobs(usingMountID: id)
         }
@@ -281,6 +286,13 @@ public actor LocalLinuxMountManager {
             throw LocalLinuxRuntimeError.runtimeUnavailable(
                 NSLocalizedString("无法删除 Linux 挂载。", comment: "Delete Linux mount failure")
             )
+        }
+    }
+
+    private func validateExpected(_ expected: LocalLinuxMountRecord?, current: LocalLinuxMountRecord?) throws {
+        guard let expected else { return }
+        guard current?.matchesConfiguration(expected) == true else {
+            throw LocalLinuxRuntimeError.runtimeUnavailable(NSLocalizedString("挂载配置已变化，请刷新后重试。", comment: ""))
         }
     }
 
@@ -362,8 +374,8 @@ public actor LocalLinuxMountManager {
                 let bridgeLease = try await bridge.acquireMountLease(id: id)
                 incrementPersistedLeaseCount(id: id)
                 leases.append(
-                    LocalLinuxMountLease(bridgeLease: bridgeLease) { [weak self] releasedID in
-                        Task { await self?.decrementPersistedLeaseCount(id: releasedID) }
+                    LocalLinuxMountLease(bridgeLease: bridgeLease) { [weak self, runtimeGeneration] releasedID in
+                        Task { await self?.decrementPersistedLeaseCount(id: releasedID, generation: runtimeGeneration) }
                     }
                 )
             }
@@ -458,6 +470,7 @@ public actor LocalLinuxMountManager {
     }
 
     public func runtimeDidStop() {
+        runtimeGeneration = UUID()
         scopedResources.removeAll()
         transientSkillMounts.removeAll()
         resetStaleLeaseCountsAfterLaunch()
@@ -471,7 +484,9 @@ public actor LocalLinuxMountManager {
         _ = Persistence.updateLocalLinuxMountLeaseCount(id: id, delta: 1)
     }
 
-    private func decrementPersistedLeaseCount(id: UUID) {
+    private func decrementPersistedLeaseCount(id: UUID, generation: UUID) {
+        // release 的 actor 回调可能迟到；停止前的租约不能减少恢复数据库后的计数。
+        guard generation == runtimeGeneration else { return }
         _ = Persistence.updateLocalLinuxMountLeaseCount(id: id, delta: -1)
     }
 
@@ -563,9 +578,14 @@ public actor LocalLinuxMountManager {
         var stale = false
         let url: URL
         do {
+            #if os(macOS)
+            let options: URL.BookmarkResolutionOptions = [.withoutUI, .withSecurityScope]
+            #else
+            let options: URL.BookmarkResolutionOptions = [.withoutUI]
+            #endif
             url = try URL(
                 resolvingBookmarkData: bookmark,
-                options: [.withoutUI],
+                options: options,
                 relativeTo: nil,
                 bookmarkDataIsStale: &stale
             )
@@ -595,12 +615,18 @@ public actor LocalLinuxMountManager {
             if shouldStop { url.stopAccessingSecurityScopedResource() }
             if persistState { persistAuthorizationState(record, state: .unavailable) }
             LocalLinuxExternalDirectory.recordFailure("准备目录", error: error, didStartAccess: shouldStop)
-            throw LocalLinuxRuntimeError.runtimeUnavailable(
-                NSLocalizedString(
-                    "外部目录尚未在本机准备好。请先在“文件”App 中打开该目录，等待 iCloud 或文件提供者下载完成后重试。",
-                    comment: "Linux mount File Provider materialization error"
-                )
+            #if os(macOS)
+            let message = NSLocalizedString(
+                "外部目录尚未在本机准备好。请先在 Finder 中打开该目录，等待 iCloud 或文件提供者下载完成后重试。",
+                comment: "Mac 外部目录尚未准备好"
             )
+            #else
+            let message = NSLocalizedString(
+                "外部目录尚未在本机准备好。请先在“文件”App 中打开该目录，等待 iCloud 或文件提供者下载完成后重试。",
+                comment: "Linux mount File Provider materialization error"
+            )
+            #endif
+            throw LocalLinuxRuntimeError.runtimeUnavailable(message)
         }
     }
 

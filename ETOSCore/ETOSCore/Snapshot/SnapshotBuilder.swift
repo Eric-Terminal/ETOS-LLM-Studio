@@ -252,6 +252,7 @@ private extension SnapshotBuilder {
             AssetDirectory(relativePath: "AudioFiles", directoryURL: Persistence.getAudioDirectory()),
             AssetDirectory(relativePath: "ImageFiles", directoryURL: Persistence.getImageDirectory()),
             AssetDirectory(relativePath: "FileAttachments", directoryURL: Persistence.getFileDirectory()),
+            AssetDirectory(relativePath: "Skills", directoryURL: SkillStore.skillsDirectory),
             AssetDirectory(relativePath: "FontFiles", directoryURL: Persistence.getFontDirectory())
         ]
 
@@ -336,6 +337,7 @@ private extension SnapshotBuilder {
                 "AudioFiles/",
                 "ImageFiles/",
                 "FileAttachments/",
+                "Skills/",
                 "FontFiles/"
             ]
         case .full:

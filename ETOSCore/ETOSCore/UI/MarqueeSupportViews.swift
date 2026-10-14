@@ -6,7 +6,9 @@
 // - 提供带选中态的滚动选择行
 // ============================================================================
 
+#if canImport(UIKit)
 import SwiftUI
+import UIKit
 
 public struct MarqueeTitleSubtitleLabel: View {
     let title: String
@@ -132,3 +134,4 @@ public struct MarqueeTitleSubtitleSelectionRow: View {
         }
     }
 }
+#endif

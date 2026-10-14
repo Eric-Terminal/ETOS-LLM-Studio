@@ -9,7 +9,7 @@
 import Foundation
 
 extension TTSManager {
-    var cloudRequestTimeoutSeconds: TimeInterval {
+    nonisolated var cloudRequestTimeoutSeconds: TimeInterval {
 #if os(watchOS)
         25
 #else
@@ -17,11 +17,15 @@ extension TTSManager {
 #endif
     }
 
-    func synthesizeCloudAudio(
+    nonisolated func synthesizeCloudAudio(
         text: String,
         settings _: TTSSettingsSnapshot,
         service: TTSServiceConfiguration
     ) async throws -> AudioClip {
+        try Task.checkCancellation()
+        guard service.isReady else {
+            throw ttsError(code: -7, message: NSLocalizedString("当前 TTS 服务配置不完整。", comment: ""))
+        }
         switch service.providerKind {
         case .openAICompatible, .groq:
             return try await synthesizeOpenAISpeech(text: text, service: service)
@@ -48,7 +52,7 @@ extension TTSManager {
         }
     }
 
-    private func synthesizeOpenAISpeech(
+    private nonisolated func synthesizeOpenAISpeech(
         text: String,
         service: TTSServiceConfiguration
     ) async throws -> AudioClip {
@@ -70,7 +74,7 @@ extension TTSManager {
         return AudioClip(data: data, format: responseFormat.lowercased(), sampleRate: nil)
     }
 
-    private func synthesizeGemini(
+    private nonisolated func synthesizeGemini(
         text: String,
         service: TTSServiceConfiguration
     ) async throws -> AudioClip {
@@ -112,7 +116,7 @@ extension TTSManager {
         return AudioClip(data: pcmData, format: "pcm", sampleRate: 24_000)
     }
 
-    private func synthesizeAzure(
+    private nonisolated func synthesizeAzure(
         text: String,
         service: TTSServiceConfiguration
     ) async throws -> AudioClip {
@@ -142,7 +146,7 @@ extension TTSManager {
         return AudioClip(data: try await fetchData(for: request), format: "mp3", sampleRate: 24_000)
     }
 
-    private func synthesizeQwen(
+    private nonisolated func synthesizeQwen(
         text: String,
         service: TTSServiceConfiguration
     ) async throws -> AudioClip {
@@ -181,7 +185,7 @@ extension TTSManager {
         return AudioClip(data: output, format: "pcm", sampleRate: 24_000)
     }
 
-    private func synthesizeMiniMax(
+    private nonisolated func synthesizeMiniMax(
         text: String,
         service: TTSServiceConfiguration
     ) async throws -> AudioClip {
@@ -243,7 +247,7 @@ extension TTSManager {
         )
     }
 
-    private func synthesizeXAI(
+    private nonisolated func synthesizeXAI(
         text: String,
         service: TTSServiceConfiguration
     ) async throws -> AudioClip {
@@ -261,7 +265,7 @@ extension TTSManager {
         return AudioClip(data: data, format: "mp3", sampleRate: nil)
     }
 
-    private func synthesizeElevenLabs(
+    private nonisolated func synthesizeElevenLabs(
         text: String,
         service: TTSServiceConfiguration
     ) async throws -> AudioClip {
@@ -292,7 +296,7 @@ extension TTSManager {
         return AudioClip(data: data, format: format, sampleRate: nil)
     }
 
-    private func synthesizeMiMo(
+    private nonisolated func synthesizeMiMo(
         text: String,
         service: TTSServiceConfiguration
     ) async throws -> AudioClip {
@@ -343,7 +347,7 @@ extension TTSManager {
         return AudioClip(data: output, format: "pcm", sampleRate: 24_000)
     }
 
-    private func synthesizeStepFun(
+    private nonisolated func synthesizeStepFun(
         text: String,
         service: TTSServiceConfiguration
     ) async throws -> AudioClip {
@@ -374,7 +378,7 @@ extension TTSManager {
         )
     }
 
-    private func synthesizeFishAudio(
+    private nonisolated func synthesizeFishAudio(
         text: String,
         service: TTSServiceConfiguration
     ) async throws -> AudioClip {
@@ -403,7 +407,7 @@ extension TTSManager {
         )
     }
 
-    private func fetchJSONAudio(
+    private nonisolated func fetchJSONAudio(
         url: URL,
         apiKey: String,
         payload: [String: Any],
@@ -417,7 +421,7 @@ extension TTSManager {
         return try await fetchData(for: request)
     }
 
-    private func jsonRequest(url: URL, payload: [String: Any]) throws -> URLRequest {
+    private nonisolated func jsonRequest(url: URL, payload: [String: Any]) throws -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = cloudRequestTimeoutSeconds
@@ -431,7 +435,7 @@ extension TTSManager {
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
 
-    private func ttsError(code: Int, message: String) -> NSError {
+    private nonisolated func ttsError(code: Int, message: String) -> NSError {
         NSError(domain: "TTS", code: code, userInfo: [NSLocalizedDescriptionKey: message])
     }
 }

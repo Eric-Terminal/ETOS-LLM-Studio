@@ -57,11 +57,11 @@ final class PersistenceGRDBStore {
     )
     let messageWriteQueueSpecificKey = DispatchSpecificKey<UInt8>()
 
-    init(chatsDirectory: URL) throws {
+    init(chatsDirectory: URL, configuration: Configuration? = nil, schedulesMaintenance: Bool = true) throws {
         self.chatsDirectory = chatsDirectory
         self.databaseURL = chatsDirectory.appendingPathComponent("chat-store.sqlite")
 
-        let configuration = Persistence.makeDatabaseConfiguration(
+        let configuration = configuration ?? Persistence.makeDatabaseConfiguration(
             qos: .userInitiated,
             mmapSize: 134_217_728
         )
@@ -77,8 +77,8 @@ final class PersistenceGRDBStore {
             let interval = TelemetrySignpost.begin(.databaseSchemaMigration)
             defer { TelemetrySignpost.end(interval) }
             try migrateSchemaIfNeeded()
-        }
-        scheduleDatabaseMaintenanceIfNeeded()
+        } catch { try? dbPool.close(); throw error }
+        if schedulesMaintenance { scheduleDatabaseMaintenanceIfNeeded() }
     }
 
     func flushPendingMessageWrites() {

@@ -496,6 +496,7 @@ public actor MCPLocalStdioTransport: Transport, MCPSDKTransportControl {
     private var job: LocalLinuxJob?
     private var collector: LocalLinuxOutputCollector?
     private var runtimeSnapshot: LocalLinuxRuntimeSnapshot?
+    private var runtimeActivity: LocalLinuxActivityLease?
     private var diagnosticTask: Task<Void, Never>?
     private var mountLeases: [LocalLinuxMountLease] = []
     private var wasInterruptedBySuspension = false
@@ -529,6 +530,9 @@ public actor MCPLocalStdioTransport: Transport, MCPSDKTransportControl {
 
     public func connect() async throws {
         guard !connected else { return }
+        let activity = try LocalLinuxActivityBarrier.shared.begin()
+        var transferredActivity = false
+        defer { if !transferredActivity { activity.finish() } }
         router.setFailureHandler { [weak self] in
             Task { await self?.cancel(interruptedBySuspension: false) }
         }
@@ -626,7 +630,8 @@ public actor MCPLocalStdioTransport: Transport, MCPSDKTransportControl {
             modelURL: outputURLs.model,
             redactionValues: frozenRedactionValues ?? environmentSnapshot.redactionValues,
             privacyEnabled: AppConfigStore.boolValue(for: .localLinuxEnvironmentPrivacyEnabled),
-            modelByteLimit: UInt64(AppConfigStore.integerValue(for: .localLinuxOutputPreviewBytes))
+            modelByteLimit: UInt64(AppConfigStore.integerValue(for: .localLinuxOutputPreviewBytes)),
+            rawOutputChanged: { [jobID = job.id] in LocalLinuxJobNotifications.outputChanged(jobID: jobID) }
         )
         self.collector = collector
         router.setCollector(collector)
@@ -638,6 +643,7 @@ public actor MCPLocalStdioTransport: Transport, MCPSDKTransportControl {
             mountLeases = try await LocalLinuxMountManager.shared.acquireLeases(
                 ids: configuration.mountIDs
             )
+            try activity.checkCancellation()
             started = try await iSHAppleBridgeAdapter.shared.startCommand(
                 requestID: requestID,
                 request: request
@@ -649,6 +655,8 @@ public actor MCPLocalStdioTransport: Transport, MCPSDKTransportControl {
             throw error
         }
         session = started
+        runtimeActivity = activity
+        transferredActivity = true
         diagnosticTask = makeDiagnosticTask(requestID: requestID, jobID: job.id)
         connected = true
         job.state = .running
@@ -663,6 +671,7 @@ public actor MCPLocalStdioTransport: Transport, MCPSDKTransportControl {
         ) { [weak self] interruptedBySuspension in
             Task { await self?.cancel(interruptedBySuspension: interruptedBySuspension) }
         }
+        if (try? activity.checkCancellation()) == nil { try? started.cancel() }
         resultTask = Task {
             let result = await started.result()
             await self.processExited(result)
@@ -683,6 +692,7 @@ public actor MCPLocalStdioTransport: Transport, MCPSDKTransportControl {
     }
 
     public func send(_ data: Data) async throws {
+        try runtimeActivity?.checkCancellation()
         guard connected, let session else { throw MCPClientError.notConnected }
         var framed = data
         if framed.last != 0x0A { framed.append(0x0A) }
@@ -698,6 +708,8 @@ public actor MCPLocalStdioTransport: Transport, MCPSDKTransportControl {
 
     private func processExited(_ result: LocalLinuxBridgeCommandResult) async {
         guard !didFinalize else { return }
+        let activity = runtimeActivity
+        defer { activity?.finish(); runtimeActivity = nil }
         didFinalize = true
         connected = false
         session = nil

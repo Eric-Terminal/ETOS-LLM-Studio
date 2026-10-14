@@ -12,6 +12,28 @@ import Combine
 @testable import ETOSCore
 
 extension ChatServiceTests {
+    @Test("后台压缩保存续聊但不替桌面窗口切换当前会话")
+    func compressionCanSaveWithoutActivation() async throws {
+        await cleanup()
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "后台生成的摘要")
+        let original = [ChatMessage(role: .user, content: "原会话正文")]
+        let source = chatService.createSavedSession(name: "桌面来源", initialMessages: original)
+        let child = try await chatService.createCompressedContinuation(from: source.id,
+            options: ContextCompressionOptions(retainedRoundCount: 0), activate: false)
+        #expect(chatService.currentSessionSubject.value?.id == source.id)
+        #expect(chatService.messagesForSessionSubject.value == original)
+        #expect(chatService.chatSessionsSubject.value.contains { $0.id == child.id })
+        let context = try #require(try Persistence.loadConversationContinuationContext(for: child.id))
+        #expect(context.summary == "后台生成的摘要")
+        #expect(context.sourceSessionID == source.id)
+        #expect(Persistence.loadMessages(for: source.id) == original)
+        await chatService.selectSession(child, isSelectionAllowed: { false })
+        #expect(chatService.currentSessionSubject.value?.id == source.id)
+        #expect(chatService.messagesForSessionSubject.value == original)
+        chatService.deleteSessions([child, source])
+    }
+
     @Test("超长历史只发起一次完整摘要请求")
     func longContextCompressionUsesOneCompleteRequest() async throws {
         await cleanup()

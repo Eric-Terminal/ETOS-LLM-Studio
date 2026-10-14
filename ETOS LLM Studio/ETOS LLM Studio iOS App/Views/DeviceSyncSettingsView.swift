@@ -22,6 +22,7 @@ struct DeviceSyncSettingsView: View {
     @State private var isLegacyMergeWarningPresented = false
     @State private var watchSyncErrorMessage: String?
     @State private var pendingCloudOverwriteResolution: CloudSyncInitialResolution?
+    @State private var pendingCloudConflictID: UUID?
     @State private var cloudOverwriteConfirmationText = ""
     @State private var isCloudOverwriteConfirmationPresented = false
     
@@ -129,25 +130,24 @@ struct DeviceSyncSettingsView: View {
                 get: { cloudSyncManager.initialConflict != nil },
                 set: { if !$0 { cloudSyncManager.dismissInitialConflictPrompt() } }
             ),
-            titleVisibility: .visible
-        ) {
+            titleVisibility: .visible,
+            presenting: cloudSyncManager.initialConflict
+        ) { conflict in
             Button(NSLocalizedString("使用 iCloud 数据覆盖此设备", comment: ""), role: .destructive) {
-                requestCloudOverwriteConfirmation(.useICloud)
+                requestCloudOverwriteConfirmation(.useICloud, conflictID: conflict.id)
             }
             Button(NSLocalizedString("使用此设备数据覆盖 iCloud", comment: ""), role: .destructive) {
-                requestCloudOverwriteConfirmation(.useThisDevice)
+                requestCloudOverwriteConfirmation(.useThisDevice, conflictID: conflict.id)
             }
             Button(NSLocalizedString("暂不同步", comment: ""), role: .cancel) {
                 cloudSyncManager.dismissInitialConflictPrompt()
             }
-        } message: {
-            if let conflict = cloudSyncManager.initialConflict {
-                Text(String(
-                    format: NSLocalizedString("此设备尚未建立可信的 iCloud 同步基线。本机有 %d 条记录，iCloud 有 %d 条记录；App 无法安全判断一端为空是首次接入还是有意删除。选择前不会修改任何数据，执行覆盖前会自动创建安全快照。", comment: ""),
-                    conflict.localRecordCount,
-                    conflict.iCloudRecordCount
-                ))
-            }
+        } message: { conflict in
+            Text(String(
+                format: NSLocalizedString("此设备尚未建立可信的 iCloud 同步基线。本机有 %d 条记录，iCloud 有 %d 条记录；App 无法安全判断一端为空是首次接入还是有意删除。选择前不会修改任何数据，执行覆盖前会自动创建安全快照。", comment: ""),
+                conflict.localRecordCount,
+                conflict.iCloudRecordCount
+            ))
         }
         .alert(cloudOverwriteConfirmationTitle, isPresented: $isCloudOverwriteConfirmationPresented) {
             TextField(NSLocalizedString("确认短语", comment: ""), text: $cloudOverwriteConfirmationText)
@@ -225,6 +225,7 @@ struct DeviceSyncSettingsView: View {
     private var syncIntroDetails: String {
         [
             NSLocalizedString("同步与备份说明正文", comment: ""),
+            NSLocalizedString("库级覆盖 Skills 说明", comment: ""),
             NSLocalizedString("iCloud 首次同步裁决说明", comment: "")
         ].joined(separator: "\n\n")
     }
@@ -262,8 +263,9 @@ struct DeviceSyncSettingsView: View {
         return String(format: format, requiredCloudOverwritePhrase)
     }
 
-    private func requestCloudOverwriteConfirmation(_ resolution: CloudSyncInitialResolution) {
+    private func requestCloudOverwriteConfirmation(_ resolution: CloudSyncInitialResolution, conflictID: UUID) {
         pendingCloudOverwriteResolution = resolution
+        pendingCloudConflictID = conflictID
         cloudOverwriteConfirmationText = ""
         cloudSyncManager.dismissInitialConflictPrompt()
         Task { @MainActor in
@@ -275,6 +277,7 @@ struct DeviceSyncSettingsView: View {
 
     private func cancelCloudOverwriteConfirmation() {
         pendingCloudOverwriteResolution = nil
+        pendingCloudConflictID = nil
         cloudOverwriteConfirmationText = ""
         Task { @MainActor in
             await Task.yield()
@@ -284,11 +287,13 @@ struct DeviceSyncSettingsView: View {
 
     private func executeCloudOverwrite() {
         guard isCloudOverwriteConfirmationValid,
+              let conflictID = pendingCloudConflictID,
               let resolution = pendingCloudOverwriteResolution else { return }
         pendingCloudOverwriteResolution = nil
+        pendingCloudConflictID = nil
         cloudOverwriteConfirmationText = ""
         Task {
-            await cloudSyncManager.resolveInitialConflict(using: resolution)
+            await cloudSyncManager.resolveInitialConflict(using: resolution, expectedConflictID: conflictID)
         }
     }
 
@@ -545,6 +550,12 @@ private struct WatchDatabaseOverwriteSelectionView: View {
                 }
             }
             .navigationTitle(NSLocalizedString("按库选择覆盖", comment: ""))
+            .guideSettingsPageContext(
+                id: "settings-sync-database-overwrite",
+                title: NSLocalizedString("按库选择覆盖", comment: ""),
+                documents: [GuideDocumentReference(id: "settings-sync", title: "Sync and Backup")],
+                settings: [.readOnly("selection", label: NSLocalizedString("保留平台", comment: ""), value: { .string(confirmationMessage) })]
+            )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

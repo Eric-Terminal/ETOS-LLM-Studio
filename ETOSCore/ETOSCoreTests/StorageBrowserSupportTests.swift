@@ -14,6 +14,21 @@ import SQLite3
 @Suite("存储浏览辅助测试")
 struct StorageBrowserSupportTests {
 
+    @Test("取消的 SQLite 浏览在读取结果行时停止，避免恢复等待旧分页扫描")
+    func cancelledSQLitePageStopsReading() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("StorageCancelled-\(UUID()).sqlite")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Self.prepareSQLiteFixture(at: url)
+        let worker = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try StorageBrowserSupport.querySQLiteTablePage(at: url, tableName: "notes", pageIndex: 0, pageSize: 2)
+        }
+        switch await worker.result {
+        case .success: Issue.record("已经取消的查询仍发布了结果")
+        case .failure(let error): #expect(error is CancellationError)
+        }
+    }
+
     @Test("相对路径展示会保留子目录层级")
     func testRelativeDisplayPath() {
         let root = URL(fileURLWithPath: "/tmp/Worldbooks", isDirectory: true)

@@ -21,10 +21,12 @@ public final class GuideContextCoordinator: ObservableObject {
 
     public typealias SnapshotProvider = @MainActor @Sendable () async -> GuidePageSnapshot
     public typealias ReadToolExecutor = @MainActor @Sendable (InternalToolCall) async throws -> String
-    public typealias ProposalBuilder = @MainActor @Sendable (InternalToolCall, GuidePageSnapshot) throws -> GuideActionProposal
+    /// 大型参数可在后台准备；这里只生成方案，写入仍等待原生确认后的执行器。
+    public typealias ProposalBuilder = @MainActor @Sendable (InternalToolCall, GuidePageSnapshot) async throws -> GuideActionProposal
     public typealias ProposalExecutor = @MainActor @Sendable (GuideActionProposal) async throws -> GuideActionExecution
 
     private struct Registration {
+        let revision = UUID()
         let token: RegistrationToken
         let descriptor: GuidePageDescriptor
         let isFallback: Bool
@@ -128,6 +130,7 @@ public final class GuideContextCoordinator: ObservableObject {
     }
 
     public func makeProposal(for call: InternalToolCall) async throws -> GuideActionProposal {
+        try Task.checkCancellation()
         guard let registration = currentRegistration else {
             throw GuideError.noActivePage
         }
@@ -137,7 +140,15 @@ public final class GuideContextCoordinator: ObservableObject {
             throw GuideError.unsupportedTool(call.toolName)
         }
         let snapshot = await registration.snapshotProvider()
-        return try registration.proposalBuilder(call, snapshot)
+        try Task.checkCancellation()
+        guard currentRegistration?.token == registration.token,
+              currentRegistration?.revision == registration.revision else { throw GuideError.pageChanged }
+        let proposal = try await registration.proposalBuilder(call, snapshot)
+        try Task.checkCancellation()
+        // 参数解析可以离开主线程；返回时仍须属于同一页面声明，不能发布旧协议或旧页面的方案。
+        guard currentRegistration?.token == registration.token,
+              currentRegistration?.revision == registration.revision else { throw GuideError.pageChanged }
+        return proposal
     }
 
     public func executeReadTool(_ call: InternalToolCall) async throws -> String {

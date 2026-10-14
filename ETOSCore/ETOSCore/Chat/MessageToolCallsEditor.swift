@@ -32,7 +32,9 @@ public struct MessageToolCallsEditor<Help: View>: View {
                 TextEditor(text: $json)
                     .font(.footnote.monospaced())
                     .frame(minHeight: 280)
+                    #if os(iOS)
                     .textInputAutocapitalization(.never)
+                    #endif
                     .autocorrectionDisabled()
                 #endif
             } header: {

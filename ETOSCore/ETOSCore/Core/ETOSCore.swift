@@ -189,7 +189,13 @@ public struct SessionMessageJumpTarget: Equatable, Sendable {
 
 @MainActor
 public final class ToolPermissionCenter: ObservableObject {
-    public static let shared = ToolPermissionCenter(defaults: .standard)
+    private static var sharedInstance: ToolPermissionCenter?
+    public static var shared: ToolPermissionCenter {
+        if let sharedInstance { return sharedInstance }
+        let center = ToolPermissionCenter(defaults: .standard)
+        sharedInstance = center
+        return center
+    }
     // 注意：这里必须使用系统合成的 objectWillChange，
     // 否则聊天里的工具审批弹窗与倒计时不会稳定自动刷新。
     
@@ -206,13 +212,13 @@ public final class ToolPermissionCenter: ObservableObject {
     private var queuedRequests: [QueuedRequest] = []
     private var activeContinuation: CheckedContinuation<ToolPermissionDecision, Never>?
     private var autoApproveTask: Task<Void, Never>?
+    private var autoApproveCountdownID = UUID()
     private let defaults: UserDefaults
 
-    private enum DefaultsKey {
-        static let autoApproveEnabled = "tool.permission.autoApproveEnabled"
-        static let autoApproveCountdownSeconds = "tool.permission.autoApproveCountdownSeconds"
-        static let disabledAutoApproveTools = "tool.permission.disabledAutoApproveTools"
-    }
+    private typealias DefaultsKey = ToolApprovalPreferences.Keys
+    private let settingsWorker: ToolApprovalSettingsWorker
+    private var settingsRevision: UInt64 = 0
+    private var settingsWritesInFlight = 0
 
     private let autoApproveCountdownMin = 1
     private let autoApproveCountdownMax = 30
@@ -221,18 +227,68 @@ public final class ToolPermissionCenter: ObservableObject {
         autoPresentationBlockerIDs.isEmpty
     }
 
-    init(defaults: UserDefaults) {
+    convenience init(defaults: UserDefaults) {
+        self.init(defaults: defaults, preferences: Self.loadPreferences(defaults: defaults))
+    }
+
+    init(defaults: UserDefaults, preferences: ToolApprovalPreferences, settingsWorker: ToolApprovalSettingsWorker = ToolApprovalSettingsWorker()) {
         self.defaults = defaults
-        autoApproveEnabled = Self.boolValue(forKey: DefaultsKey.autoApproveEnabled, defaults: defaults, defaultValue: false)
-        let storedCountdown = Self.integerValue(forKey: DefaultsKey.autoApproveCountdownSeconds, defaults: defaults, defaultValue: 8)
-        if storedCountdown > 0 {
-            autoApproveCountdownSeconds = min(max(storedCountdown, autoApproveCountdownMin), autoApproveCountdownMax)
-        } else {
-            autoApproveCountdownSeconds = 8
+        self.settingsWorker = settingsWorker
+        autoApproveEnabled = preferences.enabled
+        autoApproveCountdownSeconds = preferences.countdown
+        disabledAutoApproveToolSet = preferences.disabledSet
+        disabledAutoApproveTools = preferences.disabledTools
+    }
+
+    nonisolated private static func loadPreferences(defaults: UserDefaults) -> ToolApprovalPreferences {
+        ToolApprovalPreferences(
+            enabled: boolValue(forKey: DefaultsKey.autoApproveEnabled, defaults: defaults, defaultValue: false),
+            countdown: integerValue(forKey: DefaultsKey.autoApproveCountdownSeconds, defaults: defaults, defaultValue: 8),
+            disabledTools: stringArrayValue(forKey: DefaultsKey.disabledAutoApproveTools, defaults: defaults))
+    }
+
+    public static func prepareSharedInBackground() async -> ToolPermissionCenter {
+        if let sharedInstance { return sharedInstance }
+        let preferences = await Task.detached(priority: .userInitiated) { loadPreferences(defaults: .standard) }.value
+        if let sharedInstance { return sharedInstance }
+        let center = ToolPermissionCenter(defaults: .standard, preferences: preferences)
+        sharedInstance = center
+        return center
+    }
+
+    public func updatePreferencesInBackground(_ change: ToolApprovalPreferenceChange) async throws {
+        settingsWritesInFlight += 1
+        cancelAutoApproveCountdown()
+        var saved = false
+        defer {
+            settingsWritesInFlight -= 1
+            if saved, settingsWritesInFlight == 0, let activeRequest { scheduleAutoApproveIfNeeded(for: activeRequest) }
         }
-        let storedDisabledTools = Self.stringArrayValue(forKey: DefaultsKey.disabledAutoApproveTools, defaults: defaults)
-        disabledAutoApproveToolSet = Set(storedDisabledTools.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })
-        disabledAutoApproveTools = disabledAutoApproveToolSet.sorted()
+        let result = try await settingsWorker.update(change)
+        applyPreferences(result)
+        saved = true
+    }
+
+    public func reloadPreferencesInBackground() async throws {
+        // 数据库已被替换时先停止旧授权计时，读取失败也不能沿用旧库的自动批准。
+        autoApproveEnabled = false
+        cancelAutoApproveCountdown()
+        allowAll = false
+        allowedTools.removeAll()
+        let result = try await settingsWorker.load()
+        guard !Task.isCancelled else { return }
+        applyPreferences(result)
+    }
+
+    private func applyPreferences(_ result: ToolApprovalSettingsResult) {
+        guard result.revision > settingsRevision else { return }
+        settingsRevision = result.revision
+        autoApproveEnabled = result.preferences.enabled
+        autoApproveCountdownSeconds = result.preferences.countdown
+        disabledAutoApproveToolSet = result.preferences.disabledSet
+        disabledAutoApproveTools = result.preferences.disabledTools
+        if let activeRequest { scheduleAutoApproveIfNeeded(for: activeRequest) }
+        else { cancelAutoApproveCountdown() }
     }
     
     public func requestPermission(
@@ -402,6 +458,7 @@ public final class ToolPermissionCenter: ObservableObject {
     private func scheduleAutoApproveIfNeeded(for request: ToolPermissionRequest) {
         cancelAutoApproveCountdown()
         guard !request.forcePrompt,
+              settingsWritesInFlight == 0,
               autoApproveEnabled,
               !isAutoApproveDisabled(for: request.toolName),
               autoApproveCountdownSeconds > 0 else {
@@ -410,6 +467,7 @@ public final class ToolPermissionCenter: ObservableObject {
 
         autoApproveRemainingSeconds = autoApproveCountdownSeconds
         let requestID = request.id
+        let countdownID = autoApproveCountdownID
         autoApproveTask = Task { [weak self] in
             guard let self else { return }
             var remaining = autoApproveCountdownSeconds
@@ -424,13 +482,14 @@ public final class ToolPermissionCenter: ObservableObject {
                 }
                 remaining -= 1
                 await MainActor.run {
-                    guard self.activeRequest?.id == requestID else { return }
+                    guard self.activeRequest?.id == requestID, self.autoApproveCountdownID == countdownID else { return }
                     self.autoApproveRemainingSeconds = remaining
                 }
             }
 
             await MainActor.run {
-                guard self.activeRequest?.id == requestID else { return }
+                // 同一请求可能重新计时，旧计时器最后一次回调不能批准新的倒计时。
+                guard self.activeRequest?.id == requestID, self.autoApproveCountdownID == countdownID, !Task.isCancelled else { return }
                 self.resolveRequest(withID: requestID, decision: .allowOnce)
             }
         }
@@ -454,6 +513,7 @@ public final class ToolPermissionCenter: ObservableObject {
     }
 
     private func cancelAutoApproveCountdown() {
+        autoApproveCountdownID = UUID()
         autoApproveTask?.cancel()
         autoApproveTask = nil
         autoApproveRemainingSeconds = nil
@@ -464,11 +524,11 @@ public final class ToolPermissionCenter: ObservableObject {
         Self.save(disabledAutoApproveTools, forKey: DefaultsKey.disabledAutoApproveTools, defaults: defaults)
     }
 
-    private static func usesDatabase(defaults: UserDefaults) -> Bool {
+    nonisolated private static func usesDatabase(defaults: UserDefaults) -> Bool {
         defaults === UserDefaults.standard
     }
 
-    private static func boolValue(forKey key: String, defaults: UserDefaults, defaultValue: Bool) -> Bool {
+    nonisolated private static func boolValue(forKey key: String, defaults: UserDefaults, defaultValue: Bool) -> Bool {
         guard usesDatabase(defaults: defaults) else {
             return defaults.object(forKey: key) as? Bool ?? defaultValue
         }
@@ -479,7 +539,7 @@ public final class ToolPermissionCenter: ObservableObject {
         return defaultValue
     }
 
-    private static func integerValue(forKey key: String, defaults: UserDefaults, defaultValue: Int) -> Int {
+    nonisolated private static func integerValue(forKey key: String, defaults: UserDefaults, defaultValue: Int) -> Int {
         guard usesDatabase(defaults: defaults) else {
             return defaults.object(forKey: key) as? Int ?? defaultValue
         }
@@ -490,7 +550,7 @@ public final class ToolPermissionCenter: ObservableObject {
         return defaultValue
     }
 
-    private static func stringArrayValue(forKey key: String, defaults: UserDefaults) -> [String] {
+    nonisolated private static func stringArrayValue(forKey key: String, defaults: UserDefaults) -> [String] {
         guard usesDatabase(defaults: defaults) else {
             return defaults.stringArray(forKey: key) ?? []
         }
@@ -534,7 +594,7 @@ public final class ToolPermissionCenter: ObservableObject {
         return String(data: data, encoding: .utf8)
     }
 
-    private static func decodeStringArray(_ value: String) -> [String]? {
+    nonisolated private static func decodeStringArray(_ value: String) -> [String]? {
         guard let data = value.data(using: .utf8) else { return nil }
         guard let object = try? JSONSerialization.jsonObject(with: data) else { return nil }
         return object as? [String]

@@ -10,6 +10,15 @@ import Foundation
 
 extension LocalDebugServer {
     func handleAppConfigList(_ json: [String: Any]) async -> [String: Any] {
+        let request = LocalDebugJSONObject(value: json)
+        return await runDebugDataOperation { self.readDebugAppConfig(request.value) }
+    }
+
+    nonisolated func readDebugAppConfig(_ json: [String: Any]) -> [String: Any] {
+        debugAppConfigList(json, snapshot: AppConfigStore.persistentSnapshot(includeLocalOnly: true))
+    }
+
+    nonisolated func debugAppConfigList(_ json: [String: Any], snapshot: [String: Any]) -> [String: Any] {
         let query = (json["query"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased() ?? ""
@@ -17,7 +26,7 @@ extension LocalDebugServer {
 
         let settings = AppConfigKey.allCases.compactMap { key -> [String: Any]? in
             guard includeLocalOnly || key.participatesInSync else { return nil }
-            let item = debugAppConfigItem(for: key)
+            let item = debugAppConfigItem(for: key, rawValue: snapshot[key.rawValue])
             if query.isEmpty { return item }
 
             let rawKey = key.rawValue.lowercased()
@@ -34,6 +43,13 @@ extension LocalDebugServer {
     }
 
     func handleAppConfigSet(_ json: [String: Any]) async -> [String: Any] {
+        let request = LocalDebugJSONObject(value: json)
+        let response = await runDebugDataOperation { self.writeDebugAppConfig(request.value) }
+        if response["status"] as? String == "ok" { await AppConfigStore.shared.reloadFromPersistentStoreAndWait() }
+        return response
+    }
+
+    nonisolated private func writeDebugAppConfig(_ json: [String: Any]) -> [String: Any] {
         guard let rawKey = (json["key"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
               let key = AppConfigKey(rawValue: rawKey) else {
             return debugAppConfigError("缺少或无效的 key")
@@ -43,20 +59,19 @@ extension LocalDebugServer {
             return debugAppConfigError("value 与配置类型不匹配")
         }
 
-        guard AppConfigStore.persistSynchronously(value, for: key) else {
+        let normalizedValue = AppConfigStore.normalizedAppConfigValue(value, for: key)
+        guard AppConfigStore.persistSynchronously(normalizedValue, for: key) else {
             return debugAppConfigError("写入配置失败")
         }
-        AppConfigStore.shared.reloadFromPersistentStore()
-
         return [
             "status": "ok",
             "message": "配置已保存",
-            "setting": debugAppConfigItem(for: key)
+            "setting": debugAppConfigItem(for: key, rawValue: normalizedValue.anyValue)
         ]
     }
 
-    private func debugAppConfigItem(for key: AppConfigKey) -> [String: Any] {
-        let value = currentDebugAppConfigValue(for: key)
+    nonisolated private func debugAppConfigItem(for key: AppConfigKey, rawValue: Any?) -> [String: Any] {
+        let value = debugAppConfigValue(from: rawValue, for: key) ?? key.defaultValue
         let defaultValue = key.defaultValue
         return [
             "key": key.rawValue,
@@ -70,12 +85,7 @@ extension LocalDebugServer {
         ]
     }
 
-    private func currentDebugAppConfigValue(for key: AppConfigKey) -> AppConfigValue {
-        let snapshot = AppConfigStore.persistentSnapshot(includeLocalOnly: true)
-        return debugAppConfigValue(from: snapshot[key.rawValue], for: key) ?? key.defaultValue
-    }
-
-    private func debugAppConfigValue(from rawValue: Any?, for key: AppConfigKey) -> AppConfigValue? {
+    nonisolated private func debugAppConfigValue(from rawValue: Any?, for key: AppConfigKey) -> AppConfigValue? {
         switch key.defaultValue {
         case .bool:
             return Self.debugAppConfigBool(from: rawValue).map(AppConfigValue.bool)
@@ -97,7 +107,7 @@ extension LocalDebugServer {
         }
     }
 
-    private func debugAppConfigGroup(for key: AppConfigKey) -> String {
+    nonisolated private func debugAppConfigGroup(for key: AppConfigKey) -> String {
         let rawKey = key.rawValue
         if let first = rawKey.split(separator: ".", maxSplits: 1).first {
             return String(first)
@@ -107,7 +117,7 @@ extension LocalDebugServer {
         return "general"
     }
 
-    private func debugAppConfigValueText(_ value: AppConfigValue) -> String {
+    nonisolated private func debugAppConfigValueText(_ value: AppConfigValue) -> String {
         switch value {
         case .bool(let value):
             return value ? "true" : "false"
@@ -120,7 +130,7 @@ extension LocalDebugServer {
         }
     }
 
-    private func debugAppConfigError(_ message: String) -> [String: Any] {
+    nonisolated private func debugAppConfigError(_ message: String) -> [String: Any] {
         [
             "status": "error",
             "error_code": "INVALID_ARGS",

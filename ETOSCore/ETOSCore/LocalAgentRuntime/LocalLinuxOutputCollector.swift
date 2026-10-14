@@ -35,6 +35,7 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     private let maximumPatternBytes: Int
     private let modelByteLimit: UInt64
     private let terminalResponseHandler: (@Sendable (Data) -> Void)?
+    private let rawOutputChanged: (@Sendable () -> Void)?
 
     private var pendingByStream: [LocalLinuxOutputStream: Data] = [:]
     private var stdoutBytes: UInt64 = 0
@@ -70,7 +71,8 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
         modelByteLimit: UInt64,
         terminalColumns: Int? = nil,
         terminalRows: Int? = nil,
-        terminalResponseHandler: (@Sendable (Data) -> Void)? = nil
+        terminalResponseHandler: (@Sendable (Data) -> Void)? = nil,
+        rawOutputChanged: (@Sendable () -> Void)? = nil
     ) throws {
         let fileManager = FileManager.default
         fileManager.createFile(atPath: rawURL.path, contents: nil)
@@ -92,6 +94,7 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
         maximumPatternBytes = privacyEnabled ? (patterns.first?.value.count ?? 0) : 0
         self.modelByteLimit = modelByteLimit
         self.terminalResponseHandler = terminalResponseHandler
+        self.rawOutputChanged = rawOutputChanged
         if let terminalColumns, let terminalRows {
             terminalScreen = LocalLinuxTerminalScreen(
                 columns: terminalColumns,
@@ -113,11 +116,17 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
         streamEnded: Bool = false
     ) {
         lock.lock()
-        defer { lock.unlock() }
+        var didWrite = false
+        defer {
+            lock.unlock()
+            // 订阅者可以立即读取输出或快照，不能在持有写入锁时回调。
+            if didWrite { rawOutputChanged?() }
+        }
         guard !isFinished else { return }
         do {
             if !data.isEmpty {
                 try writeRawFrame(stream: stream, data: data)
+                didWrite = true
                 appendUserPreview(stream: stream, data: data)
                 switch stream {
                 case .stdout: stdoutBytes += UInt64(data.count)
@@ -188,6 +197,7 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
             writeError = writeError ?? error
         }
         lock.unlock()
+        rawOutputChanged?()
         if completeTerminalUpdates { terminalChanges.finish() }
     }
 

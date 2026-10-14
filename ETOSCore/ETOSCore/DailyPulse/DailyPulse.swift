@@ -31,6 +31,7 @@ public final class DailyPulseManager: ObservableObject {
     @Published public internal(set) var externalSignals: [DailyPulseExternalSignal]
     @Published public internal(set) var tasks: [DailyPulseTask]
     @Published public internal(set) var isGenerating: Bool = false
+    @Published public private(set) var isLoading = false
     @Published public internal(set) var lastErrorMessage: String?
     @Published public internal(set) var lastViewedDayKey: String?
     @Published public internal(set) var lastDeliveryAttemptDayKey: String?
@@ -100,6 +101,7 @@ public final class DailyPulseManager: ObservableObject {
     private var syncNotificationObserver: NSObjectProtocol?
     private var appConfigNotificationObserver: NSObjectProtocol?
     private var persistedReloadTask: Task<Void, Never>?
+    private var persistedReloadRevision = UUID()
     var generationRuntimePersistenceTask: Task<Void, Never>?
     private var isApplyingPersistedState = false
 
@@ -234,7 +236,9 @@ public final class DailyPulseManager: ObservableObject {
             defaults.set(value, forKey: key)
             return
         }
-        Persistence.writeAppConfig(key: key, integer: value ? 1 : 0, typeHint: "bool")
+        DailyPulsePersistenceQueue.shared.enqueue {
+            Persistence.writeAppConfig(key: key, integer: value ? 1 : 0, typeHint: "bool")
+        }
     }
 
     private static func save(_ value: String, forKey key: String, defaults: UserDefaults) {
@@ -242,7 +246,9 @@ public final class DailyPulseManager: ObservableObject {
             defaults.set(value, forKey: key)
             return
         }
-        Persistence.writeAppConfig(key: key, text: value, typeHint: "text")
+        DailyPulsePersistenceQueue.shared.enqueue {
+            Persistence.writeAppConfig(key: key, text: value, typeHint: "text")
+        }
     }
 
     public var latestRun: DailyPulseRun? {
@@ -265,34 +271,37 @@ public final class DailyPulseManager: ObservableObject {
         todayRun
     }
 
-    internal func notificationTarget(
+    public func notificationTarget(
         runID: UUID?,
         cardID: UUID?,
         dayKey: String?
     ) -> (runID: UUID, card: DailyPulseCard)? {
-        if let runID,
-           let run = runs.first(where: { $0.id == runID }) {
-            if let cardID,
-               let card = run.cards.first(where: { $0.id == cardID }) {
-                return (runID, card)
+        Self.notificationTarget(in: runs, runID: runID, cardID: cardID, dayKey: dayKey)
+    }
+
+    public nonisolated static func notificationTarget(
+        in runs: [DailyPulseRun], runID: UUID?, cardID: UUID?, dayKey: String?, referenceDate: Date = Date()
+    ) -> (runID: UUID, card: DailyPulseCard)? {
+        // 明确标识的旧通知不能回退到新一期或另一张卡片，尤其不能误执行反馈、保存和任务操作。
+        if let runID {
+            guard let run = runs.first(where: { $0.id == runID }) else { return nil }
+            if let cardID {
+                return run.cards.first(where: { $0.id == cardID }).map { (runID, $0) }
             }
             if let fallbackCard = run.visibleCards.first ?? run.cards.first {
                 return (runID, fallbackCard)
             }
+            return nil
         }
 
-        let candidateRuns: [DailyPulseRun]
-        if let dayKey, !dayKey.isEmpty {
-            candidateRuns = runs
-                .filter { $0.dayKey == dayKey }
-                .sorted(by: { $0.generatedAt > $1.generatedAt })
-        } else if let primaryRun {
-            candidateRuns = [primaryRun]
-        } else {
-            candidateRuns = runs.sorted(by: { $0.generatedAt > $1.generatedAt })
-        }
+        let targetDay = dayKey.flatMap { $0.isEmpty ? nil : $0 } ?? Self.dayKey(for: referenceDate)
+        let candidateRuns = runs.filter { $0.dayKey == targetDay }.sorted { $0.generatedAt > $1.generatedAt }
 
         for run in candidateRuns {
+            if let cardID {
+                if let card = run.cards.first(where: { $0.id == cardID }) { return (run.id, card) }
+                continue
+            }
             if let fallbackCard = run.visibleCards.first ?? run.cards.first {
                 return (run.id, fallbackCard)
             }
@@ -338,16 +347,16 @@ public final class DailyPulseManager: ObservableObject {
 
     public func reloadPersistedRuns() {
         persistedReloadTask?.cancel()
+        persistedReloadRevision = UUID()
+        isLoading = true
         let referenceDate = Date()
         let includeDatabaseSettings = Self.usesDatabase(defaults: defaults)
+        let loadTask = DailyPulsePersistenceQueue.shared.read {
+            Self.loadAndNormalizePersistedState(referenceDate: referenceDate, includeDatabaseSettings: includeDatabaseSettings)
+        }
+        let revision = DailyPulsePersistenceQueue.shared.revision
 
         persistedReloadTask = Task(priority: .utility) { [weak self] in
-            let loadTask = Task.detached(priority: .utility) {
-                Self.loadAndNormalizePersistedState(
-                    referenceDate: referenceDate,
-                    includeDatabaseSettings: includeDatabaseSettings
-                )
-            }
             let state = await withTaskCancellationHandler {
                 await loadTask.value
             } onCancel: {
@@ -355,7 +364,12 @@ public final class DailyPulseManager: ObservableObject {
             }
 
             guard let self, !Task.isCancelled else { return }
+            guard DailyPulsePersistenceQueue.shared.revision == revision else {
+                self.reloadPersistedRuns()
+                return
+            }
             self.applyPersistedState(state)
+            self.isLoading = false
             Task {
                 await DailyPulseDeliveryCoordinator.shared.refreshReminderSchedule()
             }
@@ -502,8 +516,13 @@ public final class DailyPulseManager: ObservableObject {
         }
     }
 
-    func waitForPersistedStateLoad() async {
-        await persistedReloadTask?.value
+    public func waitForPersistedStateLoad() async {
+        // 读取期间发生编辑会重排一次加载，调用方必须等到当前代次稳定。
+        while let task = persistedReloadTask {
+            let revision = persistedReloadRevision
+            await task.value
+            if persistedReloadRevision == revision { return }
+        }
     }
 
     public func clearError() {
@@ -512,22 +531,22 @@ public final class DailyPulseManager: ObservableObject {
 
     public func clearFeedbackHistory() {
         feedbackHistory = []
-        Persistence.saveDailyPulseFeedbackHistory(feedbackHistory)
+        persistFeedbackHistory()
     }
 
     public func clearExternalSignals() {
         externalSignals = []
-        Persistence.saveDailyPulseExternalSignals(externalSignals)
+        persistExternalSignals()
     }
 
     public func removeFeedbackHistoryEvent(id: UUID) {
         feedbackHistory = Self.removingFeedbackEvent(id: id, from: feedbackHistory)
-        Persistence.saveDailyPulseFeedbackHistory(feedbackHistory)
+        persistFeedbackHistory()
     }
 
     public func removeExternalSignal(id: UUID) {
         externalSignals = Self.removingExternalSignal(id: id, from: externalSignals)
-        Persistence.saveDailyPulseExternalSignals(externalSignals)
+        persistExternalSignals()
     }
 
     public func clearTomorrowCuration() {
@@ -804,7 +823,7 @@ public final class DailyPulseManager: ObservableObject {
             to: externalSignals,
             limit: Self.externalSignalRetentionLimit
         )
-        Persistence.saveDailyPulseExternalSignals(externalSignals)
+        persistExternalSignals()
     }
 
     public func ingestAnnouncements(_ announcements: [Announcement]) {
@@ -815,6 +834,6 @@ public final class DailyPulseManager: ObservableObject {
         )
         guard nextHistory != externalSignals else { return }
         externalSignals = nextHistory
-        Persistence.saveDailyPulseExternalSignals(externalSignals)
+        persistExternalSignals()
     }
 }

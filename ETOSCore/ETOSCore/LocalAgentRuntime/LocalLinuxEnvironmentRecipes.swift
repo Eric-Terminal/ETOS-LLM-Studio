@@ -264,14 +264,12 @@ public enum LocalLinuxEnvironmentInstaller {
     }
 
     public static func waitForCompletion(jobID: UUID) async throws -> LocalLinuxEnvironmentInstallationResult {
-        while let job = await LocalLinuxJobScheduler.shared.job(id: jobID) {
-            if job.state.isTerminal {
-                let output = (try? await LocalLinuxJobScheduler.shared.userVisibleOutput(jobID: job.id)) ?? ""
-                return LocalLinuxEnvironmentInstallationResult(job: job, output: output)
-            }
-            try await Task<Never, Never>.sleep(nanoseconds: 250_000_000)
+        let job = try await LocalLinuxJobCompletionWaiter.wait(jobID: jobID) {
+            await LocalLinuxJobScheduler.shared.job(id: jobID)
         }
-        throw LocalLinuxRuntimeError.jobNotFound(jobID)
+        try Task.checkCancellation()
+        let output = (try? await LocalLinuxJobScheduler.shared.userVisibleOutput(jobID: job.id)) ?? ""
+        return LocalLinuxEnvironmentInstallationResult(job: job, output: output)
     }
 }
 

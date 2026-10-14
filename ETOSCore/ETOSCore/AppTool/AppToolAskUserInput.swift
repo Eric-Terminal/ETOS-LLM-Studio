@@ -79,7 +79,7 @@ public struct AppToolAskUserInputQuestion: Codable, Identifiable, Equatable, Sen
 }
 
 public struct AppToolAskUserInputRequest: Codable, Identifiable, Equatable, Sendable {
-    public static let payloadUserInfoKey = "payload"
+    public static let requestUserInfoKey = "request"
 
     public let requestID: String
     public let title: String?
@@ -110,25 +110,12 @@ public struct AppToolAskUserInputRequest: Codable, Identifiable, Equatable, Send
     public var id: String { requestID }
 
     public var userInfo: [AnyHashable: Any] {
-        [Self.payloadUserInfoKey: encodedJSONString]
+        // 通知回执必须同步认领；同进程直接传值，避免聊天界面在主线程解码 JSON。
+        [Self.requestUserInfoKey: self]
     }
 
     public static func decode(from userInfo: [AnyHashable: Any]?) -> AppToolAskUserInputRequest? {
-        guard let userInfo,
-              let payload = userInfo[payloadUserInfoKey] as? String,
-              let data = payload.data(using: .utf8),
-              let request = try? JSONDecoder().decode(Self.self, from: data) else {
-            return nil
-        }
-        return request
-    }
-
-    private var encodedJSONString: String {
-        guard let data = try? JSONEncoder().encode(self),
-              let text = String(data: data, encoding: .utf8) else {
-            return "{}"
-        }
-        return text
+        userInfo?[requestUserInfoKey] as? Self
     }
 }
 

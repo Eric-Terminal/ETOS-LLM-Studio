@@ -134,6 +134,8 @@ public actor LocalLinuxToolExecutor {
         selectedMCPServerIDs: [UUID],
         approvedCommandRuleIDs: Set<UUID> = []
     ) async throws -> String {
+        let activity = try LocalLinuxActivityBarrier.shared.begin()
+        defer { activity.finish() }
         let run = try await contextManager.beginRun(
             sessionID: sessionID,
             triggeringMessageID: triggeringMessageID,

@@ -55,7 +55,7 @@ extension LocalDebugServer {
     /// - Parameter url: 服务器地址，格式: "192.168.1.100:7654" 或 "192.168.1.100"
     @MainActor
     public func connect(to url: String) {
-        guard !isRunning else { return }
+        guard !isRunning, !isDisconnecting else { return }
 
         let parsed = parseDebugAddress(url)
         cancelScheduledReconnect(resetAttempt: true)
@@ -178,6 +178,21 @@ extension LocalDebugServer {
         updatePendingOpenAIState()
     }
 
+    /// 生命周期调用方必须在命令队列之外等待，返回时已开始的命令与网络授权等待都已收尾。
+    public func disconnectAndWait() async {
+        disconnectWaiterCount += 1
+        isDisconnecting = true
+        defer { disconnectWaiterCount -= 1; isDisconnecting = disconnectWaiterCount > 0 }
+        disconnect()
+        await waitForPendingOperations()
+    }
+
+    public func waitForPendingOperations() async {
+        await httpConnectionTask?.value
+        await httpPollTask?.value
+        await commandQueue.waitForCompletion()
+    }
+
     @MainActor
     func beginAutoReconnect(host: String, port: String, useHTTPMode: Bool) {
         autoReconnectEnabled = true
@@ -204,7 +219,14 @@ extension LocalDebugServer {
     @MainActor
     func beginConnectionAttempt(host: String, port: String, useHTTPMode: Bool) -> UUID {
         cancelScheduledReconnect(resetAttempt: false)
-        connectionToken = UUID()
+        invalidateConnectionToken()
+        httpPollingTimer?.invalidate()
+        httpPollingTimer = nil
+        wsConnection?.cancel()
+        wsConnection = nil
+        httpSession?.invalidateAndCancel()
+        httpSession = nil
+        isRunning = false
         serverURL = "\(host):\(port)"
         useHTTP = useHTTPMode
         return connectionToken
@@ -213,6 +235,12 @@ extension LocalDebugServer {
     @MainActor
     func invalidateConnectionToken() {
         connectionToken = UUID()
+        commandQueue.cancel()
+        httpConnectionTask?.cancel()
+        httpPollTask?.cancel()
+        httpPollID = nil
+        isProcessingCommand = false
+        isTransferring = false
     }
 
     @MainActor
@@ -287,8 +315,20 @@ extension LocalDebugServer {
     func getDeviceIdentifier() -> String {
         #if os(watchOS)
         return WKInterfaceDevice.current().name
-        #else
+        #elseif os(iOS)
         return UIDevice.current.name
+        #else
+        return ProcessInfo.processInfo.hostName
+        #endif
+    }
+
+    nonisolated static var debugPlatformName: String {
+        #if os(macOS)
+        return "macOS"
+        #elseif os(iOS)
+        return "iOS"
+        #else
+        return "watchOS"
         #endif
     }
 
@@ -311,9 +351,11 @@ extension LocalDebugServer {
                 guard self.isCurrentConnection(token) else { return }
                 if let data {
                     self.handleReceivedMessage(data)
+                    // 让套接字承担背压，不能把大批文件命令无界堆到应用内存中。
+                    await self.commandQueue.waitForCompletion()
                 }
 
-                if isComplete {
+                if isComplete, self.isCurrentConnection(token) {
                     self.startReceiving(connectionToken: token)
                 }
             }
@@ -321,157 +363,20 @@ extension LocalDebugServer {
     }
 
     func handleReceivedMessage(_ data: Data) {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let command = json["command"] as? String else {
-            return
-        }
-        let requestID = json["request_id"] as? String
-
-        if command == "none" {
-            return
-        }
-
-        logger.info("收到命令: \(command)")
-
-        Task {
-            switch command {
-            case "list":
-                let response = await handleList(json)
-                sendResponse(response, requestID: requestID)
-            case "download":
-                let response = await handleDownload(json)
-                sendResponse(response, requestID: requestID)
-            case "download_all":
-                if useHTTP {
-                    await handleDownloadAllStream()
-                } else {
-                    let response = await handleDownloadAll()
-                    sendResponse(response, requestID: requestID)
-                }
-            case "list_all":
-                let response = await handleListAll()
-                sendResponse(response, requestID: requestID)
-            case "upload":
-                let response = await handleUpload(json)
-                sendResponse(response, requestID: requestID)
-            case "upload_all":
-                let response = await handleUploadAll(json)
-                sendResponse(response, requestID: requestID)
-            case "clear_documents":
-                let response = await handleClearDocuments()
-                sendResponse(response, requestID: requestID)
-            case "upload_list":
-                await handleUploadList(json)
-            case "upload_file":
-                let response = await handleUploadFile(json)
-                sendResponse(response, requestID: requestID)
-            case "upload_complete":
-                logger.info("流式上传完成")
-                sendResponse(["status": "ok", "message": "上传完成"], requestID: requestID)
-            case "delete":
-                let response = await handleDelete(json)
-                sendResponse(response, requestID: requestID)
-            case "mkdir":
-                let response = await handleMkdir(json)
-                sendResponse(response, requestID: requestID)
-            case "openai_capture":
-                let response = await handleOpenAICapture(json)
-                sendResponse(response, requestID: requestID)
-            case "providers_list":
-                let response = await handleProvidersList()
-                sendResponse(response, requestID: requestID)
-            case "providers_save":
-                let response = await handleProvidersSave(json)
-                sendResponse(response, requestID: requestID)
-            case "provider_upsert":
-                let response = await handleProviderUpsert(json)
-                sendResponse(response, requestID: requestID)
-            case "provider_model_upsert":
-                let response = await handleProviderModelUpsert(json)
-                sendResponse(response, requestID: requestID)
-            case "app_config_list":
-                let response = await handleAppConfigList(json)
-                sendResponse(response, requestID: requestID)
-            case "app_config_set":
-                let response = await handleAppConfigSet(json)
-                sendResponse(response, requestID: requestID)
-            case "sessions_list":
-                let response = await handleSessionsList()
-                sendResponse(response, requestID: requestID)
-            case "session_get":
-                let response = await handleSessionGet(json)
-                sendResponse(response, requestID: requestID)
-            case "session_create":
-                let response = await handleSessionCreate(json)
-                sendResponse(response, requestID: requestID)
-            case "session_delete":
-                let response = await handleSessionDelete(json)
-                sendResponse(response, requestID: requestID)
-            case "session_update_meta":
-                let response = await handleSessionUpdateMeta(json)
-                sendResponse(response, requestID: requestID)
-            case "session_update_messages":
-                let response = await handleSessionUpdateMessages(json)
-                sendResponse(response, requestID: requestID)
-            case "memories_list":
-                let response = await handleMemoriesList()
-                sendResponse(response, requestID: requestID)
-            case "memory_update":
-                let response = await handleMemoryUpdate(json)
-                sendResponse(response, requestID: requestID)
-            case "memory_archive":
-                let response = await handleMemoryArchive(json)
-                sendResponse(response, requestID: requestID)
-            case "memory_unarchive":
-                let response = await handleMemoryUnarchive(json)
-                sendResponse(response, requestID: requestID)
-            case "memories_reembed_all":
-                let response = await handleMemoriesReembedAll()
-                sendResponse(response, requestID: requestID)
-            case "list_sqlite_tables":
-                let response = await handleSQLiteListTables(json)
-                sendResponse(response, requestID: requestID)
-            case "query_sqlite":
-                let response = await handleSQLiteQuery(json)
-                sendResponse(response, requestID: requestID)
-            case "mutate_sqlite":
-                let response = await handleSQLiteMutate(json)
-                sendResponse(response, requestID: requestID)
-            case "openai_queue_list":
-                let response = await handleOpenAIQueueList()
-                sendResponse(response, requestID: requestID)
-            case "openai_queue_resolve":
-                let response = await handleOpenAIQueueResolve(json)
-                sendResponse(response, requestID: requestID)
-            case "ping":
-                sendResponse(["status": "ok", "message": "pong"], requestID: requestID)
-            default:
-                sendResponse(["status": "error", "message": "未知命令"], requestID: requestID)
+        let token = connectionToken
+        commandQueue.enqueue { [weak self] in
+            let worker = Task.detached(priority: .userInitiated) { try? LocalDebugJSONObject.decode(data) }
+            let decoded = await withTaskCancellationHandler { await worker.value } onCancel: { worker.cancel() }
+            guard let self, !Task.isCancelled, isCurrentConnection(token), let decoded,
+                  let command = decoded.value["command"] as? String else { return }
+            guard command != "none" else { addLog("心跳", type: .heartbeat); return }
+            isProcessingCommand = true
+            defer { if isCurrentConnection(token) { isProcessingCommand = false } }
+            await LocalDebugCommandContext.$connectionToken.withValue(token) {
+                self.addLog(String(format: NSLocalizedString("Debug command received: %@", comment: "调试命令接收日志"), command), type: .receive)
+                let response = await self.executeDebugCommand(command, json: decoded.value)
+                if let response { await self.sendResponse(response, requestID: decoded.value["request_id"] as? String) }
             }
-        }
-    }
-
-    func sendResponse(_ response: [String: Any], requestID: String? = nil) {
-        var payload = response
-        if let requestID, !requestID.isEmpty {
-            payload["request_id"] = requestID
-        }
-
-        if useHTTP {
-            let components = serverURL.split(separator: ":").map(String.init)
-            let host = components.first ?? ""
-            let port = components.count > 1 ? components[1] : "7654"
-            sendHTTPResponse(payload, host: host, port: port)
-        } else {
-            guard let connection = wsConnection,
-                  let data = try? JSONSerialization.data(withJSONObject: payload) else {
-                return
-            }
-
-            let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
-            let context = NWConnection.ContentContext(identifier: "response", metadata: [metadata])
-
-            connection.send(content: data, contentContext: context, isComplete: true, completion: .idempotent)
         }
     }
 }

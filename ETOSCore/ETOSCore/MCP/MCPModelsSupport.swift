@@ -8,7 +8,7 @@
 
 import Foundation
 
-public struct MCPPromptDescription: Codable, Identifiable, Hashable {
+public struct MCPPromptDescription: Codable, Identifiable, Hashable, Sendable {
     public var id: String { name }
 
     public let name: String
@@ -22,7 +22,7 @@ public struct MCPPromptDescription: Codable, Identifiable, Hashable {
     }
 }
 
-public struct MCPPromptArgument: Codable, Hashable {
+public struct MCPPromptArgument: Codable, Hashable, Sendable {
     public let name: String
     public let description: String?
     public let required: Bool?
@@ -34,7 +34,7 @@ public struct MCPPromptArgument: Codable, Hashable {
     }
 }
 
-public struct MCPPromptMessage: Codable, Hashable {
+public struct MCPPromptMessage: Codable, Hashable, Sendable {
     public let role: String
     public let content: MCPPromptContent
 
@@ -44,7 +44,7 @@ public struct MCPPromptMessage: Codable, Hashable {
     }
 }
 
-public enum MCPPromptContent: Codable, Hashable {
+public enum MCPPromptContent: Codable, Hashable, Sendable {
     case text(String)
     case image(data: String, mimeType: String)
     case resource(uri: String, mimeType: String?, text: String?)
@@ -93,7 +93,7 @@ public enum MCPPromptContent: Codable, Hashable {
     }
 }
 
-public struct MCPGetPromptResult: Codable, Hashable {
+public struct MCPGetPromptResult: Codable, Hashable, Sendable {
     public let description: String?
     public let messages: [MCPPromptMessage]
 

@@ -239,6 +239,11 @@ public actor LocalLinuxStorageManager {
 
     /// 直接检查持久化 RootFS，避免用户只是打开设置页时就启动 Linux。
     public func availableTerminalShellPaths() -> [String] {
+        #if os(macOS)
+        let contents = try? String(contentsOfFile: "/etc/shells", encoding: .utf8)
+        return LocalLinuxTerminalShellConfiguration.candidatePaths(shellsFileContents: contents)
+            .filter { fileManager.isExecutableFile(atPath: $0) }
+        #else
         let shellsFileURL = layout.rootFSData
             .appendingPathComponent("etc", isDirectory: true)
             .appendingPathComponent("shells", isDirectory: false)
@@ -257,13 +262,22 @@ public actor LocalLinuxStorageManager {
             return availablePaths
         }
         return [LocalLinuxTerminalShellConfiguration.defaultPath] + availablePaths
+        #endif
+    }
+
+    private func executionWorkspacePath(_ relativePath: String) -> String {
+        #if os(macOS)
+        return layout.root.appendingPathComponent(relativePath, isDirectory: true).path
+        #else
+        return Self.guestWorkspacePath(forHostRelativePath: relativePath)
+        #endif
     }
 
     public func workspace(sessionID: UUID, profileID: UUID? = nil) throws -> LocalAgentWorkspace {
         if var existing = Persistence.loadLocalAgentWorkspaces(sessionID: sessionID).first {
             let directory = layout.root.appendingPathComponent(existing.hostRelativePath, isDirectory: true)
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-            existing.guestPath = Self.guestWorkspacePath(forHostRelativePath: existing.hostRelativePath)
+            existing.guestPath = executionWorkspacePath(existing.hostRelativePath)
             existing.lastUsedAt = Date()
             _ = Persistence.saveLocalAgentWorkspace(existing)
             return existing
@@ -278,7 +292,7 @@ public actor LocalLinuxStorageManager {
             id: id,
             sessionID: sessionID,
             profileID: profileID,
-            guestPath: Self.guestWorkspacePath(forHostRelativePath: relativePath),
+            guestPath: executionWorkspacePath(relativePath),
             hostRelativePath: relativePath
         )
         guard Persistence.saveLocalAgentWorkspace(workspace) else {
@@ -297,7 +311,7 @@ public actor LocalLinuxStorageManager {
         }) {
             let directory = layout.root.appendingPathComponent(existing.hostRelativePath, isDirectory: true)
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-            existing.guestPath = Self.guestWorkspacePath(forHostRelativePath: existing.hostRelativePath)
+            existing.guestPath = executionWorkspacePath(existing.hostRelativePath)
             existing.lastUsedAt = Date()
             guard Persistence.saveLocalAgentWorkspace(existing) else {
                 throw LocalLinuxRuntimeError.runtimeUnavailable(
@@ -314,7 +328,7 @@ public actor LocalLinuxStorageManager {
             id: Self.interactiveUserWorkspaceID,
             sessionID: nil,
             profileID: nil,
-            guestPath: Self.guestWorkspacePath(forHostRelativePath: relativePath),
+            guestPath: executionWorkspacePath(relativePath),
             hostRelativePath: relativePath
         )
         guard Persistence.saveLocalAgentWorkspace(workspace) else {
@@ -333,7 +347,7 @@ public actor LocalLinuxStorageManager {
         }
         let directory = layout.root.appendingPathComponent(workspace.hostRelativePath, isDirectory: true)
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        workspace.guestPath = Self.guestWorkspacePath(forHostRelativePath: workspace.hostRelativePath)
+        workspace.guestPath = executionWorkspacePath(workspace.hostRelativePath)
         workspace.lastUsedAt = Date()
         guard Persistence.saveLocalAgentWorkspace(workspace) else {
             throw LocalLinuxRuntimeError.runtimeUnavailable(
@@ -355,7 +369,7 @@ public actor LocalLinuxStorageManager {
         }) {
             let directory = layout.root.appendingPathComponent(existing.hostRelativePath, isDirectory: true)
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-            existing.guestPath = Self.guestWorkspacePath(forHostRelativePath: existing.hostRelativePath)
+            existing.guestPath = executionWorkspacePath(existing.hostRelativePath)
             existing.lastUsedAt = Date()
             _ = Persistence.saveLocalAgentWorkspace(existing)
             return existing
@@ -370,7 +384,7 @@ public actor LocalLinuxStorageManager {
         let workspace = LocalAgentWorkspace(
             sessionID: nil,
             profileID: serverID,
-            guestPath: Self.guestWorkspacePath(forHostRelativePath: relativePath),
+            guestPath: executionWorkspacePath(relativePath),
             hostRelativePath: relativePath
         )
         guard Persistence.saveLocalAgentWorkspace(workspace) else {
@@ -398,10 +412,15 @@ public actor LocalLinuxStorageManager {
         let resolved = try checkedDescendant(url, of: workspaceURL)
         let relativePath = String(resolved.path.dropFirst(workspaceURL.standardizedFileURL.path.count))
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        #if os(macOS)
+        let workspacePath = layout.root.lastPathComponent + "/" + workspace.hostRelativePath
+        return "app://" + workspacePath + (relativePath.isEmpty ? "" : "/" + relativePath)
+        #else
         let guestPath = relativePath.isEmpty
             ? workspace.guestPath
             : workspace.guestPath + "/" + relativePath
         return "linux://" + guestPath
+        #endif
     }
 
     public func outputURLs(jobID: UUID, workspace: LocalAgentWorkspace) throws -> (raw: URL, model: URL) {
@@ -568,14 +587,16 @@ public actor LocalLinuxStorageManager {
         )
     }
 
-    nonisolated func scheduleWorkspaceSizeRefresh(_ workspace: LocalAgentWorkspace) {
+    nonisolated func scheduleWorkspaceSizeRefresh(_ workspace: LocalAgentWorkspace) async {
         // Shell/PTY 即使失败也可能已经写入 Shared；同步不依赖工作区统计能否落库。
         ETOSSharedWorkspaceFiles.notifyChange()
         guard let directory = try? hostURL(for: workspace),
               let persist = Persistence.makeLocalAgentWorkspaceSizeWriter() else { return }
-        Task { [workspaceSizeRefresher] in
-            await workspaceSizeRefresher.schedule(workspace, directory: directory, persist: persist)
-        }
+        await workspaceSizeRefresher.schedule(workspace, directory: directory, persist: persist)
+    }
+
+    public func waitForWorkspaceSizeRefreshes() async {
+        await workspaceSizeRefresher.waitForIdle()
     }
 
     public func refreshWorkspaceSize(_ workspace: LocalAgentWorkspace) async throws -> LocalAgentWorkspace {
@@ -593,35 +614,68 @@ public actor LocalLinuxStorageManager {
 
     public func exportWorkspace(_ workspace: LocalAgentWorkspace) throws -> URL {
         let source = try hostURL(for: workspace)
+        guard try source.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else {
+            throw LocalLinuxRuntimeError.invalidPath(workspace.guestPath)
+        }
         try fileManager.createDirectory(at: layout.exports, withIntermediateDirectories: true)
         let archiveURL = uniqueExportURL(baseName: "Linux-Workspace-\(workspace.id.uuidString)")
+        var completed = false
+        defer { if !completed { try? fileManager.removeItem(at: archiveURL) } }
         let archive = try Archive(url: archiveURL, accessMode: .create)
-        let enumerator = fileManager.enumerator(
+        var enumerationError: Error?
+        guard let enumerator = fileManager.enumerator(
             at: source,
             includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsPackageDescendants]
-        )
-        while let item = enumerator?.nextObject() as? URL {
+            options: [.skipsPackageDescendants],
+            errorHandler: { _, error in enumerationError = error; return false }
+        ) else { throw CocoaError(.fileReadUnknown) }
+        while let item = enumerator.nextObject() as? URL {
+            try Task.checkCancellation()
             let values = try item.resourceValues(forKeys: [.isDirectoryKey])
             guard values.isDirectory != true else { continue }
             let relativePath = String(item.path.dropFirst(source.path.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             guard !relativePath.isEmpty else { continue }
             try archive.addEntry(with: relativePath, fileURL: item, compressionMethod: .deflate)
         }
+        if let enumerationError { throw enumerationError }
+        try Task.checkCancellation()
+        completed = true
         ETOSSharedWorkspaceFiles.notifyChange()
         return archiveURL
     }
 
-    public func deleteWorkspace(_ workspace: LocalAgentWorkspace) throws {
+    public func deleteWorkspace(_ workspace: LocalAgentWorkspace) async throws {
+        try await LocalLinuxJobScheduler.shared.cancelAndWaitForJobs(workspaceID: workspace.id)
+        try Task.checkCancellation()
+        // 等待任务时 actor 可以接纳新请求；旧确认不能删除期间重建的同 ID 用户终端工作区。
+        guard let current = Persistence.loadLocalAgentWorkspaces().first(where: { $0.id == workspace.id }),
+              current.createdAt == workspace.createdAt, current.hostRelativePath == workspace.hostRelativePath else {
+            throw LocalLinuxRuntimeError.invalidPath(workspace.guestPath)
+        }
+        guard !Persistence.loadLocalLinuxJobs(activeOnly: true).contains(where: { $0.workspaceID == workspace.id }) else {
+            throw LocalLinuxRuntimeError.runtimeUnavailable(NSLocalizedString("工作区仍有任务运行，请稍后重试。", comment: ""))
+        }
         let url = try hostURL(for: workspace)
-        if fileManager.fileExists(atPath: url.path) {
-            try fileManager.removeItem(at: url)
+        try Self.removeWorkspaceDirectory(url, fileManager: fileManager) {
+            guard Persistence.deleteLocalAgentWorkspace(id: workspace.id) else {
+                throw LocalLinuxRuntimeError.runtimeUnavailable(
+                    NSLocalizedString("无法删除 Linux 工作区记录。", comment: "Delete Linux workspace record failure")
+                )
+            }
         }
-        guard Persistence.deleteLocalAgentWorkspace(id: workspace.id) else {
-            throw LocalLinuxRuntimeError.runtimeUnavailable(
-                NSLocalizedString("无法删除 Linux 工作区记录。", comment: "Delete Linux workspace record failure")
-            )
+    }
+
+    /// 先暂存原目录；数据库删除失败时恢复文件，不能留下有记录却已丢失数据的工作区。
+    static func removeWorkspaceDirectory(_ url: URL, fileManager: FileManager, deleteRecord: () throws -> Void) throws {
+        let backup = url.deletingLastPathComponent().appendingPathComponent(".deleting-\(UUID().uuidString)", isDirectory: true)
+        let existed = fileManager.fileExists(atPath: url.path)
+        if existed { try fileManager.moveItem(at: url, to: backup) }
+        do { try deleteRecord() }
+        catch {
+            if existed { try fileManager.moveItem(at: backup, to: url) }
+            throw error
         }
+        if existed { try fileManager.removeItem(at: backup) }
     }
 
     public func deleteSystem(deleteUserData: Bool) throws {

@@ -10,7 +10,8 @@ import Foundation
 import Combine
 import os.log
 
-public final class LocalModelStore: ObservableObject {
+/// 同步磁盘接口由后台任务调用；跨线程列表读取仅取得已提交的内存快照。
+public final class LocalModelStore: ObservableObject, @unchecked Sendable {
     public static let shared = LocalModelStore()
     public static let directoryName = "LocalModels"
 
@@ -18,14 +19,24 @@ public final class LocalModelStore: ObservableObject {
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "LocalModelStore")
     private let fileManager: FileManager
     private let directoryOverride: URL?
+    // 文件与元数据写入串行化；展示快照使用独立的短锁，读取列表不会等待大权重复制。
+    private let storageLock = NSRecursiveLock()
+    private let snapshotLock = NSLock()
+    private var records: [LocalModelRecord] = []
+    private var snapshot: [LocalModelRecord] = []
+    public let objectWillChange = ObservableObjectPublisher()
 
-    @Published public private(set) var models: [LocalModelRecord]
+    public var models: [LocalModelRecord] {
+        snapshotLock.lock()
+        defer { snapshotLock.unlock() }
+        return snapshot
+    }
 
     public init(fileManager: FileManager = .default, directoryURL: URL? = nil) {
         self.fileManager = fileManager
         self.directoryOverride = directoryURL
-        self.models = []
-        self.models = loadModels()
+        self.records = loadModels()
+        self.snapshot = records
     }
 
     public var directoryURL: URL {
@@ -37,7 +48,7 @@ public final class LocalModelStore: ObservableObject {
     }
 
     public static func localModelsDirectoryURL(fileManager: FileManager = .default) -> URL {
-        let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documents = StorageUtility.documentsDirectory
         let directory = documents.appendingPathComponent(directoryName, isDirectory: true)
         if !fileManager.fileExists(atPath: directory.path) {
             try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -47,9 +58,12 @@ public final class LocalModelStore: ObservableObject {
 
     @discardableResult
     public func reload() -> Bool {
+        storageLock.lock()
+        defer { storageLock.unlock() }
         let reloadedModels = loadModels()
-        guard reloadedModels != models else { return false }
-        models = reloadedModels
+        guard reloadedModels != records else { return false }
+        records = reloadedModels
+        publishModels(notifyProvider: false)
         return true
     }
 
@@ -59,12 +73,19 @@ public final class LocalModelStore: ObservableObject {
 
     public func setProviderEnabled(_ isEnabled: Bool) {
         AppConfigStore.persistSynchronously(.bool(isEnabled), for: .localModelsEnabled)
-        Task { @MainActor in
+        DispatchQueue.main.async {
             if AppConfigStore.shared.localModelsEnabled != isEnabled {
                 AppConfigStore.shared.localModelsEnabled = isEnabled
             }
         }
-        NotificationCenter.default.post(name: .localModelStoreDidChange, object: nil)
+        notifyProviderChanged()
+    }
+
+    /// 文件任务返回后，先排空它已经提交的 UI 更新，再等待 AppConfig 的数据库写入。
+    public func waitForPendingUIUpdates() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
     }
 
     public func fileURL(for record: LocalModelRecord) -> URL {
@@ -100,6 +121,8 @@ public final class LocalModelStore: ObservableObject {
     }
 
     public func importModel(from sourceURL: URL, displayName: String? = nil, mmprojURL: URL? = nil) throws -> LocalModelRecord {
+        storageLock.lock()
+        defer { storageLock.unlock() }
         let didStartSecurityScope = sourceURL.startAccessingSecurityScopedResource()
         let didStartProjectorSecurityScope = mmprojURL?.startAccessingSecurityScopedResource() ?? false
         defer {
@@ -135,6 +158,8 @@ public final class LocalModelStore: ObservableObject {
     }
 
     public func registerDownloadedModel(fileAt sourceURL: URL, suggestedFileName: String, displayName: String? = nil) throws -> LocalModelRecord {
+        storageLock.lock()
+        defer { storageLock.unlock() }
         let destinationFileName = uniqueFileName(for: suggestedFileName)
         let destinationURL = directoryURL.appendingPathComponent(destinationFileName)
         try fileManager.moveItem(at: sourceURL, to: destinationURL)
@@ -150,29 +175,59 @@ public final class LocalModelStore: ObservableObject {
     }
 
     public func update(_ record: LocalModelRecord) {
+        storageLock.lock()
+        defer { storageLock.unlock() }
+        do {
+            try saveRecord(record)
+        } catch {
+            logger.error("写入本地模型元数据失败: \(error.localizedDescription)")
+        }
+    }
+
+    /// 版本检查和落盘共用写锁，旧编辑器不能复活已删除的权重或覆盖另一处修改。
+    @discardableResult
+    public func saveDraft(_ draft: LocalModelRecord, replacing original: LocalModelRecord) throws -> LocalModelRecord {
+        storageLock.lock()
+        defer { storageLock.unlock() }
+        guard draft.id == original.id, records.first(where: { $0.id == original.id }) == original else {
+            throw LocalModelDraftWriteError.changedExternally
+        }
+        return try saveRecord(draft)
+    }
+
+    @discardableResult
+    private func saveRecord(_ record: LocalModelRecord) throws -> LocalModelRecord {
         var updated = record
         updated.displayName = updated.sanitizedDisplayName
         updated.normalizeGenerationParameters()
         updated.updatedAt = Date()
 
-        if let index = models.firstIndex(where: { $0.id == updated.id }) {
-            let oldRecord = models[index]
-            models[index] = updated
+        var nextRecords = records
+        let oldRecord = records.first { $0.id == updated.id }
+        if let index = nextRecords.firstIndex(where: { $0.id == updated.id }) {
+            nextRecords[index] = updated
+        } else {
+            nextRecords.append(updated)
+        }
+        // 先原子写元数据，再发布和清理旧附件；失败时旧快照及其文件仍然可用。
+        try persistModels(nextRecords)
+        records = nextRecords
+        if let oldRecord {
             removeProjectorFileIfUnreferenced(from: oldRecord, replacingWith: updated)
             removeLoRAFileIfUnreferenced(from: oldRecord, replacingWith: updated)
-        } else {
-            models.append(updated)
         }
-        persistModels()
-        NotificationCenter.default.post(name: .localModelStoreDidChange, object: nil)
+        publishModels()
+        return updated
     }
 
     public func updateFromProviderModel(_ model: Model) {
-        guard let index = models.firstIndex(where: { $0.id == LocalModelProviderBridge.localRecordID(from: model) }) else {
+        storageLock.lock()
+        defer { storageLock.unlock() }
+        guard let index = records.firstIndex(where: { $0.id == LocalModelProviderBridge.localRecordID(from: model) }) else {
             return
         }
 
-        var record = models[index]
+        var record = records[index]
         record.displayName = model.displayName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
             ?? record.sanitizedDisplayName
         record.isActivated = model.isActivated
@@ -215,31 +270,53 @@ public final class LocalModelStore: ObservableObject {
     }
 
     public func delete(_ record: LocalModelRecord, deleteFile: Bool = true) {
-        let storedRecord = models.first(where: { $0.id == record.id })
-        models.removeAll { $0.id == record.id }
-        for index in models.indices {
-            if models[index].speechDecoderModelID == record.id {
-                models[index].speechDecoderModelID = nil
+        storageLock.lock()
+        defer { storageLock.unlock() }
+        do {
+            try deleteRecord(record, deleteFile: deleteFile)
+        } catch {
+            logger.error("删除本地模型元数据失败: \(error.localizedDescription)")
+        }
+    }
+
+    public func deleteDraft(_ original: LocalModelRecord, deleteFile: Bool = true) throws {
+        storageLock.lock()
+        defer { storageLock.unlock() }
+        guard records.first(where: { $0.id == original.id }) == original else {
+            throw LocalModelDraftWriteError.changedExternally
+        }
+        try deleteRecord(original, deleteFile: deleteFile)
+    }
+
+    private func deleteRecord(_ record: LocalModelRecord, deleteFile: Bool) throws {
+        let storedRecord = records.first(where: { $0.id == record.id })
+        var nextRecords = records.filter { $0.id != record.id }
+        for index in nextRecords.indices {
+            if nextRecords[index].speechDecoderModelID == record.id {
+                nextRecords[index].speechDecoderModelID = nil
             }
-            if models[index].speechVADModelID == record.id {
-                models[index].speechVADModelID = nil
+            if nextRecords[index].speechVADModelID == record.id {
+                nextRecords[index].speechVADModelID = nil
             }
         }
+        try persistModels(nextRecords)
+        records = nextRecords
         if deleteFile {
-            try? fileManager.removeItem(at: fileURL(for: record))
+            if !records.contains(where: { $0.relativePath == (storedRecord ?? record).relativePath }) {
+                try? fileManager.removeItem(at: fileURL(for: storedRecord ?? record))
+            }
             let projectorPaths = Set([record.mmprojRelativePath, storedRecord?.mmprojRelativePath].compactMap { $0 })
             for relativePath in projectorPaths
-                where !models.contains(where: { $0.mmprojRelativePath == relativePath }) {
+                where !records.contains(where: { $0.mmprojRelativePath == relativePath }) {
                 deleteProjectorFile(relativePath: relativePath)
             }
             let loraPaths = Set([record.loraRelativePath, storedRecord?.loraRelativePath].compactMap { $0 })
             for relativePath in loraPaths
-                where !models.contains(where: { $0.loraRelativePath == relativePath }) {
+                where !records.contains(where: { $0.loraRelativePath == relativePath }) {
                 deleteLoRAFile(relativePath: relativePath)
             }
         }
-        persistModels()
-        NotificationCenter.default.post(name: .localModelStoreDidChange, object: nil)
+        publishModels()
     }
 
     public func activatedModelsWithExistingFiles() -> [LocalModelRecord] {
@@ -248,6 +325,8 @@ public final class LocalModelStore: ObservableObject {
 
     @discardableResult
     public func copyMultimodalProjector(from sourceURL: URL, into record: inout LocalModelRecord) throws -> LocalModelRecord {
+        storageLock.lock()
+        defer { storageLock.unlock() }
         let didStartSecurityScope = sourceURL.startAccessingSecurityScopedResource()
         defer {
             if didStartSecurityScope {
@@ -263,13 +342,17 @@ public final class LocalModelStore: ObservableObject {
     }
 
     public func deleteProjectorFile(relativePath: String) {
+        storageLock.lock()
+        defer { storageLock.unlock() }
         let trimmed = relativePath.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty, !records.contains(where: { $0.mmprojRelativePath == trimmed }) else { return }
         try? fileManager.removeItem(at: directoryURL.appendingPathComponent(trimmed))
     }
 
     @discardableResult
     public func copyLoRAAdapter(from sourceURL: URL, into record: inout LocalModelRecord) throws -> LocalModelRecord {
+        storageLock.lock()
+        defer { storageLock.unlock() }
         let didStartSecurityScope = sourceURL.startAccessingSecurityScopedResource()
         defer {
             if didStartSecurityScope {
@@ -294,35 +377,41 @@ public final class LocalModelStore: ObservableObject {
         for record: LocalModelRecord,
         suggestedFileName: String? = nil
     ) async throws -> LocalModelRecord {
-        let destinationDirectory = directoryURL
         return try await Task.detached(priority: .userInitiated) {
-            let didStartSecurityScope = sourceURL.startAccessingSecurityScopedResource()
-            defer {
-                if didStartSecurityScope {
-                    sourceURL.stopAccessingSecurityScopedResource()
-                }
-            }
-
-            let importedAdapter = try Self.copyLoRAFile(
-                from: sourceURL,
-                to: destinationDirectory,
-                compatibleWith: record.ggufArchitecture,
-                suggestedFileName: suggestedFileName,
-                fileManager: .default
-            )
-            var updatedRecord = record
-            updatedRecord.loraFileName = importedAdapter.fileName
-            updatedRecord.loraRelativePath = importedAdapter.relativePath
-            updatedRecord.loraFileSize = importedAdapter.fileSize
-            updatedRecord.loraScale = LocalModelRecord.defaultLoRAScale
-            updatedRecord.normalizeGenerationParameters()
-            return updatedRecord
+            try self.copyLoRADraft(from: sourceURL, for: record, suggestedFileName: suggestedFileName)
         }.value
     }
 
+    private func copyLoRADraft(from sourceURL: URL, for record: LocalModelRecord, suggestedFileName: String?) throws -> LocalModelRecord {
+        storageLock.lock()
+        defer { storageLock.unlock() }
+        let didStartSecurityScope = sourceURL.startAccessingSecurityScopedResource()
+        defer {
+            if didStartSecurityScope {
+                sourceURL.stopAccessingSecurityScopedResource()
+            }
+        }
+        let importedAdapter = try Self.copyLoRAFile(
+            from: sourceURL,
+            to: directoryURL,
+            compatibleWith: record.ggufArchitecture,
+            suggestedFileName: suggestedFileName,
+            fileManager: fileManager
+        )
+        var updatedRecord = record
+        updatedRecord.loraFileName = importedAdapter.fileName
+        updatedRecord.loraRelativePath = importedAdapter.relativePath
+        updatedRecord.loraFileSize = importedAdapter.fileSize
+        updatedRecord.loraScale = LocalModelRecord.defaultLoRAScale
+        updatedRecord.normalizeGenerationParameters()
+        return updatedRecord
+    }
+
     public func deleteLoRAFile(relativePath: String) {
+        storageLock.lock()
+        defer { storageLock.unlock() }
         let trimmed = relativePath.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty, !records.contains(where: { $0.loraRelativePath == trimmed }) else { return }
         try? fileManager.removeItem(at: directoryURL.appendingPathComponent(trimmed))
     }
 
@@ -350,31 +439,35 @@ public final class LocalModelStore: ObservableObject {
             updatedAt: now
         )
         autoLinkSpeechCompanions(to: &record)
-        models.append(record)
-        linkNewSpeechCompanion(record)
-        persistModels()
+        var nextRecords = records
+        nextRecords.append(record)
+        linkNewSpeechCompanion(record, in: &nextRecords)
+        try persistModels(nextRecords)
+        records = nextRecords
+        publishModels(notifyProvider: false)
         if !isProviderEnabled {
             setProviderEnabled(true)
+        } else {
+            notifyProviderChanged()
         }
-        NotificationCenter.default.post(name: .localModelStoreDidChange, object: nil)
         return record
     }
 
     private func autoLinkSpeechCompanions(to record: inout LocalModelRecord) {
         guard let architecture = record.speechArchitecture else { return }
         if architecture.requiresDecoderModel {
-            record.speechDecoderModelID = models.first {
+            record.speechDecoderModelID = records.first {
                 $0.ggufArchitecture == "qwen3" && fileExists(for: $0)
             }?.id
         }
         if architecture.isTranscriptionModel {
-            record.speechVADModelID = models.first {
+            record.speechVADModelID = records.first {
                 $0.speechArchitecture == .fsmnVAD && fileExists(for: $0)
             }?.id
         }
     }
 
-    private func linkNewSpeechCompanion(_ record: LocalModelRecord) {
+    private func linkNewSpeechCompanion(_ record: LocalModelRecord, in models: inout [LocalModelRecord]) {
         if record.ggufArchitecture == "qwen3" {
             for index in models.indices where
                 models[index].speechArchitecture == .funASRNanoEncoder
@@ -407,13 +500,18 @@ public final class LocalModelStore: ObservableObject {
         let sourceFileName = sourceURL.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "mmproj.gguf"
         let destinationFileName = uniqueFileName(for: sourceFileName)
         let destinationURL = directoryURL.appendingPathComponent(destinationFileName)
-        try fileManager.copyItem(at: sourceURL, to: destinationURL)
-        let attributes = try fileManager.attributesOfItem(atPath: destinationURL.path)
-        return ImportedProjectorFile(
-            fileName: destinationFileName,
-            relativePath: destinationFileName,
-            fileSize: attributes[.size] as? Int64 ?? 0
-        )
+        do {
+            try fileManager.copyItem(at: sourceURL, to: destinationURL)
+            let attributes = try fileManager.attributesOfItem(atPath: destinationURL.path)
+            return ImportedProjectorFile(
+                fileName: destinationFileName,
+                relativePath: destinationFileName,
+                fileSize: attributes[.size] as? Int64 ?? 0
+            )
+        } catch {
+            try? fileManager.removeItem(at: destinationURL)
+            throw error
+        }
     }
 
     private func copyLoRAFile(from sourceURL: URL, compatibleWith architecture: String?) throws -> ImportedLoRAFile {
@@ -444,13 +542,18 @@ public final class LocalModelStore: ObservableObject {
             fileManager: fileManager
         )
         let destinationURL = destinationDirectory.appendingPathComponent(destinationFileName)
-        try fileManager.copyItem(at: sourceURL, to: destinationURL)
-        let attributes = try fileManager.attributesOfItem(atPath: destinationURL.path)
-        return ImportedLoRAFile(
-            fileName: destinationFileName,
-            relativePath: destinationFileName,
-            fileSize: attributes[.size] as? Int64 ?? 0
-        )
+        do {
+            try fileManager.copyItem(at: sourceURL, to: destinationURL)
+            let attributes = try fileManager.attributesOfItem(atPath: destinationURL.path)
+            return ImportedLoRAFile(
+                fileName: destinationFileName,
+                relativePath: destinationFileName,
+                fileSize: attributes[.size] as? Int64 ?? 0
+            )
+        } catch {
+            try? fileManager.removeItem(at: destinationURL)
+            throw error
+        }
     }
 
     private func removeProjectorFileIfUnreferenced(from oldRecord: LocalModelRecord, replacingWith newRecord: LocalModelRecord) {
@@ -459,7 +562,7 @@ public final class LocalModelStore: ObservableObject {
               oldRelativePath != newRecord.mmprojRelativePath else {
             return
         }
-        let isStillReferenced = models.contains { record in
+        let isStillReferenced = records.contains { record in
             record.id != oldRecord.id && record.mmprojRelativePath == oldRelativePath
         }
         if !isStillReferenced {
@@ -473,7 +576,7 @@ public final class LocalModelStore: ObservableObject {
               oldRelativePath != newRecord.loraRelativePath else {
             return
         }
-        let isStillReferenced = models.contains { record in
+        let isStillReferenced = records.contains { record in
             record.id != oldRecord.id && record.loraRelativePath == oldRelativePath
         }
         if !isStillReferenced {
@@ -527,14 +630,27 @@ public final class LocalModelStore: ObservableObject {
         }
     }
 
-    private func persistModels() {
-        do {
-            let snapshot = LocalModelStoreSnapshot(models: models)
-            let data = try JSONEncoder.localModelEncoder.encode(snapshot)
-            try data.write(to: metadataURL(), options: [.atomic, .completeFileProtection])
-        } catch {
-            logger.error("写入本地模型元数据失败: \(error.localizedDescription)")
+    private func persistModels(_ models: [LocalModelRecord]) throws {
+        let snapshot = LocalModelStoreSnapshot(models: models)
+        let data = try JSONEncoder.localModelEncoder.encode(snapshot)
+        try data.write(to: metadataURL(), options: [.atomic, .completeFileProtection])
+    }
+
+    private func publishModels(notifyProvider: Bool = true) {
+        snapshotLock.lock()
+        snapshot = records
+        snapshotLock.unlock()
+        // 磁盘任务不进入 UI 发布链；回调读取最新快照，不会把排队的旧版本重新写回。
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.objectWillChange.send()
         }
+        // 提供商监听器包含数据库读写，必须在调用方的存储任务内完成，不能搬到 UI 队列。
+        if notifyProvider { notifyProviderChanged() }
+    }
+
+    private func notifyProviderChanged() {
+        NotificationCenter.default.post(name: .localModelStoreDidChange, object: nil)
     }
 
     private func metadataURL() -> URL {

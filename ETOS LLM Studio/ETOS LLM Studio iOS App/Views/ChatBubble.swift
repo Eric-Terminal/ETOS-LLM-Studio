@@ -325,6 +325,7 @@ struct ChatBubble: View {
             messageID: message.id, versionIndex: message.getCurrentVersionIndex()
         ))
         .environment(\.thinkingSweepUsesRainbow, messageState.message.usesRainbowThinkingSweep)
+        .environment(\.etTextFontSnapshot, messageState.textFontSnapshot)
         .onDisappear {
             setChatBubbleLocalPresentationBlocked(false)
         }

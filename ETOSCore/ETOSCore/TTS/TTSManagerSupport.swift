@@ -31,8 +31,10 @@ extension TTSManager {
 #endif
     }
 
-    func fetchData(for request: URLRequest) async throws -> Data {
+    nonisolated func fetchData(for request: URLRequest) async throws -> Data {
+        try Task.checkCancellation()
         let (data, response) = try await urlSession.securedData(for: request)
+        try Task.checkCancellation()
         guard let httpResponse = response as? HTTPURLResponse else {
             throw NSError(domain: "TTS", code: -20, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("无效的网络响应。", comment: "")])
         }
@@ -101,19 +103,14 @@ extension TTSManager {
 
     func stopCurrentPlayback(clearQueueOnly: Bool) {
 #if canImport(AVFoundation)
-        audioPlayer?.stop()
-        audioPlayer = nil
-        if let continuation = audioContinuation {
-            audioContinuation = nil
-            continuation.resume(throwing: CancellationError())
-        }
-        stopProgressTimer()
+        stopCloudPlayback()
 #endif
 
-#if os(iOS) || os(watchOS)
+#if os(iOS) || os(watchOS) || os(macOS)
+        let hadActiveSpeech = activeSpeechUtterance != nil
         stopSpeechMonitor()
         activeSpeechUtterance = nil
-        if speechSynthesizer.isSpeaking {
+        if hadActiveSpeech {
             speechSynthesizer.stopSpeaking(at: .immediate)
         }
         if let continuation = speechContinuation {
@@ -125,12 +122,12 @@ extension TTSManager {
         activeBackend = .none
         isPausedByUser = false
         if !clearQueueOnly {
-            playbackState = .init(speed: settingsStore.playbackSpeed)
+            playbackState = .init(speed: settings.playbackSpeed)
             currentSpeakingMessageID = nil
         }
     }
 
-    func normalizedBaseURL(_ string: String) -> URL {
+    nonisolated func normalizedBaseURL(_ string: String) -> URL {
         let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
         return URL(string: trimmed)!
     }

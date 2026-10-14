@@ -29,28 +29,35 @@ extension ChatService {
         enablePeriodicTimeLandmark: Bool = false,
         periodicTimeLandmarkIntervalMinutes: Int = 30,
         enableResponseSpeedMetrics: Bool = true,
-        prefill: Bool = false
+        prefill: Bool = false,
+        targetSessionID: UUID? = nil
     ) async {
-        guard let currentSession = currentSessionSubject.value else { return }
+        let visibleSession = currentSessionSubject.value
+        guard let sessionID = targetSessionID ?? visibleSession?.id,
+              let currentSession = visibleSession?.id == sessionID ? visibleSession : conversationSession(withID: sessionID) else { return }
+        let runnableModel = currentSession.preferredModelIdentifier.flatMap { identifier in
+            activatedConversationModels.first(where: { $0.id == identifier })
+        } ?? selectedModelSubject.value
 
-        // 先获取当前消息列表，避免取消请求时状态变化
-        let messagesBeforeCancellation = messagesForSessionSubject.value
+        // 固定来源会话与模型，取消期间切换窗口不能把别的会话历史写入重试目标。
+        let messagesBeforeCancellation = messagesSnapshot(for: sessionID)
 
         guard let selectedMessage = ChatResponseAttemptSupport.visibleMessages(from: messagesBeforeCancellation)
             .first(where: { $0.id == message.id }) else {
             logger.warning("未找到要重试的消息")
             return
         }
-        guard !prefill || (selectedMessage.canPrefill && selectedModelSubject.value?.canRequestAssistantPrefill == true) else { return }
+        guard !prefill || (selectedMessage.canPrefill && runnableModel?.canRequestAssistantPrefill == true) else { return }
 
         logger.info("重试消息: \(String(describing: selectedMessage.role)) - \(selectedMessage.id.uuidString)")
-        let shouldRetryAsImageGeneration = shouldRetryMessageAsImageGeneration()
+        let shouldRetryAsImageGeneration = runnableModel.map { shouldRouteMessageToImageGeneration(using: $0) } ?? false
 
         // 【重要】必须先取消旧请求，再创建新的会话级请求上下文
         // 否则取消流程会把刚创建的请求上下文提前清理
-        await cancelOngoingRequest()
+        await cancelRequest(for: sessionID)
 
-        let messages = messagesForSessionSubject.value
+        guard !Task.isCancelled, conversationSession(withID: sessionID) != nil else { return }
+        let messages = messagesSnapshot(for: sessionID)
         let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: messages)
         let currentMessage = visibleMessages.first(where: { $0.id == selectedMessage.id })
             ?? (selectedMessage.role == .assistant ? visibleMessages.last : nil)
@@ -76,7 +83,8 @@ extension ChatService {
         if shouldRetryAsImageGeneration {
             await retryImageGenerationMessage(
                 preparedRetry: preparedRetry,
-                currentSession: currentSession
+                currentSession: currentSession,
+                runnableModel: runnableModel
             )
             return
         }
@@ -101,6 +109,7 @@ extension ChatService {
             messages: preparedRetry.requestMessages,
             loadingMessageID: preparedRetry.loadingMessage.id,
             currentSession: currentSession,
+            runnableModel: runnableModel,
             userMessage: preparedRetry.representativeUserMessage,
             aiTemperature: aiTemperature,
             aiTopP: aiTopP,
@@ -129,6 +138,7 @@ extension ChatService {
         messages: [ChatMessage],
         loadingMessageID: UUID,
         currentSession: ChatSession,
+        runnableModel: RunnableModel?,
         userMessage: ChatMessage?,
         aiTemperature: Double,
         aiTopP: Double,
@@ -163,7 +173,7 @@ extension ChatService {
             ? MCPServerStore.loadServers().filter(\.isSelectedForChat).map(\.id)
             : []
         let requestConfiguration = ConversationRunRequestConfiguration(
-            modelIdentifier: selectedModelSubject.value?.id,
+            modelIdentifier: runnableModel?.id,
             temperature: aiTemperature,
             topP: aiTopP,
             systemPrompt: systemPrompt,
@@ -329,16 +339,12 @@ extension ChatService {
         }
     }
 
-    private func shouldRetryMessageAsImageGeneration() -> Bool {
-        guard let runnableModel = selectedModelSubject.value else { return false }
-        return shouldRouteMessageToImageGeneration(using: runnableModel)
-    }
-
     private func retryImageGenerationMessage(
         preparedRetry: PreparedMessageRetry,
-        currentSession: ChatSession
+        currentSession: ChatSession,
+        runnableModel: RunnableModel?
     ) async {
-        guard let runnableModel = selectedModelSubject.value else {
+        guard let runnableModel else {
             addErrorMessage(
                 NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error"),
                 sessionID: currentSession.id

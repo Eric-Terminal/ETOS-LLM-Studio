@@ -24,6 +24,7 @@ public struct ChatUserMessagePreview: Sendable, Equatable {
 
     public let content: String
     public let isTruncated: Bool
+    public let fontSnapshot: ETTextFontSnapshot
 
     /// 在后台准备预览；按完整字符截取，避免拆开 emoji、组合音标或 CRLF。
     public init(content: String, characterLimit: Int = ChatUserMessagePreview.defaultCharacterLimit) {
@@ -34,5 +35,7 @@ public struct ChatUserMessagePreview: Sendable, Equatable {
         ) ?? content.endIndex
         isTruncated = end < content.endIndex
         self.content = isTruncated ? String(content[..<end]) + "…" : content
+        // 字体和实际预览使用相同内容，在消息进入列表前完成整段回退。
+        fontSnapshot = ETTextFontSnapshot.prepare(for: self.content)
     }
 }

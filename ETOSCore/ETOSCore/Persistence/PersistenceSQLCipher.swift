@@ -113,21 +113,32 @@ extension Persistence {
         }
     }
 
-    static func copyDatabaseForLaunchBackup(sourceURL: URL, destinationURL: URL) throws {
+    static func copyDatabaseForLaunchBackup(sourceURL: URL, destinationURL: URL, encrypted: Bool? = nil, passphrase: Data? = nil) throws {
         try ensureDirectoryExists(destinationURL.deletingLastPathComponent())
         try removeItemIfExists(at: destinationURL)
         removeSQLiteSidecars(at: destinationURL)
 
-        let isEncrypted = databaseEncryptionHasStoredPassphrase()
+        let isEncrypted = encrypted ?? databaseEncryptionHasStoredPassphrase()
         if isEncrypted {
-            let source = try DatabaseQueue(path: sourceURL.path, configuration: makeEncryptedDatabaseConfiguration())
+            var sourceConfiguration = makeEncryptedDatabaseConfiguration(passphrase: passphrase)
+            sourceConfiguration.busyMode = .timeout(5)
+            let source = try DatabaseQueue(path: sourceURL.path, configuration: sourceConfiguration)
             defer { try? source.close() }
             try source.writeWithoutTransaction { db in
-                try attachCurrentPassphraseDatabase(db, path: destinationURL.path, schema: "encrypted")
-                try db.execute(sql: "SELECT sqlcipher_export('encrypted')")
-                try db.execute(sql: "DETACH DATABASE encrypted")
+                if let passphrase { try attachDatabase(db, path: destinationURL.path, schema: "encrypted", key: passphrase) }
+                else { try attachCurrentPassphraseDatabase(db, path: destinationURL.path, schema: "encrypted") }
+                defer { try? db.execute(sql: "DETACH DATABASE encrypted") }
+                // 导出多个表须固定同一读取事务，且保留 SQLite 头部的业务版本标记。
+                try db.inTransaction(.deferred) {
+                    let userVersion = try Int.fetchOne(db, sql: "PRAGMA main.user_version") ?? 0
+                    let applicationID = try Int.fetchOne(db, sql: "PRAGMA main.application_id") ?? 0
+                    try db.execute(sql: "SELECT sqlcipher_export('encrypted')")
+                    try db.execute(sql: "PRAGMA encrypted.user_version=\(userVersion)")
+                    try db.execute(sql: "PRAGMA encrypted.application_id=\(applicationID)")
+                    return .commit
+                }
             }
-            let destination = try DatabaseQueue(path: destinationURL.path, configuration: makeEncryptedDatabaseConfiguration())
+            let destination = try DatabaseQueue(path: destinationURL.path, configuration: makeEncryptedDatabaseConfiguration(passphrase: passphrase))
             defer { try? destination.close() }
             try destination.writeWithoutTransaction { db in
                 try db.execute(sql: "PRAGMA journal_mode=DELETE")
@@ -136,7 +147,8 @@ extension Persistence {
             return
         }
 
-        let sourceConfiguration = makePlainDatabaseConfiguration(readonly: true)
+        var sourceConfiguration = makePlainDatabaseConfiguration(readonly: true)
+        sourceConfiguration.busyMode = .timeout(5)
         let destinationConfiguration = makePlainDatabaseConfiguration()
         let source = try DatabaseQueue(path: sourceURL.path, configuration: sourceConfiguration)
         defer { try? source.close() }

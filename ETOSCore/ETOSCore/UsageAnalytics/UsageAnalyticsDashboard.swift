@@ -13,21 +13,25 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
     private var selectedDayKey: String
     private var displayedMonthAnchor: Date
 
+    /// 桌面页可在重建订阅时恢复筛选；默认参数保持移动端首次进入的行为。
     public init(
         notificationCenter: NotificationCenter = .default,
-        calendar: Calendar = UsageAnalyticsRuntimeContext.calendar()
+        calendar: Calendar = UsageAnalyticsRuntimeContext.calendar(),
+        selectedScope: UsageAnalyticsDetailScope = .day,
+        selectedDayKey: String? = nil,
+        displayedMonthAnchor: Date? = nil
     ) {
         self.notificationCenter = notificationCenter
         self.calendar = calendar
         let now = Date()
-        self.selectedScope = .day
-        self.selectedDayKey = UsageAnalyticsRuntimeContext.dayKey(for: now, calendar: calendar)
-        self.displayedMonthAnchor = calendar.dateInterval(of: .month, for: now)?.start ?? now
+        self.selectedScope = selectedScope
+        self.selectedDayKey = selectedDayKey ?? UsageAnalyticsRuntimeContext.dayKey(for: now, calendar: calendar)
+        self.displayedMonthAnchor = displayedMonthAnchor ?? calendar.dateInterval(of: .month, for: now)?.start ?? now
         self.state = UsageAnalyticsDashboardState(
             isLoading: true,
             isEmpty: true,
-            selectedScope: .day,
-            selectedDayKey: UsageAnalyticsRuntimeContext.dayKey(for: now, calendar: calendar),
+            selectedScope: self.selectedScope,
+            selectedDayKey: self.selectedDayKey,
             displayedMonthTitle: "",
             weekdaySymbols: Self.weekdaySymbols(calendar: calendar),
             overviewCards: [],

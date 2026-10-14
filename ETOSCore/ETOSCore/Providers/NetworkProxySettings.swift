@@ -5,7 +5,7 @@ import CFNetwork
 import Combine
 
 public enum NetworkProxySettings {
-    private enum Keys {
+    enum Keys {
         static let isEnabled = "networkProxy.global.isEnabled"
         static let type = "networkProxy.global.type"
         static let host = "networkProxy.global.host"
@@ -15,6 +15,10 @@ public enum NetworkProxySettings {
     }
 
     public static func loadGlobalConfiguration(defaults: UserDefaults = .standard) -> NetworkProxyConfiguration {
+        if usesDatabase(defaults: defaults) {
+            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
+            return Persistence.withConfigDatabaseRead { try NetworkProxyConfigurationStore.load($0) } ?? NetworkProxyConfiguration()
+        }
         let storedType = textValue(forKey: Keys.type, defaults: defaults, defaultValue: NetworkProxyType.http.rawValue)
         let type = NetworkProxyType(rawValue: storedType) ?? .http
         let storedPort = integerValue(forKey: Keys.port, defaults: defaults, defaultValue: 8080)
@@ -33,6 +37,16 @@ public enum NetworkProxySettings {
         _ configuration: NetworkProxyConfiguration,
         defaults: UserDefaults = .standard
     ) {
+        if usesDatabase(defaults: defaults) {
+            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
+            let saved = Persistence.withConfigDatabaseWrite { db in
+                do { try NetworkProxyConfigurationStore.write(configuration, in: db) }
+                catch { throw NetworkProxyConfigurationError.unavailable }
+                return true
+            } ?? false
+            if saved { NetworkProxyConfigurationStore.notifyChange() }
+            return
+        }
         save(configuration.isEnabled, forKey: Keys.isEnabled, defaults: defaults)
         save(configuration.type.rawValue, forKey: Keys.type, defaults: defaults)
         save(configuration.host, forKey: Keys.host, defaults: defaults)

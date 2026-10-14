@@ -275,6 +275,7 @@ struct ChatBubble: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .environment(\.thinkingSweepUsesRainbow, messageState.message.usesRainbowThinkingSweep)
+        .environment(\.etTextFontSnapshot, messageState.textFontSnapshot)
         .padding(.horizontal, usesNoBubbleStyle ? noBubbleRowHorizontalPadding : nil)
         .padding(.top, mergeWithPrevious ? 0 : rowVerticalPadding)
         .padding(.bottom, mergeWithNext ? 0 : rowVerticalPadding)

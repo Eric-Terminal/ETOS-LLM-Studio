@@ -63,6 +63,18 @@ enum MemoryStoragePaths {
         vectorStoreNameValue
     }
 
+    /// 数据库已经替换后移除原安装的回退文件；完整快照随后会写入自己的向量文件。
+    static func clearCachesAfterDatabaseRestore(rootDirectory overrideRootDirectory: URL? = nil) throws {
+        let directory = rootDirectory(rootDirectory: overrideRootDirectory)
+        let vectorName = "\(vectorStoreNameValue).sqlite"
+        let names = [rawFileName, userProfileFileName, mutationHistoryFileName, transferReceiptsFileName,
+                     vectorName, vectorName + "-wal", vectorName + "-shm", vectorName + "-journal"]
+        for name in names {
+            let url = directory.appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
+        }
+    }
+
     private static func resolvedRootDirectory(rootDirectory overrideRootDirectory: URL?) -> URL {
         if let overrideRootDirectory {
             return overrideRootDirectory

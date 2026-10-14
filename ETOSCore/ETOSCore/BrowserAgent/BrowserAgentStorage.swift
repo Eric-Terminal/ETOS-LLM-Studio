@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 浏览器截图和下载写入独立的 Documents/BrowserAgent 会话目录，不依赖 Linux 工作区。
+// 浏览器截图和下载写入应用数据根目录下的 BrowserAgent 会话目录，不依赖 Linux 工作区。
 // ============================================================================
 
 import Foundation
@@ -23,9 +23,7 @@ enum BrowserAgentStorage {
         if let destinationDirectory {
             directory = destinationDirectory
         } else {
-            let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-                ?? FileManager.default.temporaryDirectory
-            directory = documents
+            directory = StorageUtility.documentsDirectory
                 .appendingPathComponent("BrowserAgent", isDirectory: true)
                 .appendingPathComponent(sessionID.uuidString, isDirectory: true)
                 .appendingPathComponent(directoryName, isDirectory: true)
@@ -41,9 +39,7 @@ enum BrowserAgentStorage {
     }
 
     static func appURI(for url: URL) throws -> String {
-        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        let rootPath = documents.standardizedFileURL.path
+        let rootPath = StorageUtility.documentsDirectory.standardizedFileURL.path
         let resolvedPath = url.standardizedFileURL.path
         guard resolvedPath == rootPath || resolvedPath.hasPrefix(rootPath + "/") else {
             throw BrowserAgentError.unsupported(

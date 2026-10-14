@@ -154,10 +154,14 @@ extension AppToolKind {
                 comment: "Edit sandbox file description sent to model"
             )
         case .deleteSandboxItem:
+            #if os(macOS)
+            return NSLocalizedString("删除应用沙盒 Documents 目录中的文件或子目录。只能访问沙盒内部路径，不能删除 Documents 根目录。", comment: "Delete sandbox item description sent to model") + " " + filePathDescription("")
+            #else
             return NSLocalizedString(
                 "删除文件或子目录。相对路径和 app:// 访问 Documents；Agent 模式还可访问 linux:// 与 mount:// 后端。Documents 与挂载根本身保持为文件空间边界；linux:/// 会递归清空 guest 根目录。",
                 comment: "Delete sandbox item description sent to model"
             )
+            #endif
         }
     }
 }

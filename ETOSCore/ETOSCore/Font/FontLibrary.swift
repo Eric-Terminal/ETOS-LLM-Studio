@@ -34,6 +34,7 @@ public enum FontLibrary {
     public static let defaultWatchLineSpacingEm = 0.15
     public static let lineSpacingStepEm = 0.025
     private static let cacheLock = NSLock()
+    private static let preparationLock = NSLock()
     private static let routeConfigurationWriter = FontRouteConfigurationWriter()
     private static let sampledResolutionCacheLimit = 256
 
@@ -51,6 +52,8 @@ public enum FontLibrary {
         var preferredPostScriptNameByRole: [FontSemanticRole: String] = [:]
         var resolvedTextFontRules: [ChatAppearanceResolvedTextFontRule] = []
         var sampledResolutionCache: [String: FontResolutionCacheEntry] = [:]
+        var sampledResolutionOrder: [String] = []
+        var fontsByPostScriptName: [String: CTFont] = [:]
         var isCustomFontEnabled = true
         var fallbackScope: FontFallbackScope = .segment
         var customFontScale = FontLibrary.defaultFontScale
@@ -97,6 +100,7 @@ public enum FontLibrary {
             snapshot.fallbackScope = fallbackScope
             snapshot.customFontScale = normalizedScale
             snapshot.sampledResolutionCache.removeAll(keepingCapacity: true)
+            snapshot.sampledResolutionOrder.removeAll(keepingCapacity: true)
 
             if didChangeCustomFontState {
                 let roleMappings = buildRoleMappings(
@@ -178,6 +182,11 @@ public enum FontLibrary {
             return
         }
 
+        // 启动预热和首批消息可能同时抵达；只让一个后台调用执行文件读取与注册。
+        preparationLock.lock()
+        defer { preparationLock.unlock() }
+        if !forceReload, withRuntimeSnapshot({ $0.isPrepared }) { return }
+
         let assets = loadAssetsFromDisk()
         let routeConfiguration = loadRouteConfigurationFromDisk()
         let shouldRegisterFonts = withRuntimeSnapshot { $0.isCustomFontEnabled }
@@ -186,6 +195,22 @@ public enum FontLibrary {
             for asset in assets where asset.isEnabled {
                 registerFontFileIfNeeded(fileName: asset.fileName)
             }
+        }
+
+        var fonts: [String: CTFont] = [:]
+        for asset in assets where asset.isEnabled {
+            let name = asset.postScriptName
+            guard fonts[name] == nil else { continue }
+            let font = CTFontCreateWithName(name as CFString, 16, nil)
+            guard (CTFontCopyPostScriptName(font) as String).caseInsensitiveCompare(name) == .orderedSame else {
+                continue
+            }
+            // 提前触达字形映射表，并持有字体对象；新消息只检查短样本，不重新按名称创建字体。
+            // 关闭自定义字体时也保留本进程已经注册的字体，重新启用不会丢失可用对象。
+            var characters = Array("Aa测试あア한ع".utf16)
+            var glyphs = Array(repeating: CGGlyph(), count: characters.count)
+            CTFontGetGlyphsForCharacters(font, &characters, &glyphs, characters.count)
+            fonts[name] = font
         }
 
         updateRuntimeSnapshot { snapshot in
@@ -197,6 +222,7 @@ public enum FontLibrary {
             snapshot.isPrepared = true
             snapshot.adapterCacheRevision &+= 1
             snapshot.assets = assets
+            snapshot.fontsByPostScriptName = fonts
             snapshot.routeConfiguration = routeConfiguration
             snapshot.fallbackPostScriptNamesByRole = roleMappings.fallback
             snapshot.preferredPostScriptNameByRole = roleMappings.preferred
@@ -206,6 +232,7 @@ public enum FontLibrary {
                 isCustomFontEnabled: snapshot.isCustomFontEnabled
             )
             snapshot.sampledResolutionCache.removeAll(keepingCapacity: true)
+            snapshot.sampledResolutionOrder.removeAll(keepingCapacity: true)
         }
     }
 
@@ -433,6 +460,7 @@ public enum FontLibrary {
                 isPrepared: snapshot.isPrepared,
                 isCustomFontEnabled: snapshot.isCustomFontEnabled,
                 fallbackScope: snapshot.fallbackScope,
+                revision: snapshot.adapterCacheRevision,
                 candidates: snapshot.fallbackPostScriptNamesByRole[role] ?? []
             )
         }
@@ -440,7 +468,8 @@ public enum FontLibrary {
         let candidates = context.candidates
         guard !candidates.isEmpty else { return nil }
 
-        let normalizedSample = normalizeSampleText(sampleText)
+        // 逐字级联的首选字体与正文无关，不能让每条消息占用相同结果的另一份缓存。
+        let normalizedSample = context.fallbackScope == .character ? "" : normalizedSampleText(sampleText)
         let cacheKey = [
             role.rawValue,
             context.fallbackScope.rawValue,
@@ -467,7 +496,7 @@ public enum FontLibrary {
             )
         }
 
-        storeSampledResolution(resolved, forKey: cacheKey)
+        storeSampledResolution(resolved, forKey: cacheKey, revision: context.revision)
         return resolved
     }
 
@@ -490,10 +519,9 @@ public enum FontLibrary {
         return candidate
     }
 
-    private static func normalizeSampleText(_ text: String) -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "Aa测试あア한ع" }
-        let scalars = trimmed.unicodeScalars
+    static func normalizedSampleText(_ text: String) -> String {
+        // 与字体适配器保持同一固定扫描上界；长正文不能在查询缓存前先被完整遍历。
+        let scalars = text.unicodeScalars.prefix(384)
             .filter { !$0.properties.isWhitespace && $0.properties.generalCategory != .control }
         let prefix = String(String.UnicodeScalarView(scalars.prefix(96)))
         return prefix.isEmpty ? "Aa测试あア한ع" : prefix
@@ -574,12 +602,7 @@ public enum FontLibrary {
 
     private static func createFontIfExists(postScriptName: String) -> CTFont? {
 #if canImport(CoreText)
-        let font = CTFontCreateWithName(postScriptName as CFString, 16, nil)
-        let resolvedPostScriptName = CTFontCopyPostScriptName(font) as String
-        guard resolvedPostScriptName.caseInsensitiveCompare(postScriptName) == .orderedSame else {
-            return nil
-        }
-        return font
+        return withRuntimeSnapshot { $0.fontsByPostScriptName[postScriptName] }
 #else
         _ = postScriptName
         return nil
@@ -606,10 +629,16 @@ public enum FontLibrary {
         }
     }
 
-    private static func storeSampledResolution(_ value: String?, forKey key: String) {
+    private static func storeSampledResolution(_ value: String?, forKey key: String, revision: UInt64) {
         updateRuntimeSnapshot { snapshot in
-            if snapshot.sampledResolutionCache.count >= sampledResolutionCacheLimit {
-                snapshot.sampledResolutionCache.removeAll(keepingCapacity: true)
+            // 字体配置切换期间完成的旧查询不能污染新配置的缓存。
+            guard snapshot.adapterCacheRevision == revision else { return }
+            if snapshot.sampledResolutionCache[key] == nil {
+                if snapshot.sampledResolutionOrder.count >= sampledResolutionCacheLimit {
+                    let oldest = snapshot.sampledResolutionOrder.removeFirst()
+                    snapshot.sampledResolutionCache.removeValue(forKey: oldest)
+                }
+                snapshot.sampledResolutionOrder.append(key)
             }
             if let value {
                 snapshot.sampledResolutionCache[key] = .resolved(value)

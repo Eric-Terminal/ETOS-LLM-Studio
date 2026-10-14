@@ -68,6 +68,14 @@ public actor SkillScriptToolExecutor {
             timeoutSeconds: timeoutSeconds,
             outputLimitBytes: outputLimitBytes
         )
+        #if os(macOS)
+        // 仍执行本次 Run 冻结的只读副本；Mac 使用真实路径，不创建 Linux 挂载。
+        let immutablePackage = try await SkillExecutionPackageStore.shared.materialize(skillName: skillName, frozenSnapshot: frozenSnapshot)
+        let nativeScript = immutablePackage.appendingPathComponent(resolved.snapshot.relativePath).path
+        if request.executable == resolved.guestScriptPath { request.executable = nativeScript }
+        commandArguments = commandArguments.map { $0 == resolved.guestScriptPath ? nativeScript : $0 }
+        request.arguments = commandArguments
+        #endif
         let policyRecord = await Task.detached(priority: .utility) {
             Persistence.skillExecutionPolicy(skillName: skillName)
         }.value
@@ -185,6 +193,7 @@ public actor SkillScriptToolExecutor {
             )
         }
 
+        #if !os(macOS)
         let immutablePackage = try await SkillExecutionPackageStore.shared.materialize(
             skillName: skillName,
             frozenSnapshot: frozenSnapshot
@@ -194,6 +203,7 @@ public actor SkillScriptToolExecutor {
             hostDirectory: immutablePackage
         )
         defer { skillMountLease.release() }
+        #endif
         let job = try await scheduler.runCommand(
             kind: .run,
             request: request,

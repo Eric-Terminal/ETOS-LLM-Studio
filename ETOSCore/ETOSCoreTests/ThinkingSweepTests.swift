@@ -72,6 +72,24 @@ struct ThinkingSweepTests {
 }
 
 extension ChatServiceTests {
+    @Test("活动回复标识固定会话及占位消息，结束状态不能继续显示等待")
+    func activeResponseIdentifierTracksRequestContext() throws {
+        let service = try #require(chatService)
+        let sessionID = UUID(), otherSessionID = UUID(), first = UUID(), next = UUID(), token = UUID()
+        defer { service.cancelRequestForSessionDeletion(sessionID) }
+        #expect(service.activeResponseMessageID(for: sessionID) == nil)
+        var context = ChatService.RequestExecutionContext(token: token, task: nil, loadingMessageID: first, imageGenerationContext: nil)
+        service.setRequestContext(context, for: sessionID)
+        #expect(service.activeResponseMessageID(for: sessionID) == first)
+        #expect(service.activeResponseMessageID(for: otherSessionID) == nil)
+        service.updateRequestLoadingMessageID(next, for: sessionID)
+        #expect(service.activeResponseMessageID(for: sessionID) == next)
+        context.loadingMessageID = next
+        context.hasFinishedResponse = true
+        service.setRequestContext(context, for: sessionID)
+        #expect(service.activeResponseMessageID(for: sessionID) == nil)
+    }
+
     @Test("扫光绑定实际请求模型，切换模型不修改旧请求，落盘不恢复样式")
     func thinkingSweepStaysWithRequestedMessage() async throws {
         let session = createPermanentTestSession(name: "请求扫光快照")

@@ -27,7 +27,7 @@ enum MCPNativeCapabilityError: LocalizedError {
     }
 }
 
-enum MCPNativeCapabilityPolicy {
+public enum MCPNativeCapabilityPolicy {
     private static let perCallApprovalToolIDs: Set<String> = [
         "health.write_quantity",
         "health.write_blood_pressure",
@@ -71,7 +71,7 @@ enum MCPNativeCapabilityPolicy {
         "nfc.write_ndef"
     ]
 
-    static func requiresPerCallApproval(_ toolID: String) -> Bool {
+    public static func requiresPerCallApproval(_ toolID: String) -> Bool {
         perCallApprovalToolIDs.contains(toolID)
     }
 }

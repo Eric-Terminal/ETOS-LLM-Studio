@@ -15,6 +15,7 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
     public private(set) var message: ChatMessage
     @Published public private(set) var visualMessage: ChatMessage
     public private(set) var isUserContentTruncated = false
+    public private(set) var textFontSnapshot: ETTextFontSnapshot?
     @Published public private(set) var roleplayHTML: RoleplayHTMLExtraction?
     public private(set) var layoutRevision: UInt = 0
     public private(set) var rendererHandoffRevision: UInt = 0
@@ -33,6 +34,7 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
         if message.role == .user, let userContentPreview {
             initialVisualMessage.content = userContentPreview.content
             self.isUserContentTruncated = userContentPreview.isTruncated
+            self.textFontSnapshot = userContentPreview.fontSnapshot
         }
         self.visualMessage = initialVisualMessage
         self.roleplayHTML = nil
@@ -68,14 +70,21 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
         self.message = message
     }
 
-    public func updateVisualMessage(_ message: ChatMessage, isUserContentTruncated: Bool = false) {
-        guard visualMessage != message || self.isUserContentTruncated != isUserContentTruncated else { return }
+    public func updateVisualMessage(
+        _ message: ChatMessage,
+        isUserContentTruncated: Bool = false,
+        fontSnapshot: ETTextFontSnapshot? = nil
+    ) {
+        let nextFontSnapshot = fontSnapshot ?? (visualMessage.content == message.content ? textFontSnapshot : nil)
+        guard visualMessage != message || self.isUserContentTruncated != isUserContentTruncated
+                || textFontSnapshot != nextFontSnapshot else { return }
         // 执行状态和结果变化不影响任务标题，避免完成一次调用后再次解析参数。
         let hasUpdatedToolArguments = !(visualMessage.toolCalls ?? []).elementsEqual(message.toolCalls ?? []) {
             $0.id == $1.id && $0.toolName == $1.toolName && $0.arguments == $1.arguments
         }
         layoutRevision &+= 1
         self.isUserContentTruncated = isUserContentTruncated
+        textFontSnapshot = nextFontSnapshot
         visualMessage = message
         if hasUpdatedToolArguments {
             prepareToolCallDisplayTitles()

@@ -22,6 +22,7 @@ public struct ChatAppearanceTextRuleRenderRequest: Hashable, Sendable {
     public let fontScale: Double
     public let fontFallbackScope: FontFallbackScope
     public let fontConfigurationRevision: String
+    public let semanticFont: ETFont
 
     public init(
         source: String,
@@ -30,7 +31,8 @@ public struct ChatAppearanceTextRuleRenderRequest: Hashable, Sendable {
         fontRules: [ChatAppearanceResolvedTextFontRule] = [],
         fontPointSize: Double = 17,
         fontScale: Double = 1,
-        fontFallbackScope: FontFallbackScope = .segment
+        fontFallbackScope: FontFallbackScope = .segment,
+        semanticFont: ETFont = .body
     ) {
         self.source = source
         self.usesMarkdown = usesMarkdown
@@ -40,6 +42,7 @@ public struct ChatAppearanceTextRuleRenderRequest: Hashable, Sendable {
         self.fontScale = fontScale
         self.fontFallbackScope = fontFallbackScope
         self.fontConfigurationRevision = FontLibrary.adapterCacheToken()
+        self.semanticFont = semanticFont
     }
 }
 
@@ -102,7 +105,7 @@ public actor ChatAppearanceTextRuleRenderer {
             attributed = AttributedString(request.source)
         }
 
-        await applySemanticFonts(to: &attributed)
+        await applySemanticFonts(request.semanticFont, to: &attributed)
         applySemanticColors(request.styleColors, to: &attributed)
         applyCustomColorRules(activeColorRules, to: &attributed)
         applyCustomFontRules(
@@ -115,12 +118,13 @@ public actor ChatAppearanceTextRuleRenderer {
     }
 
     private nonisolated static func applySemanticFonts(
+        _ baseFont: ETFont,
         to attributed: inout AttributedString
     ) async {
         for run in attributed.runs {
             guard let intent = run.inlinePresentationIntent,
                   !intent.intersection([.code, .stronglyEmphasized, .emphasized]).isEmpty else { continue }
-            var descriptor = ETFont.body
+            var descriptor = baseFont
             if intent.contains(.code) { descriptor = descriptor.monospaced() }
             if intent.contains(.stronglyEmphasized) { descriptor = descriptor.bold() }
             if intent.contains(.emphasized) { descriptor = descriptor.italic() }
@@ -306,6 +310,19 @@ public actor ChatAppearanceTextRuleRenderer {
             cascadeKey: cascadeDescriptors
         ])
         return Font(UIFont(descriptor: descriptor, size: size))
+#elseif canImport(CoreText)
+        let size = CGFloat(pointSize)
+        let available = postScriptNames.filter { name in
+            let font = CTFontCreateWithName(name as CFString, size, nil)
+            return (CTFontCopyPostScriptName(font) as String).caseInsensitiveCompare(name) == .orderedSame
+        }
+        guard let primary = available.first else { return nil }
+        let cascade = available.dropFirst().map { CTFontDescriptorCreateWithNameAndSize($0 as CFString, size) }
+        let attributes: [CFString: Any] = [
+            kCTFontNameAttribute: primary, kCTFontCascadeListAttribute: cascade
+        ]
+        let descriptor = CTFontDescriptorCreateWithAttributes(attributes as CFDictionary)
+        return Font(CTFontCreateWithFontDescriptor(descriptor, size, nil))
 #else
         guard let primaryName = postScriptNames.first else { return nil }
         return .custom(primaryName, size: CGFloat(pointSize), relativeTo: .body)

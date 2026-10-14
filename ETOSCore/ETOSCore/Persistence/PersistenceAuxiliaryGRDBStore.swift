@@ -21,13 +21,13 @@ final class PersistenceAuxiliaryGRDBStore {
     let supportsMemoryRelationalSchema: Bool
     let dbPool: DatabasePool
 
-    init(databaseURL: URL, loggerCategory: String) throws {
+    init(databaseURL: URL, loggerCategory: String, configuration: Configuration? = nil, schedulesMaintenance: Bool = true) throws {
         self.databaseURL = databaseURL
         self.logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: loggerCategory)
         self.supportsConfigRelationalSchema = databaseURL.lastPathComponent == "config-store.sqlite"
         self.supportsMemoryRelationalSchema = databaseURL.lastPathComponent == "memory-store.sqlite"
 
-        let configuration = Persistence.makeDatabaseConfiguration(
+        let configuration = configuration ?? Persistence.makeDatabaseConfiguration(
             qos: .userInitiated,
             mmapSize: 67_108_864
         )
@@ -41,8 +41,8 @@ final class PersistenceAuxiliaryGRDBStore {
             let interval = TelemetrySignpost.begin(.databaseSchemaMigration)
             defer { TelemetrySignpost.end(interval) }
             try migrateSchemaIfNeeded()
-        }
-        scheduleDatabaseMaintenanceIfNeeded()
+        } catch { try? dbPool.close(); throw error }
+        if schedulesMaintenance { scheduleDatabaseMaintenanceIfNeeded() }
     }
 
     func auxiliaryBlobExists(forKey key: String) -> Bool {

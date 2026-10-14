@@ -15,6 +15,7 @@ extension ChatService {
     public func createCompressedContinuation(
         from sourceSessionID: UUID,
         options: ContextCompressionOptions = ContextCompressionOptions(),
+        activate: Bool = true,
         progress: @escaping @MainActor @Sendable (ContextCompressionProgress) -> Void = { _ in }
     ) async throws -> ChatSession {
         await progress(ContextCompressionProgress(phase: .preparing))
@@ -107,8 +108,11 @@ extension ChatService {
             sessions.removeAll { $0.id == childSession.id }
             sessions.insert(childSession, at: 0)
             self.chatSessionsSubject.send(sessions)
-            self.currentSessionSubject.send(childSession)
-            self.publishMessages([])
+            // 桌面窗口须在持久化结束后核对锁定与来源，再决定是否切换。
+            if activate {
+                self.currentSessionSubject.send(childSession)
+                self.publishMessages([])
+            }
             self.logger.info("已创建上下文压缩续聊会话: \(childSession.id.uuidString)")
         }
         return childSession

@@ -448,7 +448,7 @@ extension ChatViewModel {
                         ? RoleplayHTMLExtractor.extract(from: visualMessage.content)
                         : nil
                 }
-                return (visualMessage, html, preview?.isTruncated == true)
+                return (visualMessage, html, preview?.isTruncated == true, preview?.fontSnapshot)
             }.value
 
             guard !Task.isCancelled, let self else { return }
@@ -457,7 +457,7 @@ extension ChatViewModel {
                   state.message == sourceMessage else {
                 return
             }
-            state.updateVisualMessage(prepared.0, isUserContentTruncated: prepared.2)
+            state.updateVisualMessage(prepared.0, isUserContentTruncated: prepared.2, fontSnapshot: prepared.3)
             state.updateRoleplayHTML(prepared.1?.containsHTML == true ? prepared.1 : nil)
             self.scheduleMarkdownPreparationIfNeeded(for: prepared.0)
             if self.visualMessagePrepareGenerations[messageID] == generation {

@@ -348,17 +348,19 @@ public struct ChatAppearanceProfileConfiguration: Codable, Equatable, Sendable {
 
     public func nextBoundary(after date: Date, calendar: Calendar = .current) -> Date? {
         guard !scheduleRules.isEmpty else { return nil }
-        let currentMinute = Self.minuteOfDay(for: date, calendar: calendar)
-        let currentDay = calendar.startOfDay(for: date)
-        let boundaries = scheduleRules.flatMap { [$0.startMinuteOfDay, $0.endMinuteOfDay] }
-        let futureMinute = boundaries
-            .filter { $0 > currentMinute }
-            .min()
-        let minute = futureMinute ?? boundaries.min()
-        guard let minute else { return nil }
-        let dayOffset = futureMinute == nil ? 1 : 0
-        return calendar.date(byAdding: .day, value: dayOffset, to: currentDay)?
-            .addingTimeInterval(TimeInterval(minute * 60))
+        var candidates: [Date] = []
+        for minute in scheduleRules.flatMap({ [$0.startMinuteOfDay, $0.endMinuteOfDay] }) {
+            let components = DateComponents(hour: minute / 60, minute: minute % 60, second: 0)
+            for policy in [Calendar.RepeatedTimePolicy.first, .last] {
+                if let next = calendar.nextDate(after: date, matching: components,
+                    matchingPolicy: .nextTime, repeatedTimePolicy: policy, direction: .forward) {
+                    candidates.append(next)
+                }
+            }
+        }
+        // 墙钟时间不能用“午夜 + 秒数”推导；夏令时跳变本身也可能改变当前命中区间。
+        if let transition = calendar.timeZone.nextDaylightSavingTimeTransition(after: date) { candidates.append(transition) }
+        return candidates.min()
     }
 
     public func firstAvailableScheduleWindow(

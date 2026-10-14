@@ -13,19 +13,19 @@ import os.log
 
 extension LocalDebugServer {
     func handleOpenAIQueueList() async -> [String: Any] {
-        let queue = pendingOpenAIRequests.map { item in
-            [
-                "id": item.id.uuidString,
-                "model": item.model ?? "",
-                "message_count": item.originalMessageCount,
-                "received_at": Self.formatWebConsoleDate(item.receivedAt)
-            ] as [String: Any]
-        }
-        return [
-            "status": "ok",
-            "queue": queue,
-            "count": queue.count
-        ]
+        let pending = pendingOpenAIRequests
+        let result = await Task.detached(priority: .utility) {
+            let queue = pending.map { item in
+                [
+                    "id": item.id.uuidString,
+                    "model": item.model ?? "",
+                    "message_count": item.originalMessageCount,
+                    "received_at": Self.formatWebConsoleDate(item.receivedAt)
+                ] as [String: Any]
+            }
+            return LocalDebugJSONObject(value: ["status": "ok", "queue": queue, "count": queue.count])
+        }.value
+        return result.value
     }
 
     func handleOpenAIQueueResolve(_ json: [String: Any]) async -> [String: Any] {
@@ -40,30 +40,37 @@ extension LocalDebugServer {
             targetID = nil
         }
 
-        guard let resolved = resolvePendingOpenAIRequest(targetID: targetID, save: shouldSave) else {
-            return ["status": "error", "message": "队列中未找到对应请求"]
+        guard let pending = reservePendingOpenAIRequest(targetID: targetID) else {
+            return ["status": "error", "message": NSLocalizedString("The captured request is missing or already being processed.", comment: "调试捕获请求不可用")]
         }
-
-        return [
-            "status": "ok",
-            "message": shouldSave ? "已保存捕获请求" : "已忽略捕获请求",
-            "resolved_id": resolved.id.uuidString,
-            "remaining": pendingOpenAIRequests.count
-        ]
+        do {
+            try await finishPendingOpenAIRequest(pending, save: shouldSave)
+            return [
+                "status": "ok",
+                "message": shouldSave ? "已保存捕获请求" : "已忽略捕获请求",
+                "resolved_id": pending.id.uuidString,
+                "remaining": pendingOpenAIRequests.count
+            ]
+        } catch {
+            return ["status": "error", "message": error.localizedDescription]
+        }
     }
 
     func handleOpenAICapture(_ json: [String: Any]) async -> [String: Any] {
-        guard let requestData = json["request"] as? [String: Any],
-              let pending = parseOpenAIChatCompletions(requestData) else {
+        guard let requestData = json["request"] as? [String: Any] else {
+            return ["status": "error", "message": "无效的 OpenAI 请求"]
+        }
+        let request = LocalDebugJSONObject(value: requestData)
+        let worker = Task.detached(priority: .userInitiated) { self.parseOpenAIChatCompletions(request.value) }
+        let parsed = await withTaskCancellationHandler { await worker.value } onCancel: { worker.cancel() }
+        guard canContinueDebugCommand, let pending = parsed else {
             return ["status": "error", "message": "无效的 OpenAI 请求"]
         }
 
         let model = pending.model
 
-        await MainActor.run {
-            self.pendingOpenAIRequests.append(pending)
-            self.updatePendingOpenAIState()
-        }
+        pendingOpenAIRequests.append(pending)
+        updatePendingOpenAIState()
 
         logger.info("捕获 OpenAI 请求: \(model ?? "unknown")")
 
@@ -73,12 +80,17 @@ extension LocalDebugServer {
         ]
     }
 
-    public func resolvePendingOpenAIRequest(save: Bool) {
-        _ = resolvePendingOpenAIRequest(targetID: nil, save: save)
+    public func resolvePendingOpenAIRequest(id: UUID? = nil, save: Bool) {
+        guard let pending = reservePendingOpenAIRequest(targetID: id) else { return }
+        let token = connectionToken
+        // 用户已经确认的保存必须完成；断开可以丢弃远端排队命令，不能丢弃这次原生确认。
+        commandQueue.enqueue(discardOnCancellation: false) { [self] in
+            do { try await finishPendingOpenAIRequest(pending, save: save) }
+            catch { if isCurrentConnection(token) { errorMessage = error.localizedDescription } }
+        }
     }
 
-    @discardableResult
-    func resolvePendingOpenAIRequest(targetID: UUID?, save: Bool) -> PendingOpenAIRequest? {
+    private func reservePendingOpenAIRequest(targetID: UUID?) -> PendingOpenAIRequest? {
         guard !pendingOpenAIRequests.isEmpty else { return nil }
 
         let targetIndex: Int
@@ -91,15 +103,20 @@ extension LocalDebugServer {
             targetIndex = 0
         }
 
-        let pending = pendingOpenAIRequests.remove(at: targetIndex)
-        if save {
-            saveCapturedOpenAIRequest(pending)
-        }
-        updatePendingOpenAIState()
+        let pending = pendingOpenAIRequests[targetIndex]
+        guard resolvingOpenAIRequestIDs.insert(pending.id).inserted else { return nil }
         return pending
     }
 
-    func parseOpenAIChatCompletions(_ json: [String: Any]) -> PendingOpenAIRequest? {
+    private func finishPendingOpenAIRequest(_ pending: PendingOpenAIRequest, save: Bool) async throws {
+        defer { resolvingOpenAIRequestIDs.remove(pending.id) }
+        if save { try await saveCapturedOpenAIRequest(pending) }
+        // 保存失败时保留原请求供重试；断开已清空的旧队列不会因此重新出现。
+        pendingOpenAIRequests.removeAll { $0.id == pending.id }
+        updatePendingOpenAIState()
+    }
+
+    nonisolated func parseOpenAIChatCompletions(_ json: [String: Any]) -> PendingOpenAIRequest? {
         guard let rawMessages = json["messages"] as? [[String: Any]] else {
             return nil
         }
@@ -109,6 +126,7 @@ extension LocalDebugServer {
         var messages: [ChatMessage] = []
 
         for rawMessage in rawMessages {
+            guard !Task.isCancelled else { return nil }
             let roleString = (rawMessage["role"] as? String) ?? "user"
             let content = normalizeOpenAIContent(rawMessage["content"])
 
@@ -139,7 +157,7 @@ extension LocalDebugServer {
         )
     }
 
-    func normalizeOpenAIContent(_ content: Any?) -> String {
+    nonisolated func normalizeOpenAIContent(_ content: Any?) -> String {
         if let text = content as? String {
             return text
         }
@@ -155,29 +173,22 @@ extension LocalDebugServer {
         return ""
     }
 
-    func saveCapturedOpenAIRequest(_ pending: PendingOpenAIRequest) {
-        let session = ChatSession(
-            id: UUID(),
-            name: formatSessionTitle(for: pending.receivedAt),
-            topicPrompt: pending.systemPrompt,
-            enhancedPrompt: nil,
-            isTemporary: false
-        )
+    func saveCapturedOpenAIRequest(_ pending: PendingOpenAIRequest) async throws {
+        let insertSession = insertSession
+        let session = try await Task.detached(priority: .userInitiated) {
+            let session = ChatSession(id: UUID(), name: self.formatSessionTitle(for: pending.receivedAt),
+                topicPrompt: pending.systemPrompt, enhancedPrompt: nil, isTemporary: false)
+            try insertSession(session, pending.messages)
+            return session
+        }.value
 
-        Persistence.saveMessages(pending.messages, for: session.id)
-        var sessions = Persistence.loadChatSessions()
-        sessions.insert(session, at: 0)
-        Persistence.saveChatSessions(sessions)
-
-        Task { @MainActor in
-            let chatService = ChatService.shared
-            var liveSessions = chatService.chatSessionsSubject.value
-            liveSessions.insert(session, at: 0)
-            chatService.chatSessionsSubject.send(liveSessions)
-        }
+        let chatService = ChatService.shared
+        var liveSessions = chatService.chatSessionsSubject.value
+        liveSessions.insert(session, at: 0)
+        chatService.chatSessionsSubject.send(liveSessions)
     }
 
-    func formatSessionTitle(for date: Date) -> String {
+    nonisolated func formatSessionTitle(for date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = .autoupdatingCurrent
         formatter.dateStyle = .medium
@@ -197,11 +208,7 @@ extension LocalDebugServer {
         } else {
             summary = nil
         }
-        let count = pendingOpenAIRequests.count
-
-        Task { @MainActor in
-            self.pendingOpenAIRequest = summary
-            self.pendingOpenAIQueueCount = count
-        }
+        pendingOpenAIRequest = summary
+        pendingOpenAIQueueCount = pendingOpenAIRequests.count
     }
 }

@@ -161,19 +161,22 @@ public final class CustomChatSlashCommandStore: ObservableObject {
         AppConfigStore.persistSynchronously(.text(raw), for: .customChatSlashCommands)
     }
 
-    private nonisolated static func normalizedCommands(
+    nonisolated static func normalizedCommands(
         _ commands: [CustomChatSlashCommand]
     ) -> [CustomChatSlashCommand] {
         var seenTriggers = Set<String>()
+        var seenIDs = Set<UUID>()
         return commands.compactMap { command in
             let trigger = canonicalTrigger(command.trigger)
             let trimmedPrompt = command.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
             guard isValidTrigger(trigger),
                   !ChatSlashCommandParser.isReservedTrigger(trigger),
                   !trimmedPrompt.isEmpty,
-                  seenTriggers.insert(trigger).inserted else {
+                  !seenTriggers.contains(trigger), !seenIDs.contains(command.id) else {
                 return nil
             }
+            seenTriggers.insert(trigger)
+            seenIDs.insert(command.id)
 
             var normalized = command
             normalized.trigger = trigger

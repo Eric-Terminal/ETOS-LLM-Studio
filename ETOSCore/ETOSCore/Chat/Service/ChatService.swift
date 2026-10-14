@@ -287,7 +287,8 @@ public class ChatService {
         }
     }
 
-    func messagesSnapshot(for sessionID: UUID) -> [ChatMessage] {
+    /// 优先读取运行期消息；历史检索等调用方须在后台执行，未缓存时会读持久化层。
+    public func messagesSnapshot(for sessionID: UUID) -> [ChatMessage] {
         if currentSessionSubject.value?.id == sessionID {
             return messagesForSessionSubject.value
         }
@@ -471,6 +472,14 @@ public class ChatService {
     func loadingMessageID(for sessionID: UUID) -> UUID? {
         withRequestStateLock {
             requestContextBySessionID[sessionID]?.loadingMessageID
+        }
+    }
+
+    /// 展示层只标记尚未结束的真实请求，不能从最后一条历史回复猜测等待状态。
+    public func activeResponseMessageID(for sessionID: UUID) -> UUID? {
+        withRequestStateLock {
+            guard let context = requestContextBySessionID[sessionID], !context.hasFinishedResponse else { return nil }
+            return context.loadingMessageID
         }
     }
 

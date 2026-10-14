@@ -113,6 +113,16 @@ extension PersistenceGRDBStore {
         }
     }
 
+    func hideConversationContinuationLink(contextID: UUID, childSessionID: UUID, kind: ConversationContinuationLinkKind) throws {
+        // 只更新指定标记，旧窗口不能覆盖同步写入的新摘要或另一侧的隐藏状态。
+        let column = kind == .sourceSession ? "source_session_link_hidden" : "continuation_session_link_hidden"
+        try dbPool.write { db in
+            try db.execute(sql: "UPDATE conversation_continuation_contexts SET \(column) = 1 WHERE id = ? AND child_session_id = ?",
+                arguments: [contextID.uuidString, childSessionID.uuidString])
+            guard db.changesCount == 1 else { throw ContextCompressionError.sourceSessionNotFound }
+        }
+    }
+
     func loadConversationContinuationContext(
         for childSessionID: UUID
     ) throws -> ConversationContinuationContext? {
@@ -333,6 +343,19 @@ extension Persistence {
         }
         WatchDatabaseSyncService.markDatabaseChanged(.chat)
         postCloudSyncLocalDataDidChange()
+    }
+
+    public static func hideConversationContinuationLink(contextID: UUID, childSessionID: UUID, kind: ConversationContinuationLinkKind) throws {
+        if let store = activeGRDBStore() {
+            try store.hideConversationContinuationLink(contextID: contextID, childSessionID: childSessionID, kind: kind)
+            WatchDatabaseSyncService.markDatabaseChanged(.chat)
+            postCloudSyncLocalDataDidChange()
+        } else {
+            guard let latest = try loadConversationContinuationContext(for: childSessionID), latest.id == contextID else {
+                throw ContextCompressionError.sourceSessionNotFound
+            }
+            try saveConversationContinuationContext(latest.hidingLink(kind))
+        }
     }
 
     public static func loadConversationContinuationContext(

@@ -329,9 +329,20 @@ public final class AppConfigStore: ObservableObject {
             write(.chatStreamingDisplayMode, chatStreamingDisplayMode)
         }
     }
+    private var isApplyingPreparedMessageActionBar = false
+
+    /// 调用方先在后台准备；仍经由同一数据库写入队列，备份与退出可等待待写任务。
+    public func applyPreparedMessageActionBarSettings(_ prepared: PreparedMessageActionBarConfiguration) {
+        isApplyingPreparedMessageActionBar = true
+        defer { isApplyingPreparedMessageActionBar = false }
+        messageActionBarSettings = prepared.configuration
+        messageActionBarConfiguration = prepared.rawValue
+    }
+
     @Published public var messageActionBarConfiguration: String {
         didSet {
             write(.messageActionBarConfiguration, messageActionBarConfiguration)
+            guard !isApplyingPreparedMessageActionBar else { return }
             let decoded = MessageActionBarConfiguration.decoded(from: messageActionBarConfiguration)
             if messageActionBarSettings != decoded {
                 messageActionBarSettings = decoded
@@ -340,6 +351,7 @@ public final class AppConfigStore: ObservableObject {
     }
     @Published public var messageActionBarSettings: MessageActionBarConfiguration {
         didSet {
+            guard !isApplyingPreparedMessageActionBar else { return }
             let encoded = messageActionBarSettings.encodedString()
             if messageActionBarConfiguration != encoded {
                 messageActionBarConfiguration = encoded
@@ -515,6 +527,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var providerDetailGroupByMainstream: Bool { didSet { write(.providerDetailGroupByMainstream, providerDetailGroupByMainstream) } }
     @Published public var backgroundCropTarget: String { didSet { write(.backgroundCropTarget, backgroundCropTarget) } }
     @Published public var shortcutBridgeShortcutName: String { didSet { write(.shortcutBridgeShortcutName, shortcutBridgeShortcutName) } }
+    @Published public var shortcutOfficialImportShortcutName: String { didSet { write(.shortcutOfficialImportShortcutName, shortcutOfficialImportShortcutName) } }
 
     @Published public var openAITailContextUsesSystemRole: Bool { didSet { write(.openAITailContextUsesSystemRole, openAITailContextUsesSystemRole) } }
     @Published public var includeSystemTimeInPrompt: Bool { didSet { write(.includeSystemTimeInPrompt, includeSystemTimeInPrompt) } }
@@ -802,6 +815,7 @@ public final class AppConfigStore: ObservableObject {
         providerDetailGroupByMainstream = Self.boolValue(.providerDetailGroupByMainstream, userDefaults: userDefaults)
         backgroundCropTarget = Self.textValue(.backgroundCropTarget, userDefaults: userDefaults)
         shortcutBridgeShortcutName = Self.textValue(.shortcutBridgeShortcutName, userDefaults: userDefaults)
+        shortcutOfficialImportShortcutName = Self.textValue(.shortcutOfficialImportShortcutName, userDefaults: userDefaults)
 
         openAITailContextUsesSystemRole = Self.boolValue(.openAITailContextUsesSystemRole, userDefaults: userDefaults)
         includeSystemTimeInPrompt = Self.boolValue(.includeSystemTimeInPrompt, userDefaults: userDefaults)

@@ -4,22 +4,51 @@ import SwiftUI
     import UIKit
 #elseif os(watchOS)
     import WatchKit
+#elseif os(macOS)
+    import AppKit
 #endif
 
 @MainActor
 private struct NetworkConnectionApprovalHost: ViewModifier {
+    let isEnabled: Bool
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var center = NetworkConnectionApprovalCenter.shared
     #if os(iOS)
         @State private var presentedAlert: UIAlertController?
+    #elseif os(macOS)
+        @ObservedObject private var appLock = AppLockManager.shared
     #endif
+
+    private var isPresentationActive: Bool {
+        guard isEnabled else { return false }
+        #if os(macOS)
+        return NSApplication.shared.isActive && appLock.state != .locked
+        #else
+        return scenePhase == .active
+        #endif
+    }
 
     func body(content: Content) -> some View {
         content
-            .onAppear { center.setActive(scenePhase == .active) }
-            .onChange(of: scenePhase) { _, phase in
-                center.setActive(phase == .active)
+            .onAppear {
+                center.setActive(isPresentationActive)
+                #if os(macOS)
+                presentCurrentRequest()
+                #endif
             }
+            .onChange(of: scenePhase) { _, _ in
+                center.setActive(isPresentationActive)
+            }
+            .onChange(of: isEnabled) { _, _ in center.setActive(isPresentationActive) }
+            #if os(macOS)
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                center.setActive(isPresentationActive)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+                center.setActive(false)
+            }
+            .onChange(of: appLock.state) { _, _ in center.setActive(isPresentationActive) }
+            #endif
             .onChange(of: center.currentRequest?.id) { _, _ in presentCurrentRequest() }
             .alert(
                 NSLocalizedString("Unable to save exception", comment: "网络例外保存失败标题"),
@@ -70,6 +99,8 @@ private struct NetworkConnectionApprovalHost: ViewModifier {
             }
             presentedAlert = alert
             controller.present(alert, animated: true)
+        #elseif os(macOS)
+            NetworkConnectionApprovalMacPresenter.shared.presentCurrentRequest(from: center)
         #elseif os(watchOS)
             guard let request = center.currentRequest else { return }
             guard let controller = WKApplication.shared().visibleInterfaceController else {
@@ -97,7 +128,7 @@ private struct NetworkConnectionApprovalHost: ViewModifier {
 
 @MainActor
 extension View {
-    public func networkConnectionApprovalHost() -> some View {
-        modifier(NetworkConnectionApprovalHost())
+    public func networkConnectionApprovalHost(isEnabled: Bool = true) -> some View {
+        modifier(NetworkConnectionApprovalHost(isEnabled: isEnabled))
     }
 }

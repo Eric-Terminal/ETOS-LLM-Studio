@@ -18,20 +18,20 @@ public class LocalDebugServer: ObservableObject {
     // 注意：这里必须使用系统合成的 objectWillChange，
     // 否则本地调试页的连接状态、请求队列与日志不会稳定刷新。
 
-    public struct OpenAIRequestSummary: Identifiable, Hashable {
+    public struct OpenAIRequestSummary: Identifiable, Hashable, Sendable {
         public let id: UUID
         public let model: String?
         public let messageCount: Int
         public let receivedAt: Date
     }
 
-    public struct DebugLogEntry: Identifiable {
+    public struct DebugLogEntry: Identifiable, Sendable {
         public let id = UUID()
         public let timestamp: Date
         public let message: String
         public let type: LogType
 
-        public enum LogType: CustomStringConvertible {
+        public enum LogType: CustomStringConvertible, Sendable {
             case info, send, receive, error, heartbeat
 
             public var description: String {
@@ -70,14 +70,31 @@ public class LocalDebugServer: ObservableObject {
     @Published public var useHTTP: Bool = true // HTTP 轮询模式开关（默认启用）
     @Published public var debugLogs: [DebugLogEntry] = []
     @Published public var isTransferring: Bool = false
+    @Published public internal(set) var isProcessingCommand = false
+    @Published public internal(set) var isDisconnecting = false
 
     let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "LocalDebugServer")
     var wsConnection: NWConnection?
     let queue = DispatchQueue(label: "com.etos.localdebug", qos: .userInitiated)
     var pendingOpenAIRequests: [PendingOpenAIRequest] = []
+    var resolvingOpenAIRequestIDs: Set<UUID> = []
+    let insertSession: @Sendable (ChatSession, [ChatMessage]) throws -> Void
+    var fileRoot: @Sendable () -> URL = { StorageUtility.documentsDirectory }
+    var managedDatabaseFiles: @Sendable () -> [LocalDebugManagedDatabase] = { Persistence.debugManagedDatabaseFiles() }
+    var exportDatabaseFile: @Sendable (LocalDebugManagedDatabase, URL) throws -> Void = { try Persistence.exportDebugDatabase($0, to: $1) }
+    var installDocuments: @Sendable (LocalDebugDocumentReplacement) throws -> Void = { try Persistence.installDebugDocuments($0) }
+    var fetchFilePayload: (@Sendable (String) async throws -> Data)?
+
+    /// 宿主在执行闭包前暂停页面和运行任务，闭包返回后刷新状态并恢复入口；不得排空当前调试命令自身。
+    public var documentReplacementCoordinator: (@MainActor (@escaping @Sendable () throws -> Void) async throws -> Void)?
 
     var httpPollingTimer: Timer?
     var httpSession: URLSession?
+    var httpConnectionTask: Task<Void, Never>?
+    var httpPollTask: Task<Void, Never>?
+    var httpPollID: UUID?
+    let commandQueue = LocalDebugCommandQueue()
+    var disconnectWaiterCount = 0
     /// 电脑端调试追求跟手操作，HTTP 轮询以高频短请求承载命令通道。
     let httpPollingInterval: TimeInterval = 0.2
     var httpFailureCount: Int = 0
@@ -94,5 +111,11 @@ public class LocalDebugServer: ObservableObject {
 
     let maxLogEntries = 100
 
-    public init() {}
+    public init() {
+        insertSession = { try Persistence.insertChatSession($0, messages: $1) }
+    }
+
+    init(insertSession: @escaping @Sendable (ChatSession, [ChatMessage]) throws -> Void) {
+        self.insertSession = insertSession
+    }
 }

@@ -414,56 +414,56 @@ public struct LocalLLMSamplerChainPreset: Identifiable, Hashable, Sendable {
         LocalLLMSamplerKind.chainString(samplerKinds)
     }
 
-    public static let defaults = LocalLLMSamplerChainPreset(
+    public static var defaults: Self { LocalLLMSamplerChainPreset(
         id: "default",
         title: NSLocalizedString("默认轻量", comment: "Local sampler preset default title"),
         summary: NSLocalizedString("只保留温度采样，接近常见聊天 API 的默认体验。", comment: "Local sampler preset default summary"),
         samplerKinds: LocalLLMSamplerKind.defaultChain
-    )
+    ) }
 
-    public static let llamaCppFull = LocalLLMSamplerChainPreset(
+    public static var llamaCppFull: Self { LocalLLMSamplerChainPreset(
         id: "llama-cpp-full",
         title: NSLocalizedString("llama.cpp 全量", comment: "Local sampler preset llama.cpp full title"),
         summary: NSLocalizedString("完整启用 penalties、DRY、Top-n-sigma、Top-K、Typical-P、Top-P、Min-P、XTC 和温度。", comment: "Local sampler preset llama.cpp full summary"),
         samplerKinds: LocalLLMSamplerKind.parse("edskypmxt")
-    )
+    ) }
 
-    public static let balanced = LocalLLMSamplerChainPreset(
+    public static var balanced: Self { LocalLLMSamplerChainPreset(
         id: "balanced",
         title: NSLocalizedString("均衡聊天", comment: "Local sampler preset balanced title"),
         summary: NSLocalizedString("保留重复惩罚、Top-K、Top-P、Min-P 和温度，适合日常对话。", comment: "Local sampler preset balanced summary"),
         samplerKinds: [.penalties, .topK, .topP, .minP, .temperature]
-    )
+    ) }
 
-    public static let precise = LocalLLMSamplerChainPreset(
+    public static var precise: Self { LocalLLMSamplerChainPreset(
         id: "precise",
         title: NSLocalizedString("稳健问答", comment: "Local sampler preset precise title"),
         summary: NSLocalizedString("减少实验采样器，只保留基础筛选，适合需要稳定回答的场景。", comment: "Local sampler preset precise summary"),
         samplerKinds: [.penalties, .topK, .topP, .temperature]
-    )
+    ) }
 
-    public static let creative = LocalLLMSamplerChainPreset(
+    public static var creative: Self { LocalLLMSamplerChainPreset(
         id: "creative",
         title: NSLocalizedString("创作发散", comment: "Local sampler preset creative title"),
         summary: NSLocalizedString("加入 Typical-P 和 Min-P，给写作类回复更多候选空间。", comment: "Local sampler preset creative summary"),
         samplerKinds: [.penalties, .topK, .typical, .topP, .minP, .temperature]
-    )
+    ) }
 
-    public static let longContext = LocalLLMSamplerChainPreset(
+    public static var longContext: Self { LocalLLMSamplerChainPreset(
         id: "long-context",
         title: NSLocalizedString("长文防复读", comment: "Local sampler preset long context title"),
         summary: NSLocalizedString("把 DRY 放在前段，适合长回复或长上下文里减少重复片段。", comment: "Local sampler preset long context summary"),
         samplerKinds: [.penalties, .dry, .topK, .topP, .minP, .temperature]
-    )
+    ) }
 
-    public static let allPresets: [LocalLLMSamplerChainPreset] = [
+    public static var allPresets: [LocalLLMSamplerChainPreset] { [
         .defaults,
         .llamaCppFull,
         .balanced,
         .precise,
         .creative,
         .longContext,
-    ]
+    ] }
 }
 
 public struct LocalLLMParameterDescriptor: Identifiable, Hashable, Sendable {
@@ -500,7 +500,14 @@ public enum LocalLLMParameterCatalog {
     public static let nextRequestText = NSLocalizedString("下次请求生效", comment: "Local parameter effect next request")
     public static let samplerText = NSLocalizedString("下次采样生效", comment: "Local parameter effect next sampler")
 
-    public static let descriptors: [LocalLLMParameterDescriptor] = [
+    public static let descriptors = localizedDescriptors()
+
+    /// 桌面在后台准备说明行；切换 App 语言后重新生成，避免沿用首次访问时的译文。
+    public static func localizedDescriptors() -> [LocalLLMParameterDescriptor] {
+        let contextRebuildText = NSLocalizedString("需要重建 context", comment: "Local parameter effect context rebuild")
+        let nextRequestText = NSLocalizedString("下次请求生效", comment: "Local parameter effect next request")
+        let samplerText = NSLocalizedString("下次采样生效", comment: "Local parameter effect next sampler")
+        return [
         LocalLLMParameterDescriptor(
             id: "contextSize",
             title: NSLocalizedString("上下文长度", comment: "Local parameter context size title"),
@@ -671,6 +678,8 @@ public enum LocalLLMParameterCatalog {
         ),
     ]
 
+    }
+
     public static func descriptor(for id: String) -> LocalLLMParameterDescriptor {
         descriptors.first { $0.id == id } ?? LocalLLMParameterDescriptor(
             id: id,
@@ -730,12 +739,12 @@ public enum LocalLLMCLIStyleArgumentImporter {
         var unsupported: [LocalLLMCLIStyleImportIssue] = []
         var errors: [LocalLLMCLIStyleImportIssue] = []
         var index = 0
+        let descriptors = Dictionary(uniqueKeysWithValues: LocalLLMParameterCatalog.localizedDescriptors().map { ($0.id, $0) })
 
         func appendApplied(_ option: String, _ descriptorID: String, _ value: String) {
-            let descriptor = LocalLLMParameterCatalog.descriptor(for: descriptorID)
             applied.append(LocalLLMCLIStyleImportAppliedParameter(
                 option: option,
-                title: descriptor.title,
+                title: descriptors[descriptorID]?.title ?? descriptorID,
                 value: value
             ))
         }
@@ -941,7 +950,7 @@ public enum LocalLLMCLIStyleArgumentImporter {
                 }
             case "grammar-file":
                 _ = nextValue()
-                unsupported.append(LocalLLMCLIStyleImportIssue(option: rawName, message: NSLocalizedString("iOS 沙盒下不导入任意路径文件，请改用 Grammar 文本。", comment: "Local llama import grammar file unsupported")))
+                unsupported.append(LocalLLMCLIStyleImportIssue(option: rawName, message: NSLocalizedString("参数导入不读取任意路径文件，请改用 Grammar 文本。", comment: "Local llama import grammar file unsupported")))
             case "mmproj", "mm":
                 _ = nextValue()
                 unsupported.append(LocalLLMCLIStyleImportIssue(option: rawName, message: NSLocalizedString("请用本地模型详情页的 mmproj 文件选择器导入投影器。", comment: "Local llama import mmproj unsupported")))

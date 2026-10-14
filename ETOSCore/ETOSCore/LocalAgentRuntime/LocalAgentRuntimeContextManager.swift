@@ -15,6 +15,7 @@ public actor LocalAgentRuntimeContextManager {
     private let storage: LocalLinuxStorageManager
     private let environmentProvider: LocalLinuxProcessEnvironmentProvider
     private let executorDeviceID: String
+    private var activeRuns: [UUID: LocalLinuxActivityLease] = [:]
 
     public init(
         storage: LocalLinuxStorageManager = .shared,
@@ -36,6 +37,9 @@ public actor LocalAgentRuntimeContextManager {
         selectedMCPServerIDs: [UUID] = [],
         browserSessionID: UUID? = nil
     ) async throws -> (context: AgentRuntimeContext, workspace: LocalAgentWorkspace) {
+        let activity = try LocalLinuxActivityBarrier.shared.begin()
+        var transferredActivity = false
+        defer { if !transferredActivity { activity.finish() } }
         if let existing = Persistence.loadLocalAgentRun(id: runID) {
             try Self.validateReusableRun(existing, sessionID: sessionID)
             guard let workspace = Persistence.loadLocalAgentWorkspaces().first(where: {
@@ -45,6 +49,8 @@ public actor LocalAgentRuntimeContextManager {
                     NSLocalizedString("Agent Run 的工作区已经不存在。", comment: "Existing Agent run workspace missing")
                 )
             }
+            activeRuns[runID] = activity
+            transferredActivity = true
             return (existing.context, workspace)
         }
 
@@ -71,14 +77,26 @@ public actor LocalAgentRuntimeContextManager {
         let selectedMCPConfigurations = MCPServerStore.loadServers().filter {
             selectedMCPServerIDs.contains($0.id)
         }
+        #if os(macOS)
+        let mountIDs: [UUID] = []
+        #else
         let mountIDs = Persistence.loadLocalLinuxMounts()
             .filter { $0.isEnabled && $0.authorizationState == .available }
             .map(\.id)
             .sorted { $0.uuidString < $1.uuidString }
+        #endif
         let conversationRun = Persistence.loadConversationRun(id: runID)
         let resolvedRootRunID = rootRunID ?? conversationRun?.rootRunID ?? runID
         let resolvedParentRunID = parentRunID ?? conversationRun?.parentRunID
         let promptProfile = await LocalAgentPromptStore.shared.activeProfile()
+        #if os(macOS)
+        // 同步来的自定义说明保持原样；每次 Run 补充真实平台，避免模型把 Mac 当作 Alpine。
+        let platformInstructions = LocalAgentPromptStore.defaultContent
+        let promptContent = promptProfile.content == platformInstructions
+            ? promptProfile.content : promptProfile.content + "\n\n" + platformInstructions
+        #else
+        let promptContent = promptProfile.content
+        #endif
         let skillState = await MainActor.run {
             (
                 names: SkillManager.shared.chatToolsEnabled
@@ -112,20 +130,27 @@ public actor LocalAgentRuntimeContextManager {
             browserSessionID: browserSessionID ?? sessionID,
             browserDataProfile: Persistence.browserAgentDataProfile(sessionID: sessionID),
             promptProfileID: promptProfile.id,
-            promptContent: promptProfile.content,
+            promptContent: promptContent,
             skillSnapshots: skillSnapshots,
             executorDeviceID: executorDeviceID,
             mode: mode
         )
+        try activity.checkCancellation()
         guard Persistence.saveLocalAgentRun(LocalAgentRunRecord(context: context, state: .running)) else {
             throw LocalLinuxRuntimeError.runtimeUnavailable(
                 NSLocalizedString("无法保存 Agent Run。", comment: "Save local Agent run failure")
             )
         }
+        activeRuns[runID] = activity
+        transferredActivity = true
         return (context, workspace)
     }
 
     public func finishRun(id: UUID, state: LocalAgentRunState) async {
+        // 宿主已收尾的旧 Run 不得在恢复窗口中写回新数据库或清理新文件。
+        guard let activity = activeRuns.removeValue(forKey: id) ?? (try? LocalLinuxActivityBarrier.shared.begin()) else { return }
+        if !state.isTerminal { activeRuns[id] = activity }
+        defer { if state.isTerminal { activity.finish() } }
         if var record = Persistence.loadLocalAgentRun(id: id), !record.state.isTerminal {
             record.state = state
             record.finishedAt = state.isTerminal ? Date() : nil
@@ -137,6 +162,11 @@ public actor LocalAgentRuntimeContextManager {
             await LocalAgentFileToolExecutor.shared.finishRun(id: id)
             await MCPNativeMediaExecutor.shared.finishRun(id: id)
         }
+    }
+
+    public func interruptActiveRunsForHostDataOperation() async {
+        precondition(LocalLinuxActivityBarrier.shared.isSuspended)
+        for id in Array(activeRuns.keys) { await finishRun(id: id, state: .interrupted) }
     }
 
     static func validateReusableRun(_ record: LocalAgentRunRecord, sessionID: UUID) throws {

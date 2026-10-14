@@ -4,6 +4,7 @@ import Testing
 
 // 单元测试模拟文件提供者的准备与路径更新。真实安全作用域由系统签发，仍需在真机
 // 补测 iCloud 未下载目录的新增挂载、重新授权，以及退出 App 后恢复访问。
+// Mac 测试目标还需覆盖沙盒签名与系统目录面板签发的授权，临时目录无法代替这项验证。
 @Suite("外部目录授权与云端准备", .serialized)
 struct LocalLinuxExternalDirectoryTests {
     @Test("云端目录尚无本地路径时先协调准备，再检查和读取")
@@ -83,8 +84,8 @@ struct LocalLinuxExternalDirectoryTests {
         }
     }
 
-    @Test("保存的目录授权可供新的管理器恢复并读取")
-    func bookmarkRestoresDirectoryAccess() async throws {
+    @Test("保存的目录授权可供新的管理器恢复并读取", arguments: [LocalLinuxMountAccess.readOnly, .readWrite])
+    func bookmarkRestoresDirectoryAccess(permission: LocalLinuxMountAccess) async throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         try Data("保留内容".utf8).write(to: directory.appendingPathComponent("note.txt"))
@@ -93,7 +94,7 @@ struct LocalLinuxExternalDirectoryTests {
             id: id,
             displayName: "书签恢复",
             bookmark: try LocalLinuxExternalDirectory.createBookmark(for: directory),
-            access: .readOnly,
+            access: permission,
             guestPath: "/mnt/etos/\(id.uuidString.lowercased())",
             isEnabled: false
         )
@@ -104,6 +105,7 @@ struct LocalLinuxExternalDirectoryTests {
 
         #expect(try String(contentsOf: access.url.appendingPathComponent("note.txt"), encoding: .utf8) == "保留内容")
         #expect(Persistence.loadLocalLinuxMounts().first(where: { $0.id == id })?.authorizationState == .available)
+        #expect(Persistence.loadLocalLinuxMounts().first(where: { $0.id == id })?.access == permission)
     }
 
     @Test("重新选择目录修复授权并保留挂载身份，失败时保留上次授权")

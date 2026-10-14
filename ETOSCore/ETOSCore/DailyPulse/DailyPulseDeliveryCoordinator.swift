@@ -22,8 +22,8 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
 
     @Published public var reminderEnabled: Bool {
         didSet {
-            Self.save(reminderEnabled, forKey: Self.reminderEnabledDefaultsKey, defaults: defaults)
             guard !isApplyingStoredSettings else { return }
+            Self.save(reminderEnabled, forKey: Self.reminderEnabledDefaultsKey, defaults: defaults)
             Task {
                 await refreshReminderSchedule()
             }
@@ -37,8 +37,8 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
                 return
             }
             guard deliveryTimes != oldValue else { return }
-            Self.saveDeliveryTimes(deliveryTimes, defaults: defaults)
             guard !isApplyingStoredSettings else { return }
+            Self.saveDeliveryTimes(deliveryTimes, defaults: defaults)
             Task {
                 await refreshReminderSchedule()
             }
@@ -47,37 +47,35 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
 
     private let defaults: UserDefaults
     private var isApplyingStoredSettings = false
+    @Published public private(set) var isLoading = false
+    private var settingsLoadTask: Task<Void, Never>?
+    private var settingsLoadRevision = UUID()
 
     private nonisolated static let legacyReminderIdentifier = "dailyPulse.reminder.daily"
     private nonisolated static let cardIdentifierPrefix = "dailyPulse.card."
     private nonisolated static let fallbackIdentifierPrefix = "dailyPulse.fallback."
     private nonisolated static let defaultCardCount = 3
-    private static let reminderEnabledDefaultsKey = "dailyPulse.delivery.reminderEnabled"
-    private static let reminderHourDefaultsKey = "dailyPulse.delivery.reminderHour"
-    private static let reminderMinuteDefaultsKey = "dailyPulse.delivery.reminderMinute"
-    private static let deliveryTimesDefaultsKey = "dailyPulse.delivery.times"
-    private static let lastReadyDayKeyDefaultsKey = "dailyPulse.delivery.lastReadyDayKey"
+    private nonisolated static let reminderEnabledDefaultsKey = "dailyPulse.delivery.reminderEnabled"
+    private nonisolated static let reminderHourDefaultsKey = "dailyPulse.delivery.reminderHour"
+    private nonisolated static let reminderMinuteDefaultsKey = "dailyPulse.delivery.reminderMinute"
+    private nonisolated static let deliveryTimesDefaultsKey = "dailyPulse.delivery.times"
+    private nonisolated static let lastReadyDayKeyDefaultsKey = "dailyPulse.delivery.lastReadyDayKey"
 
     @Published public private(set) var lastReadyDayKey: String?
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.reminderEnabled = Self.boolValue(forKey: Self.reminderEnabledDefaultsKey, defaults: defaults, defaultValue: false)
-        let storedSchedule = Self.loadDeliveryTimes(defaults: defaults)
-        let migratedTime = DailyPulseDeliveryTime(
-            hour: Self.integerValue(forKey: Self.reminderHourDefaultsKey, defaults: defaults, defaultValue: 8),
-            minute: Self.integerValue(forKey: Self.reminderMinuteDefaultsKey, defaults: defaults, defaultValue: 30)
-        )
-        self.deliveryTimes = Self.migratedCardDeliveryTimes(
-            from: storedSchedule,
-            fallback: migratedTime
-        )
-        let storedLastReadyDayKey = Self.textValue(forKey: Self.lastReadyDayKeyDefaultsKey, defaults: defaults, defaultValue: "")
-        self.lastReadyDayKey = storedLastReadyDayKey.isEmpty ? nil : storedLastReadyDayKey
-        if storedSchedule?.times != deliveryTimes || storedSchedule?.hasLegacyCardCounts == true {
-            Self.saveDeliveryTimes(deliveryTimes, defaults: defaults)
+        self.reminderEnabled = false
+        self.deliveryTimes = Self.migratedCardDeliveryTimes(from: nil, fallback: .init(hour: 8, minute: 30))
+        self.lastReadyDayKey = nil
+        if Self.usesDatabase(defaults: defaults) {
+            reloadFromStorage()
+        } else {
+            applyStoredSettings(Self.loadStoredSettings(defaults: defaults))
         }
     }
+
+    deinit { settingsLoadTask?.cancel() }
 
     public func activate() {
         AppLocalNotificationCenter.shared.configureIfNeeded()
@@ -87,26 +85,47 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
     }
 
     public func reloadFromStorage() {
+        guard Self.usesDatabase(defaults: defaults) else {
+            applyStoredSettings(Self.loadStoredSettings(defaults: defaults))
+            Task { await refreshReminderSchedule() }
+            return
+        }
+        settingsLoadTask?.cancel()
+        settingsLoadRevision = UUID()
+        isLoading = true
+        let worker = DailyPulsePersistenceQueue.shared.read { Self.loadStoredSettings(defaults: .standard) }
+        let revision = DailyPulsePersistenceQueue.shared.revision
+        settingsLoadTask = Task { [weak self] in
+            let settings = await withTaskCancellationHandler { await worker.value } onCancel: { worker.cancel() }
+            guard !Task.isCancelled, let self else { return }
+            // 时间编辑会使明日内容失效，开放控件前必须先取得已保存的卡片。
+            await DailyPulseManager.shared.waitForPersistedStateLoad()
+            guard !Task.isCancelled else { return }
+            guard DailyPulsePersistenceQueue.shared.revision == revision else {
+                reloadFromStorage()
+                return
+            }
+            applyStoredSettings(settings)
+            isLoading = false
+            Task { [weak self] in await self?.refreshReminderSchedule() }
+        }
+    }
+
+    public func waitForSettingsLoad() async {
+        while let task = settingsLoadTask {
+            let revision = settingsLoadRevision
+            await task.value
+            if settingsLoadRevision == revision { return }
+        }
+    }
+
+    private func applyStoredSettings(_ settings: StoredSettings) {
         isApplyingStoredSettings = true
-        reminderEnabled = Self.boolValue(forKey: Self.reminderEnabledDefaultsKey, defaults: defaults, defaultValue: false)
-        let storedSchedule = Self.loadDeliveryTimes(defaults: defaults)
-        let migratedTime = DailyPulseDeliveryTime(
-            hour: Self.integerValue(forKey: Self.reminderHourDefaultsKey, defaults: defaults, defaultValue: 8),
-            minute: Self.integerValue(forKey: Self.reminderMinuteDefaultsKey, defaults: defaults, defaultValue: 30)
-        )
-        deliveryTimes = Self.migratedCardDeliveryTimes(
-            from: storedSchedule,
-            fallback: migratedTime
-        )
-        if storedSchedule?.times != deliveryTimes || storedSchedule?.hasLegacyCardCounts == true {
-            Self.saveDeliveryTimes(deliveryTimes, defaults: defaults)
-        }
-        let storedLastReadyDayKey = Self.textValue(forKey: Self.lastReadyDayKeyDefaultsKey, defaults: defaults, defaultValue: "")
-        lastReadyDayKey = storedLastReadyDayKey.isEmpty ? nil : storedLastReadyDayKey
+        reminderEnabled = settings.enabled
+        deliveryTimes = settings.times
+        lastReadyDayKey = settings.lastReadyDay
         isApplyingStoredSettings = false
-        Task {
-            await refreshReminderSchedule()
-        }
+        if settings.requiresMigration { Self.saveDeliveryTimes(deliveryTimes, defaults: defaults) }
     }
 
     public var reminderTimeText: String {
@@ -145,6 +164,9 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
     }
 
     public func refreshReminderSchedule(referenceDate: Date = Date()) async {
+        await waitForSettingsLoad()
+        await DailyPulseManager.shared.waitForPersistedStateLoad()
+        guard !Task.isCancelled else { return }
 #if canImport(UserNotifications)
         AppLocalNotificationCenter.shared.configureIfNeeded()
         let notificationCenter = AppLocalNotificationCenter.shared
@@ -315,6 +337,8 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
     }
 
     public func notifyReadyIfNeeded(for run: DailyPulseRun) async {
+        await waitForSettingsLoad()
+        guard !Task.isCancelled else { return }
 #if canImport(UserNotifications)
         guard reminderEnabled else { return }
         guard lastReadyDayKey != run.dayKey else { return }
@@ -378,7 +402,7 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
 
     @discardableResult
     public func updateDeliveryTime(id: UUID, hour: Int, minute: Int) -> Bool {
-        guard let index = deliveryTimes.firstIndex(where: { $0.id == id }) else { return false }
+        guard !isLoading, let index = deliveryTimes.firstIndex(where: { $0.id == id }) else { return false }
         let normalized = DailyPulseDeliveryTime(
             id: id,
             hour: hour,
@@ -390,6 +414,7 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
     }
 
     public func setCardCount(_ count: Int) {
+        guard !isLoading else { return }
         let targetCount = max(1, count)
         guard targetCount != deliveryTimes.count else { return }
 
@@ -408,7 +433,7 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
 
     @discardableResult
     public func removeCard(id: UUID) -> Bool {
-        guard deliveryTimes.count > 1,
+        guard !isLoading, deliveryTimes.count > 1,
               deliveryTimes.contains(where: { $0.id == id }) else { return false }
         deliveryTimes.removeAll(where: { $0.id == id })
         invalidatePreparedTomorrowRun()
@@ -637,7 +662,27 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         return normalizedDeliveryTimes(expandedTimes)
     }
 
-    private struct StoredDeliverySchedule {
+    private struct StoredSettings: Sendable {
+        let enabled: Bool
+        let times: [DailyPulseDeliveryTime]
+        let lastReadyDay: String?
+        let requiresMigration: Bool
+    }
+
+    private nonisolated static func loadStoredSettings(defaults: UserDefaults) -> StoredSettings {
+        let schedule = loadDeliveryTimes(defaults: defaults)
+        let fallback = DailyPulseDeliveryTime(
+            hour: integerValue(forKey: reminderHourDefaultsKey, defaults: defaults, defaultValue: 8),
+            minute: integerValue(forKey: reminderMinuteDefaultsKey, defaults: defaults, defaultValue: 30)
+        )
+        let times = migratedCardDeliveryTimes(from: schedule, fallback: fallback)
+        let ready = textValue(forKey: lastReadyDayKeyDefaultsKey, defaults: defaults, defaultValue: "")
+        return StoredSettings(enabled: boolValue(forKey: reminderEnabledDefaultsKey, defaults: defaults, defaultValue: false),
+            times: times, lastReadyDay: ready.isEmpty ? nil : ready,
+            requiresMigration: schedule?.times != times || schedule?.hasLegacyCardCounts == true)
+    }
+
+    private struct StoredDeliverySchedule: Sendable {
         let times: [DailyPulseDeliveryTime]
         let legacyCardCounts: [Int]?
 
@@ -650,7 +695,7 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         let cardCount: Int?
     }
 
-    private static func loadDeliveryTimes(defaults: UserDefaults) -> StoredDeliverySchedule? {
+    private nonisolated static func loadDeliveryTimes(defaults: UserDefaults) -> StoredDeliverySchedule? {
         let rawValue = textValue(forKey: deliveryTimesDefaultsKey, defaults: defaults, defaultValue: "")
         guard !rawValue.isEmpty,
               let data = rawValue.data(using: .utf8),
@@ -673,6 +718,14 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
     }
 
     private static func saveDeliveryTimes(_ times: [DailyPulseDeliveryTime], defaults: UserDefaults) {
+        if usesDatabase(defaults: defaults) {
+            DailyPulsePersistenceQueue.shared.enqueue {
+                guard let data = try? JSONEncoder().encode(normalizedDeliveryTimes(times)),
+                      let value = String(data: data, encoding: .utf8) else { return }
+                Persistence.writeAppConfig(key: deliveryTimesDefaultsKey, text: value, typeHint: "text")
+            }
+            return
+        }
         guard let data = try? JSONEncoder().encode(normalizedDeliveryTimes(times)),
               let rawValue = String(data: data, encoding: .utf8) else {
             return
@@ -680,11 +733,11 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         save(rawValue, forKey: deliveryTimesDefaultsKey, defaults: defaults)
     }
 
-    private static func usesDatabase(defaults: UserDefaults) -> Bool {
+    private nonisolated static func usesDatabase(defaults: UserDefaults) -> Bool {
         defaults === UserDefaults.standard
     }
 
-    private static func boolValue(forKey key: String, defaults: UserDefaults, defaultValue: Bool) -> Bool {
+    private nonisolated static func boolValue(forKey key: String, defaults: UserDefaults, defaultValue: Bool) -> Bool {
         guard usesDatabase(defaults: defaults) else {
             return defaults.object(forKey: key) as? Bool ?? defaultValue
         }
@@ -695,7 +748,7 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         return defaultValue
     }
 
-    private static func integerValue(forKey key: String, defaults: UserDefaults, defaultValue: Int) -> Int {
+    private nonisolated static func integerValue(forKey key: String, defaults: UserDefaults, defaultValue: Int) -> Int {
         guard usesDatabase(defaults: defaults) else {
             return defaults.object(forKey: key) as? Int ?? defaultValue
         }
@@ -706,7 +759,7 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         return defaultValue
     }
 
-    private static func textValue(forKey key: String, defaults: UserDefaults, defaultValue: String) -> String {
+    private nonisolated static func textValue(forKey key: String, defaults: UserDefaults, defaultValue: String) -> String {
         guard usesDatabase(defaults: defaults) else {
             return defaults.string(forKey: key) ?? defaultValue
         }
@@ -722,7 +775,9 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
             defaults.set(value, forKey: key)
             return
         }
-        Persistence.writeAppConfig(key: key, integer: value ? 1 : 0, typeHint: "bool")
+        DailyPulsePersistenceQueue.shared.enqueue {
+            Persistence.writeAppConfig(key: key, integer: value ? 1 : 0, typeHint: "bool")
+        }
     }
 
     private static func save(_ value: Int, forKey key: String, defaults: UserDefaults) {
@@ -730,7 +785,9 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
             defaults.set(value, forKey: key)
             return
         }
-        Persistence.writeAppConfig(key: key, integer: value, typeHint: "integer")
+        DailyPulsePersistenceQueue.shared.enqueue {
+            Persistence.writeAppConfig(key: key, integer: value, typeHint: "integer")
+        }
     }
 
     private static func save(_ value: String, forKey key: String, defaults: UserDefaults) {
@@ -738,6 +795,8 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
             defaults.set(value, forKey: key)
             return
         }
-        Persistence.writeAppConfig(key: key, text: value, typeHint: "text")
+        DailyPulsePersistenceQueue.shared.enqueue {
+            Persistence.writeAppConfig(key: key, text: value, typeHint: "text")
+        }
     }
 }

@@ -7,6 +7,7 @@ import UIKit
 public struct InlineHTMLActionsView<Preview: View>: View {
     private let content: InlineHTMLContent
     private let onCopy: ((String) -> Void)?
+    private let onExport: (@MainActor (Data, String) async throws -> URL?)?
     private let preview: Preview
     @State private var isWorking = false
     @State private var errorMessage: String?
@@ -14,9 +15,10 @@ public struct InlineHTMLActionsView<Preview: View>: View {
     @State private var exportURL: URL?
     @State private var showsCode = false
 
-    public init(content: InlineHTMLContent, onCopy: ((String) -> Void)? = nil, @ViewBuilder preview: () -> Preview) {
+    public init(content: InlineHTMLContent, onCopy: ((String) -> Void)? = nil, onExport: (@MainActor (Data, String) async throws -> URL?)? = nil, @ViewBuilder preview: () -> Preview) {
         self.content = content
         self.onCopy = onCopy
+        self.onExport = onExport
         self.preview = preview()
     }
 
@@ -139,6 +141,10 @@ public struct InlineHTMLActionsView<Preview: View>: View {
 
     @MainActor
     private func export(data: Data, fileExtension: String) async throws {
+        if let onExport {
+            exportURL = try await onExport(data, fileExtension)
+            return
+        }
         let url = try await Task.detached(priority: .userInitiated) {
             try InlineHTMLExportSupport.write(data: data, fileExtension: fileExtension)
         }.value

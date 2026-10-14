@@ -32,6 +32,8 @@ extension DailyPulseManager {
         notifyReadyWhenFinished: Bool = false
     ) async {
         await waitForPersistedStateLoad()
+        await DailyPulseDeliveryCoordinator.shared.waitForSettingsLoad()
+        guard !Task.isCancelled else { return }
         if isGenerating { return }
         guard Self.shouldStartGeneration(
             isDailyPulseEnabled: isDailyPulseEnabled,
@@ -79,31 +81,29 @@ extension DailyPulseManager {
             guard let generationModel = await resolveGenerationModel() else {
                 throw DailyPulseGenerationError.noModelSelected
             }
+            try Task.checkCancellation()
 
-            let scheduledDeliveries = DailyPulseDeliveryCoordinator
-                .groupedCardDeliveryTimes(deliveryTimes)
-                .compactMap { deliveryGroup -> (deliveryTimes: [DailyPulseDeliveryTime], scheduledAt: Date)? in
-                    guard let firstDeliveryTime = deliveryGroup.first,
-                          let scheduledAt = DailyPulseDeliveryCoordinator.deliveryDate(
-                              dayKey: generationDayKey,
-                              time: firstDeliveryTime
-                          ) else {
-                        return nil
+            let modelIdentifier = generationModel.id
+            let scheduleTask = Task.detached(priority: .userInitiated) {
+                let deliveries = DailyPulseDeliveryCoordinator.groupedCardDeliveryTimes(deliveryTimes)
+                    .compactMap { group -> (deliveryTimes: [DailyPulseDeliveryTime], scheduledAt: Date)? in
+                        guard let first = group.first,
+                              let date = DailyPulseDeliveryCoordinator.deliveryDate(dayKey: generationDayKey, time: first) else { return nil }
+                        return (group, date)
                     }
-                    return (deliveryGroup, scheduledAt)
-                }
+                return (deliveries: deliveries,
+                    groups: Self.partitionedSessionExcerpts(input.sessionExcerpts,
+                        cardCounts: deliveries.map { $0.deliveryTimes.count }, scheduledDeliveryDates: deliveries.map(\.scheduledAt)),
+                    signature: Self.generationScheduleSignature(deliveryTimes: deliveryTimes, modelIdentifier: modelIdentifier))
+            }
+            let schedule = await withTaskCancellationHandler { await scheduleTask.value } onCancel: { scheduleTask.cancel() }
+            try Task.checkCancellation()
+            let scheduledDeliveries = schedule.deliveries
             guard !scheduledDeliveries.isEmpty else {
                 throw DailyPulseGenerationError.invalidModelOutput
             }
-            let sessionGroups = Self.partitionedSessionExcerpts(
-                input.sessionExcerpts,
-                cardCounts: scheduledDeliveries.map { $0.deliveryTimes.count },
-                scheduledDeliveryDates: scheduledDeliveries.map(\.scheduledAt)
-            )
-            let scheduleSignature = Self.generationScheduleSignature(
-                deliveryTimes: deliveryTimes,
-                modelIdentifier: generationModel.id
-            )
+            let sessionGroups = schedule.groups
+            let scheduleSignature = schedule.signature
             var checkpoint = Self.resumableCheckpoint(
                 from: generationRuntimeState.checkpoints,
                 dayKey: generationDayKey,
@@ -116,6 +116,7 @@ extension DailyPulseManager {
             replaceGenerationCheckpoint(checkpoint)
 
             for (index, scheduledDelivery) in scheduledDeliveries.enumerated() {
+                try Task.checkCancellation()
                 let deliveryGroup = scheduledDelivery.deliveryTimes
                 let scheduledAt = scheduledDelivery.scheduledAt
                 let cardsAtTime = deliveryGroup.count
@@ -134,17 +135,21 @@ extension DailyPulseManager {
                 checkpoint.generatedCards.removeAll { incompleteCardIDs.contains($0.id) }
                 let existingCards = checkpoint.generatedCards
 
-                let userPrompt = Self.makeUserPrompt(
-                    from: input,
-                    sessionExcerpts: sessionGroups.indices.contains(index) ? sessionGroups[index] : [],
-                    cardsPerDelivery: cardsAtTime,
-                    candidateCardsPerDelivery: cardsAtTime * 2,
-                    scheduledDeliveryDate: scheduledAt,
-                    excludedTopics: existingCards.map(\.title)
-                )
+                let promptTask = Task.detached(priority: .userInitiated) {
+                    (system: Self.systemPrompt, user: Self.makeUserPrompt(
+                        from: input,
+                        sessionExcerpts: sessionGroups.indices.contains(index) ? sessionGroups[index] : [],
+                        cardsPerDelivery: cardsAtTime,
+                        candidateCardsPerDelivery: cardsAtTime * 2,
+                        scheduledDeliveryDate: scheduledAt,
+                        excludedTopics: existingCards.map(\.title)
+                    ))
+                }
+                let prompts = await withTaskCancellationHandler { await promptTask.value } onCancel: { promptTask.cancel() }
+                try Task.checkCancellation()
                 let raw = try await chatService.generateDetachedChatCompletion(
-                    systemPrompt: Self.systemPrompt,
-                    userPrompt: userPrompt,
+                    systemPrompt: prompts.system,
+                    userPrompt: prompts.user,
                     temperature: 0.45,
                     runnableModel: generationModel,
                     requestSource: .dailyPulse,
@@ -162,22 +167,22 @@ extension DailyPulseManager {
                         }
                     }
                 )
-                let parsed = try Self.parseModelResponse(from: raw)
-                let cards = Self.makeCards(
-                    from: parsed.cards,
-                    fallbackFocus: input.focusText,
-                    profile: input.preferenceProfile,
-                    limit: cardsAtTime,
-                    excluding: existingCards
-                )
+                try Task.checkCancellation()
+                let parseTask = Task.detached(priority: .userInitiated) {
+                    let parsed = try Self.parseModelResponse(from: raw)
+                    return (headline: Self.normalizedText(parsed.headline,
+                        fallback: NSLocalizedString("这次有几条值得你看", comment: "Daily Pulse delivery batch fallback headline")),
+                        cards: Self.makeCards(from: parsed.cards, fallbackFocus: input.focusText,
+                            profile: input.preferenceProfile, limit: cardsAtTime, excluding: existingCards))
+                }
+                let parsed = try await withTaskCancellationHandler { try await parseTask.value } onCancel: { parseTask.cancel() }
+                try Task.checkCancellation()
+                let cards = parsed.cards
                 guard cards.count == cardsAtTime else {
                     throw DailyPulseGenerationError.invalidModelOutput
                 }
 
-                let headline = Self.normalizedText(
-                    parsed.headline,
-                    fallback: NSLocalizedString("这次有几条值得你看", comment: "Daily Pulse delivery batch fallback headline")
-                )
+                let headline = parsed.headline
                 checkpoint.firstHeadline = checkpoint.firstHeadline ?? headline
                 checkpoint.generatedCards.append(contentsOf: cards)
                 checkpoint.deliveryBatches.append(contentsOf: zip(deliveryGroup, cards).map { pair in
@@ -216,7 +221,7 @@ extension DailyPulseManager {
                 if !tomorrowCurationText.isEmpty {
                     tomorrowCurationText = ""
                 } else {
-                    Persistence.saveDailyPulsePendingCuration(nil)
+                    DailyPulsePersistenceQueue.shared.enqueue { Persistence.saveDailyPulsePendingCuration(nil) }
                 }
             }
             await DailyPulseDeliveryCoordinator.shared.refreshReminderSchedule()
@@ -227,6 +232,7 @@ extension DailyPulseManager {
         } catch {
             if Self.isCancellationError(error) || Task.isCancelled {
                 logger.info("每日脉冲生成已取消，触发方式: \(trigger.rawValue, privacy: .public)")
+                await DailyPulsePersistenceQueue.shared.flush()
                 return
             }
 
@@ -238,6 +244,7 @@ extension DailyPulseManager {
             }
             logger.error("每日脉冲生成失败: \(description, privacy: .public)")
         }
+        await DailyPulsePersistenceQueue.shared.flush()
     }
 
     nonisolated static func shouldStartGeneration(
@@ -261,7 +268,8 @@ extension DailyPulseManager {
     }
 
     func persistRuns() {
-        Persistence.saveDailyPulseRuns(runs)
+        let snapshot = runs
+        DailyPulsePersistenceQueue.shared.enqueue { Persistence.saveDailyPulseRuns(snapshot) }
     }
 
     func replaceGenerationCheckpoint(_ checkpoint: DailyPulseGenerationCheckpoint) {
@@ -287,9 +295,7 @@ extension DailyPulseManager {
 
     func persistGenerationRuntimeState() async {
         let snapshot = generationRuntimeState
-        let previousTask = generationRuntimePersistenceTask
-        let persistenceTask = Task.detached(priority: .utility) {
-            await previousTask?.value
+        let persistenceTask = DailyPulsePersistenceQueue.shared.enqueue {
             Persistence.saveDailyPulseGenerationRuntimeState(snapshot)
         }
         generationRuntimePersistenceTask = persistenceTask
@@ -298,9 +304,7 @@ extension DailyPulseManager {
 
     func persistGenerationRuntimeStateInBackground() {
         let snapshot = generationRuntimeState
-        let previousTask = generationRuntimePersistenceTask
-        generationRuntimePersistenceTask = Task.detached(priority: .utility) {
-            await previousTask?.value
+        generationRuntimePersistenceTask = DailyPulsePersistenceQueue.shared.enqueue {
             Persistence.saveDailyPulseGenerationRuntimeState(snapshot)
         }
     }
@@ -320,7 +324,18 @@ extension DailyPulseManager {
 
     func persistTasks() {
         tasks = Self.sortedTasks(tasks)
-        Persistence.saveDailyPulseTasks(tasks)
+        let snapshot = tasks
+        DailyPulsePersistenceQueue.shared.enqueue { Persistence.saveDailyPulseTasks(snapshot) }
+    }
+
+    func persistFeedbackHistory() {
+        let snapshot = feedbackHistory
+        DailyPulsePersistenceQueue.shared.enqueue { Persistence.saveDailyPulseFeedbackHistory(snapshot) }
+    }
+
+    func persistExternalSignals() {
+        let snapshot = externalSignals
+        DailyPulsePersistenceQueue.shared.enqueue { Persistence.saveDailyPulseExternalSignals(snapshot) }
     }
 
     func appendFeedbackEvent(_ event: DailyPulseFeedbackEvent) {
@@ -329,7 +344,7 @@ extension DailyPulseManager {
             to: feedbackHistory,
             limit: Self.feedbackHistoryRetentionLimit
         )
-        Persistence.saveDailyPulseFeedbackHistory(feedbackHistory)
+        persistFeedbackHistory()
     }
 
     func persistPendingCurationFromDraft(referenceDate: Date = Date()) {
@@ -341,7 +356,7 @@ extension DailyPulseManager {
                         $0.dayKey == Self.nextDayKey(from: referenceDate)
                     }))
             pendingCuration = nil
-            Persistence.saveDailyPulsePendingCuration(nil)
+            DailyPulsePersistenceQueue.shared.enqueue { Persistence.saveDailyPulsePendingCuration(nil) }
             if shouldInvalidatePreparedRun {
                 invalidatePreparedTomorrowRun(referenceDate: referenceDate)
             }
@@ -359,7 +374,7 @@ extension DailyPulseManager {
             createdAt: pendingCuration?.createdAt ?? Date()
         )
         pendingCuration = note
-        Persistence.saveDailyPulsePendingCuration(note)
+        DailyPulsePersistenceQueue.shared.enqueue { Persistence.saveDailyPulsePendingCuration(note) }
         if shouldInvalidatePreparedRun {
             invalidatePreparedTomorrowRun(referenceDate: referenceDate)
         }
@@ -373,7 +388,7 @@ extension DailyPulseManager {
             if tomorrowCurationText == pendingCuration.text {
                 tomorrowCurationText = ""
             }
-            Persistence.saveDailyPulsePendingCuration(nil)
+            DailyPulsePersistenceQueue.shared.enqueue { Persistence.saveDailyPulsePendingCuration(nil) }
         }
     }
 

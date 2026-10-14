@@ -1,23 +1,23 @@
 import Foundation
 
 /// 只把列表需要的摘要交给界面，条目计数、排序和角色来源解析都在后台完成。
-struct WorldbookBindingSnapshot: Sendable {
-    struct Row: Identifiable, Sendable {
-        let id: UUID
-        let name: String
-        let entryCount: Int
-        let enabledEntryCount: Int
-        let isEnabled: Bool
-        let roleplaySource: String?
+public struct WorldbookBindingSnapshot: Sendable {
+    public struct Row: Identifiable, Sendable {
+        public let id: UUID
+        public let name: String
+        public let entryCount: Int
+        public let enabledEntryCount: Int
+        public let isEnabled: Bool
+        public let roleplaySource: String?
     }
 
-    let rows: [Row]
-    let availableIDs: Set<UUID>
-    let roleplayIDs: Set<UUID>
-    let guideValue: JSONValue
-    let selectionSchema: JSONValue
+    public let rows: [Row]
+    public let availableIDs: Set<UUID>
+    public let roleplayIDs: Set<UUID>
+    public let guideValue: JSONValue
+    public let selectionSchema: JSONValue
 
-    static func load(sessionID: UUID?) -> Self {
+    public static func load(sessionID: UUID?) -> Self {
         let service = ChatService.shared
         return Self(
             worldbooks: service.loadWorldbooks(),
@@ -26,7 +26,7 @@ struct WorldbookBindingSnapshot: Sendable {
         )
     }
 
-    init(worldbooks: [Worldbook], characters: [RoleplayCharacter], binding: SessionRoleplayBinding?) {
+    public init(worldbooks: [Worldbook], characters: [RoleplayCharacter], binding: SessionRoleplayBinding?) {
         var sources: [UUID: [String]] = [:]
         if let binding {
             let charactersByID = Dictionary(uniqueKeysWithValues: characters.map { ($0.id, $0) })
@@ -77,7 +77,7 @@ struct WorldbookBindingSnapshot: Sendable {
         ])
     }
 
-    func selection(from value: JSONValue) throws -> Set<UUID> {
+    public func selection(from value: JSONValue) throws -> Set<UUID> {
         guard case .array(let values) = value else { throw GuideError.invalidToolArguments }
         var ids = Set<UUID>()
         for value in values {

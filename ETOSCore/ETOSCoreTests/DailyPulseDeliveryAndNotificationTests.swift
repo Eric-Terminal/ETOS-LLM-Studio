@@ -539,6 +539,9 @@ struct DailyPulseDeliveryAndNotificationTests {
         let center = AppLocalNotificationCenter.shared
         _ = center.consumePendingRoute()
         _ = center.consumePendingDailyPulseSelection()
+#if os(macOS)
+        while center.consumeDailyPulseRequest() != nil {}
+#endif
         let runID = UUID()
         let cardID = UUID()
 
@@ -552,8 +555,64 @@ struct DailyPulseDeliveryAndNotificationTests {
             actionIdentifier: UNNotificationDefaultActionIdentifier
         )
 
+#if os(macOS)
+        let request = center.consumeDailyPulseRequest()
+        #expect(request?.action == .open)
+        #expect(request?.runID == runID)
+        #expect(request?.cardID == cardID)
+        #expect(request?.dayKey == "2026-03-23")
+#else
         #expect(center.consumePendingRoute() == .dailyPulse)
         #expect(center.consumePendingDailyPulseSelection() == .init(runID: runID, cardID: cardID))
+#endif
+    }
+
+#if os(macOS)
+    @MainActor
+    @Test("Mac 通知按钮只按顺序暂存操作且忽略未知动作")
+    func macPulseActionsWaitForWorkspace() {
+        let center = AppLocalNotificationCenter.shared
+        while center.consumeDailyPulseRequest() != nil {}
+        defer { while center.consumeDailyPulseRequest() != nil {} }
+        let runID = UUID(), cardID = UUID()
+        let payload = AppLocalNotificationCenter.dailyPulseUserInfo(kind: "card", dayKey: "2026-10-08", runID: runID, cardID: cardID)
+        for action in ["dailyPulse.action.like", "dailyPulse.action.save", "dailyPulse.action.continue", "dailyPulse.action.task", "unknown"] {
+            center.handleNotificationResponseUserInfo(payload, actionIdentifier: action)
+        }
+        #expect(center.pendingDailyPulseRequests.map(\.action) == [.like, .save, .continueChat, .addTask])
+        for _ in 0..<4 {
+            let request = center.consumeDailyPulseRequest()
+            #expect(request?.runID == runID)
+            #expect(request?.cardID == cardID)
+        }
+        #expect(center.consumeDailyPulseRequest() == nil)
+    }
+#endif
+
+    @Test("旧通知的明确标识不能回退到重新生成的卡片")
+    func stalePulseNotificationDoesNotRetarget() {
+        let now = Date(timeIntervalSince1970: 1_791_446_400)
+        let day = DailyPulseManager.dayKey(for: now)
+        let run = makeRun(dayKey: day, generatedAt: now)
+        #expect(DailyPulseManager.notificationTarget(in: [run], runID: UUID(), cardID: UUID(), dayKey: day, referenceDate: now) == nil)
+        #expect(DailyPulseManager.notificationTarget(in: [run], runID: run.id, cardID: UUID(), dayKey: day, referenceDate: now) == nil)
+        #expect(DailyPulseManager.notificationTarget(in: [run], runID: nil, cardID: UUID(), dayKey: day, referenceDate: now) == nil)
+        let exact = DailyPulseManager.notificationTarget(in: [run], runID: run.id, cardID: run.cards[0].id, dayKey: day, referenceDate: now)
+        #expect(exact?.runID == run.id)
+        #expect(exact?.card.id == run.cards[0].id)
+    }
+
+    @Test("无精确标识的旧提醒按日期定位且不回退到明日预准备")
+    func legacyPulseReminderUsesRequestedDayOnly() {
+        let now = Date(timeIntervalSince1970: 1_791_446_400)
+        let day = DailyPulseManager.dayKey(for: now)
+        let tomorrow = makeRun(dayKey: DailyPulseManager.dayKey(for: now.addingTimeInterval(86400)), generatedAt: now)
+        var today = makeRun(dayKey: day, generatedAt: now)
+        var hidden = today.cards[0]; hidden.id = UUID(); hidden.feedback = .hidden
+        today.cards.insert(hidden, at: 0)
+        let target = DailyPulseManager.notificationTarget(in: [tomorrow, today], runID: nil, cardID: nil, dayKey: nil, referenceDate: now)
+        #expect(target?.card.id == today.cards[1].id)
+        #expect(DailyPulseManager.notificationTarget(in: [tomorrow], runID: nil, cardID: nil, dayKey: nil, referenceDate: now) == nil)
     }
 
     @Test("反馈通知路由能识别目标 userInfo")

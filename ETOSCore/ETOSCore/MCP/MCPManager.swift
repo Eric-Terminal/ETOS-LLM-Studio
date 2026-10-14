@@ -104,12 +104,20 @@ public final class MCPManager: ObservableObject {
     var inFlightConnections: [UUID: Task<MCPClient, Error>] = [:]
     var localStdioInstances: [MCPLocalStdioInstanceKey: MCPLocalStdioInstance] = [:]
     var localStdioConnectionTasks: [MCPLocalStdioInstanceKey: Task<MCPLocalStdioInstance, Error>] = [:]
+    var macStdioUsage: [UUID: MCPMacStdioUsage] = [:]
     var trackedToolCallTasks: [UUID: Task<JSONValue, Error>] = [:]
     var trackedToolCallObservers: [UUID: @Sendable (MCPProgressParams) -> Void] = [:]
     var trackedToolCallTokenKeys: [UUID: String] = [:]
     var progressTimestampsByToken: [String: Date] = [:]
     var configObservationCancellable: AnyDatabaseCancellable?
-    var configSnapshotSignature: String = MCPServerStore.configurationSnapshotSignature()
+    var configSnapshotSignature: String = ""
+    var backgroundStoreRevision: UInt64 = 0
+    var isRestoringDatabase = false
+    var initialLoadTask: Task<Void, Never>?
+    var inFlightConnectionTokens: [UUID: UUID] = [:]
+    lazy var configurationPersistenceWorker = MCPConfigurationPersistenceWorker(
+        appToolDefaults: MCPBuiltInAppToolServer.categories.map { MCPBuiltInAppToolServer.defaultConfiguration(for: $0) }
+    )
     var autoConnectRetryTasks: [UUID: Task<Void, Never>] = [:]
     var autoConnectRetryAttempts: [UUID: Int] = [:]
     var autoConnectFailureNotifiedAt: [UUID: Date] = [:]
@@ -127,6 +135,11 @@ public final class MCPManager: ObservableObject {
     let governanceLogLimit = 1200
 
     private init() {
+        #if os(macOS)
+        // 启动只使用内存默认值，数据库偏好随后台目录快照一次性应用。
+        chatToolsEnabled = false
+        toolCallTitleEnabled = true
+        #else
         chatToolsEnabled = AppConfigStore.boolValue(
             for: .mcpChatToolsEnabled,
             legacyUserDefaultsKey: Self.chatToolsEnabledUserDefaultsKey,
@@ -136,9 +149,18 @@ public final class MCPManager: ObservableObject {
             for: .mcpToolCallTitleEnabled,
             defaultValue: true
         )
+        #endif
+        #if os(macOS)
+        initialLoadTask = Task { [weak self] in
+            await self?.reloadServersInBackground()
+            self?.startConfigObservationIfNeeded()
+            self?.connectSelectedServersIfNeeded()
+        }
+        #else
         reloadServers()
         startConfigObservationIfNeeded()
         connectSelectedServersIfNeeded()
+        #endif
     }
 
     deinit {
@@ -155,6 +177,7 @@ public final class MCPManager: ObservableObject {
     }
 
     func removeConnectionArtifacts(for serverID: UUID) -> MCPClient? {
+        macStdioUsage.removeValue(forKey: serverID)?.idleTask?.cancel()
         let client = clients.removeValue(forKey: serverID)
         let transport = streamingTransports.removeValue(forKey: serverID)
         notificationRelays[serverID] = nil
@@ -167,35 +190,35 @@ public final class MCPManager: ObservableObject {
     // MARK: - Server Management
 
     public func reloadServers() {
+        guard !isRestoringDatabase else { return }
+        applyStoreSnapshot(MCPManagerStoreSnapshot.load(
+            appToolDefaults: MCPBuiltInAppToolServer.categories.map { MCPBuiltInAppToolServer.defaultConfiguration(for: $0) }
+        ))
+    }
+
+    func applyStoreSnapshot(_ snapshot: MCPManagerStoreSnapshot) {
+        #if os(macOS)
+        chatToolsEnabled = snapshot.chatToolsEnabled
+        toolCallTitleEnabled = snapshot.toolCallTitleEnabled
+        if !chatToolsEnabled { cancelAllAutoConnectRetries(resetAttempts: true) }
+        #endif
         let previousServersByID = Dictionary(uniqueKeysWithValues: servers.map { ($0.id, $0) })
-        let storedServers = MCPServerStore.loadServers()
-        let deletedBuiltInServerIDs = MCPServerStore.deletedBuiltInServerIDs()
-        let preparedSearchServers = MCPBuiltInSearchServer.prepareServersForManager(
-            storedServers,
-            deletedBuiltInServerIDs: deletedBuiltInServerIDs
-        )
-        let preparedAppToolServers = MCPBuiltInAppToolServer.prepareServersForManager(
-            preparedSearchServers.servers,
-            deletedBuiltInServerIDs: deletedBuiltInServerIDs
-        )
-        let preparedPersonalDataServers = MCPBuiltInPersonalDataServer.prepareServersForManager(
-            preparedAppToolServers.servers,
-            deletedBuiltInServerIDs: deletedBuiltInServerIDs
-        )
-        for serverToDelete in preparedAppToolServers.serversToDelete {
-            MCPServerStore.delete(serverToDelete)
-        }
-        let serversToPersist = [preparedSearchServers.serverToPersist, preparedPersonalDataServers.serverToPersist].compactMap { $0 } + preparedAppToolServers.serversToPersist
-        for serverToPersist in serversToPersist {
-            MCPServerStore.save(serverToPersist)
-        }
-        servers = preparedPersonalDataServers.servers
+        servers = snapshot.servers
         let currentServersByID = Dictionary(uniqueKeysWithValues: servers.map { ($0.id, $0) })
         for (serverID, previous) in previousServersByID
         where currentServersByID[serverID] != previous {
             removeLocalStdioInstances(for: serverID)
+            if let current = currentServersByID[serverID], current.transport != previous.transport {
+                // 配置观察和手动保存统一撤销旧连接；先应用快照，再异步关闭客户端。
+                inFlightConnections[serverID]?.cancel()
+                inFlightConnections[serverID] = nil
+                cancelTrackedToolCalls(for: serverID, reason: NSLocalizedString("服务器已断开", comment: ""))
+                let client = removeConnectionArtifacts(for: serverID)
+                Task { await client?.disconnect() }
+                serverStatuses[serverID] = nil
+            }
         }
-        configSnapshotSignature = MCPServerStore.configurationSnapshotSignature()
+        configSnapshotSignature = snapshot.signature
         let serverIDs = Set(servers.map { $0.id })
         autoConnectSuppressedServerIDs = autoConnectSuppressedServerIDs.intersection(serverIDs)
         let removedIDs = Set(autoConnectRetryTasks.keys).subtracting(serverIDs)
@@ -228,23 +251,23 @@ public final class MCPManager: ObservableObject {
             status.isSelectedForChat = server.isSelectedForChat
             if case .idle = status.connectionState {
                 if status.tools.isEmpty {
-                    status.tools = MCPServerStore.loadTools(for: server.id)
+                    status.tools = snapshot.metadata[server.id]?.tools ?? []
                 }
 
                 if status.info == nil {
-                    status.info = MCPServerStore.loadServerInfo(for: server.id)
+                    status.info = snapshot.metadata[server.id]?.info
                 }
                 if status.resources.isEmpty {
-                    status.resources = MCPServerStore.loadResources(for: server.id)
+                    status.resources = snapshot.metadata[server.id]?.resources ?? []
                 }
                 if status.resourceTemplates.isEmpty {
-                    status.resourceTemplates = MCPServerStore.loadResourceTemplates(for: server.id)
+                    status.resourceTemplates = snapshot.metadata[server.id]?.resourceTemplates ?? []
                 }
                 if status.prompts.isEmpty {
-                    status.prompts = MCPServerStore.loadPrompts(for: server.id)
+                    status.prompts = snapshot.metadata[server.id]?.prompts ?? []
                 }
                 if status.roots.isEmpty {
-                    status.roots = MCPServerStore.loadRoots(for: server.id)
+                    status.roots = snapshot.metadata[server.id]?.roots ?? []
                 }
 
                 let hasMetadataCache = status.info != nil ||
@@ -254,7 +277,7 @@ public final class MCPManager: ObservableObject {
                     !status.prompts.isEmpty ||
                     !status.roots.isEmpty
                 if hasMetadataCache {
-                    status.metadataCachedAt = MCPServerStore.loadMetadataCachedAt(for: server.id) ?? status.metadataCachedAt ?? Date()
+                    status.metadataCachedAt = snapshot.metadata[server.id]?.cachedAt ?? status.metadataCachedAt ?? Date()
                     // 首次加载时，只有聊天暴露总开关开启，才乐观恢复 ready 并等待后台握手校验。
                     if existingStatus == nil, chatToolsEnabled, server.isSelectedForChat {
                         status.connectionState = .ready
@@ -469,6 +492,7 @@ public final class MCPManager: ObservableObject {
         keepReadyStateDuringHandshake: Bool = false,
         refreshMetadataIfCacheMissing: Bool = false
     ) async throws -> MCPClient {
+        guard !isRestoringDatabase else { throw CancellationError() }
         if let client = clients[server.id], case .ready = status(for: server).connectionState {
             return client
         }
@@ -487,16 +511,16 @@ public final class MCPManager: ObservableObject {
                 refreshMetadataIfCacheMissing: refreshMetadataIfCacheMissing
             )
         }
+        let token = UUID()
+        inFlightConnectionTokens[server.id] = token
         inFlightConnections[server.id] = task
-
-        do {
-            let client = try await task.value
-            inFlightConnections[server.id] = nil
-            return client
-        } catch {
-            inFlightConnections[server.id] = nil
-            throw error
+        defer {
+            if inFlightConnectionTokens[server.id] == token {
+                inFlightConnections[server.id] = nil
+                inFlightConnectionTokens[server.id] = nil
+            }
         }
+        return try await task.value
     }
 
     func ensureClientReady(serverID: UUID, refreshMetadataIfCacheMissing: Bool = false) async throws -> MCPClient {
@@ -519,6 +543,9 @@ public final class MCPManager: ObservableObject {
         keepReadyStateDuringHandshake: Bool,
         refreshMetadataIfCacheMissing: Bool
     ) async throws -> MCPClient {
+        let connectionToken = inFlightConnectionTokens[server.id]
+        let macUsage = beginMacStdioUse(serverID: server.id)
+        defer { endMacStdioUse(serverID: server.id, usage: macUsage) }
         if retryOnFailure {
             cancelAutoConnectRetry(for: server.id, resetAttempts: false)
         } else {
@@ -552,7 +579,8 @@ public final class MCPManager: ObservableObject {
         }
 
         var approvedLocalLinuxCommandRuleIDs: Set<UUID> = []
-        if case .localStdio(let configuration) = server.transport,
+        if server.usesLocalLinuxStdio,
+           case .localStdio(let configuration) = server.transport,
            AppConfigStore.boolValue(for: .localLinuxCommandSafetyEnabled) {
             let command = configuration.command.trimmingCharacters(in: .whitespacesAndNewlines)
             let request = LocalLinuxJobRequest(
@@ -595,6 +623,8 @@ public final class MCPManager: ObservableObject {
                 message: NSLocalizedString("已恢复流式重连令牌。", comment: "MCP governance stream resumption token restored")
             )
         }
+        try Task.checkCancellation()
+        guard !isRestoringDatabase, inFlightConnectionTokens[server.id] == connectionToken else { throw CancellationError() }
         let relay = MCPServerNotificationRelay(serverID: server.id, manager: self)
         notificationRelays[server.id] = relay
         transportBundle.streamControl?.notificationDelegate = relay
@@ -630,9 +660,12 @@ public final class MCPManager: ObservableObject {
                 timeout: handshakeTimeout,
                 capabilities: clientCapabilitiesForCurrentHandlers()
             )
+            try Task.checkCancellation()
+            guard !isRestoringDatabase, clients[server.id] === client else { throw CancellationError() }
             if let configurableTransport = transportBundle.streamControl as? MCPProtocolVersionConfigurableTransport {
                 await configurableTransport.updateProtocolVersion(client.negotiatedProtocolVersion)
             }
+            guard !isRestoringDatabase, clients[server.id] === client else { throw CancellationError() }
             mcpManagerLogger.info("MCP 初始化成功：\(server.displayName, privacy: .public)，server=\(info.name, privacy: .public) \(info.version ?? "unknown", privacy: .public)")
 
             let shouldSelectForChat = !preserveSelection && !status(for: server).isSelectedForChat
@@ -669,14 +702,20 @@ public final class MCPManager: ObservableObject {
             if shouldRefreshMetadata {
                 await refreshMetadata(for: server.id, client: client, serverInfo: info)
             }
-
+            try Task.checkCancellation()
+            guard !isRestoringDatabase, clients[server.id] === client else { throw CancellationError() }
             persistResumptionToken(for: server.id)
 
             return client
         } catch {
+            guard clients[server.id] === client else {
+                await client.disconnect()
+                throw error
+            }
             mcpManagerLogger.error("MCP 初始化失败：\(server.displayName, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
             let failedClient = removeConnectionArtifacts(for: server.id)
             await failedClient?.disconnect()
+            guard inFlightConnectionTokens[server.id] == connectionToken else { throw error }
             if Task.isCancelled || isAutoConnectSuppressed(server.id) {
                 if servers.contains(where: { $0.id == server.id }) {
                     updateStatus(for: server.id) {

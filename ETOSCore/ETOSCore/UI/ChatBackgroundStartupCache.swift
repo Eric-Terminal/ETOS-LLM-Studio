@@ -1,6 +1,10 @@
 import Foundation
 import ImageIO
+#if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 /// 启动专用的派生缓存。UserDefaults 仅保存最后一张位图的索引，设置真值仍由数据库管理。
 public actor ChatBackgroundStartupCache {
@@ -39,7 +43,7 @@ public actor ChatBackgroundStartupCache {
 
     private struct Snapshot: @unchecked Sendable {
         let metadata: Metadata
-        let image: UIImage
+        let image: ETPlatformImage
     }
 
     private final class MemoryCache: @unchecked Sendable {
@@ -82,20 +86,25 @@ public actor ChatBackgroundStartupCache {
                   let image = CGImageSourceCreateImageAtIndex(
                     source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary
                   ) else { return nil }
-            let snapshot = Snapshot(metadata: metadata, image: UIImage(cgImage: image))
+            #if canImport(UIKit)
+            let platformImage = UIImage(cgImage: image)
+            #else
+            let platformImage = NSImage(cgImage: image, size: .zero)
+            #endif
+            let snapshot = Snapshot(metadata: metadata, image: platformImage)
             memory.set(snapshot)
             return snapshot
         }
     }
 
     /// 视图模型首帧仅查看内存；磁盘尚未就绪时由异步路径补齐。
-    public nonisolated func cachedImage(named name: String, radius: Double) -> UIImage? {
+    public nonisolated func cachedImage(named name: String, radius: Double) -> ETPlatformImage? {
         guard let snapshot = memory.get(), snapshot.metadata.name == name,
               snapshot.metadata.radius == radius else { return nil }
         return snapshot.image
     }
 
-    public func image(named name: String, radius: Double, target: DisplayImageTarget) async -> UIImage? {
+    public func image(named name: String, radius: Double, target: DisplayImageTarget) async -> ETPlatformImage? {
         _ = await preloadTask.value
         guard let snapshot = memory.get(), snapshot.metadata.name == name,
               snapshot.metadata.radius == radius, snapshot.metadata.target == target,
@@ -103,14 +112,19 @@ public actor ChatBackgroundStartupCache {
         return snapshot.image
     }
 
-    public func store(_ image: UIImage, named name: String, radius: Double,
+    public func store(_ image: ETPlatformImage, named name: String, radius: Double,
                       target: DisplayImageTarget, sourceRevision: String) async {
         // 旧预热结果不能覆盖本次启动刚生成的新壁纸。
         _ = await preloadTask.value
         let metadata = Metadata(name: name, radius: radius, target: target, sourceRevision: sourceRevision)
         guard memory.get()?.metadata != metadata else { return }
         memory.set(Snapshot(metadata: metadata, image: image))
+        #if canImport(UIKit)
         guard let data = image.pngData() else { return }
+        #else
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+              let data = NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:]) else { return }
+        #endif
         do {
             try data.write(to: cacheURL, options: .atomic)
             userDefaults.set(metadata.dictionary, forKey: Self.metadataKey)
@@ -121,7 +135,6 @@ public actor ChatBackgroundStartupCache {
 
     private nonisolated static func sourceRevision(named name: String) -> String? {
         let url = ConfigLoader.getBackgroundsDirectory().appendingPathComponent(name)
-        guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey]) else { return nil }
-        return "\(values.contentModificationDate?.timeIntervalSince1970 ?? 0)|\(values.fileSize ?? 0)"
+        return DisplayImageLoader.fileSourceRevision(at: url)
     }
 }

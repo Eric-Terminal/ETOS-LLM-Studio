@@ -63,7 +63,7 @@ private extension MCPNativeLocationExecutor {
         let longitude = try arguments.personalDataRequiredDouble("longitude")
         let location = CLLocation(latitude: latitude, longitude: longitude)
         #if canImport(MapKit)
-        if #available(iOS 26.0, watchOS 26.0, *) {
+        if #available(iOS 26.0, watchOS 26.0, macOS 26.0, *) {
             guard let request = MKReverseGeocodingRequest(location: location) else {
                 throw MCPBuiltInPersonalDataError.invalidArgument(
                     NSLocalizedString("无法为该坐标创建反向地理编码请求。", comment: "Reverse geocoding request unavailable")
@@ -78,6 +78,7 @@ private extension MCPNativeLocationExecutor {
         }
         #endif
 
+        #if !os(macOS)
         let placemarks = try await CLGeocoder().reverseGeocodeLocation(location)
         let places = placemarks.map { placemark in
             [
@@ -95,6 +96,7 @@ private extension MCPNativeLocationExecutor {
             "places": places,
             "count": places.count
         ])
+        #endif
     }
 
     func searchPlaces(_ arguments: [String: Any]) async throws -> [String: Any] {

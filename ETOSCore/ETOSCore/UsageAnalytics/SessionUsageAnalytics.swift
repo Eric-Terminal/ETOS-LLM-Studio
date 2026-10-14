@@ -80,37 +80,68 @@ struct SessionUsageAnalyticsSummary: Equatable, Sendable {
 
 @MainActor
 final class SessionUsageAnalyticsViewModel: ObservableObject {
-    @Published private(set) var summary: SessionUsageAnalyticsSummary?
+    @Published private(set) var presentation: SessionUsageAnalyticsPresentation?
+    @Published private(set) var revision = UUID()
     private let sessionID: UUID
+    private let load: @Sendable (UUID) -> SessionUsageAnalyticsSummary
+    private let notifications: NotificationCenter
+    private var isActive = false
+    private var locale = Locale.current
     private var refreshTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
 
-    init(sessionID: UUID) {
+    init(sessionID: UUID, notifications: NotificationCenter = .default,
+         load: @escaping @Sendable (UUID) -> SessionUsageAnalyticsSummary = { id in
+             SessionUsageAnalyticsSummary.aggregate(sessionID: id,
+                 events: Persistence.loadSessionUsageAnalyticsEvents(sessionID: id), providers: ConfigLoader.loadProviders())
+         }) {
         self.sessionID = sessionID
-        NotificationCenter.default.publisher(for: .usageAnalyticsStoreDidChange)
-            .merge(with: NotificationCenter.default.publisher(for: .syncUsageStatsUpdated))
-            .merge(with: NotificationCenter.default.publisher(for: .providerConfigurationDidChange))
-            .receive(on: RunLoop.main)
+        self.notifications = notifications
+        self.load = load
+    }
+
+    deinit { refreshTask?.cancel() }
+
+    func setActive(_ active: Bool, locale: Locale = .current) {
+        guard isActive != active else { return }
+        isActive = active
+        self.locale = locale
+        guard active else {
+            cancellables.removeAll(); refreshTask?.cancel()
+            revision = UUID(); presentation = nil
+            return
+        }
+        notifications.publisher(for: .usageAnalyticsStoreDidChange)
+            .merge(with: notifications.publisher(for: .syncUsageStatsUpdated))
+            .merge(with: notifications.publisher(for: .providerConfigurationDidChange))
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.refresh() }
             .store(in: &cancellables)
         refresh()
     }
 
-    deinit { refreshTask?.cancel() }
-
-    func refresh() {
+    func refresh(locale: Locale? = nil) {
+        if let locale { self.locale = locale }
+        guard isActive else { return }
         refreshTask?.cancel()
-        let sessionID = sessionID
+        revision = UUID(); presentation = nil
+        let previous = refreshTask, expected = revision, sessionID = sessionID, load = load, locale = self.locale
         refreshTask = Task { [weak self] in
-            let summary = await Task.detached(priority: .userInitiated) {
-                SessionUsageAnalyticsSummary.aggregate(
-                    sessionID: sessionID,
-                    events: Persistence.loadSessionUsageAnalyticsEvents(sessionID: sessionID),
-                    providers: ConfigLoader.loadProviders()
-                )
-            }.value
+            // 等待上一轮已开始的读取收尾，防止频繁通知叠加磁盘扫描；停用不发布迟到结果。
+            await previous?.value
             guard !Task.isCancelled else { return }
-            self?.summary = summary
+            let worker = Task.detached(priority: .userInitiated) {
+                try Task.checkCancellation()
+                let summary = load(sessionID)
+                try Task.checkCancellation()
+                return SessionUsageAnalyticsPresentation(summary, locale: locale)
+            }
+            let result = await withTaskCancellationHandler { await worker.result } onCancel: { worker.cancel() }
+            guard !Task.isCancelled, let self, isActive, revision == expected else { return }
+            if case .success(let presentation) = result { self.presentation = presentation }
+            refreshTask = nil
         }
     }
+
+    func waitForPendingRefresh() async { await refreshTask?.value }
 }

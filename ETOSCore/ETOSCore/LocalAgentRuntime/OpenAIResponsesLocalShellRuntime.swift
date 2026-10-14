@@ -2,8 +2,8 @@
 // OpenAIResponsesLocalShellRuntime.swift
 // ETOS LLM Studio
 //
-// 为 OpenAI Responses 原生 local shell 物化冻结的 Skill 包，并在整个 Agent Run
-// 中保持只读挂载。模型只收到 guest 路径，宿主目录不会进入请求或日志。
+// 为 OpenAI Responses 原生 local shell 物化冻结的 Skill 包。移动端持有只读
+// 挂载并仅公开 guest 路径；macOS 直接提供本次冻结副本的本机路径。
 // ============================================================================
 
 import Foundation
@@ -39,6 +39,8 @@ public actor OpenAIResponsesLocalShellRuntime {
     }
 
     public func toolDefinition(for context: AgentRuntimeContext) async throws -> InternalToolDefinition {
+        let activity = try LocalLinuxActivityBarrier.shared.begin()
+        defer { activity.finish() }
         guard let runID = context.runID else {
             throw LocalLinuxRuntimeError.runtimeUnavailable(
                 NSLocalizedString("Agent Run 缺少运行标识。", comment: "Missing local Agent run identifier")
@@ -49,6 +51,7 @@ public actor OpenAIResponsesLocalShellRuntime {
             environment = existing
         } else {
             environment = try await prepareEnvironment(context: context)
+            try activity.checkCancellation()
             environments[runID] = environment
         }
 
@@ -63,12 +66,17 @@ public actor OpenAIResponsesLocalShellRuntime {
                 "path": .string(mounted.guestPath)
             ])
         }
-        return InternalToolDefinition(
-            name: OpenAIResponsesLocalShellProtocol.toolName,
-            description: NSLocalizedString(
+        #if os(macOS)
+        let description = NSLocalizedString("mac.shell.tool.run", comment: "Mac 本机 Shell 工具")
+        #else
+        let description = NSLocalizedString(
                 "在 ETOS 隔离的本地 Linux 用户态中执行 OpenAI Responses 原生 Shell 调用。",
                 comment: "OpenAI Responses local shell internal tool description"
-            ),
+            )
+        #endif
+        return InternalToolDefinition(
+            name: OpenAIResponsesLocalShellProtocol.toolName,
+            description: description,
             parameters: .dictionary([:]),
             isBlocking: true,
             kind: .openAIResponsesLocalShell,
@@ -91,7 +99,11 @@ public actor OpenAIResponsesLocalShellRuntime {
     }
 
     private func prepareEnvironment(context: AgentRuntimeContext) async throws -> RunEnvironment {
+        #if os(macOS)
+        let leases: [LocalLinuxMountLease] = []
+        #else
         var leases: [LocalLinuxMountLease] = []
+        #endif
         var mountedSkills: [MountedSkill] = []
         do {
             for snapshot in (context.skillSnapshots ?? []).sorted(by: { $0.skillName < $1.skillName }) {
@@ -99,6 +111,9 @@ public actor OpenAIResponsesLocalShellRuntime {
                     skillName: snapshot.skillName,
                     frozenSnapshot: snapshot
                 )
+                #if os(macOS)
+                let guestPath = package.path
+                #else
                 let guestPath = "/mnt/etos/skills/\(snapshot.skillID)/\(snapshot.versionDigest)"
                 let lease = try await mountManager.acquireReadOnlySkillMount(
                     skillID: snapshot.skillID,
@@ -106,6 +121,7 @@ public actor OpenAIResponsesLocalShellRuntime {
                     guestDirectory: guestPath
                 )
                 leases.append(lease)
+                #endif
                 mountedSkills.append(MountedSkill(snapshot: snapshot, guestPath: guestPath))
             }
             return RunEnvironment(leases: leases, skills: mountedSkills)

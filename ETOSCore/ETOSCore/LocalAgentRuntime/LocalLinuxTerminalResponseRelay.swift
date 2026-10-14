@@ -11,11 +11,11 @@ import Foundation
 
 final class LocalLinuxTerminalResponseRelay: @unchecked Sendable {
     private let lock = NSLock()
-    private var session: iSHAppleBridgeTerminalSession?
+    private var session: (any LocalTerminalSession)?
     private var pending = Data()
     private var lastWrite: Task<Void, Never>?
 
-    func bind(to session: iSHAppleBridgeTerminalSession) {
+    func bind(to session: any LocalTerminalSession) {
         lock.lock()
         self.session = session
         let buffered = pending
@@ -36,7 +36,7 @@ final class LocalLinuxTerminalResponseRelay: @unchecked Sendable {
         lock.unlock()
     }
 
-    private func schedule(_ data: Data, on session: iSHAppleBridgeTerminalSession) {
+    private func schedule(_ data: Data, on session: any LocalTerminalSession) {
         let previous = lastWrite
         lastWrite = Task.detached(priority: .userInitiated) {
             await previous?.value

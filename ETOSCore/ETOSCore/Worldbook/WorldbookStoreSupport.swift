@@ -56,17 +56,18 @@ extension WorldbookStore {
         return sorted
     }
 
+    @discardableResult
     func saveWorldbooksUnlocked(
         _ worldbooks: [Worldbook],
         removeLegacyAggregate: Bool = true
-    ) {
+    ) -> Bool {
         let sorted = deduplicatedAndSortedWorldbooks(worldbooks)
 
         if canUseGRDB, saveWorldbooksToSQLite(sorted) {
             cleanupLegacyFilesAfterGRDBSave(removeLegacyAggregate: removeLegacyAggregate)
             logger.info("已保存世界书到 SQLite: \(sorted.count)")
             updateCaches(with: sorted)
-            return
+            return true
         }
 
         _ = ensureDirectoryIfNeeded()
@@ -86,8 +87,10 @@ extension WorldbookStore {
 
             logger.info("已保存世界书文件: \(sorted.count)")
             updateCaches(with: sorted)
+            return true
         } catch {
             logger.error("保存世界书失败: \(error.localizedDescription, privacy: .public)")
+            return false
         }
     }
 

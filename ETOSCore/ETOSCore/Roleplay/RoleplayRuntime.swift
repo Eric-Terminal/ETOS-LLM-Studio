@@ -8,7 +8,7 @@
 
 import Foundation
 
-struct ResolvedRoleplaySession {
+struct ResolvedRoleplaySession: Sendable {
     var binding: SessionRoleplayBinding
     var characters: [RoleplayCharacter]
     var persona: PersonaProfile?
@@ -32,12 +32,13 @@ enum RoleplayRuntime {
     static func resolve(
         sessionID: UUID,
         messages: [ChatMessage],
-        store: RoleplayStore
+        store: RoleplayStore,
+        migrateLegacyValues: Bool = true
     ) -> ResolvedRoleplaySession? {
         guard let binding = store.binding(sessionID: sessionID), !binding.characterIDs.isEmpty else { return nil }
         let characters = binding.characterIDs.compactMap(store.character(id:))
         guard !characters.isEmpty else { return nil }
-        let variables = store.variableSnapshot(sessionID: sessionID)
+        let variables = store.variableSnapshot(sessionID: sessionID, migrateLegacyValues: migrateLegacyValues)
         let messageContext = latestVariableMessage(in: messages, variables: variables)
         let lastMessage = messages.last(where: { $0.role == .user || $0.role == .assistant })?.content ?? ""
         let lastUserMessage = messages.last(where: { $0.role == .user })?.content ?? ""

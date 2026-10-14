@@ -112,6 +112,14 @@ public struct TTSPlaybackState: Equatable, Sendable {
 }
 
 public struct TTSSettingsSnapshot: Equatable, Sendable {
+    public static let defaultValue = TTSSettingsSnapshot(
+        playbackMode: .auto, providerKind: .openAICompatible,
+        autoPlayAfterAssistantResponse: false, onlyReadQuotedContent: false,
+        watchUseLightweightPreprocess: true, watchSpeechMaxCharacters: 2_000,
+        speechRate: 1, pitch: 1, playbackSpeed: 1, voice: "alloy",
+        responseFormat: "mp3", languageType: "Auto", miniMaxEmotion: "calm"
+    )
+
     public var playbackMode: TTSPlaybackMode
     public var providerKind: TTSProviderKind
     public var autoPlayAfterAssistantResponse: Bool
@@ -161,7 +169,7 @@ public struct TTSSettingsSnapshot: Equatable, Sendable {
 public final class TTSSettingsStore: ObservableObject {
     public static let shared = TTSSettingsStore()
 
-    private enum Keys {
+    enum Keys {
         static let playbackMode = "tts.playbackMode"
         static let providerKind = "tts.providerKind"
         static let autoPlayAfterAssistantResponse = "tts.autoPlayAfterAssistantResponse"

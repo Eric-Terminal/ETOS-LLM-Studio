@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 两端共用备份字段白名单；保存、上传与覆盖恢复仍由用户在原生页面发起。
+/// 各端共用备份字段白名单；保存、上传与覆盖恢复仍由用户在原生页面发起。
 @MainActor
 public enum SnapshotBackupGuideSupport {
     public static var documents: [GuideDocumentReference] {

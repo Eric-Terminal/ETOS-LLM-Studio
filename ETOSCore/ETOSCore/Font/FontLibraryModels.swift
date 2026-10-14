@@ -55,7 +55,7 @@ public enum FontFallbackScope: String, Codable, CaseIterable, Identifiable, Hash
     }
 }
 
-public struct FontAssetRecord: Codable, Identifiable, Equatable {
+public struct FontAssetRecord: Codable, Identifiable, Equatable, Sendable {
     public var id: UUID
     public var fileName: String
     public var checksum: String
@@ -83,8 +83,8 @@ public struct FontAssetRecord: Codable, Identifiable, Equatable {
     }
 }
 
-public struct FontRouteConfiguration: Codable, Equatable {
-    public struct LanguageBucketConfiguration: Codable, Equatable {
+public struct FontRouteConfiguration: Codable, Equatable, Sendable {
+    public struct LanguageBucketConfiguration: Codable, Equatable, Sendable {
         public var body: [UUID]
         public var emphasis: [UUID]
         public var strong: [UUID]

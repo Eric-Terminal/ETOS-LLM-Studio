@@ -239,13 +239,13 @@ public final class TTSServiceStore: ObservableObject {
         return services.first { $0.id == selectedServiceID }
     }
 
-    private struct Payload: Codable, Equatable, Sendable {
+    struct Payload: Codable, Equatable, Sendable {
         var services: [TTSServiceConfiguration]
         var selectedServiceID: UUID?
         var didMigrateLegacyModel: Bool
     }
 
-    private struct LoadedPayload: Sendable {
+    struct LoadedPayload: Sendable {
         var payload: Payload
         var needsPersistence: Bool
     }
@@ -360,7 +360,7 @@ public final class TTSServiceStore: ObservableObject {
         }
     }
 
-    private nonisolated static func loadPayload(
+    nonisolated static func loadPayload(
         from rawValue: String,
         legacySettings: TTSSettingsSnapshot
     ) -> LoadedPayload {
@@ -400,7 +400,7 @@ public final class TTSServiceStore: ObservableObject {
         return LoadedPayload(payload: payload, needsPersistence: needsPersistence)
     }
 
-    private nonisolated static func normalizedPayload(_ payload: Payload) -> Payload {
+    nonisolated static func normalizedPayload(_ payload: Payload) -> Payload {
         var seenIDs = Set<UUID>()
         let normalizedServices = payload.services.compactMap { service -> TTSServiceConfiguration? in
             guard seenIDs.insert(service.id).inserted else { return nil }

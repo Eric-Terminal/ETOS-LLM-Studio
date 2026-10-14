@@ -180,7 +180,7 @@ public enum WatchDatabaseSyncService {
         defer { try? fileManager.removeItem(at: workingDirectory) }
 
         let metadata = localMetadataPacket().databases.filter { selectedKinds.contains($0.kind) }
-        let manifest = ArchiveManifest(
+        var manifest = ArchiveManifest(
             sourcePlatform: SyncEngine.currentPlatformName,
             createdAt: Date(),
             databases: metadata
@@ -188,7 +188,6 @@ public enum WatchDatabaseSyncService {
         let manifestURL = payloadDirectory.appendingPathComponent(manifestPath, isDirectory: false)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(manifest).write(to: manifestURL, options: .atomic)
 
         var databaseItems: [(kind: WatchSyncDatabaseKind, url: URL)] = []
         for kind in WatchSyncDatabaseKind.allCases where selectedKinds.contains(kind) {
@@ -204,7 +203,13 @@ public enum WatchDatabaseSyncService {
             fileManager: fileManager
         )
         try Persistence.removeItemIfExists(at: archiveURL)
+        var completed = false
+        defer { if !completed { try? fileManager.removeItem(at: archiveURL) } }
         let archive = try Archive(url: archiveURL, accessMode: .create, pathEncoding: nil)
+        if selectedKinds.contains(.config) {
+            manifest.skillFiles = try WatchSyncSkillArchive.add(to: archive, directory: SkillStore.skillsDirectory)
+        }
+        try encoder.encode(manifest).write(to: manifestURL, options: .atomic)
         try archive.addEntry(with: manifestPath, fileURL: manifestURL, compressionMethod: .deflate)
         for item in databaseItems {
             try archive.addEntry(
@@ -213,6 +218,7 @@ public enum WatchDatabaseSyncService {
                 compressionMethod: .deflate
             )
         }
+        completed = true
         return archiveURL
     }
 
@@ -270,17 +276,33 @@ public enum WatchDatabaseSyncService {
             sources[kind] = destinationURL
         }
 
-        try Persistence.installWatchSyncDatabases(sources)
+        var skillsDirectory: URL?
+        if kinds.contains(.config) {
+            guard let entry = archive[manifestPath] else { throw SyncError.invalidArchive }
+            var data = Data()
+            let checksum = try archive.extract(entry) { data.append($0) }
+            guard checksum == entry.checksum else { throw SyncError.invalidArchive }
+            let manifest = try JSONDecoder().decode(ArchiveManifest.self, from: data)
+            // 旧归档缺少 Skills，不能宣称完成配置覆盖后再让本机旧技能回流到来源端。
+            guard manifest.schemaVersion == 2, let paths = manifest.skillFiles else {
+                throw SyncError.invalidArchive
+            }
+            let directory = workingDirectory.appendingPathComponent("Skills", isDirectory: true)
+            try WatchSyncSkillArchive.extract(from: archive, paths: paths, to: directory)
+            skillsDirectory = directory
+        }
+        try Persistence.installWatchSyncDatabases(sources, skillsDirectory: skillsDirectory)
         return summary(for: Set(sources.keys))
     }
 }
 
 private extension WatchDatabaseSyncService {
     struct ArchiveManifest: Codable {
-        var schemaVersion = 1
+        var schemaVersion = 2
         var sourcePlatform: String
         var createdAt: Date
         var databases: [WatchSyncDatabaseMetadata]
+        var skillFiles: [String]?
     }
 
     static func localMetadata(_ kind: WatchSyncDatabaseKind) -> WatchSyncDatabaseMetadata {
@@ -549,12 +571,17 @@ private extension PersistenceGRDBStore {
 }
 
 extension Persistence {
-    static func installWatchSyncDatabases(_ sources: [WatchSyncDatabaseKind: URL]) throws {
+    static func installWatchSyncDatabases(_ sources: [WatchSyncDatabaseKind: URL], skillsDirectory: URL? = nil) throws {
         guard !sources.isEmpty else { return }
         databaseReplacementLock.lock()
         defer { databaseReplacementLock.unlock() }
 
         if let incomingConfig = sources[.config] {
+            guard let store = activeAuxiliaryStore(kind: .config) else {
+                throw WatchDatabaseSyncService.SyncError.unavailable(WatchSyncDatabaseKind.config.localizedTitle)
+            }
+            let localRows = try store.dbPool.read { try Row.fetchAll($0, sql: "SELECT * FROM app_config") }
+            try WatchSyncLocalConfiguration.preserve(in: incomingConfig, localRows: localRows)
             let localMounts = try activeAuxiliaryStore(kind: .config)?.loadLocalLinuxMounts() ?? []
             // 发送端按设计剥离书签。覆盖前保留接收设备自己的授权，避免一次配置往返
             // 就把原本可用的目录全部变为“需要重新授权”；处理发生在加密转换之前。
@@ -608,8 +635,10 @@ extension Persistence {
                 resetLaunchBackupStateForSnapshotRestore()
                 try prepareSnapshotRestoreRollback(replacements: replacements, rollbackDirectory: rollbackDirectory)
                 do {
-                    for replacement in replacements {
-                        try replaceDatabaseFile(replacement)
+                    try WatchSyncSkillArchive.install(from: skillsDirectory, to: SkillStore.skillsDirectory) {
+                        for replacement in replacements {
+                            try replaceDatabaseFile(replacement)
+                        }
                     }
                 } catch {
                     restoreSnapshotRollback(replacements: replacements, rollbackDirectory: rollbackDirectory)
@@ -623,7 +652,6 @@ extension Persistence {
             if shouldPreserveDatabaseEncryption {
                 writeDatabaseEncryptionEnabled(true)
             }
-            NotificationCenter.default.post(name: .snapshotRestoreDidFinish, object: nil)
         } catch {
             bootstrapGRDBStoreOnLaunch()
             throw error

@@ -21,7 +21,14 @@ public enum StorageUtility {
     private static let resolvedDocumentsDirectory: URL = {
         let fileManager = FileManager.default
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil else {
+            #if os(macOS)
+            // 原生 Mac 客户端可能不启用沙盒；所有相对数据库和附件路径仍保持
+            // 移动端布局，只把根目录放入应用专属的 Application Support。
+            return fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("ETOS LLM Studio", isDirectory: true)
+            #else
             return fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            #endif
         }
 
         // 测试不能读写模拟器长期保留的 Documents，否则不同测试运行会相互污染。
@@ -33,7 +40,7 @@ public enum StorageUtility {
     
     // MARK: - 目录访问
     
-    /// 获取 Documents 目录
+    /// 获取应用数据根目录；macOS 使用 Application Support，移动端使用 Documents。
     public static var documentsDirectory: URL {
         resolvedDocumentsDirectory
     }
@@ -613,7 +620,12 @@ public enum StorageUtility {
         }
         if isSkillPath {
             Task { @MainActor in
+                #if os(macOS)
+                let manager = await SkillManager.prepareSharedInBackground()
+                try? await manager.reloadLibraryInBackground()
+                #else
                 SkillManager.shared.reloadFromDisk()
+                #endif
             }
         }
     }

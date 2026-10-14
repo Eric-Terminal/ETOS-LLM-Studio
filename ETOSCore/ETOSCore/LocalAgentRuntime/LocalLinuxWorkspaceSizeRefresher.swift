@@ -18,6 +18,19 @@ actor LocalLinuxWorkspaceSizeRefresher {
     private var pending: [UUID: Request] = [:]
     private var scans: [UUID: Scan] = [:]
     private var isDraining = false
+    private var idleWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func waitForIdle() async {
+        guard isDraining || !scans.isEmpty || !pending.isEmpty else { return }
+        await withCheckedContinuation { idleWaiters.append($0) }
+    }
+
+    private func notifyIdle() {
+        guard !isDraining, scans.isEmpty, pending.isEmpty else { return }
+        let waiters = idleWaiters
+        idleWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+    }
 
     init(
         coalescingDelay: Duration = .milliseconds(500),
@@ -58,6 +71,7 @@ actor LocalLinuxWorkspaceSizeRefresher {
         scans[workspace.id] = scan
         defer {
             if scans[workspace.id]?.id == scan.id { scans.removeValue(forKey: workspace.id) }
+            notifyIdle()
         }
         return try await task.value
     }
@@ -74,5 +88,6 @@ actor LocalLinuxWorkspaceSizeRefresher {
             if !pending.isEmpty { try? await Task<Never, Never>.sleep(for: coalescingDelay) }
         }
         isDraining = false
+        notifyIdle()
     }
 }

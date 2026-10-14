@@ -15,8 +15,12 @@ public final class TTSManager: NSObject, ObservableObject {
     @Published var cachedNetworkAudioExport: TTSAudioExport?
 
     let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "TTSManager")
-    let settingsStore = TTSSettingsStore.shared
-    let urlSession: URLSession
+    private let settingsProvider: @MainActor () -> TTSSettingsSnapshot
+    let serviceProvider: @MainActor () -> TTSServiceConfiguration?
+    nonisolated let urlSession: URLSession
+    var settings: TTSSettingsSnapshot { settingsProvider() }
+    var retiringTask: Task<Void, Never>?
+    var audioExportTask: Task<Void, Never>?
 
     var queue: [QueueItem] = []
     var workerTask: Task<Void, Never>?
@@ -38,12 +42,15 @@ public final class TTSManager: NSObject, ObservableObject {
     private var isApplicationInBackground = false
 
 #if canImport(AVFoundation)
-    var audioPlayer: AVAudioPlayer?
+    var audioPlayback: (any TTSCloudAudioPlayback)?
+    var audioPlaybackID = UUID()
+    var audioControlTask: Task<Void, Never>?
+    var audioProgressTask: Task<Void, Never>?
     var audioContinuation: CheckedContinuation<Void, Error>?
-    var progressTimer: Timer?
+    let makeAudioPlayback: @Sendable () -> any TTSCloudAudioPlayback
 #endif
 
-#if os(iOS) || os(watchOS)
+#if os(iOS) || os(watchOS) || os(macOS)
     lazy var speechSynthesizer: AVSpeechSynthesizer = {
         let synthesizer = AVSpeechSynthesizer()
         synthesizer.delegate = self
@@ -53,6 +60,8 @@ public final class TTSManager: NSObject, ObservableObject {
     var activeSpeechUtterance: AVSpeechUtterance?
     var speechMonitorTask: Task<Void, Never>?
     var speechDidStart = false
+#endif
+#if os(iOS) || os(watchOS)
     var ownsPlaybackAudioSession = false
 #endif
 
@@ -62,6 +71,7 @@ public final class TTSManager: NSObject, ObservableObject {
         let text: String
         let playbackModeOverride: TTSPlaybackMode?
         let serviceOverride: TTSServiceConfiguration?
+        let settingsOverride: TTSSettingsSnapshot?
         let cachedClip: AudioClip?
     }
 
@@ -71,6 +81,7 @@ public final class TTSManager: NSObject, ObservableObject {
         let text: String
         let playbackModeOverride: TTSPlaybackMode?
         let serviceOverride: TTSServiceConfiguration?
+        let settingsOverride: TTSSettingsSnapshot?
     }
 
     enum ActiveBackend {
@@ -88,17 +99,37 @@ public final class TTSManager: NSObject, ObservableObject {
 
     var lastReplayRequest: ReplayRequest?
 
-    public init(urlSession: URLSession = NetworkSessionConfiguration.shared) {
+    public init(
+        urlSession: URLSession = NetworkSessionConfiguration.shared,
+        settingsProvider: (@MainActor () -> TTSSettingsSnapshot)? = nil,
+        serviceProvider: (@MainActor () -> TTSServiceConfiguration?)? = nil
+    ) {
         self.urlSession = urlSession
+        self.settingsProvider = settingsProvider ?? { TTSSettingsStore.shared.snapshot }
+        self.serviceProvider = serviceProvider ?? { TTSServiceStore.shared.selectedService }
+#if canImport(AVFoundation)
+        self.makeAudioPlayback = { TTSCloudAudioBackend() }
+#endif
         super.init()
     }
+
+#if canImport(AVFoundation)
+    init(urlSession: URLSession, settingsProvider: @escaping @MainActor () -> TTSSettingsSnapshot,
+         serviceProvider: @escaping @MainActor () -> TTSServiceConfiguration?,
+         makeAudioPlayback: @escaping @Sendable () -> any TTSCloudAudioPlayback) {
+        self.urlSession = urlSession; self.settingsProvider = settingsProvider
+        self.serviceProvider = serviceProvider; self.makeAudioPlayback = makeAudioPlayback
+        super.init()
+    }
+#endif
 
     public func speak(
         _ text: String,
         messageID: UUID? = nil,
         flush: Bool = true,
         playbackModeOverride: TTSPlaybackMode? = nil,
-        serviceOverride: TTSServiceConfiguration? = nil
+        serviceOverride: TTSServiceConfiguration? = nil,
+        settingsOverride: TTSSettingsSnapshot? = nil
     ) {
         guard TTSBackgroundPlaybackPolicy.allowsPlayback(
             isApplicationInBackground: isApplicationInBackground,
@@ -108,7 +139,7 @@ public final class TTSManager: NSObject, ObservableObject {
             return
         }
 
-        let settings = settingsStore.snapshot
+        let settings = settingsOverride ?? self.settings
         let selectionMode = TTSTextSelectionMode(rawValue: AppConfigStore.shared.ttsTextSelectionMode)
             ?? (settings.onlyReadQuotedContent ? .quotedOnly : .fullText)
         let filterCodeAndHTML = AppConfigStore.shared.ttsFilterCodeAndHTML
@@ -127,16 +158,12 @@ public final class TTSManager: NSObject, ObservableObject {
             messageID: messageID,
             text: text,
             playbackModeOverride: playbackModeOverride,
-            serviceOverride: serviceOverride
+            serviceOverride: serviceOverride,
+            settingsOverride: settingsOverride
         )
 
         if flush {
-            preparationGeneration &+= 1
-            preparationTask?.cancel()
-            preparationTask = nil
-            workerGeneration &+= 1
-            workerTask?.cancel()
-            workerTask = nil
+            cancelPlaybackTasks()
             stopCurrentPlayback(clearQueueOnly: true)
             clearPrefetchState()
             queue = []
@@ -162,9 +189,11 @@ public final class TTSManager: NSObject, ObservableObject {
         }
         let generation = preparationGeneration
         let previousPreparation = preparationTask
+        let previousPlayback = retiringTask
         preparationTask = Task { [weak self] in
             // 追加朗读保持请求顺序；停止或替换后，旧预处理结果不得重新启动播放。
             await previousPreparation?.value
+            await previousPlayback?.value
             guard !Task.isCancelled else { return }
             let preparation = Task.detached(priority: .userInitiated) {
                 guard !Task.isCancelled else { return [String]() }
@@ -212,6 +241,7 @@ public final class TTSManager: NSObject, ObservableObject {
                 text: chunk,
                 playbackModeOverride: request.playbackModeOverride,
                 serviceOverride: request.serviceOverride,
+                settingsOverride: request.settingsOverride,
                 cachedClip: canReuseNetworkAudio ? replayAudioClips[index] : nil
             )
         }
@@ -231,9 +261,11 @@ public final class TTSManager: NSObject, ObservableObject {
     }
 
     public var canReplayLastRequest: Bool {
-        guard let request = lastReplayRequest else { return false }
-        return !request.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        // 仅非空的已预处理分段会保存重播请求；视图查询时无需再次扫描整篇正文。
+        lastReplayRequest != nil
     }
+
+    public var canSeekCurrentAudio: Bool { audioPlayback != nil && playbackState.duration > 0 }
 
     /// 重新朗读上一条成功提交的文本，便于在播放结束后快速重试
     public func replayLastRequest() {
@@ -247,7 +279,8 @@ public final class TTSManager: NSObject, ObservableObject {
             messageID: request.messageID,
             flush: true,
             playbackModeOverride: request.playbackModeOverride,
-            serviceOverride: request.serviceOverride
+            serviceOverride: request.serviceOverride,
+            settingsOverride: request.settingsOverride
         )
     }
 
@@ -266,10 +299,10 @@ public final class TTSManager: NSObject, ObservableObject {
 #if canImport(AVFoundation)
         switch activeBackend {
         case .cloud:
-            audioPlayer?.pause()
+            pauseCloudPlayback()
             playbackState.status = .paused
         case .system:
-#if os(iOS) || os(watchOS)
+#if os(iOS) || os(watchOS) || os(macOS)
             _ = speechSynthesizer.pauseSpeaking(at: .word)
             playbackState.status = .paused
 #endif
@@ -286,10 +319,10 @@ public final class TTSManager: NSObject, ObservableObject {
 #if canImport(AVFoundation)
         switch activeBackend {
         case .cloud:
-            audioPlayer?.play()
+            resumeCloudPlayback()
             playbackState.status = .playing
         case .system:
-#if os(iOS) || os(watchOS)
+#if os(iOS) || os(watchOS) || os(macOS)
             _ = speechSynthesizer.continueSpeaking()
             playbackState.status = .playing
 #endif
@@ -300,12 +333,7 @@ public final class TTSManager: NSObject, ObservableObject {
     }
 
     public func stop() {
-        preparationGeneration &+= 1
-        preparationTask?.cancel()
-        preparationTask = nil
-        workerGeneration &+= 1
-        workerTask?.cancel()
-        workerTask = nil
+        cancelPlaybackTasks()
         stopCurrentPlayback(clearQueueOnly: false)
         deactivateTTSAudioSessionIfNeeded()
         clearPrefetchState()
@@ -315,7 +343,42 @@ public final class TTSManager: NSObject, ObservableObject {
         activeNetworkClips = [:]
         isSpeaking = false
         currentSpeakingMessageID = nil
-        playbackState = .init(speed: settingsStore.playbackSpeed)
+        playbackState = .init(speed: settings.playbackSpeed)
+    }
+
+    /// 锁定、恢复数据库和退出前，等待已取消的网络、预处理、音频和导出任务真正结束。
+    public func stopAndWait(clearHistory: Bool = false) async {
+        stop()
+        let pending = retiringTask, generation = workerGeneration
+#if canImport(AVFoundation)
+        let audioControl = audioControlTask
+#endif
+        await pending?.value
+#if canImport(AVFoundation)
+        await audioControl?.value
+#endif
+        guard generation == workerGeneration else { return }
+        retiringTask = nil
+        if clearHistory {
+            lastReplayRequest = nil
+            lastNetworkChunkTexts = []; lastNetworkAudioClips = []
+            pendingReplayChunkTexts = []; pendingReplayAudioClips = []
+            cachedNetworkAudioExport = nil
+        }
+    }
+
+    private func cancelPlaybackTasks() {
+        preparationGeneration &+= 1; workerGeneration &+= 1; audioExportRevision &+= 1
+        let preparation = preparationTask, worker = workerTask, export = audioExportTask
+        preparation?.cancel(); worker?.cancel(); export?.cancel()
+        preparationTask = nil; workerTask = nil; audioExportTask = nil
+        let previous = retiringTask
+        retiringTask = Task {
+            await previous?.value
+            await preparation?.value
+            await worker?.value
+            await export?.value
+        }
     }
 
     /// 根视图在场景进入或离开后台时调用，确保朗读行为与用户设置一致。
@@ -330,28 +393,26 @@ public final class TTSManager: NSObject, ObservableObject {
 
     public func seekBy(seconds: TimeInterval) {
 #if canImport(AVFoundation)
-        guard let audioPlayer else { return }
-        let destination = max(0, min(audioPlayer.duration, audioPlayer.currentTime + seconds))
-        audioPlayer.currentTime = destination
+        guard let playback = audioPlayback else { return }
+        let destination = max(0, min(playbackState.duration, playbackState.position + seconds))
+        enqueueAudioControl { try Task.checkCancellation(); await playback.seek(to: destination) }
         playbackState.position = destination
 #endif
     }
 
     public func setPlaybackSpeed(_ speed: Float) {
 #if canImport(AVFoundation)
-        guard let audioPlayer else {
-            playbackState.speed = speed
-            return
+        let speed = speed.ttsClamped(to: 0.5...2)
+        if let playback = audioPlayback {
+            enqueueAudioControl { try Task.checkCancellation(); await playback.setSpeed(speed) }
         }
-        audioPlayer.enableRate = true
-        audioPlayer.rate = speed
         playbackState.speed = speed
 #endif
     }
 
 }
 
-#if os(iOS) || os(watchOS)
+#if os(iOS) || os(watchOS) || os(macOS)
 // 语音代理继承 Sendable；在类型定义文件声明一致性，让编译器检查主线程隔离。
 extension TTSManager: AVSpeechSynthesizerDelegate {}
 #endif

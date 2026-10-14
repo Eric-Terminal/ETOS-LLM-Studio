@@ -1,10 +1,11 @@
 import Foundation
 import SwiftUI
 
-/// 两端的导入入口与系统文件打开入口共用同一套快照检查、确认和恢复流程。
+/// 各端的导入入口与系统文件打开入口共用同一套快照检查、确认和恢复流程。
 public struct SnapshotImportRestoreView: View {
     private let fileURL: URL
     private let onDismiss: () -> Void
+    private let restoreOperation: (@MainActor (URL, String?) async throws -> Void)?
     @State private var inspection: SnapshotRestoreService.InspectionResult?
     @State private var isInspecting = true
     @State private var isRestoring = false
@@ -12,9 +13,14 @@ public struct SnapshotImportRestoreView: View {
     @State private var statusMessage: String?
     @State private var errorMessage: String?
 
-    public init(fileURL: URL, onDismiss: @escaping () -> Void) {
+    public init(
+        fileURL: URL,
+        restoreOperation: (@MainActor (URL, String?) async throws -> Void)? = nil,
+        onDismiss: @escaping () -> Void
+    ) {
         self.fileURL = fileURL
         self.onDismiss = onDismiss
+        self.restoreOperation = restoreOperation
     }
 
     public var body: some View {
@@ -94,6 +100,16 @@ public struct SnapshotImportRestoreView: View {
             }
         }
         .interactiveDismissDisabled(isRestoring)
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(id: "snapshot-import-restore", title: NSLocalizedString("从快照恢复", comment: ""), documents: SnapshotBackupGuideSupport.documents),
+            snapshot: { GuidePageSnapshot(fields: [
+                "file_name": GuideSnapshotField(label: NSLocalizedString("文件名", comment: ""), value: .string(fileURL.lastPathComponent), access: .readOnly),
+                "encrypted": GuideSnapshotField(label: NSLocalizedString("设置密码", comment: ""), value: .bool(inspection?.requiresPassword == true), access: .readOnly),
+                "restoring": GuideSnapshotField(label: NSLocalizedString("正在恢复快照…", comment: ""), value: .bool(isRestoring), access: .readOnly),
+                "requires_manual_action": GuideSnapshotField(label: NSLocalizedString("恢复", comment: ""), value: .bool(true), access: .readOnly),
+                "password": GuideSnapshotField(label: NSLocalizedString("密码", comment: ""), value: .string(GuideSnapshotField.hiddenValue), access: .writeOnly)
+            ]) }
+        )
         .task {
             do {
                 inspection = try await Task.detached(priority: .userInitiated) {
@@ -112,10 +128,16 @@ public struct SnapshotImportRestoreView: View {
         let restorePassword = inspection?.requiresPassword == true ? password : nil
         Task {
             do {
-                try await Task.detached(priority: .userInitiated) {
-                    try SnapshotRestoreService.restoreSnapshot(from: fileURL, password: restorePassword)
-                }.value
-                AppConfigStore.shared.reloadFromPersistentStore()
+                if let restoreOperation {
+                    try await restoreOperation(fileURL, restorePassword)
+                } else {
+                    await AppConfigStore.shared.flushPendingWrites()
+                    try await Task.detached(priority: .userInitiated) {
+                        try SnapshotRestoreService.restoreSnapshot(from: fileURL, password: restorePassword)
+                    }.value
+                    await AppConfigStore.shared.reloadFromPersistentStoreAndWait()
+                }
+                password = ""
                 statusMessage = NSLocalizedString("快照已恢复。若当前界面仍显示旧数据，请返回聊天列表后重新进入。", comment: "")
             } catch {
                 errorMessage = error.localizedDescription

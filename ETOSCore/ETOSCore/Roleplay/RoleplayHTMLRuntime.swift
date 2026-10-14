@@ -257,14 +257,16 @@ public enum RoleplayHTMLDocumentFactory {
     public static func makeVariableUpdateScript(
         variableSnapshot: RoleplayVariableSnapshot,
         messageID: UUID,
-        messageVersionIndex: Int
+        messageVersionIndex: Int,
+        scriptID: UUID? = nil,
+        scriptInitialVariables: [String: JSONValue] = [:]
     ) -> String {
         let scopedVariables = makeScopedVariables(
             variableSnapshot: variableSnapshot,
             messageID: messageID,
             messageVersionIndex: messageVersionIndex,
-            scriptID: nil,
-            scriptInitialVariables: [:]
+            scriptID: scriptID,
+            scriptInitialVariables: scriptInitialVariables
         )
         let messageVariables = variableSnapshot.messageVariables(
             messageID: messageID,
@@ -467,7 +469,7 @@ public enum RoleplayHTMLDocumentFactory {
     additional: \(additionalWorldbooksJSON)
   };
   const currentScriptID = \(scriptIDJSON);
-  if (currentScriptID && !scriptVariableScopes[currentScriptID]) {
+  if (currentScriptID) {
     scriptVariableScopes[currentScriptID] = clone(scopedVariables.script || {});
   }
   const currentMessageIndex = \(currentMessageIndex);
@@ -1376,15 +1378,14 @@ public enum RoleplayHTMLDocumentFactory {
   window.__etosReplaceVariableState = (nextScopes, nextMessageVariables) => {
     const previous = api.getAllVariables();
     scopedVariables = clone(nextScopes || {});
-    if (!currentScriptID) {
-      const message = chatMessages[currentMessageIndex];
-      if (message) {
-        const swipe = message.swipe_id || 0;
-        message.data = clone(nextMessageVariables || {});
-        message.swipes_data ||= [];
-        message.swipes_data[swipe] = message.data;
-        scopedVariables.message = clone(message.data);
-      }
+    if (currentScriptID) scriptVariableScopes[currentScriptID] = clone(scopedVariables.script || {});
+    const message = chatMessages[currentMessageIndex];
+    if (message) {
+      const swipe = message.swipe_id || 0;
+      message.data = clone(nextMessageVariables || {});
+      message.swipes_data ||= [];
+      message.swipes_data[swipe] = message.data;
+      scopedVariables.message = clone(message.data);
     }
     return emitLocal('mag_variable_update_ended', api.getAllVariables(), previous);
   };
@@ -1475,7 +1476,10 @@ public enum RoleplayHTMLDocumentFactory {
     }
 
     private static func jsonLiteral(_ value: JSONValue) -> String {
-        guard let data = try? JSONEncoder().encode(value), let output = String(data: data, encoding: .utf8) else {
+        let encoder = JSONEncoder()
+        // 相同变量对象必须生成相同更新脚本，避免字典遍历顺序引起重复的变量更新事件。
+        encoder.outputFormatting = .sortedKeys
+        guard let data = try? encoder.encode(value), let output = String(data: data, encoding: .utf8) else {
             return "{}"
         }
         return output

@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import os
 
 extension ChatService {
     public func loadRoleplayCharacters() -> [RoleplayCharacter] {
@@ -44,28 +45,34 @@ extension ChatService {
     @discardableResult
     public func importRoleplayCard(data: Data, fileName: String) throws -> RoleplayCardImportResult {
         var result = try RoleplayCardImportService().importCard(from: data, fileName: fileName)
-        if let worldbook = result.embeddedWorldbook {
-            worldbookStore.upsertWorldbook(worldbook)
-            result.character.embeddedWorldbookID = worldbook.id
-        }
-        result.character.assets = try RoleplayAssetStore.install(result.assets, characterID: result.character.id)
-        if let avatar = result.avatarPNGData {
-            let avatarFileName = "roleplay-character-\(result.character.id.uuidString).png"
-            if Persistence.saveImage(avatar, fileName: avatarFileName) != nil {
-                result.character.avatarFileName = avatarFileName
+        var createdWorldbookID: UUID?
+        do {
+            if let worldbook = result.embeddedWorldbook {
+                try worldbookStore.saveDraft(worldbook, replacing: nil)
+                createdWorldbookID = worldbook.id
+                result.character.embeddedWorldbookID = worldbook.id
             }
-        }
-        if let mainIcon = result.assets.first(where: { $0.asset.type == "icon" && $0.asset.name == "main" })
-            ?? result.assets.first(where: { $0.asset.type == "icon" }),
-           let data = mainIcon.data {
-            let ext = mainIcon.asset.fileExtension.isEmpty ? "png" : mainIcon.asset.fileExtension
-            let avatarFileName = "roleplay-character-\(result.character.id.uuidString).\(ext)"
-            if Persistence.saveImage(data, fileName: avatarFileName) != nil {
-                result.character.avatarFileName = avatarFileName
+            let assets = try RoleplayAssetStore.install(result.assets, characterID: result.character.id)
+            result.character.assets = assets
+            if let icon = assets.first(where: { $0.type == "icon" && $0.name == "main" && $0.localFileName != nil })
+                ?? assets.first(where: { $0.type == "icon" && $0.localFileName != nil }) {
+                // 已安装的资源名经过清理，可直接复用；避免重复头像和外部扩展名拼接路径。
+                result.character.avatarFileName = icon.localFileName
+            } else if let avatar = result.avatarPNGData {
+                let name = "roleplay-character-\(result.character.id.uuidString).png"
+                guard Persistence.saveImage(avatar, fileName: name) != nil else { throw RoleplayDraftWriteError.persistenceFailed }
+                result.character.avatarFileName = name
             }
+            try roleplayStore.saveCharacterDraft(result.character, replacing: nil)
+            return result
+        } catch {
+            if let name = result.character.avatarFileName, !(result.character.assets ?? []).contains(where: { $0.localFileName == name }) {
+                Persistence.deleteImage(fileName: name)
+            }
+            RoleplayAssetStore.deleteFiles(for: result.character.assets ?? [])
+            if let createdWorldbookID { _ = worldbookStore.deleteWorldbook(id: createdWorldbookID) }
+            throw error
         }
-        roleplayStore.upsertCharacter(result.character)
-        return result
     }
 
     @discardableResult
@@ -86,11 +93,8 @@ extension ChatService {
     }
 
     public func deleteRoleplayCharacter(id: UUID) {
-        if let character = roleplayStore.character(id: id),
-           let worldbookID = character.embeddedWorldbookID {
-            worldbookStore.deleteWorldbook(id: worldbookID)
-        }
-        roleplayStore.deleteCharacter(id: id)
+        guard let character = roleplayStore.character(id: id), roleplayStore.deleteCharacter(id: id, expected: character) else { return }
+        if let worldbookID = character.embeddedWorldbookID { _ = worldbookStore.deleteWorldbook(id: worldbookID) }
     }
 
     public func bindRoleplay(
@@ -103,7 +107,25 @@ extension ChatService {
         helperScriptsEnabled: Bool = true,
         seedGreetingIfEmpty: Bool = true
     ) {
-        let previousBinding = roleplayStore.binding(sessionID: sessionID)
+        let draft = SessionRoleplayBinding(
+            sessionID: sessionID, characterIDs: characterIDs, personaID: personaID,
+            additionalWorldbookIDs: additionalWorldbookIDs, selectedGreetingIndex: selectedGreetingIndex,
+            htmlRenderingEnabled: htmlRenderingEnabled, helperScriptsEnabled: helperScriptsEnabled
+        )
+        do {
+            try saveRoleplayBindingDraft(draft, replacing: roleplayStore.binding(sessionID: sessionID), seedGreetingIfEmpty: seedGreetingIfEmpty)
+        } catch { logger.error("无法保存会话角色绑定：\(error.localizedDescription)") }
+    }
+
+    public func saveRoleplayBindingDraft(
+        _ draft: SessionRoleplayBinding,
+        replacing previousBinding: SessionRoleplayBinding?,
+        seedGreetingIfEmpty: Bool = true
+    ) throws {
+        let sessionID = draft.sessionID
+        let characterIDs = draft.characterIDs
+        let personaID = draft.personaID
+        let selectedGreetingIndex = draft.selectedGreetingIndex
         let selectedCharacter = characterIDs.first.flatMap { roleplayStore.character(id: $0) }
         let greetings = selectedCharacter.map { [$0.firstMessage] + $0.alternateGreetings } ?? []
         let normalizedGreetingIndex = greetings.isEmpty
@@ -113,14 +135,8 @@ extension ChatService {
         let greetingSelectionChanged = previousBinding.map {
             $0.characterIDs != characterIDs || $0.selectedGreetingIndex != normalizedGreetingIndex
         } ?? false
-        let canReplaceSeededGreeting = seedGreetingIfEmpty
-            && greetingSelectionChanged
-            && messages.count == 1
-            && messages[0].role == .assistant
-        let shouldSeedGreeting = seedGreetingIfEmpty && (messages.isEmpty || canReplaceSeededGreeting)
         let inferredSeededGreetingMessageID: UUID? = {
             guard previousBinding?.seededGreetingMessageID == nil,
-                  !greetingSelectionChanged,
                   let firstMessage = messages.first,
                   firstMessage.role == .assistant,
                   let previousBinding,
@@ -138,26 +154,33 @@ extension ChatService {
             ).trimmingCharacters(in: .whitespacesAndNewlines)
             return firstMessage.content == previousGreeting ? firstMessage.id : nil
         }()
+        // 单条助手消息也可能是导入或手工编辑的历史；只有已确认的开场白可随选择替换。
+        let previousSeededGreetingMessageID = previousBinding?.seededGreetingMessageID ?? inferredSeededGreetingMessageID
+        let canReplaceSeededGreeting = seedGreetingIfEmpty
+            && greetingSelectionChanged
+            && messages.count == 1
+            && messages[0].role == .assistant
+            && messages[0].id == previousSeededGreetingMessageID
+        let shouldSeedGreeting = seedGreetingIfEmpty && (messages.isEmpty || canReplaceSeededGreeting)
         let seededGreetingMessageID: UUID? = {
             if shouldSeedGreeting {
                 return canReplaceSeededGreeting ? messages[0].id : UUID()
             }
             return greetingSelectionChanged
                 ? nil
-                : previousBinding?.seededGreetingMessageID ?? inferredSeededGreetingMessageID
+                : previousSeededGreetingMessageID
         }()
         let binding = SessionRoleplayBinding(
             sessionID: sessionID,
             characterIDs: characterIDs,
             personaID: personaID,
-            additionalWorldbookIDs: additionalWorldbookIDs,
+            additionalWorldbookIDs: draft.additionalWorldbookIDs,
             selectedGreetingIndex: normalizedGreetingIndex,
-            htmlRenderingEnabled: htmlRenderingEnabled,
-            helperScriptsEnabled: helperScriptsEnabled,
+            htmlRenderingEnabled: draft.htmlRenderingEnabled,
+            helperScriptsEnabled: draft.helperScriptsEnabled,
             seededGreetingMessageID: seededGreetingMessageID
         )
-        roleplayStore.upsertBinding(binding)
-        roleplayStore.setPreferredPersonaID(personaID)
+        try roleplayStore.saveBindingDraft(binding, replacing: previousBinding)
         var variableSnapshot = roleplayStore.variableSnapshot(sessionID: sessionID)
         if let character = selectedCharacter {
             variableSnapshot.character.merge(character.initialVariables) { _, new in new }
@@ -253,5 +276,11 @@ extension ChatService {
 
     public func unbindRoleplay(sessionID: UUID) {
         roleplayStore.removeBinding(sessionID: sessionID)
+    }
+
+    public func removeRoleplayBindingDraft(_ original: SessionRoleplayBinding) throws {
+        guard roleplayStore.removeBinding(sessionID: original.sessionID, expected: original) else {
+            throw RoleplayDraftWriteError.changedExternally
+        }
     }
 }

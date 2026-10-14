@@ -22,8 +22,11 @@ struct ChatUserMessagePreviewTests {
         // 不让出 MainActor：断言的就是后台气泡任务尚未运行的首帧。
         #expect(shortState.visualMessage.content == short.content)
         #expect(!shortState.isUserContentTruncated)
+        #expect(shortState.textFontSnapshot == snapshot.userContentPreviews[short.id]?.fontSnapshot)
+        #expect(shortState.textFontSnapshot != nil)
         #expect(longState.visualMessage.content == String(repeating: "长", count: 20) + "…")
         #expect(longState.isUserContentTruncated)
+        #expect(longState.textFontSnapshot == snapshot.userContentPreviews[long.id]?.fontSnapshot)
         await model.visualMessagePrepareTasks[short.id]?.value
         await model.visualMessagePrepareTasks[long.id]?.value
     }

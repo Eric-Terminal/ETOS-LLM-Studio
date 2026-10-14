@@ -13,6 +13,7 @@ import os.log
 extension LocalDebugServer {
     /// 添加调试日志
     public func addLog(_ message: String, type: DebugLogEntry.LogType = .info) {
+        if let token = LocalDebugCommandContext.connectionToken, !isCurrentConnection(token) { return }
         // 心跳日志只记录到系统日志，不显示在 UI 中，避免占用调试面板空间。
         if type == .heartbeat {
             logger.debug("[\(type)] \(message)")

@@ -32,7 +32,9 @@ public struct ProviderAPIKeyManagementForm: View {
                             SecureField(NSLocalizedString("API Key", comment: ""), text: textBinding($entry.value))
                         }
                     }
+                    #if !os(macOS)
                     .textInputAutocapitalization(.never)
+                    #endif
                     .autocorrectionDisabled()
                     TextField(NSLocalizedString("备注（可选）", comment: ""), text: textBinding($entry.note))
                     Button(role: .destructive) {

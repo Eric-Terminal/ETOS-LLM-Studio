@@ -66,6 +66,7 @@ public actor LocalAgentFileToolExecutor {
     let guestFileSupport: LocalAgentGuestFileSupport
     var requestCounter = UInt64(Date().timeIntervalSince1970 * 1_000_000)
     private var mutationsByRunID: [UUID: [MutationEntry]] = [:]
+    private var runActivities: [UUID: LocalLinuxActivityLease] = [:]
     private var activeRunOperations = Set<UUID>()
     private var runOperationWaiters: [UUID: [CheckedContinuation<Void, Never>]] = [:]
     private let maximumUndoEntriesPerRun = 64
@@ -106,9 +107,18 @@ public actor LocalAgentFileToolExecutor {
     }
 
     public func execute(toolName: String, argumentsJSON: String) async throws -> String {
+        let activity = try LocalLinuxActivityBarrier.shared.begin()
+        defer { activity.finish() }
         var arguments = try decode(argumentsJSON)
         let trustedContext = removeTrustedContext(from: &arguments)
         let acquiredRunID = trustedContext?.runID
+        if let trustedContext {
+            try trustedRunValidator(trustedContext.runID, trustedContext.sessionID)
+            // App 文件工具也可能拥有撤销快照；没有 Linux Run 记录时仍需由宿主收尾。
+            if runActivities[trustedContext.runID] == nil {
+                runActivities[trustedContext.runID] = try LocalLinuxActivityBarrier.shared.begin()
+            }
+        }
         if let acquiredRunID {
             await acquireRunOperation(acquiredRunID)
         }
@@ -118,6 +128,7 @@ public actor LocalAgentFileToolExecutor {
             }
         }
         if let trustedContext {
+            try activity.checkCancellation()
             try trustedRunValidator(trustedContext.runID, trustedContext.sessionID)
         }
         let routedPaths = try pathArguments(in: arguments).map { key, value in
@@ -606,6 +617,8 @@ public actor LocalAgentFileToolExecutor {
 
     /// Run 结束后，撤销入口已不再可达，因此同步清理内存记录与 guest/app 快照。
     public func finishRun(id runID: UUID) async {
+        let activity = runActivities.removeValue(forKey: runID)
+        defer { activity?.finish() }
         await acquireRunOperation(runID)
         defer { releaseRunOperation(runID) }
         let entries = mutationsByRunID.removeValue(forKey: runID) ?? []
@@ -615,6 +628,11 @@ public actor LocalAgentFileToolExecutor {
                 await guestFileSupport.discard(preparation)
             }
         }
+    }
+
+    public func finishActiveRunsForHostDataOperation() async {
+        precondition(LocalLinuxActivityBarrier.shared.isSuspended)
+        for id in Array(runActivities.keys) { await finishRun(id: id) }
     }
 
     static func validateTrustedConversationRun(_ run: ConversationRun?, sessionID: UUID) throws {
@@ -844,6 +862,11 @@ public actor LocalAgentFileToolExecutor {
 
     private func route(_ rawPath: String) throws -> RoutedPath {
         let value = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        #if os(macOS)
+        if value.hasPrefix("linux://") || value.hasPrefix("mount://") {
+            throw LocalLinuxRuntimeError.invalidPath(rawPath)
+        }
+        #endif
         if value.hasPrefix("linux://") {
             return RoutedPath(backend: .linux, original: rawPath, path: try normalizedGuestPath(String(value.dropFirst("linux://".count))))
         }

@@ -506,7 +506,7 @@ extension AppToolManager {
 }
 
 extension AppToolManager {
-    static var customJSToolsDirectoryURL: URL {
+    nonisolated static var customJSToolsDirectoryURL: URL {
         let baseURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         return baseURL.appendingPathComponent("CustomJSTools", isDirectory: true)
@@ -530,7 +530,7 @@ extension AppToolManager {
         .dictionary([:])
     }
 
-    static func loadCustomJSToolsFromDisk() -> [AppToolCustomJSTool] {
+    nonisolated static func loadCustomJSToolsFromDisk() -> [AppToolCustomJSTool] {
         let rootURL = customJSToolsDirectoryURL
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

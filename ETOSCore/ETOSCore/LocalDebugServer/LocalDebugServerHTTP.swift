@@ -43,7 +43,7 @@ extension LocalDebugServer {
 
     /// 测试 HTTP 连接
     func testHTTPConnection(host: String, port: String, completion: @escaping (Bool, Error?) -> Void) {
-        guard let url = URL(string: "http://\(host):\(port)/ping") else {
+        guard let session = httpSession, let url = URL(string: "http://\(host):\(port)/ping") else {
             completion(false, nil)
             return
         }
@@ -52,18 +52,18 @@ extension LocalDebugServer {
         request.httpMethod = "GET"
         request.timeoutInterval = 5.0
 
-        httpSession?.securedDataTask(with: request) { [weak self] data, response, error in
-            if let error = error {
-                self?.logger.error("HTTP 测试失败: \(error.localizedDescription)")
+        let previous = httpConnectionTask, previousPoll = httpPollTask, token = connectionToken
+        httpConnectionTask = Task { [weak self] in
+            await previous?.value
+            await previousPoll?.value
+            guard !Task.isCancelled, self?.isCurrentConnection(token) == true else { return }
+            do {
+                let (_, response) = try await session.securedData(for: request)
+                guard !Task.isCancelled, self?.isCurrentConnection(token) == true else { return }
+                completion((response as? HTTPURLResponse)?.statusCode == 200, nil)
+            } catch {
+                guard !Task.isCancelled, self?.isCurrentConnection(token) == true else { return }
                 completion(false, error)
-                return
-            }
-
-            if let httpResponse = response as? HTTPURLResponse,
-               httpResponse.statusCode == 200 {
-                completion(true, nil)
-            } else {
-                completion(false, nil)
             }
         }
     }
@@ -112,168 +112,60 @@ extension LocalDebugServer {
 
     /// 执行一次 HTTP 轮询
     func performHTTPPoll(host: String, port: String, connectionToken token: UUID) {
-        if isTransferring {
-            return
-        }
-
-        guard let url = URL(string: "http://\(host):\(port)/poll") else {
-            return
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 3.0
-
-        let deviceInfo: [String: Any] = [
+        guard isCurrentConnection(token), !isTransferring, commandQueue.isEmpty, httpPollID == nil,
+              let session = httpSession, let url = URL(string: "http://\(host):\(port)/poll") else { return }
+        let deviceInfo = LocalDebugJSONObject(value: [
             "device_id": getDeviceIdentifier(),
-            "platform": "watchOS",
+            "platform": Self.debugPlatformName,
             "timestamp": Date().timeIntervalSince1970
-        ]
-
-        if let jsonData = try? JSONSerialization.data(withJSONObject: deviceInfo) {
-            request.httpBody = jsonData
-        }
-
-        httpSession?.securedDataTask(with: request) { [weak self] data, response, error in
-            guard let self = self else { return }
-
-            if let error = error {
-                Task { @MainActor in
-                    guard self.isCurrentConnection(token) else { return }
-                    self.httpFailureCount += 1
-                    self.addLog("轮询失败: \(error.localizedDescription)", type: .error)
-                    if self.httpFailureCount >= self.maxHTTPFailures {
-                        self.addLog("连续失败 \(self.httpFailureCount) 次，断开连接", type: .error)
-                        self.handleConnectionLost(errorMessage: self.describeHTTPConnectionFailure(error))
-                    }
+        ])
+        let id = UUID(), previous = httpPollTask
+        httpPollID = id
+        httpPollTask = Task { [weak self] in
+            await previous?.value
+            guard let self else { return }
+            defer { if httpPollID == id { httpPollID = nil } }
+            guard !Task.isCancelled, isCurrentConnection(token) else { return }
+            do {
+                let worker = Task.detached(priority: .utility) { try deviceInfo.encoded() }
+                let body = try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
+                guard !Task.isCancelled, isCurrentConnection(token) else { return }
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.timeoutInterval = 3.0
+                request.httpBody = body
+                let (data, response) = try await session.securedData(for: request)
+                guard !Task.isCancelled, isCurrentConnection(token) else { return }
+                guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+                    recordHTTPPollFailure(nil)
+                    return
                 }
-                return
-            }
-
-            guard let data = data,
-                  let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200 else {
-                Task { @MainActor in
-                    guard self.isCurrentConnection(token) else { return }
-                    self.httpFailureCount += 1
-                    if self.httpFailureCount >= self.maxHTTPFailures {
-                        self.addLog("响应异常，断开连接", type: .error)
-                        self.handleConnectionLost(errorMessage: self.describeHTTPConnectionFailure(nil))
-                    }
-                }
-                return
-            }
-
-            Task { @MainActor in
-                guard self.isCurrentConnection(token) else { return }
-                self.httpFailureCount = 0
-            }
-
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let command = json["command"] as? String {
-                Task { @MainActor in
-                    guard self.isCurrentConnection(token) else { return }
-                    if command == "none" {
-                        self.addLog("心跳", type: .heartbeat)
-                    } else {
-                        self.addLog("收到命令: \(command)", type: .receive)
-                        self.handleReceivedMessage(data)
-                    }
-                }
+                httpFailureCount = 0
+                handleReceivedMessage(data)
+            } catch {
+                guard !Task.isCancelled, isCurrentConnection(token) else { return }
+                recordHTTPPollFailure(error)
             }
         }
     }
 
-    /// 通过 HTTP 发送响应
-    func sendHTTPResponse(_ response: [String: Any], host: String, port: String) {
-        guard let url = URL(string: "http://\(host):\(port)/response") else {
-            return
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 30.0
-
-        if let jsonData = try? JSONSerialization.data(withJSONObject: response) {
-            request.httpBody = jsonData
-
-            let dataSize = jsonData.count
-            let path = response["path"] as? String ?? ""
-            let status = response["status"] as? String ?? ""
-
-            Task { @MainActor in
-                if dataSize > 1_000_000 {
-                    self.addLog("发送大响应: \(String(format: "%.2f", Double(dataSize) / 1_000_000)) MB", type: .send)
-                } else if !path.isEmpty {
-                    self.addLog("发送: \(path) (\(self.formatSize(dataSize)))", type: .send)
-                } else {
-                    self.addLog("响应: \(status)", type: .send)
-                }
-            }
-
-            httpSession?.securedDataTask(with: request) { [weak self] _, _, error in
-                guard let self = self else { return }
-                Task { @MainActor in
-                    if let error = error {
-                        self.addLog("发送失败: \(error.localizedDescription)", type: .error)
-                    }
-                }
-            }
+    private func recordHTTPPollFailure(_ error: Error?) {
+        httpFailureCount += 1
+        if let error { addLog(String(format: NSLocalizedString("Debug poll failed: %@", comment: "调试轮询失败日志"), error.localizedDescription), type: .error) }
+        if httpFailureCount >= maxHTTPFailures {
+            addLog(String(format: NSLocalizedString("Disconnected after %d failed polls.", comment: "调试轮询断开日志"), httpFailureCount), type: .error)
+            handleConnectionLost(errorMessage: describeHTTPConnectionFailure(error))
         }
     }
 
     /// 异步发送 HTTP 响应（等待完成）
     /// 确保每个请求完全完成后再返回，避免并发导致的乱序问题。
     func sendHTTPResponseAsync(_ response: [String: Any]) async {
-        let components = serverURL.split(separator: ":").map(String.init)
-        let host = components.first ?? ""
-        let port = components.count > 1 ? components[1] : "7654"
-
-        guard let url = URL(string: "http://\(host):\(port)/response") else {
-            logger.error("无效的 URL: http://\(host):\(port)/response")
-            return
-        }
-
-        guard let session = httpSession else {
-            logger.error("httpSession 为 nil，无法发送响应")
-            return
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("close", forHTTPHeaderField: "Connection")
-        request.timeoutInterval = 60.0
-
-        let jsonData: Data
-        do {
-            jsonData = try JSONSerialization.data(withJSONObject: response)
-        } catch {
-            logger.error("JSON 序列化失败: \(error.localizedDescription), 响应键: \(response.keys.joined(separator: ", "))")
-            return
-        }
-        request.httpBody = jsonData
-
-        let index = response["index"] as? Int
-        let isComplete = response["stream_complete"] as? Bool ?? false
-
-        do {
-            let (_, httpResponse) = try await session.securedData(for: request)
-            if let httpRes = httpResponse as? HTTPURLResponse {
-                if httpRes.statusCode != 200 {
-                    logger.error("服务器返回错误状态码: \(httpRes.statusCode)")
-                } else if isComplete {
-                    logger.info("完成信号已确认送达服务器")
-                }
-            }
-
-            if index != nil && !isComplete {
-                try? await Task.sleep(nanoseconds: 10_000_000)
-            }
-        } catch {
-            logger.error("发送响应失败 (index=\(index ?? -1)): \(error.localizedDescription)")
+        guard canContinueDebugCommand else { return }
+        await sendResponse(response, streaming: true)
+        if response["index"] != nil, response["stream_complete"] as? Bool != true, canContinueDebugCommand {
+            try? await Task.sleep(nanoseconds: 10_000_000)
         }
     }
 }

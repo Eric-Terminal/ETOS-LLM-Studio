@@ -19,7 +19,7 @@ public final class RoleplayStore: @unchecked Sendable {
     static let variablesBlobKey = "roleplay_variables_v1"
     static let sharedVariablesBlobKey = "roleplay_shared_variables_v1"
 
-    private let queue = DispatchQueue(label: "com.ETOS.LLM.Studio.roleplay.store")
+    let queue = DispatchQueue(label: "com.ETOS.LLM.Studio.roleplay.store")
     private var cachedLibrary: RoleplayLibrarySnapshot?
     private var cachedVariables: [UUID: RoleplayVariableSnapshot]?
     private var cachedSharedVariables: RoleplaySharedVariableSnapshot?
@@ -72,7 +72,7 @@ public final class RoleplayStore: @unchecked Sendable {
     }
 
     public func upsertCharacter(_ character: RoleplayCharacter) {
-        queue.sync {
+        queue.sync { () -> Void in
             var library = loadLibraryUnlocked()
             var value = character
             value.updatedAt = Date()
@@ -86,29 +86,33 @@ public final class RoleplayStore: @unchecked Sendable {
         notifyChange(kind: Self.libraryChangeKind)
     }
 
-    public func deleteCharacter(id: UUID) {
-        let character = character(id: id)
-        let avatarFileName = character?.avatarFileName
-        queue.sync {
+    @discardableResult
+    public func deleteCharacter(id: UUID, expected: RoleplayCharacter? = nil) -> Bool {
+        let character: RoleplayCharacter? = queue.sync {
             var library = loadLibraryUnlocked()
+            guard let character = library.characters.first(where: { $0.id == id }),
+                  expected == nil || character == expected else { return nil }
             library.characters.removeAll { $0.id == id }
             for index in library.bindings.indices {
                 library.bindings[index].characterIDs.removeAll { $0 == id }
             }
-            saveLibraryUnlocked(library)
+            guard saveLibraryUnlocked(library) else { return nil }
             var shared = loadSharedVariablesUnlocked()
             shared.characters.removeValue(forKey: id)
             saveSharedVariablesUnlocked(shared)
+            return character
         }
-        if let avatarFileName {
+        guard let character else { return false }
+        if let avatarFileName = character.avatarFileName, !(character.assets ?? []).contains(where: { $0.localFileName == avatarFileName }) {
             Persistence.deleteImage(fileName: avatarFileName)
         }
-        RoleplayAssetStore.deleteFiles(for: character?.assets ?? [])
+        RoleplayAssetStore.deleteFiles(for: character.assets ?? [])
         notifyChange(kind: Self.libraryChangeKind)
+        return true
     }
 
     public func upsertPersona(_ persona: PersonaProfile) {
-        queue.sync {
+        queue.sync { () -> Void in
             var library = loadLibraryUnlocked()
             var value = persona
             value.updatedAt = Date()
@@ -122,10 +126,12 @@ public final class RoleplayStore: @unchecked Sendable {
         notifyChange(kind: Self.libraryChangeKind)
     }
 
-    public func deletePersona(id: UUID) {
-        let avatarFileName = persona(id: id)?.avatarFileName
-        queue.sync {
+    @discardableResult
+    public func deletePersona(id: UUID, expected: PersonaProfile? = nil) -> Bool {
+        let persona: PersonaProfile? = queue.sync {
             var library = loadLibraryUnlocked()
+            guard let persona = library.personas.first(where: { $0.id == id }),
+                  expected == nil || persona == expected else { return nil }
             library.personas.removeAll { $0.id == id }
             if library.preferredPersonaID == id {
                 library.preferredPersonaID = nil
@@ -133,19 +139,22 @@ public final class RoleplayStore: @unchecked Sendable {
             for index in library.bindings.indices where library.bindings[index].personaID == id {
                 library.bindings[index].personaID = nil
             }
-            saveLibraryUnlocked(library)
+            guard saveLibraryUnlocked(library) else { return nil }
             var shared = loadSharedVariablesUnlocked()
             shared.personas.removeValue(forKey: id)
             saveSharedVariablesUnlocked(shared)
+            return persona
         }
-        if let avatarFileName {
+        guard let persona else { return false }
+        if let avatarFileName = persona.avatarFileName {
             Persistence.deleteImage(fileName: avatarFileName)
         }
         notifyChange(kind: Self.libraryChangeKind)
+        return true
     }
 
     public func upsertBinding(_ binding: SessionRoleplayBinding) {
-        queue.sync {
+        queue.sync { () -> Void in
             var library = loadLibraryUnlocked()
             var value = binding
             value.characterIDs = deduplicated(value.characterIDs)
@@ -161,69 +170,76 @@ public final class RoleplayStore: @unchecked Sendable {
         notifyChange(kind: Self.libraryChangeKind)
     }
 
-    public func removeBinding(sessionID: UUID) {
-        queue.sync {
+    @discardableResult
+    public func removeBinding(sessionID: UUID, expected: SessionRoleplayBinding? = nil) -> Bool {
+        let removed = queue.sync {
             var library = loadLibraryUnlocked()
+            guard expected == nil || library.bindings.first(where: { $0.sessionID == sessionID }) == expected else { return false }
             library.bindings.removeAll { $0.sessionID == sessionID }
-            saveLibraryUnlocked(library)
+            guard saveLibraryUnlocked(library) else { return false }
             var variables = loadVariablesUnlocked()
             variables.removeValue(forKey: sessionID)
             saveVariablesUnlocked(variables)
+            return true
         }
+        guard removed else { return false }
         notifyChange(kind: Self.libraryChangeKind)
+        return true
     }
 
-    public func variableSnapshot(sessionID: UUID) -> RoleplayVariableSnapshot {
-        queue.sync {
-            var sessions = loadVariablesUnlocked()
-            var snapshot = sessions[sessionID] ?? .init()
-            var shared = loadSharedVariablesUnlocked()
-            let binding = loadLibraryUnlocked().bindings.first { $0.sessionID == sessionID }
-            var migrated = false
+    public func variableSnapshot(sessionID: UUID, migrateLegacyValues: Bool = true) -> RoleplayVariableSnapshot {
+        queue.sync { variableSnapshotUnlocked(sessionID: sessionID, migrate: migrateLegacyValues) }
+    }
 
-            if shared.globalInitialized != true {
-                if !snapshot.global.isEmpty { shared.global = snapshot.global }
-                shared.globalInitialized = true
-                migrated = true
-            }
-            if shared.presetInitialized != true {
-                if !snapshot.preset.isEmpty { shared.preset = snapshot.preset }
-                shared.presetInitialized = true
-                migrated = true
-            }
-            if let characterID = binding?.characterIDs.first,
-               shared.characters[characterID] == nil,
-               !snapshot.character.isEmpty {
-                shared.characters[characterID] = snapshot.character
-                migrated = true
-            }
-            if let personaID = binding?.personaID,
-               shared.personas[personaID] == nil,
-               !snapshot.persona.isEmpty {
-                shared.personas[personaID] = snapshot.persona
-                migrated = true
-            }
-            if migrated {
-                snapshot.global = [:]
-                snapshot.preset = [:]
-                if binding?.characterIDs.isEmpty == false { snapshot.character = [:] }
-                if binding?.personaID != nil { snapshot.persona = [:] }
-                sessions[sessionID] = snapshot
-                saveVariablesUnlocked(sessions)
-                saveSharedVariablesUnlocked(shared)
-            }
+    func variableSnapshotUnlocked(sessionID: UUID, migrate: Bool = true) -> RoleplayVariableSnapshot {
+        var sessions = loadVariablesUnlocked()
+        var snapshot = sessions[sessionID] ?? .init()
+        var shared = loadSharedVariablesUnlocked()
+        let binding = loadLibraryUnlocked().bindings.first { $0.sessionID == sessionID }
+        var migrated = false
 
-            snapshot.global = shared.global
-            snapshot.preset = shared.preset
-            snapshot.character = binding?.characterIDs.first.flatMap { shared.characters[$0] } ?? [:]
-            snapshot.persona = binding?.personaID.flatMap { shared.personas[$0] } ?? [:]
-            snapshot.extensionScopes = shared.extensions ?? [:]
-            return snapshot
+        if shared.globalInitialized != true {
+            if !snapshot.global.isEmpty { shared.global = snapshot.global }
+            shared.globalInitialized = true
+            migrated = true
         }
+        if shared.presetInitialized != true {
+            if !snapshot.preset.isEmpty { shared.preset = snapshot.preset }
+            shared.presetInitialized = true
+            migrated = true
+        }
+        if let characterID = binding?.characterIDs.first,
+           shared.characters[characterID] == nil,
+           !snapshot.character.isEmpty {
+            shared.characters[characterID] = snapshot.character
+            migrated = true
+        }
+        if let personaID = binding?.personaID,
+           shared.personas[personaID] == nil,
+           !snapshot.persona.isEmpty {
+            shared.personas[personaID] = snapshot.persona
+            migrated = true
+        }
+        // 共享副本成功落库后才能清除会话中的旧值，避免迁移写盘失败时丢失唯一副本。
+        if migrate, migrated, saveSharedVariablesUnlocked(shared) {
+            snapshot.global = [:]
+            snapshot.preset = [:]
+            if binding?.characterIDs.isEmpty == false { snapshot.character = [:] }
+            if binding?.personaID != nil { snapshot.persona = [:] }
+            sessions[sessionID] = snapshot
+            saveVariablesUnlocked(sessions)
+        }
+
+        snapshot.global = shared.global
+        snapshot.preset = shared.preset
+        snapshot.character = binding?.characterIDs.first.flatMap { shared.characters[$0] } ?? [:]
+        snapshot.persona = binding?.personaID.flatMap { shared.personas[$0] } ?? [:]
+        snapshot.extensionScopes = shared.extensions ?? [:]
+        return snapshot
     }
 
     public func saveVariableSnapshot(_ snapshot: RoleplayVariableSnapshot, sessionID: UUID) {
-        queue.sync {
+        queue.sync { () -> Void in
             var variables = loadVariablesUnlocked()
             let binding = loadLibraryUnlocked().bindings.first { $0.sessionID == sessionID }
             var shared = loadSharedVariablesUnlocked()
@@ -259,7 +275,7 @@ public final class RoleplayStore: @unchecked Sendable {
         }
     }
 
-    private func loadLibraryUnlocked() -> RoleplayLibrarySnapshot {
+    func loadLibraryUnlocked() -> RoleplayLibrarySnapshot {
         if let cachedLibrary { return cachedLibrary }
         let loaded = Persistence.loadAuxiliaryBlob(
             RoleplayLibrarySnapshot.self,
@@ -269,7 +285,7 @@ public final class RoleplayStore: @unchecked Sendable {
         return loaded
     }
 
-    private func loadVariablesUnlocked() -> [UUID: RoleplayVariableSnapshot] {
+    func loadVariablesUnlocked() -> [UUID: RoleplayVariableSnapshot] {
         if let cachedVariables { return cachedVariables }
         let loaded = Persistence.loadAuxiliaryBlob(
             [UUID: RoleplayVariableSnapshot].self,
@@ -279,7 +295,7 @@ public final class RoleplayStore: @unchecked Sendable {
         return loaded
     }
 
-    private func loadSharedVariablesUnlocked() -> RoleplaySharedVariableSnapshot {
+    func loadSharedVariablesUnlocked() -> RoleplaySharedVariableSnapshot {
         if let cachedSharedVariables { return cachedSharedVariables }
         let loaded = Persistence.loadAuxiliaryBlob(
             RoleplaySharedVariableSnapshot.self,
@@ -289,19 +305,25 @@ public final class RoleplayStore: @unchecked Sendable {
         return loaded
     }
 
-    private func saveLibraryUnlocked(_ library: RoleplayLibrarySnapshot) {
+    @discardableResult
+    func saveLibraryUnlocked(_ library: RoleplayLibrarySnapshot) -> Bool {
+        guard Persistence.saveAuxiliaryBlob(library, forKey: Self.libraryBlobKey) else { return false }
         cachedLibrary = library
-        _ = Persistence.saveAuxiliaryBlob(library, forKey: Self.libraryBlobKey)
+        return true
     }
 
-    private func saveVariablesUnlocked(_ variables: [UUID: RoleplayVariableSnapshot]) {
+    @discardableResult
+    func saveVariablesUnlocked(_ variables: [UUID: RoleplayVariableSnapshot]) -> Bool {
+        guard Persistence.saveAuxiliaryBlob(variables, forKey: Self.variablesBlobKey) else { return false }
         cachedVariables = variables
-        _ = Persistence.saveAuxiliaryBlob(variables, forKey: Self.variablesBlobKey)
+        return true
     }
 
-    private func saveSharedVariablesUnlocked(_ variables: RoleplaySharedVariableSnapshot) {
+    @discardableResult
+    func saveSharedVariablesUnlocked(_ variables: RoleplaySharedVariableSnapshot) -> Bool {
+        guard Persistence.saveAuxiliaryBlob(variables, forKey: Self.sharedVariablesBlobKey) else { return false }
         cachedSharedVariables = variables
-        _ = Persistence.saveAuxiliaryBlob(variables, forKey: Self.sharedVariablesBlobKey)
+        return true
     }
 
     private func deduplicated(_ ids: [UUID]) -> [UUID] {
@@ -309,7 +331,7 @@ public final class RoleplayStore: @unchecked Sendable {
         return ids.filter { seen.insert($0).inserted }
     }
 
-    private func notifyChange(kind: String) {
+    func notifyChange(kind: String) {
         WatchDatabaseSyncService.markDatabaseChanged(.config)
 
         // 酒馆脚本会在后台更新变量，通知必须回到主线程后再驱动 SwiftUI 状态。

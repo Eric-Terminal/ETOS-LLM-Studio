@@ -13,6 +13,7 @@ extension SyncEngine {
     // MARK: - 打包导出
 
     /// 根据同步选项构建完整同步包
+    /// 包含每日脉冲时，异步调用方应先等待 DailyPulseManager.flushPendingPersistence()。
     public static func buildPackage(
         options: SyncOptions,
         chatService: ChatService = .shared,
@@ -319,13 +320,15 @@ extension SyncEngine {
         }
 
         if package.options.contains(.dailyPulse) {
-            let result = mergeDailyPulseArtifacts(
-                runs: package.dailyPulseRuns,
-                feedbackHistory: package.dailyPulseFeedbackHistory,
-                pendingCuration: package.dailyPulsePendingCuration,
-                externalSignals: package.dailyPulseExternalSignals,
-                tasks: package.dailyPulseTasks
-            )
+            // 与本机反馈和任务快照共用顺序，避免先合并后被尚未落库的旧写入覆盖。
+            let merge = await DailyPulsePersistenceQueue.shared.enqueue {
+                [runs = package.dailyPulseRuns, history = package.dailyPulseFeedbackHistory,
+                 curation = package.dailyPulsePendingCuration, signals = package.dailyPulseExternalSignals,
+                 tasks = package.dailyPulseTasks] in
+                mergeDailyPulseArtifacts(runs: runs, feedbackHistory: history,
+                    pendingCuration: curation, externalSignals: signals, tasks: tasks)
+            }
+            let result = await merge.value
             summary.importedDailyPulseRuns = result.imported
             summary.skippedDailyPulseRuns = result.skipped
             if result.imported > 0 {

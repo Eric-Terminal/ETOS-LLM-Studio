@@ -8,7 +8,7 @@
 
 import Foundation
 
-#if canImport(WebKit) && canImport(UIKit) && !os(watchOS)
+#if canImport(WebKit) && (canImport(UIKit) || os(macOS)) && !os(watchOS)
 final class BrowserDownloadRedirectDelegate: NetworkSecuritySessionDelegate, @unchecked Sendable {
     private let allowedHosts: Set<String>
     private let lock = NSLock()

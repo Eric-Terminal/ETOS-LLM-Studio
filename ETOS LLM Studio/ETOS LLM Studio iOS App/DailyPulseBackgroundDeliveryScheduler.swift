@@ -21,6 +21,7 @@ final class DailyPulseBackgroundDeliveryScheduler {
 
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "DailyPulseBackground")
     private let nextDayBoundaryHour = 0
+    private var scheduleTask: Task<Void, Never>?
 
     private init() {}
 
@@ -29,6 +30,16 @@ final class DailyPulseBackgroundDeliveryScheduler {
     }
 
     func refreshScheduleIfNeeded(referenceDate: Date = Date()) {
+        scheduleTask?.cancel()
+        scheduleTask = Task { [weak self] in
+            await DailyPulseDeliveryCoordinator.shared.waitForSettingsLoad()
+            await DailyPulseManager.shared.waitForPersistedStateLoad()
+            guard !Task.isCancelled, let self else { return }
+            submitLoadedSchedule(referenceDate: referenceDate)
+        }
+    }
+
+    private func submitLoadedSchedule(referenceDate: Date) {
         let coordinator = DailyPulseDeliveryCoordinator.shared
         guard coordinator.reminderEnabled,
               DailyPulseManager.shared.isDailyPulseEnabled else {
@@ -65,6 +76,8 @@ final class DailyPulseBackgroundDeliveryScheduler {
     }
 
     func cancelScheduledRefresh() {
+        scheduleTask?.cancel()
+        scheduleTask = nil
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.taskIdentifier)
     }
 
@@ -74,6 +87,8 @@ final class DailyPulseBackgroundDeliveryScheduler {
         }
 
         let coordinator = DailyPulseDeliveryCoordinator.shared
+        await coordinator.waitForSettingsLoad()
+        guard !Task.isCancelled else { return }
         let didPrepare = await DailyPulseManager.shared.generateForBackgroundDeliveryIfNeeded(
             reminderEnabled: coordinator.reminderEnabled,
             deliveryTimes: coordinator.deliveryTimes,

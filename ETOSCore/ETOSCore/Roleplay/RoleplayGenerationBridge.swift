@@ -15,8 +15,9 @@ extension ChatService {
         sessionID: UUID,
         store: RoleplayStore = .shared
     ) async throws -> String {
+        try Task.checkCancellation()
         let dictionary = config.roleplayDictionary ?? [:]
-        let allMessages = Persistence.loadMessages(for: sessionID)
+        let allMessages = messagesSnapshot(for: sessionID)
         guard var resolved = RoleplayRuntime.resolve(sessionID: sessionID, messages: allMessages, store: store) else {
             let fallback = dictionary["user_input"]?.roleplayString ?? ""
             return try await generateDetachedChatCompletion(
@@ -47,6 +48,7 @@ extension ChatService {
             sessionID: sessionID,
             macroContext: &templateMacroContext
         )
+        try Task.checkCancellation()
         var requestMessages = RoleplayGenerationPromptAssembler.assemble(
             dictionary: dictionary,
             raw: raw,
@@ -63,6 +65,7 @@ extension ChatService {
             : []
         if !scriptIDs.isEmpty {
             for index in requestMessages.indices where requestMessages[index].content.contains("{{") {
+                try Task.checkCancellation()
                 requestMessages[index].content = await RoleplayMacroExpansionBridge.shared.expand(
                     requestMessages[index].content,
                     sessionID: sessionID,
@@ -81,6 +84,7 @@ extension ChatService {
             regexRules: resolved.regexRules,
             macroContext: &templateMacroContext
         )
+        try Task.checkCancellation()
         if templateMacroContext.variables != store.variableSnapshot(sessionID: sessionID) {
             store.saveVariableSnapshot(templateMacroContext.variables, sessionID: sessionID)
         }
@@ -91,6 +95,7 @@ extension ChatService {
                 scriptIDs: scriptIDs
             )
         }
+        try Task.checkCancellation()
         return try await generateDetachedChatCompletion(
             messages: requestMessages,
             temperature: dictionary.roleplayTemperature,

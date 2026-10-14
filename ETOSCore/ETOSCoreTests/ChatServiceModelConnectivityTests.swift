@@ -140,6 +140,66 @@ struct ChatServiceModelConnectivityTests {
         #expect(result.errorMessage?.isEmpty == false)
     }
 
+    @MainActor
+    @Test("取消单模型检查后仍等待原任务，不能立即重启覆盖结果")
+    func singleCancellationKeepsHandle() async {
+        let adapter = ConnectivityProbeMockAdapter()
+        let (service, runnable) = makeService(adapter: adapter, model: Model(modelName: "chat", isActivated: true))
+        let model = SingleModelConnectivityTestViewModel(provider: runnable.provider, model: runnable.model, service: service)
+        model.start()
+        model.cancel()
+        model.start()
+        #expect(model.isRunning)
+        #expect(model.isCancelling)
+        await model.cancelAndWait()
+        #expect(!model.isRunning)
+        #expect(!model.isCancelling)
+        #expect(model.completedCount == 0)
+        #expect(model.results.allSatisfy { $0.status == .pending })
+        #expect(adapter.chatRequestCount == 0)
+    }
+
+    @MainActor
+    @Test("批量取消在子任务调度前生效，完成等待后没有残留测试状态")
+    func batchCancellationKeepsHandle() async {
+        let adapter = ConnectivityProbeMockAdapter()
+        let (service, runnable) = makeService(adapter: adapter, model: Model(modelName: "chat", isActivated: true))
+        let model = ModelConnectivityTestViewModel(provider: runnable.provider, service: service)
+        model.start()
+        model.cancel()
+        model.start()
+        #expect(model.isRunning)
+        #expect(model.isCancelling)
+        await model.cancelAndWait()
+        #expect(!model.isRunning)
+        #expect(!model.isCancelling)
+        #expect(model.completedCount == 0)
+        #expect(model.results.allSatisfy { $0.status == .pending })
+        #expect(adapter.chatRequestCount == 0)
+    }
+
+    @MainActor
+    @Test("运行中的单模型请求取消后不继续流式或工具检查，也不接受取消结果", .timeLimit(.minutes(1)))
+    func inFlightCancellationStopsRemainingKinds() async {
+        let adapter = ConnectivityProbeMockAdapter()
+        let (service, runnable) = makeService(adapter: adapter, model: Model(modelName: "chat", isActivated: true))
+        let started = AsyncStream<Void>.makeStream()
+        ConnectivityProbeURLProtocol.pauseRequests { started.continuation.yield(()) }
+        defer { started.continuation.finish(); ConnectivityProbeURLProtocol.configure(body: Data(), contentType: "application/json") }
+        let model = SingleModelConnectivityTestViewModel(runnableModel: runnable, service: service)
+        model.start()
+        for await _ in started.stream { break }
+        model.cancel()
+        #expect(model.isRunning)
+        #expect(model.isCancelling)
+        model.start()
+        await model.cancelAndWait()
+        #expect(!model.isRunning)
+        #expect(model.completedCount == 0)
+        #expect(model.results.allSatisfy { $0.status == .pending })
+        #expect(adapter.chatRequestCount == 1)
+    }
+
     private func makeProvider(models: [Model]) -> Provider {
         Provider(
             name: "Connectivity",
@@ -238,12 +298,18 @@ private final class ConnectivityProbeURLProtocol: URLProtocol {
     private static let lock = NSLock()
     private static var responseBody = Data()
     private static var responseContentType = "application/json"
+    private static var onPausedRequest: (@Sendable () -> Void)?
 
     static func configure(body: Data, contentType: String) {
         lock.lock()
         responseBody = body
         responseContentType = contentType
+        onPausedRequest = nil
         lock.unlock()
+    }
+
+    static func pauseRequests(onStart: @escaping @Sendable () -> Void) {
+        lock.lock(); onPausedRequest = onStart; lock.unlock()
     }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -255,7 +321,9 @@ private final class ConnectivityProbeURLProtocol: URLProtocol {
         Self.lock.lock()
         let body = Self.responseBody
         let contentType = Self.responseContentType
+        let onPausedRequest = Self.onPausedRequest
         Self.lock.unlock()
+        if let onPausedRequest { onPausedRequest(); return }
 
         let response = HTTPURLResponse(
             url: url,

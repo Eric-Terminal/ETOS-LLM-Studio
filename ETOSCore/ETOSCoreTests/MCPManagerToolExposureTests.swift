@@ -383,7 +383,11 @@ struct MCPManagerToolExposureTests {
         manager.reloadServers()
         let chatToolDescriptions = manager.chatToolsForLLM().map(\.description)
         #expect(chatToolDescriptions.contains(where: { $0.contains("Remote MCP Server") }))
+        #if os(macOS)
+        #expect(chatToolDescriptions.contains(where: { $0.contains("Local MCP Server") }))
+        #else
         #expect(!chatToolDescriptions.contains(where: { $0.contains("Local MCP Server") }))
+        #endif
 
         let agentTools = manager.chatToolsForLLM(includeLocalLinuxTools: true)
         let agentToolDescriptions = agentTools.map(\.description)

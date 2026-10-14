@@ -117,6 +117,7 @@ public extension Persistence {
         do {
             guard let store = activeGRDBStore() else { return false }
             try store.saveLocalAgentWorkspace(workspace)
+            LocalLinuxJobNotifications.storageChanged()
             return true
         } catch {
             logger.error("保存 Linux 工作区失败：\(error.localizedDescription)")
@@ -127,7 +128,11 @@ public extension Persistence {
     internal static func makeLocalAgentWorkspaceSizeWriter()
         -> (@Sendable (LocalAgentWorkspace, UInt64) throws -> Void)? {
         grdbStoreLock.withLock {
-            cachedGRDBStore?.makeLocalAgentWorkspaceSizeWriter()
+            guard let write = cachedGRDBStore?.makeLocalAgentWorkspaceSizeWriter() else { return nil }
+            return { workspace, size in
+                try write(workspace, size)
+                LocalLinuxJobNotifications.storageChanged()
+            }
         }
     }
 
@@ -136,6 +141,7 @@ public extension Persistence {
         do {
             guard let store = activeGRDBStore() else { return false }
             try store.deleteLocalAgentWorkspace(id: id)
+            LocalLinuxJobNotifications.storageChanged()
             return true
         } catch {
             logger.error("删除 Linux 工作区记录失败：\(error.localizedDescription)")
@@ -168,6 +174,7 @@ public extension Persistence {
         do {
             guard let store = activeGRDBStore() else { return false }
             try store.saveLocalLinuxJob(job)
+            LocalLinuxJobNotifications.recordsChanged(jobID: job.id)
             return true
         } catch {
             logger.error("保存 Linux 任务失败：\(error.localizedDescription)")
@@ -177,7 +184,9 @@ public extension Persistence {
 
     @discardableResult
     static func markActiveLocalLinuxJobsInterrupted() -> Int {
-        (try? activeGRDBStore()?.markActiveLocalLinuxJobsInterrupted(at: Date())) ?? 0
+        let count = (try? activeGRDBStore()?.markActiveLocalLinuxJobsInterrupted(at: Date())) ?? 0
+        if count > 0 { LocalLinuxJobNotifications.recordsChanged() }
+        return count
     }
 
     @discardableResult
@@ -185,6 +194,7 @@ public extension Persistence {
         do {
             guard let store = activeGRDBStore() else { return false }
             try store.saveLocalLinuxDiagnostic(diagnostic)
+            LocalLinuxJobNotifications.recordsChanged(jobID: diagnostic.jobID)
             return true
         } catch {
             logger.error("保存 Linux 诊断失败：\(error.localizedDescription)")
@@ -217,6 +227,7 @@ public extension Persistence {
         do {
             guard let store = activeAuxiliaryStore(kind: .config) else { return false }
             try store.saveLocalLinuxEnvironmentVariable(variable)
+            NotificationCenter.default.post(name: .localLinuxConfigurationDidChange, object: nil)
             WatchDatabaseSyncService.markDatabaseChanged(.config)
             return true
         } catch {
@@ -230,6 +241,7 @@ public extension Persistence {
         do {
             guard let store = activeAuxiliaryStore(kind: .config) else { return false }
             try store.deleteLocalLinuxEnvironmentVariable(id: id)
+            NotificationCenter.default.post(name: .localLinuxConfigurationDidChange, object: nil)
             WatchDatabaseSyncService.markDatabaseChanged(.config)
             return true
         } catch {
@@ -277,6 +289,7 @@ public extension Persistence {
         do {
             guard let store = activeAuxiliaryStore(kind: .config) else { return false }
             try store.saveLocalLinuxCommandRule(rule)
+            NotificationCenter.default.post(name: .localLinuxConfigurationDidChange, object: nil)
             WatchDatabaseSyncService.markDatabaseChanged(.config)
             return true
         } catch {
@@ -290,6 +303,7 @@ public extension Persistence {
         do {
             guard let store = activeAuxiliaryStore(kind: .config) else { return false }
             try store.deleteLocalLinuxCommandRule(id: id)
+            NotificationCenter.default.post(name: .localLinuxConfigurationDidChange, object: nil)
             WatchDatabaseSyncService.markDatabaseChanged(.config)
             return true
         } catch {
@@ -307,6 +321,7 @@ public extension Persistence {
         do {
             guard let store = activeAuxiliaryStore(kind: .config) else { return false }
             try store.updateLocalLinuxMountAuthorizationState(id: id, state: state)
+            LocalLinuxJobNotifications.storageChanged()
             return true
         } catch {
             logger.error("更新 Linux 挂载授权状态失败：\(error.localizedDescription)")
@@ -319,6 +334,7 @@ public extension Persistence {
         do {
             guard let store = activeAuxiliaryStore(kind: .config) else { return false }
             try store.updateLocalLinuxMountLeaseCount(id: id, delta: delta)
+            LocalLinuxJobNotifications.storageChanged()
             return true
         } catch {
             logger.error("更新 Linux 挂载租约计数失败：\(error.localizedDescription)")
@@ -331,6 +347,7 @@ public extension Persistence {
         do {
             guard let store = activeAuxiliaryStore(kind: .config) else { return false }
             try store.resetLocalLinuxMountLeaseCounts()
+            LocalLinuxJobNotifications.storageChanged()
             return true
         } catch {
             logger.error("重置 Linux 挂载租约计数失败：\(error.localizedDescription)")
@@ -343,6 +360,7 @@ public extension Persistence {
         do {
             guard let store = activeAuxiliaryStore(kind: .config) else { return false }
             try store.saveLocalLinuxMount(mount)
+            LocalLinuxJobNotifications.storageChanged()
             WatchDatabaseSyncService.markDatabaseChanged(.config)
             return true
         } catch {
@@ -356,6 +374,7 @@ public extension Persistence {
         do {
             guard let store = activeAuxiliaryStore(kind: .config) else { return false }
             try store.deleteLocalLinuxMount(id: id)
+            LocalLinuxJobNotifications.storageChanged()
             WatchDatabaseSyncService.markDatabaseChanged(.config)
             return true
         } catch {

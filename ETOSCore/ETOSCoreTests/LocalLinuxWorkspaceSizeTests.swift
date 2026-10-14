@@ -4,6 +4,22 @@ import Testing
 
 @Suite("本地 Linux 后台工作区统计")
 struct LocalLinuxWorkspaceSizeTests {
+    @Test("宿主等待包含合并队列及统计落盘", .timeLimit(.minutes(1)))
+    func hostWaitIncludesQueuedPersistence() async throws {
+        let probe = MeasurementProbe()
+        let refresher = makeRefresher(probe)
+        var starts = probe.starts.makeAsyncIterator()
+        await scheduleBurst(on: refresher, workspace: makeWorkspace(), probe: probe)
+        let completion = Task {
+            await refresher.waitForIdle()
+            #expect(await probe.savedCount == 1)
+        }
+        #expect(await starts.next() == 1)
+        #expect(await probe.savedCount == 0)
+        await probe.complete(1, size: 42)
+        await completion.value
+    }
+
     @Test("短时间内的完成请求合并扫描，排队不等待目录遍历", .timeLimit(.minutes(1)))
     func completionBurstIsCoalesced() async throws {
         let probe = MeasurementProbe()

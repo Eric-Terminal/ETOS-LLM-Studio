@@ -1,11 +1,13 @@
-// iOS Browser Agent 使用公开 WKWebView。每个聊天会话持有独立标签页集合，
+// iOS/macOS Browser Agent 使用公开 WKWebView。每个聊天会话持有独立标签页集合，
 // Agent 和用户接管共享同一个 WKWebView，但不同会话不会共享标签页引用。
 
 import Foundation
 import Combine
-#if canImport(WebKit) && canImport(UIKit) && !os(watchOS)
+#if canImport(WebKit) && (canImport(UIKit) || os(macOS)) && !os(watchOS)
 import WebKit
+#if canImport(UIKit)
 import UIKit
+#endif
 @MainActor
 public final class BrowserSessionManager: NSObject, ObservableObject {
     public static let shared = BrowserSessionManager()
@@ -25,6 +27,7 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         var recoverableURL: URL?
         var recoverableTitle: String?
         var needsReload = false
+        var navigationRevision = UUID()
 
         init(id: UUID = UUID(), webView: WKWebView) {
             self.id = id
@@ -39,15 +42,18 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         var selectedTabID: UUID?
         var isUserControlling = false
         var controlState = BrowserAgentControlState.idle
+        var takeoverRevision = UUID()
         let isolatedDataStore = WKWebsiteDataStore.nonPersistent()
     }
 
     private var sessions: [UUID: Session] = [:]
     private var webViewLocations: [ObjectIdentifier: (sessionID: UUID, tabID: UUID)] = [:]
     private var lifecycleObservers: [NSObjectProtocol] = []
+    public private(set) var isSuspended = false
 
     public override init() {
         super.init()
+        #if canImport(UIKit)
         lifecycleObservers.append(NotificationCenter.default.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification,
             object: nil,
@@ -55,11 +61,12 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in self?.reclaimBackgroundTabs(olderThan: nil) }
         })
+        #endif
     }
 
     public func capabilities() -> BrowserAgentCapabilities {
         BrowserAgentCapabilities(
-            platform: "iOS",
+            platform: BrowserWebPlatform.name,
             isExperimental: false,
             supportsNavigation: true,
             supportsSnapshot: true,
@@ -94,8 +101,9 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         if isControlling {
             beginUserTakeover(sessionID: sessionID)
         } else {
+            guard let revision = sessions[sessionID]?.takeoverRevision else { return }
             Task { @MainActor [weak self] in
-                await self?.releaseUserTakeover(sessionID: sessionID)
+                await self?.releaseUserTakeover(sessionID: sessionID, expectedRevision: revision)
             }
         }
     }
@@ -105,7 +113,14 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
     }
 
     public func beginUserTakeover(sessionID: UUID) {
+        guard !isSuspended else { return }
         let session = session(for: sessionID)
+        session.takeoverRevision = UUID()
+        for tab in session.tabs.values {
+            tab.navigationRevision = UUID()
+            tab.allowedAgentNavigationHosts = nil
+            tab.webView.stopLoading()
+        }
         session.isUserControlling = true
         session.controlState = BrowserAgentControlState(
             controller: .user,
@@ -120,6 +135,7 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
     }
 
     public func beginAgentAction(sessionID: UUID, tabID: UUID?, action: BrowserAgentAction) {
+        guard !isSuspended else { return }
         reclaimBackgroundTabs(olderThan: Date().addingTimeInterval(-30 * 60))
         let session = session(for: sessionID)
         let resolvedTabID = tabID ?? session.selectedTabID
@@ -161,10 +177,21 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         dataProfile: BrowserAgentDataProfile? = nil,
         allowedAgentNavigationHosts: Set<String>? = nil
     ) async throws -> BrowserAgentTabSummary {
+        try Task.checkCancellation()
+        guard !isSuspended else { throw CancellationError() }
+        // 用户界面与工具入口都可能调用，缺省配置读取不能阻塞 WebKit 的主执行器。
+        let resolvedProfile: BrowserAgentDataProfile
+        if let dataProfile { resolvedProfile = dataProfile }
+        else {
+            resolvedProfile = await Task.detached(priority: .utility) {
+                Persistence.browserAgentDataProfile(sessionID: sessionID)
+            }.value
+        }
+        try Task.checkCancellation()
+        guard !isSuspended else { throw CancellationError() }
         reclaimBackgroundTabs(olderThan: Date().addingTimeInterval(-30 * 60))
         let session = session(for: sessionID)
         let configuration = WKWebViewConfiguration()
-        let resolvedProfile = dataProfile ?? Persistence.browserAgentDataProfile(sessionID: sessionID)
         // 隔离 profile 在同一聊天的标签页之间共享 Cookie，但不会跨会话或跨进程保留。
         configuration.websiteDataStore = resolvedProfile == .persistentShared
             ? .default()
@@ -172,7 +199,7 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
 
         let webView = WKWebView(
-            frame: CGRect(x: 0, y: 0, width: 390, height: 844),
+            frame: CGRect(origin: .zero, size: BrowserWebPlatform.defaultViewport),
             configuration: configuration
         )
         webView.allowsBackForwardNavigationGestures = true
@@ -196,6 +223,7 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
     }
 
     public func closeTab(sessionID: UUID, tabID: UUID?) throws -> BrowserAgentTabSummary {
+        guard !isSuspended else { throw CancellationError() }
         let session = try existingSession(sessionID)
         let resolvedID = try resolvedTabID(tabID, session: session)
         guard let tab = session.tabs.removeValue(forKey: resolvedID) else {
@@ -228,8 +256,8 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         tab.needsReload = false
         tab.recoverableURL = nil
         tab.recoverableTitle = nil
-        beginAgentNavigationGuard(tab, allowedHosts: allowedAgentNavigationHosts)
-        defer { tab.allowedAgentNavigationHosts = nil }
+        let revision = beginAgentNavigationGuard(tab, allowedHosts: allowedAgentNavigationHosts)
+        defer { if tab.navigationRevision == revision { tab.allowedAgentNavigationHosts = nil } }
         tab.lastNavigationError = nil
         tab.webView.load(URLRequest(url: url))
         try await waitForNavigation(tab)
@@ -246,7 +274,9 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
                 NSLocalizedString("页面快照没有返回可解析的数据。", comment: "Browser Agent invalid snapshot")
             )
         }
-        let snapshot = try BrowserDOMResultParser.snapshot(object)
+        let payload = BrowserDOMPayload(object)
+        let snapshot = try await Task.detached(priority: .utility) { try BrowserDOMResultParser.snapshot(payload.object) }.value
+        try Task.checkCancellation()
         tab.domRevision = snapshot.domRevision
         tab.lastActivityAt = Date()
         return snapshot
@@ -262,8 +292,8 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
     ) async throws {
         let tab = try resolvedTab(sessionID: sessionID, tabID: tabID)
         try await restoreIfNeeded(tab)
-        beginAgentNavigationGuard(tab, allowedHosts: allowedAgentNavigationHosts)
-        defer { tab.allowedAgentNavigationHosts = nil }
+        let revision = beginAgentNavigationGuard(tab, allowedHosts: allowedAgentNavigationHosts)
+        defer { if tab.navigationRevision == revision { tab.allowedAgentNavigationHosts = nil } }
         let value = try await evaluate(
             BrowserDOMAutomation.click(
                 elementID: elementID,
@@ -288,8 +318,8 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
     ) async throws {
         let tab = try resolvedTab(sessionID: sessionID, tabID: tabID)
         try await restoreIfNeeded(tab)
-        beginAgentNavigationGuard(tab, allowedHosts: allowedAgentNavigationHosts)
-        defer { tab.allowedAgentNavigationHosts = nil }
+        let revision = beginAgentNavigationGuard(tab, allowedHosts: allowedAgentNavigationHosts)
+        defer { if tab.navigationRevision == revision { tab.allowedAgentNavigationHosts = nil } }
         let value = try await evaluate(
             BrowserDOMAutomation.type(
                 elementID: elementID,
@@ -327,8 +357,8 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
     ) async throws -> JSONValue {
         let tab = try resolvedTab(sessionID: sessionID, tabID: tabID)
         try await restoreIfNeeded(tab)
-        beginAgentNavigationGuard(tab, allowedHosts: allowedAgentNavigationHosts)
-        defer { tab.allowedAgentNavigationHosts = nil }
+        let revision = beginAgentNavigationGuard(tab, allowedHosts: allowedAgentNavigationHosts)
+        defer { if tab.navigationRevision == revision { tab.allowedAgentNavigationHosts = nil } }
         let value = try await evaluate(script, in: tab.webView)
         try await waitForTriggeredNavigation(tab)
         return browserAgentJSONValue(from: value)
@@ -415,28 +445,27 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
             )
         }
         let proposed = filename ?? response.suggestedFilename ?? url.lastPathComponent
-        let destination = try await Task.detached(priority: .utility) {
-            try BrowserAgentStorage.destinationURL(
+        try Task.checkCancellation()
+        return try await Task.detached(priority: .utility) {
+            let destination = try BrowserAgentStorage.destinationURL(
                 sessionID: sessionID,
                 directoryName: "Downloads",
                 proposedFilename: proposed.isEmpty ? "download" : proposed,
                 destinationDirectory: destinationDirectory
             )
-        }.value
-        try await Task.detached(priority: .utility) {
             if FileManager.default.fileExists(atPath: destination.path) {
                 try FileManager.default.removeItem(at: destination)
             }
             try FileManager.default.moveItem(at: temporaryURL, to: destination)
+            let values = try destination.resourceValues(forKeys: [.fileSizeKey])
+            return BrowserAgentDownloadResult(
+                uri: try BrowserAgentStorage.appURI(for: destination),
+                finalURL: response.url?.absoluteString ?? url.absoluteString,
+                mimeType: response.mimeType,
+                filename: destination.lastPathComponent,
+                byteCount: Int64(values.fileSize ?? 0)
+            )
         }.value
-        let values = try destination.resourceValues(forKeys: [.fileSizeKey])
-        return BrowserAgentDownloadResult(
-            uri: try BrowserAgentStorage.appURI(for: destination),
-            finalURL: response.url?.absoluteString ?? url.absoluteString,
-            mimeType: response.mimeType,
-            filename: destination.lastPathComponent,
-            byteCount: Int64(values.fileSize ?? 0)
-        )
     }
 
     public func webView(sessionID: UUID, tabID: UUID?) throws -> WKWebView {
@@ -470,6 +499,7 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
             tab.viewportHeight = viewportHeight
         }
         tab.lastActivityAt = Date()
+        objectWillChange.send()
         return summary(for: tab)
     }
 
@@ -521,14 +551,15 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
     ) async throws {
         let tab = try resolvedTab(sessionID: sessionID, tabID: tabID)
         try await restoreIfNeeded(tab)
-        beginAgentNavigationGuard(tab, allowedHosts: allowedAgentNavigationHosts)
-        defer { tab.allowedAgentNavigationHosts = nil }
+        let revision = beginAgentNavigationGuard(tab, allowedHosts: allowedAgentNavigationHosts)
+        defer { if tab.navigationRevision == revision { tab.allowedAgentNavigationHosts = nil } }
         let value = try await evaluate(script, in: tab.webView)
         try BrowserDOMResultParser.interactionError(value)
         try await waitForTriggeredNavigation(tab)
     }
 
     public func selectTab(sessionID: UUID, tabID: UUID) throws {
+        guard !isSuspended else { throw CancellationError() }
         let session = try existingSession(sessionID)
         guard session.tabs[tabID] != nil else { throw BrowserAgentError.tabNotFound }
         session.selectedTabID = tabID
@@ -549,6 +580,8 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
     }
 
     private func resolvedTab(sessionID: UUID, tabID: UUID?) throws -> Tab {
+        try Task.checkCancellation()
+        guard !isSuspended else { throw CancellationError() }
         let session = try existingSession(sessionID)
         let resolvedID = try resolvedTabID(tabID, session: session)
         guard let tab = session.tabs[resolvedID] else { throw BrowserAgentError.tabNotFound }
@@ -581,8 +614,10 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         )
     }
 
-    private func releaseUserTakeover(sessionID: UUID) async {
-        guard let session = sessions[sessionID], session.isUserControlling else { return }
+    private func releaseUserTakeover(sessionID: UUID, expectedRevision: UUID) async {
+        guard let session = sessions[sessionID], session.isUserControlling,
+              session.takeoverRevision == expectedRevision else { return }
+        let revision = session.takeoverRevision
         session.controlState = BrowserAgentControlState(
             controller: .returningToAgent,
             status: .waiting,
@@ -594,6 +629,8 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         if session.selectedTabID != nil {
             _ = try? await snapshot(sessionID: sessionID, tabID: session.selectedTabID)
         }
+        // 刷新期间再次接管、锁定或恢复数据库，旧交还任务不能释放新的控制权。
+        guard !isSuspended, sessions[sessionID] === session, session.takeoverRevision == revision else { return }
         session.isUserControlling = false
         session.controlState = .idle
         objectWillChange.send()
@@ -623,10 +660,11 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
     }
 
     private func startReloadIfNeeded(_ tab: Tab) {
-        guard tab.needsReload, let url = tab.recoverableURL else { return }
+        guard !isSuspended, tab.needsReload, let url = tab.recoverableURL else { return }
         tab.needsReload = false
         tab.wasRestoredByReload = true
         tab.lastNavigationError = nil
+        tab.navigationRevision = UUID()
         tab.webView.load(URLRequest(url: url))
     }
 
@@ -637,9 +675,12 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
     }
 
     private func waitForNavigation(_ tab: Tab) async throws {
+        let revision = tab.navigationRevision
+        defer { if Task.isCancelled, tab.navigationRevision == revision { tab.webView.stopLoading() } }
         let deadline = Date().addingTimeInterval(60)
         while tab.webView.isLoading {
             try Task.checkCancellation()
+            guard !isSuspended, tab.navigationRevision == revision else { throw CancellationError() }
             if Date() >= deadline {
                 tab.webView.stopLoading()
                 throw BrowserAgentError.navigationFailed(
@@ -648,14 +689,17 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
             }
             try await Task.sleep(nanoseconds: 100_000_000)
         }
+        try Task.checkCancellation()
         if let error = tab.lastNavigationError {
             throw BrowserAgentError.navigationFailed(error.localizedDescription)
         }
     }
 
-    private func beginAgentNavigationGuard(_ tab: Tab, allowedHosts: Set<String>?) {
+    private func beginAgentNavigationGuard(_ tab: Tab, allowedHosts: Set<String>?) -> UUID {
+        tab.navigationRevision = UUID()
         tab.lastNavigationError = nil
         tab.allowedAgentNavigationHosts = allowedHosts.map { Set($0.map { $0.lowercased() }) }
+        return tab.navigationRevision
     }
 
     nonisolated static func cookieApplies(_ cookie: HTTPCookie, to url: URL) -> Bool {
@@ -687,6 +731,34 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         } catch {
             throw BrowserAgentError.javaScriptFailed(error.localizedDescription)
         }
+    }
+
+    /// 暂停时立即封闭 WebKit 入口；后台工具任务由执行器取消并等待持久化收尾。
+    public func suspendInteraction() {
+        isSuspended = true
+        for session in sessions.values {
+            session.takeoverRevision = UUID()
+            session.isUserControlling = false
+            session.controlState = .idle
+            for tab in session.tabs.values {
+                tab.navigationRevision = UUID(); tab.allowedAgentNavigationHosts = nil
+                tab.webView.stopLoading()
+            }
+        }
+        objectWillChange.send()
+    }
+
+    public func resumeInteraction() { isSuspended = false; objectWillChange.send() }
+
+    public func discardAllSessions() {
+        for session in sessions.values {
+            for tab in session.tabs.values {
+                tab.webView.stopLoading()
+                tab.webView.navigationDelegate = nil
+            }
+        }
+        sessions.removeAll(); webViewLocations.removeAll()
+        objectWillChange.send()
     }
 
 }

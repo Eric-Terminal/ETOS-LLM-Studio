@@ -9,7 +9,7 @@
 import Foundation
 
 extension TTSManager {
-    func synthesizeQwenAudio(
+    nonisolated func synthesizeQwenAudio(
         text: String,
         service: TTSServiceConfiguration
     ) async throws -> AudioClip {
@@ -36,6 +36,17 @@ extension TTSManager {
         webSocket.resume()
         defer { webSocket.cancel(with: .goingAway, reason: nil) }
 
+        return try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            return try await runQwenAudio(text: text, service: service, webSocket: webSocket)
+        } onCancel: {
+            // receive() 可能正在等待服务端事件，必须主动断开才能让退出和数据库恢复完成。
+            webSocket.cancel(with: .goingAway, reason: nil)
+        }
+    }
+
+    private nonisolated func runQwenAudio(text: String, service: TTSServiceConfiguration, webSocket: URLSessionWebSocketTask) async throws -> AudioClip {
+        let parameters = service.advancedSettings
         let taskID = UUID().uuidString.lowercased()
         try await webSocket.send(.string(try qwenAudioJSON([
             "header": [
@@ -87,7 +98,7 @@ extension TTSManager {
         )
     }
 
-    private func waitForQwenAudioStart(_ webSocket: URLSessionWebSocketTask) async throws {
+    private nonisolated func waitForQwenAudioStart(_ webSocket: URLSessionWebSocketTask) async throws {
         while true {
             try Task.checkCancellation()
             let message = try await webSocket.receive()
@@ -105,7 +116,7 @@ extension TTSManager {
         }
     }
 
-    private func collectQwenAudio(_ webSocket: URLSessionWebSocketTask) async throws -> Data {
+    private nonisolated func collectQwenAudio(_ webSocket: URLSessionWebSocketTask) async throws -> Data {
         var audio = Data()
         while true {
             try Task.checkCancellation()
@@ -127,7 +138,7 @@ extension TTSManager {
         }
     }
 
-    private func qwenAudioLifecycle(from string: String) throws -> QwenAudioLifecycle {
+    private nonisolated func qwenAudioLifecycle(from string: String) throws -> QwenAudioLifecycle {
         guard let data = string.data(using: .utf8),
               let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let header = json["header"] as? [String: Any] else {
@@ -150,7 +161,7 @@ extension TTSManager {
         }
     }
 
-    private func qwenAudioJSON(_ object: [String: Any]) throws -> String {
+    private nonisolated func qwenAudioJSON(_ object: [String: Any]) throws -> String {
         let data = try JSONSerialization.data(withJSONObject: object)
         guard let string = String(data: data, encoding: .utf8) else {
             throw qwenAudioError(NSLocalizedString("Qwen Audio TTS 请求编码失败。", comment: ""))
@@ -158,7 +169,7 @@ extension TTSManager {
         return string
     }
 
-    private func qwenAudioError(_ message: String) -> NSError {
+    private nonisolated func qwenAudioError(_ message: String) -> NSError {
         NSError(domain: "TTS.QwenAudio", code: -1, userInfo: [NSLocalizedDescriptionKey: message])
     }
 }

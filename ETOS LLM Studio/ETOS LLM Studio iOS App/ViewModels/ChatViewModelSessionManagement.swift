@@ -127,6 +127,8 @@ extension ChatViewModel {
 
     func prepareMorningDailyPulseDeliveryIfNeeded(referenceDate: Date = Date()) async {
         let coordinator = DailyPulseDeliveryCoordinator.shared
+        await coordinator.waitForSettingsLoad()
+        guard !Task.isCancelled else { return }
         await DailyPulseManager.shared.generateForScheduledDeliveryIfNeeded(
             reminderEnabled: coordinator.reminderEnabled,
             deliveryTimes: coordinator.deliveryTimes,

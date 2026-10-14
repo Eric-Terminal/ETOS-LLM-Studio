@@ -48,6 +48,7 @@ public struct ChatMessageListSnapshot: Sendable {
     public let sendingRetryableMessageIDs: Set<UUID>
     public let userContentPreviews: [UUID: ChatUserMessagePreview]
     private let previewCharacterLimit: Int
+    private let fontRevision: String
     private let visualRules: [MessageRegexRule]
     private let userPreviewSources: [UUID: String]
     private let visiblePositions: [Int]
@@ -63,8 +64,11 @@ public struct ChatMessageListSnapshot: Sendable {
         revision = (previous?.revision ?? 0) &+ 1
         let previous = previous?.sessionID == sessionID ? previous : nil
         self.renderConfiguration = renderConfiguration
+        FontLibrary.preloadRuntimeCache()
+        fontRevision = FontLibrary.adapterCacheToken()
         self.forceRendering = forceRendering || previous?.renderConfiguration != renderConfiguration
             || previous?.previewCharacterLimit != previewCharacterLimit || previous?.visualRules != visualRules
+            || previous?.fontRevision != fontRevision
         baseRevision = previous?.revision
         let oldMessages = previous?.messages ?? []
         hasSameMessageIdentity = previous != nil && oldMessages.count == messages.count
@@ -133,7 +137,8 @@ public struct ChatMessageListSnapshot: Sendable {
         for (position, message) in visibleMessages.enumerated() where message.role == .user {
             previewSources[message.id] = message.content
             if canReusePreviews, previous?.userPreviewSources[message.id] == message.content,
-               let cached = previous?.userContentPreviews[message.id] {
+               let cached = previous?.userContentPreviews[message.id],
+               cached.fontSnapshot.revision == fontRevision {
                 previews[message.id] = cached
                 continue
             }

@@ -45,7 +45,8 @@ public struct WorldbookImportDiagnostics: Hashable, Sendable {
     }
 }
 
-public final class WorldbookStore {
+// 缓存与编码器的访问均由 store 队列串行化，可跨后台任务传递存储实例。
+public final class WorldbookStore: @unchecked Sendable {
     public static let shared = WorldbookStore()
     public static let didChangeNotification = Notification.Name("com.ETOS.worldbookStore.didChange")
 
@@ -128,7 +129,7 @@ public final class WorldbookStore {
     }
 
     public func saveWorldbooks(_ worldbooks: [Worldbook]) {
-        queue.sync {
+        queue.sync { () -> Void in
             saveWorldbooksUnlocked(worldbooks)
         }
         WatchDatabaseSyncService.markDatabaseChanged(.config)
@@ -160,15 +161,19 @@ public final class WorldbookStore {
         NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
     }
 
-    public func deleteWorldbook(id: UUID) {
-        queue.sync {
+    @discardableResult
+    public func deleteWorldbook(id: UUID, expected: Worldbook? = nil) -> Bool {
+        let deleted = queue.sync {
             var all = loadWorldbooksUnlocked()
+            if let expected, all.first(where: { $0.id == id }) != expected { return false }
             all.removeAll { $0.id == id }
-            saveWorldbooksUnlocked(all)
+            return saveWorldbooksUnlocked(all)
         }
+        guard deleted else { return false }
         WatchDatabaseSyncService.markDatabaseChanged(.config)
         NotificationCenter.default.post(name: Self.didChangeNotification, object: nil)
         NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+        return true
     }
 
     public func assignWorldbooks(sessionID: UUID, worldbookIDs: [UUID]) {
@@ -251,7 +256,11 @@ public final class WorldbookStore {
             }
 
             all.append(candidate)
-            saveWorldbooksUnlocked(all)
+            guard saveWorldbooksUnlocked(all) else {
+                return WorldbookImportReport(importedEntries: 0, skippedEntries: skipped,
+                                             failedEntries: failedEntries + candidate.entries.count,
+                                             failureReasons: failureReasons + [WorldbookDraftWriteError.writeFailed.localizedDescription])
+            }
             WatchDatabaseSyncService.markDatabaseChanged(.config)
 
             return WorldbookImportReport(

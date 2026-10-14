@@ -125,6 +125,8 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     private struct ActiveDatabaseSyncOperation {
         let id: UUID
         var pendingOutboundKinds: Set<WatchSyncDatabaseKind>
+        let incomingKinds: Set<WatchSyncDatabaseKind>
+        var outboundArchiveURL: URL?
         var waitingForOutboundArchive: Bool
         var waitingForIncomingArchive: Bool
         var summary: SyncMergeSummary
@@ -149,6 +151,8 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     private let syncChannel = "watch.connectivity"
     private var activeSyncOperation: ActiveSyncOperation?
     private var activeDatabaseSyncOperation: ActiveDatabaseSyncOperation?
+    private let databaseSyncIsolation = WatchDatabaseSyncIsolation()
+    private var pendingDatabaseArchiveAcknowledgements: Set<UUID> = []
     private static var shouldSkipUserNotificationsForCurrentProcess: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
@@ -180,6 +184,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         Task.detached(priority: .userInitiated) {
             await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
             let syncOptions = SyncOptions(rawValue: optionsRawValue)
+            if syncOptions.contains(.dailyPulse) { await DailyPulseManager.flushPendingPersistence() }
             let snapshot = SyncDeltaEngine.buildLocalSnapshot(
                 options: syncOptions,
                 channel: syncChannel
@@ -255,6 +260,9 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             state = .failed(message)
             throw makeWatchSyncError(message)
         }
+        guard remoteReply["databaseArchiveVersion"] as? Int == 2 else {
+            throw makeWatchSyncError(NSLocalizedString("请将 iPhone 与 Apple Watch 上的 App 都更新后再覆盖数据。", comment: ""))
+        }
 
         let remotePacket = try JSONDecoder().decode(WatchSyncDatabaseMetadataPacket.self, from: metadataData)
         let localPacket = await Task.detached(priority: .userInitiated) {
@@ -285,10 +293,16 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         let remoteKinds = Set(resolutions.compactMap { resolution in
             resolution.sourcePlatform == localPlatform ? nil : resolution.kind
         })
+        guard localKinds.isDisjoint(with: remoteKinds), databaseSyncIsolation.begin(operationID) else {
+            failSyncOperation(operationID: operationID, fallbackSilent: false,
+                              message: NSLocalizedString("当前有数据或工具任务正在运行，请稍后重试。", comment: ""))
+            return
+        }
 
         activeDatabaseSyncOperation = ActiveDatabaseSyncOperation(
             id: operationID,
             pendingOutboundKinds: localKinds,
+            incomingKinds: remoteKinds,
             waitingForOutboundArchive: !localKinds.isEmpty,
             waitingForIncomingArchive: !remoteKinds.isEmpty,
             summary: WatchDatabaseSyncService.summary(for: localKinds)
@@ -299,10 +313,31 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             return
         }
 
-        if !remoteKinds.isEmpty {
-            requestRemoteDatabaseArchive(replacing: remoteKinds, requestID: operationID.uuidString, silent: false)
-        } else {
-            startPendingDatabaseArchiveSend(operationID: operationID)
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await databaseSyncIsolation.prepare()
+                // 在接收任何数据库前冻结用户选中的本机数据，混合方向不能边覆盖边导出。
+                let archiveURL = try await Task.detached(priority: .userInitiated) {
+                    await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
+                    MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
+                    return localKinds.isEmpty ? nil : try WatchDatabaseSyncService.buildArchive(for: localKinds)
+                }.value
+                guard activeDatabaseSyncOperation?.id == operationID else {
+                    if let archiveURL {
+                        await Task.detached(priority: .utility) { try? FileManager.default.removeItem(at: archiveURL) }.value
+                    }
+                    return
+                }
+                activeDatabaseSyncOperation?.outboundArchiveURL = archiveURL
+                if !remoteKinds.isEmpty {
+                    requestRemoteDatabaseArchive(replacing: remoteKinds, requestID: operationID.uuidString, silent: false)
+                } else {
+                    startPendingDatabaseArchiveSend(operationID: operationID)
+                }
+            } catch {
+                failSyncOperation(operationID: operationID, fallbackSilent: false, message: error.localizedDescription)
+            }
         }
     }
 
@@ -387,6 +422,8 @@ public final class WatchSyncManager: NSObject, ObservableObject {
 
     /// 通过近场在线通道广播单个 AppConfig 键；不可达时跳过，避免无确认触发旧合并。
     public func performQuickSync(key: String, value: Any) {
+        guard !CloudSyncManager.shared.isRestoringLocalData,
+              !CloudSyncManager.shared.isPerformingSync else { return }
         guard watchConnectivitySyncOptions().contains(.appStorage) else { return }
         guard SyncEngine.isPropertyListEncodableValue(value) else { return }
         guard let session = validateSessionBeforeTransfer(options: [.appStorage], silent: true) else { return }
@@ -438,35 +475,11 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         }
 
         let kinds = databaseOperation.pendingOutboundKinds
+        guard let archiveURL = databaseOperation.outboundArchiveURL else { return }
         databaseOperation.pendingOutboundKinds = []
+        databaseOperation.outboundArchiveURL = nil
         activeDatabaseSyncOperation = databaseOperation
-
-        Task.detached(priority: .userInitiated) {
-            do {
-                await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
-                MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
-                let archiveURL = try WatchDatabaseSyncService.buildArchive(for: kinds)
-                await MainActor.run { [weak self] in
-                    self?.sendDatabaseArchive(
-                        archiveURL,
-                        replacing: kinds,
-                        requestID: operationID.uuidString,
-                        silent: false
-                    )
-                }
-            } catch {
-                await MainActor.run { [weak self] in
-                    self?.failSyncOperation(
-                        operationID: operationID,
-                        fallbackSilent: false,
-                        message: String(
-                            format: NSLocalizedString("准备库级覆盖失败：%@", comment: ""),
-                            error.localizedDescription
-                        )
-                    )
-                }
-            }
-        }
+        sendDatabaseArchive(archiveURL, replacing: kinds, requestID: operationID.uuidString, silent: false)
     }
 
     private func requestRemoteDatabaseArchive(
@@ -477,6 +490,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         guard let session else { return }
         let message: [String: Any] = [
             "kind": Self.databaseArchiveRequestKind,
+            "databaseArchiveVersion": 2,
             "databaseKinds": kinds.map(\.rawValue),
             "requestID": requestID,
             "silent": silent,
@@ -517,6 +531,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         guard let session else { return }
         let metadata: [String: Any] = [
             "kind": Self.databaseArchiveKind,
+            "databaseArchiveVersion": 2,
             "databaseKinds": kinds.map(\.rawValue),
             "requestID": requestID ?? "",
             "silent": silent,
@@ -524,6 +539,9 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             "timestamp": Date().timeIntervalSince1970
         ]
         let transfer = session.transferFile(archiveURL, metadata: metadata)
+        if let id = requestID.flatMap(UUID.init(uuidString:)) {
+            pendingDatabaseArchiveAcknowledgements.insert(id)
+        }
         pendingTransfers[ObjectIdentifier(transfer)] = PendingTransferContext(
             expectsResponse: false,
             operationID: requestID.flatMap(UUID.init(uuidString:)),
@@ -872,7 +890,14 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             state = .failed(message)
         }
         if let operationID, activeDatabaseSyncOperation?.id == operationID {
+            if let url = activeDatabaseSyncOperation?.outboundArchiveURL {
+                Task.detached(priority: .utility) { try? FileManager.default.removeItem(at: url) }
+            }
             activeDatabaseSyncOperation = nil
+        }
+        if let operationID {
+            pendingDatabaseArchiveAcknowledgements.remove(operationID)
+            databaseSyncIsolation.finish(operationID)
         }
         completeSyncOperationIfNeeded(operationID: operationID)
     }
@@ -882,6 +907,11 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         allowReuseExisting: Bool,
         stateMessage: String
     ) -> UUID? {
+        guard !CloudSyncManager.shared.isRestoringLocalData,
+              !CloudSyncManager.shared.isPerformingSync else {
+            if !silent { state = .failed(NSLocalizedString("当前有数据或工具任务正在运行，请稍后重试。", comment: "")) }
+            return nil
+        }
         if activeSyncOperation != nil {
             guard allowReuseExisting else { return nil }
             if !silent {
@@ -941,6 +971,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         lastUpdatedAt = Date()
         state = .success(databaseOperation.summary)
         activeDatabaseSyncOperation = nil
+        databaseSyncIsolation.finish(operationID)
         completeSyncOperationIfNeeded(operationID: operationID)
     }
 
@@ -992,6 +1023,9 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         let effectiveSilent = isSyncSilent(operationID: operationID, fallback: silent)
         defer { try? FileManager.default.removeItem(at: url) }
 
+        let cloud = CloudSyncManager.shared
+        guard cloud.beginLocalDataRestore() else { return }
+        defer { cloud.endLocalDataRestore(didRestore: false) }
         do {
             let data = try Data(contentsOf: url)
             let decoder = JSONDecoder()
@@ -1023,6 +1057,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                 Task.detached(priority: .userInitiated) {
                     await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
                     let responseOptions = SyncOptions(rawValue: responseOptionsRawValue)
+                    if responseOptions.contains(.dailyPulse) { await DailyPulseManager.flushPendingPersistence() }
                     let localSnapshot = SyncDeltaEngine.buildLocalSnapshot(
                         options: responseOptions,
                         channel: responseChannel
@@ -1107,9 +1142,37 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         defer { try? FileManager.default.removeItem(at: url) }
 
         do {
-            let summary = try await Task.detached(priority: .userInitiated) {
-                try WatchDatabaseSyncService.installArchive(at: url, replacing: kinds)
-            }.value
+            guard let operationID,
+                  activeDatabaseSyncOperation.map({ $0.id == operationID && $0.incomingKinds == kinds }) ?? true,
+                  databaseSyncIsolation.begin(operationID) else {
+                throw makeWatchSyncError(NSLocalizedString("当前有数据或工具任务正在运行，请稍后重试。", comment: ""))
+            }
+            let isInitiator = activeDatabaseSyncOperation?.id == operationID
+            defer { databaseSyncIsolation.finish(operationID) }
+            if !isInitiator { try await databaseSyncIsolation.prepare() }
+            await AppConfigStore.shared.flushPendingWrites()
+            await MCPManager.shared.prepareForDatabaseRestore()
+            let summary: SyncMergeSummary
+            do {
+                summary = try await Task.detached(priority: .userInitiated) {
+                    await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
+                    return try MemoryManager.withCurrentInstancePausedForSnapshotRestore {
+                        let summary = try WatchDatabaseSyncService.installArchive(at: url, replacing: kinds)
+                        if kinds.contains(.memory) { try MemoryStoragePaths.clearCachesAfterDatabaseRestore() }
+                        return summary
+                    }
+                }.value
+            } catch {
+                await MCPManager.shared.finishDatabaseRestore()
+                throw error
+            }
+            await AppConfigStore.shared.reloadFromPersistentStoreAndWait()
+            await MCPManager.shared.finishDatabaseRestore()
+            NotificationCenter.default.post(name: .snapshotRestoreDidFinish, object: nil)
+            if kinds.contains(.config) {
+                let skills = await SkillManager.prepareSharedInBackground()
+                try await skills.reloadLibraryInBackground()
+            }
 
             lastSummary = summary
             lastUpdatedAt = Date()
@@ -1120,7 +1183,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                 silent: effectiveSilent
             )
 
-            if let operationID, activeDatabaseSyncOperation?.id == operationID {
+            if activeDatabaseSyncOperation?.id == operationID {
                 finishDatabaseSyncStep(
                     operationID: operationID,
                     incomingSummary: summary
@@ -1163,7 +1226,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             let data = try? JSONEncoder().encode(packet)
             await MainActor.run {
                 if let data {
-                    replyHandler(["accepted": true, "metadata": data])
+                    replyHandler(["accepted": true, "metadata": data, "databaseArchiveVersion": 2])
                 } else {
                     replyHandler(["accepted": false])
                 }
@@ -1177,6 +1240,10 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         replyHandler: @escaping ([String: Any]) -> Void
     ) -> Bool {
         guard message["kind"] as? String == Self.databaseArchiveRequestKind else { return false }
+        guard message["databaseArchiveVersion"] as? Int == 2 else {
+            replyHandler(["accepted": false, "reason": "incompatibleArchive"])
+            return true
+        }
         let requestID = message["requestID"] as? String
         let silent = (message["silent"] as? Bool) ?? false
         guard isWatchConnectivitySyncEnabled(),
@@ -1190,13 +1257,22 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             replyHandler(["accepted": false])
             return true
         }
+        guard let operationID = requestID.flatMap(UUID.init(uuidString:)),
+              activeSyncOperation == nil, databaseSyncIsolation.begin(operationID) else {
+            replyHandler(["accepted": false, "reason": "syncBusy"])
+            return true
+        }
 
         replyHandler(["accepted": true])
-        Task.detached(priority: .userInitiated) {
+        Task { [weak self] in
+            guard let self else { return }
             do {
-                await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
-                MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
-                let archiveURL = try WatchDatabaseSyncService.buildArchive(for: kinds)
+                try await databaseSyncIsolation.prepare()
+                let archiveURL = try await Task.detached(priority: .userInitiated) {
+                    await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
+                    MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
+                    return try WatchDatabaseSyncService.buildArchive(for: kinds)
+                }.value
                 await MainActor.run { [weak self] in
                     self?.sendDatabaseArchive(
                         archiveURL,
@@ -1232,6 +1308,9 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         guard message["kind"] as? String == Self.databaseArchiveResultKind else { return false }
         let requestID = message["requestID"] as? String
         let operationID = requestID.flatMap(UUID.init(uuidString:))
+        guard let operationID else { return true }
+        let wasAwaitingAcknowledgement = pendingDatabaseArchiveAcknowledgements.remove(operationID) != nil
+        guard wasAwaitingAcknowledgement || activeDatabaseSyncOperation?.id == operationID else { return true }
         let silent = (message["silent"] as? Bool) ?? false
         let success = (message["success"] as? Bool) ?? false
 
@@ -1247,6 +1326,11 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                 )
             )
             return true
+        }
+
+        guard wasAwaitingAcknowledgement else { return true }
+        if activeDatabaseSyncOperation?.id != operationID {
+            databaseSyncIsolation.finish(operationID)
         }
 
         finishDatabaseSyncStep(
@@ -1333,6 +1417,11 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         replyHandler: @escaping ([String: Any]) -> Void
     ) -> Bool {
         guard message["kind"] as? String == Self.quickAppConfigKind else { return false }
+        guard !CloudSyncManager.shared.isRestoringLocalData,
+              !CloudSyncManager.shared.isPerformingSync else {
+            replyHandler(["accepted": false, "reason": "syncBusy"])
+            return true
+        }
         guard isWatchConnectivitySyncEnabled() else {
             replyHandler(["accepted": false, "reason": "syncDisabled"])
             return true
@@ -1352,6 +1441,9 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         replyHandler(["accepted": true])
         let package = SyncPackage(options: [.appStorage], appStorageSnapshot: snapshotData)
         Task { @MainActor [weak self] in
+            let cloud = CloudSyncManager.shared
+            guard cloud.beginLocalDataRestore() else { return }
+            defer { cloud.endLocalDataRestore(didRestore: false) }
             let summary = await SyncEngine.apply(package: package)
             self?.lastSummary = summary
             self?.lastUpdatedAt = Date()
@@ -1457,6 +1549,13 @@ extension WatchSyncManager: WCSessionDelegate {
             }
             let effectiveSilent = self.isSyncSilent(operationID: operationID, fallback: silent)
             if transferKind == Self.databaseArchiveKind {
+                guard file.metadata?["databaseArchiveVersion"] as? Int == 2 else {
+                    let message = NSLocalizedString("请将 iPhone 与 Apple Watch 上的 App 都更新后再覆盖数据。", comment: "")
+                    self.sendDatabaseArchiveResult(requestID: requestID, success: false, message: message, silent: effectiveSilent)
+                    self.failSyncOperation(operationID: operationID, fallbackSilent: effectiveSilent, message: message)
+                    try? FileManager.default.removeItem(at: stagedFileURL)
+                    return
+                }
                 let rawKinds = file.metadata?["databaseKinds"] as? [String] ?? []
                 let kinds = Set(rawKinds.compactMap(WatchSyncDatabaseKind.init(rawValue:)))
                 guard !kinds.isEmpty else {

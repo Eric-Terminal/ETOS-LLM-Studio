@@ -98,8 +98,10 @@ public extension CloudSyncManager {
         state = .waitingForInitialDecision
     }
 
-    func resolveInitialConflict(using resolution: CloudSyncInitialResolution) async {
+    func resolveInitialConflict(using resolution: CloudSyncInitialResolution, expectedConflictID: UUID? = nil) async {
+        guard !isRestoringLocalData else { return }
         guard isEnabled, let pending = pendingInitialConflict else { return }
+        guard expectedConflictID == nil || pending.summary.id == expectedConflictID else { return }
         guard !isPerformingSync else {
             needsSyncAfterCurrentRun = true
             return

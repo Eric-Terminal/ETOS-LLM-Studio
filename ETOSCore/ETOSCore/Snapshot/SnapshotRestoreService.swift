@@ -74,10 +74,12 @@ public enum SnapshotRestoreService {
         if manifest.backupKind == .full {
             try validateRestorableFiles(from: archive, manifest: manifest)
         }
-        MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
-        try Persistence.installSnapshotDatabases(databaseURLs)
-        if manifest.backupKind == .full {
-            try restoreFiles(from: archive, manifest: manifest)
+        try MemoryManager.withCurrentInstancePausedForSnapshotRestore {
+            try Persistence.installSnapshotDatabases(databaseURLs)
+            try MemoryStoragePaths.clearCachesAfterDatabaseRestore()
+            if manifest.backupKind == .full {
+                try restoreFiles(from: archive, manifest: manifest)
+            }
         }
         NotificationCenter.default.post(name: .snapshotRestoreDidFinish, object: nil)
     }
@@ -265,6 +267,8 @@ private extension SnapshotRestoreService {
             rootURL = Persistence.getImageDirectory()
         case "FileAttachments":
             rootURL = Persistence.getFileDirectory()
+        case "Skills":
+            rootURL = SkillStore.skillsDirectory
         case "FontFiles":
             rootURL = Persistence.getFontDirectory()
         case "Memory":
