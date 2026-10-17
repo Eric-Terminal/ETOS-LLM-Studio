@@ -18,7 +18,7 @@ struct SnapshotUploadManagerTests {
         let notifications = Notifications()
         let manager = SnapshotUploadManager(
             operation: { request, progress in
-                #expect(!Thread.isMainThread)
+                dispatchPrecondition(condition: .notOnQueue(.main))
                 return try await probe.run(request, progress: progress)
             },
             notify: { id, succeeded in notifications.events.append((id, succeeded)) }

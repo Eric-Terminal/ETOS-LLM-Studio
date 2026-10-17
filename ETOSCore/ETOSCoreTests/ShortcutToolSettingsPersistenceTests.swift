@@ -23,7 +23,8 @@ struct ShortcutToolSettingsPersistenceTests {
         let other = try database.read { try #require(ShortcutToolStore.loadTools(from: $0).first { $0.name == "Two" }) }
         #expect(original.metadata["future"] == .string("preserve"))
         let tools = try database.write {
-            try #require(ShortcutToolStore.saveSettingsDraft(original: original, isEnabled: true, runMode: .bridge, userDescription: "", in: $0))
+            let saved = try ShortcutToolStore.saveSettingsDraft(original: original, isEnabled: true, runMode: .bridge, userDescription: "", in: $0)
+            return try #require(saved)
         }
         let saved = try #require(tools.first { $0.id == original.id })
         #expect(saved.isEnabled)

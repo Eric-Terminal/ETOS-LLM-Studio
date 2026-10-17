@@ -62,7 +62,8 @@ struct LocalDebugUploadTransactionTests {
         let original = try fixture.snapshot(), server = fixture.server()
         var events: [String] = []
         server.fetchFilePayload = { _ in
-            #expect(try fixture.snapshot() == original)
+            let snapshot = try fixture.snapshot()
+            #expect(snapshot == original)
             return Data(#"{"status":"ok","data":"bmV3"}"#.utf8)
         }
         server.documentReplacementCoordinator = { operation in

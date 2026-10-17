@@ -9,7 +9,7 @@ struct LocalDebugDataCommandTests {
     func dataOperationRunsOffMainThread() async {
         let server = LocalDebugServer()
         let result = await server.runDebugDataOperation {
-            #expect(!Thread.isMainThread)
+            dispatchPrecondition(condition: .notOnQueue(.main))
             return ["status": "ok", "count": 3, "flag": true, "empty": NSNull()]
         }
         #expect(result["count"] as? Int == 3 && result["flag"] as? Bool == true)

@@ -116,12 +116,14 @@ struct LocalDebugCommandQueueTests {
     @Test("后台 JSON 往返保留请求标识与布尔空值，非对象输入不会成为命令")
     func backgroundJSONBoundaryPreservesValues() async throws {
         let result = try await Task.detached {
-            #expect(!Thread.isMainThread)
-            let decoded = try #require(LocalDebugJSONObject.decode(Data(#"{"command":"ping","request_id":"中文","flag":true,"value":null,"count":7}"#.utf8)))
+            dispatchPrecondition(condition: .notOnQueue(.main))
+            let object = try LocalDebugJSONObject.decode(Data(#"{"command":"ping","request_id":"中文","flag":true,"value":null,"count":7}"#.utf8))
+            let decoded = try #require(object)
             let encoded = try decoded.encoded()
             #expect(try LocalDebugJSONObject.decode(Data("[]".utf8)) == nil)
             #expect(throws: (any Error).self) { try LocalDebugJSONObject.decode(Data("{".utf8)) }
-            return try #require(LocalDebugJSONObject.decode(encoded))
+            let roundTrip = try LocalDebugJSONObject.decode(encoded)
+            return try #require(roundTrip)
         }.value
         #expect(result.value["request_id"] as? String == "中文")
         #expect(result.value["flag"] as? Bool == true && result.value["count"] as? Int == 7)

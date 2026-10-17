@@ -197,21 +197,24 @@ struct LocalModelBackgroundStorageTests {
         let source = try fixture.gguf()
         let importTask = Task.detached { try fixture.store.importModel(from: source) }
         // 信号量只用于测试中的后台线程，超时后一定释放复制，避免断言失败留下悬挂任务。
-        let readSucceeded = await Task.detached {
-            guard fileManager.copyStarted.wait(timeout: .now() + 5) == .success else {
-                fileManager.resumeCopy.signal()
-                return false
-            }
-            let readCompleted = DispatchSemaphore(value: 0)
+        let readSucceeded = await withCheckedContinuation { continuation in
             DispatchQueue.global().async {
-                #expect(fixture.store.models == [initial])
-                readCompleted.signal()
+                guard fileManager.copyStarted.wait(timeout: .now() + 5) == .success else {
+                    fileManager.resumeCopy.signal()
+                    continuation.resume(returning: false)
+                    return
+                }
+                let readCompleted = DispatchSemaphore(value: 0)
+                DispatchQueue.global().async {
+                    #expect(fixture.store.models == [initial])
+                    readCompleted.signal()
+                }
+                let succeeded = readCompleted.wait(timeout: .now() + 2) == .success
+                fileManager.resumeCopy.signal()
+                if !succeeded { _ = readCompleted.wait(timeout: .now() + 5) }
+                continuation.resume(returning: succeeded)
             }
-            let succeeded = readCompleted.wait(timeout: .now() + 2) == .success
-            fileManager.resumeCopy.signal()
-            if !succeeded { _ = readCompleted.wait(timeout: .now() + 5) }
-            return succeeded
-        }.value
+        }
         _ = try await importTask.value
         #expect(readSucceeded)
         #expect(fixture.store.models.count == 2)

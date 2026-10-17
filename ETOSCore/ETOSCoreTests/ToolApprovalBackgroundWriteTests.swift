@@ -20,7 +20,11 @@ struct ToolApprovalBackgroundWriteTests {
         let request = try await activeRequest(center)
         #expect(center.autoApproveRemainingSeconds(for: request) == 30)
         let write = Task { try await center.updatePreferencesInBackground(.enabled(false)) }
-        let entered = await Task.detached { gate.entered.wait(timeout: .now() + 5) == .success }.value
+        let entered = await withCheckedContinuation { continuation in
+            DispatchQueue.global().async {
+                continuation.resume(returning: gate.entered.wait(timeout: .now() + 5) == .success)
+            }
+        }
         #expect(entered)
         #expect(center.autoApproveRemainingSeconds(for: request) == nil)
         gate.release.signal()

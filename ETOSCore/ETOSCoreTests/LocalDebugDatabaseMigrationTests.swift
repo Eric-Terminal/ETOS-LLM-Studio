@@ -22,10 +22,13 @@ struct LocalDebugDatabaseMigrationTests {
             let url = fixture.root.appendingPathComponent(path)
             let queue = try DatabaseQueue(path: url.path, configuration: DebugMigrationFixture.configuration(encrypted))
             try queue.read { db in
-                #expect(try String.fetchOne(db, sql: "SELECT value FROM restore_fixture") == "保留记录")
-                #expect((try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM grdb_migrations") ?? 0) > 0)
+                let value = try String.fetchOne(db, sql: "SELECT value FROM restore_fixture")
+                let migrationCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM grdb_migrations") ?? 0
                 let table = path.contains("chat-store") ? "sessions" : (path.contains("config-store") ? "providers" : "memory_items")
-                #expect(try db.tableExists(table))
+                let tableExists = try db.tableExists(table)
+                #expect(value == "保留记录")
+                #expect(migrationCount > 0)
+                #expect(tableExists)
             }
             try queue.close()
             #expect(try Data(contentsOf: url).starts(with: Data("SQLite format 3\0".utf8)) == !encrypted)
@@ -62,8 +65,10 @@ struct LocalDebugDatabaseMigrationTests {
         for path in DebugMigrationFixture.legacyPaths {
             let queue = try DatabaseQueue(path: fixture.root.appendingPathComponent(path).path, configuration: DebugMigrationFixture.configuration(encrypted))
             try queue.read { db in
-                #expect(try String.fetchOne(db, sql: "SELECT value FROM restore_fixture") == "保留记录")
-                #expect(try db.tableExists(path.contains("config-store") ? "providers" : "memory_items"))
+                let value = try String.fetchOne(db, sql: "SELECT value FROM restore_fixture")
+                let tableExists = try db.tableExists(path.contains("config-store") ? "providers" : "memory_items")
+                #expect(value == "保留记录")
+                #expect(tableExists)
             }
             try queue.close()
         }
@@ -117,7 +122,8 @@ struct LocalDebugDatabaseMigrationTests {
         try await worker.value
         let queue = try DatabaseQueue(path: staged.root.appendingPathComponent(path).path, configuration: DebugMigrationFixture.configuration(encrypted))
         defer { try? queue.close() }
-        #expect(try queue.read { try $0.tableExists("sessions") })
+        let tableExists = try await queue.read { try $0.tableExists("sessions") }
+        #expect(tableExists)
         #expect(!FileManager.default.fileExists(atPath: staged.workingDirectory.path))
     }
 

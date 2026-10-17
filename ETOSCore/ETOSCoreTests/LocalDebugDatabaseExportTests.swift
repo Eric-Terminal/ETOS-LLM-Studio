@@ -17,11 +17,16 @@ struct LocalDebugDatabaseExportTests {
         let destination = try DatabaseQueue(path: fixture.destinationURL.path, configuration: fixture.configuration)
         defer { try? destination.close() }
         try destination.read { db in
-            #expect(try String.fetchOne(db, sql: "SELECT value FROM record_view") == "WAL 中的记录")
-            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM audit") == 1)
-            #expect(try Int.fetchOne(db, sql: "PRAGMA user_version") == 42)
-            #expect(try Int.fetchOne(db, sql: "PRAGMA application_id") == 31337)
-            #expect(try String.fetchOne(db, sql: "PRAGMA journal_mode") == "delete")
+            let value = try String.fetchOne(db, sql: "SELECT value FROM record_view")
+            let auditCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM audit")
+            let version = try Int.fetchOne(db, sql: "PRAGMA user_version")
+            let applicationID = try Int.fetchOne(db, sql: "PRAGMA application_id")
+            let journalMode = try String.fetchOne(db, sql: "PRAGMA journal_mode")
+            #expect(value == "WAL 中的记录")
+            #expect(auditCount == 1)
+            #expect(version == 42)
+            #expect(applicationID == 31337)
+            #expect(journalMode == "delete")
         }
         try destination.write { try $0.execute(sql: "INSERT INTO records(value) VALUES ('导出后的修改')") }
         #expect(try destination.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM audit") } == 2)
@@ -84,8 +89,10 @@ struct LocalDebugDatabaseExportTests {
                 try fixture.export()
                 let destination = try DatabaseQueue(path: fixture.destinationURL.path, configuration: fixture.configuration)
                 do {
-                    try destination.read { db in
-                        #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM records") == Int.fetchOne(db, sql: "SELECT COUNT(*) FROM audit"))
+                    try await destination.read { db in
+                        let recordCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM records")
+                        let auditCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM audit")
+                        #expect(recordCount == auditCount)
                     }
                     try destination.close()
                 } catch { try? destination.close(); throw error }
