@@ -72,6 +72,7 @@ public actor GuideKnowledgeService {
 
 public enum GuideDocumentCatalog {
     public static let documents: [GuideDocument] = [
+        BatchGuideSupport.document(),
         GuideMacWorkspaceKnowledge.document(),
         GuideContextCompressionKnowledge.document(),
         GuideChatQuickActionsKnowledge.document(),

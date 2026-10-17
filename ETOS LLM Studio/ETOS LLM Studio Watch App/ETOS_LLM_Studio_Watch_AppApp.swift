@@ -64,6 +64,7 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
                         _ = await ShortcutURLRouter.shared.handleIncomingURL(url)
                     }
                 }
+                .batchTaskLifecycle(isReady: launchStateMachine.phase == .ready)
                 .onAppear {
                     // 启动时自动重连已加入聊天路由的 MCP 服务器
                     mcpManager.connectSelectedServersIfNeeded()

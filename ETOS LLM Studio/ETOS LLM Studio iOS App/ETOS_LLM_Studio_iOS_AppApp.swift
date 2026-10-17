@@ -120,6 +120,7 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                         }
                     }
                 }
+                .batchTaskLifecycle(isReady: launchStateMachine.phase == .ready)
                 .onAppear {
                     PerformanceTelemetryCenter.shared.markFirstInterfaceReady()
                     appLockWindowPresenter.install()

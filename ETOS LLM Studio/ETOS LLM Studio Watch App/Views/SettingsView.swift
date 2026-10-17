@@ -256,6 +256,12 @@ struct SettingsView: View {
                         settingsNavigationLabel("用量统计", icon: .usageAnalytics)
                     }
 
+                    NavigationLink {
+                        BatchTasksView(pageChrome: { AnyView($0.watchGuideEntry()) })
+                    } label: {
+                        settingsNavigationLabel("batch.title", icon: .batch)
+                    }
+
                     NavigationLink(destination: ToolCenterView().environmentObject(viewModel)) {
                         settingsNavigationLabel("工具中心", icon: .toolCenter)
                     }
@@ -569,6 +575,7 @@ extension SettingsListIcon {
     static let toolCenter = SettingsListIcon(systemName: "wrench", backgroundColor: .teal, legacySystemName: "slider.horizontal.3")
     static let dailyPulse = SettingsListIcon(systemName: "sparkles", backgroundColor: .yellow, legacySystemName: "sparkles.rectangle.stack")
     static let usageAnalytics = SettingsListIcon(systemName: "chart.bar", backgroundColor: .cyan, legacySystemName: "calendar.badge.clock")
+    static let batch = SettingsListIcon(systemName: "tray.full", backgroundColor: .blue, legacySystemName: "tray.full")
     static let memory = SettingsListIcon(systemName: "brain", backgroundColor: .mint, legacySystemName: "brain.head.profile")
     static let mcp = SettingsListIcon(systemName: "network", backgroundColor: .blue)
     static let agentSkills = SettingsListIcon(systemName: "star", backgroundColor: .purple, legacySystemName: "sparkles.square.filled.on.square")

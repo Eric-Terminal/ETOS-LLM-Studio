@@ -18,7 +18,7 @@ struct MacSettingsView: View {
                     rows([.models, .conversation, .prompts, .output, .display, .sync])
                 }
                 Section(NSLocalizedString("拓展能力", comment: "")) {
-                    rows([.tools, .pulse, .usage, .memory, .mcp, .skills, .shortcuts,
+                    rows([.tools, .pulse, .usage, .batch, .memory, .mcp, .skills, .shortcuts,
                           .roleplay, .worldbook, .speech, .tts, .browser, .extended])
                 }
                 Section(NSLocalizedString("设置", comment: "")) {
@@ -79,6 +79,7 @@ struct MacSettingsView: View {
         case .tools: MacToolCenterView(isActive: available)
         case .pulse: MacDailyPulseView(model: workspace.dailyPulse, isEmbeddedInSettings: true)
         case .usage: MacUsageAnalyticsView(isActive: available)
+        case .batch: BatchTasksView(isActive: available)
         case .memory: MacMemorySystemView(isActive: available)
         case .mcp: MacMCPListView(isActive: available)
         case .skills: MacSkillsView(isActive: available, model: workspace.skills)

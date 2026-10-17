@@ -134,6 +134,12 @@ struct SettingsView: View {
                 }
 
                 NavigationLink {
+                    BatchTasksView()
+                } label: {
+                    SettingsListIconLabel("batch.title", icon: .batch)
+                }
+
+                NavigationLink {
                     LongTermMemoryFeatureView()
                         .environmentObject(viewModel)
                 } label: {
@@ -519,6 +525,7 @@ extension SettingsListIcon {
     static let toolCenter = SettingsListIcon(systemName: "wrench", backgroundColor: .teal)
     static let dailyPulse = SettingsListIcon(systemName: "sparkles", backgroundColor: .yellow)
     static let usageAnalytics = SettingsListIcon(systemName: "chart.bar", backgroundColor: .cyan)
+    static let batch = SettingsListIcon(systemName: "tray.full", backgroundColor: .blue)
     static let memory = SettingsListIcon(systemName: "brain", backgroundColor: .mint)
     static let mcp = SettingsListIcon(systemName: "network", backgroundColor: .blue)
     static let agentSkills = SettingsListIcon(systemName: "star", backgroundColor: .purple)

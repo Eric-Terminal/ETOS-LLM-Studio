@@ -84,6 +84,7 @@ private struct MacLaunchView: View {
             }
         }
         .task { await workspace.start() }
+        .batchTaskLifecycle(isReady: workspace.phase == .ready && !workspace.isRestoringData)
         .alert(NSLocalizedString("错误", comment: ""), isPresented: Binding(
             get: { workspace.errorMessage != nil },
             set: { if !$0 { workspace.errorMessage = nil } }
