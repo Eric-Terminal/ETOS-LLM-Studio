@@ -57,7 +57,6 @@ extension ChatViewModel {
         guard !isRecordingSpeech,
               !speechTranscriptionInProgress,
               speechRecordingURL == nil,
-              systemSpeechStreamingSession == nil,
               speechStreamingTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             isSpeechRecordingPreparing = false
             return
@@ -88,52 +87,6 @@ extension ChatViewModel {
             return
         }
         speechStreamingTranscript = ""
-
-        if shouldUseSystemSpeechStreaming {
-            let speechPermissionGranted = await SystemSpeechRecognizerService.requestAuthorization()
-            guard speechRecordingRequestID == requestID else { return }
-            guard speechPermissionGranted else {
-                presentSpeechError(NSLocalizedString("语音识别权限被拒绝，请到设置中开启。", comment: ""))
-                isSpeechRecordingPreparing = false
-                isSpeechRecorderPresented = false
-                return
-            }
-
-            do {
-                let streamSession = try SystemSpeechStreamingSession()
-                speechStreamingTranscript = ""
-                resetRecordingVisuals()
-                try streamSession.start(
-                    onTranscript: { [weak self] transcript in
-                        Task { @MainActor [weak self] in
-                            self?.speechStreamingTranscript = transcript
-                        }
-                    },
-                    onAudioLevel: { [weak self] level in
-                        Task { @MainActor [weak self] in
-                            self?.appendWaveformSample(level)
-                        }
-                    }
-                )
-                systemSpeechStreamingSession = streamSession
-                isRecordingSpeech = true
-                isSpeechRecordingPreparing = false
-                startRecordingTimer()
-            } catch {
-                presentSpeechError(
-                    String(
-                        format: NSLocalizedString("开始录音失败: %@", comment: ""),
-                        error.localizedDescription
-                    )
-                )
-                isSpeechRecordingPreparing = false
-                isSpeechRecorderPresented = false
-                stopRecordingTimer(resetVisuals: true)
-                systemSpeechStreamingSession = nil
-                speechStreamingTranscript = ""
-            }
-            return
-        }
 
         do {
             try await recordingAudioSession.activate()
@@ -196,7 +149,6 @@ extension ChatViewModel {
             isSpeechRecorderPresented = false
             stopRecordingTimer(resetVisuals: true)
             audioRecorder = nil
-            systemSpeechStreamingSession = nil
             speechRecordingURL = nil
             speechStreamingTranscript = ""
         }
@@ -207,13 +159,6 @@ extension ChatViewModel {
         isSpeechRecordingPreparing = false
         isRecordingSpeech = false
         stopRecordingTimer()
-
-        if let streamSession = systemSpeechStreamingSession {
-            let transcript = streamSession.finish().trimmingCharacters(in: .whitespacesAndNewlines)
-            systemSpeechStreamingSession = nil
-            speechStreamingTranscript = transcript
-            return
-        }
 
         audioRecorder?.stop()
     }
@@ -316,11 +261,6 @@ extension ChatViewModel {
 
     func cancelSpeechRecording() {
         speechRecordingRequestID = nil
-        if let streamSession = systemSpeechStreamingSession {
-            streamSession.stop()
-            systemSpeechStreamingSession = nil
-            speechStreamingTranscript = ""
-        }
         if isRecordingSpeech {
             audioRecorder?.stop()
             isRecordingSpeech = false
@@ -441,10 +381,6 @@ extension ChatViewModel {
             samples.removeFirst(samples.count - waveformSampleCount)
         }
         waveformSamples = samples
-    }
-
-    private var shouldUseSystemSpeechStreaming: Bool {
-        !sendSpeechAsAudio && ChatService.isSystemSpeechRecognizerModel(selectedSpeechModel)
     }
 
     private func requestMicrophonePermission() async -> Bool {

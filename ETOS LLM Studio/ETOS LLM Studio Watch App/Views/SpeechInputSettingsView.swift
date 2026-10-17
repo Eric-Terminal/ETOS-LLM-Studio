@@ -24,7 +24,7 @@ struct SpeechInputSettingsView: View {
             Section {
                 settingsIntroCard(
                     title: NSLocalizedString("语音输入模式", comment: "Speech input mode intro title"),
-                    summary: NSLocalizedString("录音可用系统内建识别或 OpenAI Audio Transcriptions 兼容模型转写，也可在聊天模型支持音频时直发。", comment: "Speech input mode intro summary"),
+                    summary: NSLocalizedString("录音可用本地语音模型或云端服务转写，也可在聊天模型支持音频时直发。", comment: "手表语音输入模式摘要"),
                     details: NSLocalizedString("语音输入模式详情：转写接口与模型来源", comment: "Speech input mode intro details"),
                     isExpanded: $isShowingIntroDetails
                 )

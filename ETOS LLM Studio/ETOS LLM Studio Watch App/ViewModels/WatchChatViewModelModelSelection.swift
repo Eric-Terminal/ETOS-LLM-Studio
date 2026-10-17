@@ -128,10 +128,12 @@ extension ChatViewModel {
             selectedSpeechModel = nil
             return
         }
-        guard !speechModels.isEmpty else { return }
-        selectedSpeechModel = nil
-        persistSpecializedModelIdentifier("", for: .speechModelIdentifier)
-        speechModelIdentifier = ""
+        // 模型目录发布前保留已存选择；目录就绪后，失效选择直接改用首项。
+        guard !speechModels.isEmpty else {
+            selectedSpeechModel = nil
+            return
+        }
+        setSelectedSpeechModel(speechModels.first)
     }
 
     func syncEmbeddingModelSelection() {

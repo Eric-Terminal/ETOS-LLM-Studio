@@ -39,11 +39,16 @@ extension ChatService {
 
     public var activatedSpeechModels: [RunnableModel] {
         // 专用模型设置决定转写用途，不要求模型携带额外能力标记。
+#if canImport(Speech) && canImport(AVFoundation)
+        // 系统键盘听写不代表平台开放 Speech 框架，模型目录必须与实际转写实现一致。
         var candidates = configuredRunnableModels
         if !candidates.contains(where: { $0.id == Self.systemSpeechRecognizerRunnableModel.id }) {
             candidates.insert(Self.systemSpeechRecognizerRunnableModel, at: 0)
         }
         return candidates
+#else
+        return configuredRunnableModels
+#endif
     }
 
     public var activatedOCRModels: [RunnableModel] {

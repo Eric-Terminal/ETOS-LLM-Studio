@@ -430,7 +430,6 @@ class ChatViewModel: ObservableObject {
     var audioRecorder: AVAudioRecorder?
     let recordingAudioSession = SpeechRecordingAudioSession()
     var speechRecordingRequestID: UUID?
-    var systemSpeechStreamingSession: SystemSpeechStreamingSession?
     var speechRecordingURL: URL?
     var recordingStartDate: Date?
     var recordingTimer: Timer?

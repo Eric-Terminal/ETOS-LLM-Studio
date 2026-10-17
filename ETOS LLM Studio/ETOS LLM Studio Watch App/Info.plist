@@ -32,8 +32,6 @@
 	<string>Read authorized contacts only when you explicitly invoke a contacts tool.</string>
 	<key>NSHomeKitUsageDescription</key>
 	<string>Read and control authorized homes and accessories only when you explicitly invoke a Home tool.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>语音输入需要访问语音识别</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Read your current location when you explicitly invoke a location tool, or keep an active response running when background generation is enabled.</string>
 	<key>NSHealthShareUsageDescription</key>

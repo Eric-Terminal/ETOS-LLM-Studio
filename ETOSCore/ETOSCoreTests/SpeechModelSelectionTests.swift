@@ -5,7 +5,7 @@ import Foundation
 @Suite("语音模型选择测试")
 struct SpeechModelSelectionTests {
 
-    @Test("语音模型列表默认包含系统语音识别模型")
+    @Test("仅支持 Speech 框架的平台默认提供系统语音模型")
     func testActivatedSpeechModelsContainsSystemModelByDefault() {
         let backupProviders = ConfigLoader.loadProviders()
         defer { restoreProviders(backupProviders) }
@@ -15,8 +15,12 @@ struct SpeechModelSelectionTests {
         let service = ChatService()
         let activated = service.activatedSpeechModels
 
+#if canImport(Speech) && canImport(AVFoundation)
         #expect(activated.count == 1)
         #expect(activated.first?.id == ChatService.systemSpeechRecognizerRunnableModel.id)
+#else
+        #expect(activated.isEmpty)
+#endif
     }
 
     @Test("配置模型无需语音能力标记即可选择")
@@ -42,8 +46,12 @@ struct SpeechModelSelectionTests {
 
         let activated = ChatService().activatedSpeechModels
 
+#if canImport(Speech) && canImport(AVFoundation)
         #expect(activated.count == 2)
         #expect(activated.first?.id == ChatService.systemSpeechRecognizerRunnableModel.id)
+#else
+        #expect(activated.count == 1)
+#endif
         #expect(activated.contains(where: { $0.model.modelName == "transcription-compatible-model" }))
     }
 
@@ -81,9 +89,14 @@ struct SpeechModelSelectionTests {
         let service = ChatService()
         let activated = service.activatedSpeechModels
 
+#if canImport(Speech) && canImport(AVFoundation)
         #expect(activated.count == 4)
         #expect(activated.first?.id == ChatService.systemSpeechRecognizerRunnableModel.id)
-        #expect(Set(activated.dropFirst().map(\.model.modelName)) == [
+#else
+        #expect(activated.count == 3)
+#endif
+        let configuredModels = activated.filter { !ChatService.isSystemSpeechRecognizerModel($0) }
+        #expect(Set(configuredModels.map(\.model.modelName)) == [
             "gpt-4o",
             "gpt-image-1",
             "text-embedding-3-small"
