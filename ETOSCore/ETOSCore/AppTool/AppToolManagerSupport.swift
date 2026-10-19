@@ -14,7 +14,7 @@ extension AppToolManager {
     func toolDefinition(for kind: AppToolKind) -> InternalToolDefinition {
         InternalToolDefinition(
             name: kind.toolName,
-            description: kind.toolDescription,
+            description: kind.builtInDescriptionPromptID.map { BuiltInPromptStore.template(for: $0) } ?? kind.toolDescription,
             parameters: kind.parameters,
             isBlocking: true
         )

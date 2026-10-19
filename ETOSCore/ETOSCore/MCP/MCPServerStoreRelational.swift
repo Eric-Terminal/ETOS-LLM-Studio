@@ -92,7 +92,7 @@ extension MCPServerStore {
             sql: """
             SELECT
                 id, api_key, additional_headers_json, disabled_tool_ids_json,
-                tool_approval_policies_json, oauth_payload_json, stream_resumption_token,
+                tool_approval_policies_json, tool_description_overrides_json, oauth_payload_json, stream_resumption_token,
                 info_json, resources_json, resource_templates_json, prompts_json, roots_json
             FROM \(relationalServerTable)
             """
@@ -154,7 +154,7 @@ extension MCPServerStore {
                     transport_kind, endpoint_url, message_endpoint_url, sse_endpoint_url,
                     sort_index,
                     api_key, additional_headers_json, oauth_payload_json,
-                    disabled_tool_ids_json, tool_approval_policies_json, stream_resumption_token,
+                    disabled_tool_ids_json, tool_approval_policies_json, tool_description_overrides_json, stream_resumption_token,
                     status, metadata_cached_at,
                     info_json, resources_json, resource_templates_json, prompts_json, roots_json,
                     updated_at
@@ -514,10 +514,10 @@ extension MCPServerStore {
             INSERT INTO \(relationalServerTable) (
                 id, display_name, notes, is_selected_for_chat, status, transport_kind,
                 sort_index, endpoint_url, message_endpoint_url, sse_endpoint_url, metadata_cached_at, updated_at,
-                api_key, additional_headers_json, disabled_tool_ids_json, tool_approval_policies_json,
+                api_key, additional_headers_json, disabled_tool_ids_json, tool_approval_policies_json, tool_description_overrides_json,
                 oauth_payload_json, stream_resumption_token,
                 info_json, resources_json, resource_templates_json, prompts_json, roots_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 display_name = excluded.display_name,
                 notes = excluded.notes,
@@ -534,6 +534,7 @@ extension MCPServerStore {
                 additional_headers_json = excluded.additional_headers_json,
                 disabled_tool_ids_json = excluded.disabled_tool_ids_json,
                 tool_approval_policies_json = excluded.tool_approval_policies_json,
+                tool_description_overrides_json = excluded.tool_description_overrides_json,
                 oauth_payload_json = excluded.oauth_payload_json,
                 stream_resumption_token = excluded.stream_resumption_token,
                 info_json = excluded.info_json,
@@ -559,6 +560,7 @@ extension MCPServerStore {
                 payload.additionalHeadersJSON,
                 payload.disabledToolIDsJSON,
                 payload.toolApprovalPoliciesJSON,
+                payload.toolDescriptionOverridesJSON,
                 payload.oauthPayloadJSON,
                 payload.streamResumptionToken,
                 payload.infoJSON,

@@ -74,6 +74,7 @@ struct MCPServerPayloadRecord: Codable, FetchableRecord, MutablePersistableRecor
         case additionalHeadersJSON = "additional_headers_json"
         case disabledToolIDsJSON = "disabled_tool_ids_json"
         case toolApprovalPoliciesJSON = "tool_approval_policies_json"
+        case toolDescriptionOverridesJSON = "tool_description_overrides_json"
         case oauthPayloadJSON = "oauth_payload_json"
         case streamResumptionToken = "stream_resumption_token"
         case infoJSON = "info_json"
@@ -88,6 +89,7 @@ struct MCPServerPayloadRecord: Codable, FetchableRecord, MutablePersistableRecor
     var additionalHeadersJSON: String?
     var disabledToolIDsJSON: String?
     var toolApprovalPoliciesJSON: String?
+    var toolDescriptionOverridesJSON: String?
     var oauthPayloadJSON: String?
     var streamResumptionToken: String?
     var infoJSON: String?
@@ -102,6 +104,7 @@ struct MCPServerPayloadRecord: Codable, FetchableRecord, MutablePersistableRecor
         additionalHeadersJSON: String?,
         disabledToolIDsJSON: String?,
         toolApprovalPoliciesJSON: String?,
+        toolDescriptionOverridesJSON: String? = nil,
         oauthPayloadJSON: String?,
         streamResumptionToken: String?,
         infoJSON: String?,
@@ -115,6 +118,7 @@ struct MCPServerPayloadRecord: Codable, FetchableRecord, MutablePersistableRecor
         self.additionalHeadersJSON = additionalHeadersJSON
         self.disabledToolIDsJSON = disabledToolIDsJSON
         self.toolApprovalPoliciesJSON = toolApprovalPoliciesJSON
+        self.toolDescriptionOverridesJSON = toolDescriptionOverridesJSON
         self.oauthPayloadJSON = oauthPayloadJSON
         self.streamResumptionToken = streamResumptionToken
         self.infoJSON = infoJSON
@@ -129,6 +133,7 @@ struct MCPServerPayloadRecord: Codable, FetchableRecord, MutablePersistableRecor
         streamResumptionToken = server.streamResumptionToken
         disabledToolIDsJSON = server.disabledToolIds.isEmpty ? nil : MCPServerStoreCodec.encodeJSONTextIfPresent(server.disabledToolIds)
         toolApprovalPoliciesJSON = server.toolApprovalPolicies.isEmpty ? nil : MCPServerStoreCodec.encodeJSONTextIfPresent(server.toolApprovalPolicies)
+        toolDescriptionOverridesJSON = server.toolDescriptionOverrides.isEmpty ? nil : MCPServerStoreCodec.encodeJSONTextIfPresent(server.toolDescriptionOverrides)
         infoJSON = MCPServerStoreCodec.encodeJSONTextIfPresent(metadata?.info)
         resourcesJSON = metadata?.resources.isEmpty == false ? MCPServerStoreCodec.encodeJSONTextIfPresent(metadata?.resources) : nil
         resourceTemplatesJSON = metadata?.resourceTemplates.isEmpty == false ? MCPServerStoreCodec.encodeJSONTextIfPresent(metadata?.resourceTemplates) : nil
@@ -188,6 +193,10 @@ struct MCPServerPayloadRecord: Codable, FetchableRecord, MutablePersistableRecor
 
     func decodeToolApprovalPolicies() -> [String: MCPToolApprovalPolicy] {
         MCPServerStoreCodec.decodeJSONTextIfPresent([String: MCPToolApprovalPolicy].self, from: toolApprovalPoliciesJSON) ?? [:]
+    }
+
+    func decodeToolDescriptionOverrides() -> [String: String] {
+        MCPServerStoreCodec.decodeJSONTextIfPresent([String: String].self, from: toolDescriptionOverridesJSON) ?? [:]
     }
 
     func decodeOAuthPayload() -> MCPOAuthPayload? {

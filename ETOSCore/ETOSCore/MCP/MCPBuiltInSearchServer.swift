@@ -15,6 +15,9 @@ public enum MCPBuiltInSearchServer {
     public static let serverID = UUID(uuidString: "45544F53-0000-0000-0000-000053454152")!
     public static let toolID = "search_web"
     public static let endpoint = "builtin://search"
+    static var toolDescription: String {
+        NSLocalizedString("使用设备网络搜索网页。如果 query 或 url 包含 URL / 域名，会优先抓取该页面标题和摘要，再补充搜索结果。", comment: "Built-in search MCP tool description")
+    }
 
     public static func isBuiltInSearchServer(_ server: MCPServerConfiguration) -> Bool {
         server.id == serverID || server.transport == .builtInSearch
@@ -249,7 +252,7 @@ actor MCPBuiltInSearchServerEngine {
             "tools": [
                 [
                     "name": MCPBuiltInSearchServer.toolID,
-                    "description": NSLocalizedString("使用设备网络搜索网页。如果 query 或 url 包含 URL / 域名，会优先抓取该页面标题和摘要，再补充搜索结果。", comment: "Built-in search MCP tool description"),
+                    "description": MCPBuiltInSearchServer.toolDescription,
                     "inputSchema": [
                         "type": "object",
                         "properties": [

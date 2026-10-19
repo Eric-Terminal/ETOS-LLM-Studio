@@ -82,6 +82,8 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable, Sendable 
     public var isSelectedForChat: Bool
     public var disabledToolIds: [String]
     public var toolApprovalPolicies: [String: MCPToolApprovalPolicy]
+    /// 与服务器元数据分开保存，tools/list 刷新不能覆盖用户编辑；空字符串也是有效覆盖。
+    public var toolDescriptionOverrides: [String: String]
     public var streamResumptionToken: String?
     public var sortIndex: Int
 
@@ -93,6 +95,7 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable, Sendable 
         isSelectedForChat: Bool = false,
         disabledToolIds: [String] = [],
         toolApprovalPolicies: [String: MCPToolApprovalPolicy] = [:],
+        toolDescriptionOverrides: [String: String] = [:],
         streamResumptionToken: String? = nil,
         sortIndex: Int = 0
     ) {
@@ -103,6 +106,7 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable, Sendable 
         self.isSelectedForChat = isSelectedForChat
         self.disabledToolIds = disabledToolIds
         self.toolApprovalPolicies = toolApprovalPolicies
+        self.toolDescriptionOverrides = toolDescriptionOverrides
         self.streamResumptionToken = streamResumptionToken?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.sortIndex = sortIndex
     }
@@ -117,6 +121,7 @@ extension MCPServerConfiguration {
         case isSelectedForChat
         case disabledToolIds
         case toolApprovalPolicies
+        case toolDescriptionOverrides
         case streamResumptionToken
         case sortIndex
     }
@@ -130,6 +135,7 @@ extension MCPServerConfiguration {
         isSelectedForChat = try container.decodeIfPresent(Bool.self, forKey: .isSelectedForChat) ?? false
         disabledToolIds = try container.decodeIfPresent([String].self, forKey: .disabledToolIds) ?? []
         toolApprovalPolicies = try container.decodeIfPresent([String: MCPToolApprovalPolicy].self, forKey: .toolApprovalPolicies) ?? [:]
+        toolDescriptionOverrides = try container.decodeIfPresent([String: String].self, forKey: .toolDescriptionOverrides) ?? [:]
         sortIndex = try container.decodeIfPresent(Int.self, forKey: .sortIndex) ?? 0
         let decodedToken = try container.decodeIfPresent(String.self, forKey: .streamResumptionToken)
         if let decodedToken {
@@ -160,6 +166,9 @@ extension MCPServerConfiguration {
         }
         if !normalizedToolApprovalPolicies.isEmpty {
             try container.encode(normalizedToolApprovalPolicies, forKey: .toolApprovalPolicies)
+        }
+        if !toolDescriptionOverrides.isEmpty {
+            try container.encode(toolDescriptionOverrides, forKey: .toolDescriptionOverrides)
         }
         if let streamResumptionToken {
             let trimmed = streamResumptionToken.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -379,6 +388,10 @@ public struct MCPSDKTransportBundle {
 }
 
 public extension MCPServerConfiguration {
+    func effectiveDescription(for tool: MCPToolDescription) -> String? {
+        toolDescriptionOverrides[tool.toolId] ?? tool.description
+    }
+
     func isToolEnabled(_ toolId: String) -> Bool {
         !disabledToolIds.contains(toolId)
     }

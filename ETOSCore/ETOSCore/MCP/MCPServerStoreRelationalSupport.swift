@@ -25,6 +25,7 @@ extension MCPServerStore {
         let oauthPayloadJSON: String? = row["oauth_payload_json"]
         let disabledToolIDsJSON: String? = row["disabled_tool_ids_json"]
         let toolPoliciesJSON: String? = row["tool_approval_policies_json"]
+        let toolDescriptionsJSON: String? = row["tool_description_overrides_json"]
         let streamToken: String? = row["stream_resumption_token"]
 
         let header = MCPServerHeaderRecord(
@@ -47,6 +48,7 @@ extension MCPServerStore {
             additionalHeadersJSON: additionalHeadersJSON,
             disabledToolIDsJSON: disabledToolIDsJSON,
             toolApprovalPoliciesJSON: toolPoliciesJSON,
+            toolDescriptionOverridesJSON: toolDescriptionsJSON,
             oauthPayloadJSON: oauthPayloadJSON,
             streamResumptionToken: streamToken,
             infoJSON: nil,
@@ -129,6 +131,7 @@ extension MCPServerStore {
             isSelectedForChat: header.isSelectedForChat != 0,
             disabledToolIds: disabledToolIDs,
             toolApprovalPolicies: toolPolicies,
+            toolDescriptionOverrides: payload?.decodeToolDescriptionOverrides() ?? [:],
             streamResumptionToken: streamToken,
             sortIndex: header.sortIndex
         )

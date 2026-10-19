@@ -972,6 +972,12 @@ extension PersistenceAuxiliaryGRDBStore {
             }
         }
 
+        if supportsConfigRelationalSchema {
+            migrator.registerMigration("v24_add_mcp_tool_description_overrides") { db in
+                try db.execute(sql: "ALTER TABLE mcp_servers ADD COLUMN tool_description_overrides_json TEXT")
+            }
+        }
+
         if supportsMemoryRelationalSchema {
             migrator.registerMigration("v2_create_memory_domain_tables") { db in
                 try db.execute(sql: """

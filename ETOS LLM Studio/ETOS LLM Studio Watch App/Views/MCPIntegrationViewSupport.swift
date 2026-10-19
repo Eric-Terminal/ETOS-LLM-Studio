@@ -262,14 +262,15 @@ struct MCPToolSettingsDetailView: View {
     let serverID: UUID
     let tool: MCPToolDescription
     @ObservedObject private var manager = MCPManager.shared
+    @State private var effectiveDescription = ""
 
     var body: some View {
         List {
             Section(NSLocalizedString("工具信息", comment: "")) {
                 Text(tool.toolId)
                     .etFont(.headline)
-                if let desc = tool.description, !desc.isEmpty {
-                    Text(desc)
+                if !effectiveDescription.isEmpty {
+                    Text(effectiveDescription)
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -283,6 +284,13 @@ struct MCPToolSettingsDetailView: View {
 
             Section(NSLocalizedString("启用状态", comment: "Enable status")) {
                 Toggle(NSLocalizedString("启用", comment: "Enable"), isOn: toolBinding)
+            }
+
+            Section {
+                NavigationLink(NSLocalizedString("编辑工具描述", value: "Edit Tool Description", comment: "")) {
+                    ToolDescriptionEditorView(target: .mcp(serverID: serverID, tool: tool))
+                        .watchGuideEntry()
+                }
             }
 
             Section(
@@ -299,6 +307,9 @@ struct MCPToolSettingsDetailView: View {
             }
         }
         .navigationTitle(NSLocalizedString("工具设置", comment: ""))
+        .onReceive(manager.$servers) { servers in
+            effectiveDescription = servers.first(where: { $0.id == serverID })?.effectiveDescription(for: tool) ?? ""
+        }
         .guidePageContext(
             descriptor: GuidePageDescriptor(
                 id: guidePageID,

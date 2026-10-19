@@ -46,6 +46,11 @@ struct MacCoreSettingsView: View {
                     Toggle(NSLocalizedString("在提示词中包含系统时间", comment: ""), isOn: $configuration.includeSystemTimeInPrompt)
                 }
                 Section {
+                    NavigationLink(NSLocalizedString("工具描述", comment: "")) {
+                        BuiltInToolDescriptionListView(isActive: isActive) { target in
+                            ToolDescriptionEditorView(target: target, isActive: isActive)
+                        }
+                    }
                     NavigationLink(NSLocalizedString("Agent 提示词", comment: "")) {
                         MacAgentPromptsView(isActive: isActive, model: workspace.agentPrompts)
                     }
@@ -90,6 +95,7 @@ struct MacCoreSettingsView: View {
         case .prompts: [
             .string("system_prompt", label: NSLocalizedString("系统提示词", comment: ""), get: { configuration.systemPrompt }, set: { configuration.systemPrompt = $0 }),
             .bool("system_time", label: NSLocalizedString("在提示词中包含系统时间", comment: ""), get: { configuration.includeSystemTimeInPrompt }, set: { configuration.includeSystemTimeInPrompt = $0 }),
+            .readOnly("tool_descriptions_require_navigation", label: NSLocalizedString("工具描述", comment: ""), value: { .bool(true) }),
             .readOnly("agent_prompts_require_navigation", label: NSLocalizedString("Agent 提示词", comment: ""), value: { .bool(true) })
         ]
         case .output: [

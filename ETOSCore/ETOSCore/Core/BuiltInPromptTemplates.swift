@@ -27,6 +27,7 @@ public enum BuiltInPromptCategory: String, CaseIterable, Identifiable, Sendable 
     case ocrAndAttachments
     case assistantTasks
     case dailyPulse
+    case toolDescriptions
 
     public var id: String { rawValue }
 
@@ -42,6 +43,8 @@ public enum BuiltInPromptCategory: String, CaseIterable, Identifiable, Sendable 
             return NSLocalizedString("辅助任务", comment: "Built-in prompt category title")
         case .dailyPulse:
             return NSLocalizedString("每日脉冲", comment: "Built-in prompt category title")
+        case .toolDescriptions:
+            return NSLocalizedString("工具描述", comment: "")
         }
     }
 
@@ -57,6 +60,8 @@ public enum BuiltInPromptCategory: String, CaseIterable, Identifiable, Sendable 
             return "wand.and.stars"
         case .dailyPulse:
             return "sparkles"
+        case .toolDescriptions:
+            return "wrench.and.screwdriver"
         }
     }
 }
@@ -97,11 +102,16 @@ public enum BuiltInPromptID: String, CaseIterable, Identifiable, Sendable {
     case dailyPulseSystem = "dailyPulse.system"
     case dailyPulseUser = "dailyPulse.user"
     case dailyPulseContinuation = "dailyPulse.continuation"
+    case showWidgetToolDescription = "tool.showWidget.description"
+    case askUserInputToolDescription = "tool.askUserInput.description"
+    case getSystemTimeToolDescription = "tool.getSystemTime.description"
 
     public var id: String { rawValue }
 
     public var category: BuiltInPromptCategory {
         switch self {
+        case .showWidgetToolDescription, .askUserInputToolDescription, .getSystemTimeToolDescription:
+            return .toolDescriptions
         case .systemTime, .longTermMemory, .recentConversationMemory, .userProfileMemory,
              .enhancedPrompt, .conversationContinuation:
             return .chatContext
@@ -126,6 +136,12 @@ public enum BuiltInPromptID: String, CaseIterable, Identifiable, Sendable {
 
     public var title: String {
         switch self {
+        case .showWidgetToolDescription:
+            return AppToolKind.showWidget.displayName
+        case .askUserInputToolDescription:
+            return AppToolKind.askUserInput.displayName
+        case .getSystemTimeToolDescription:
+            return AppToolKind.getSystemTime.displayName
         case .systemTime:
             return NSLocalizedString("时间前置提示词", comment: "Built-in prompt title")
         case .longTermMemory:
@@ -201,6 +217,8 @@ public enum BuiltInPromptID: String, CaseIterable, Identifiable, Sendable {
 
     public var detail: String {
         switch self {
+        case .showWidgetToolDescription, .askUserInputToolDescription, .getSystemTimeToolDescription:
+            return NSLocalizedString("自定义发送给模型的工具描述，不改变工具参数与执行方式。", value: "Customize the tool description sent to the model without changing its parameters or execution.", comment: "")
         case .systemTime:
             return NSLocalizedString("控制把当前设备时间发送给模型时的包裹文本。", comment: "Built-in prompt detail")
         case .longTermMemory:
@@ -251,6 +269,8 @@ public enum BuiltInPromptID: String, CaseIterable, Identifiable, Sendable {
 
     public var variables: [BuiltInPromptVariable] {
         switch self {
+        case .showWidgetToolDescription, .askUserInputToolDescription, .getSystemTimeToolDescription:
+            return []
         case .systemTime:
             return [.time]
         case .longTermMemory:
@@ -532,6 +552,12 @@ private extension BuiltInPromptVariable {
 private extension BuiltInPromptID {
     var defaultTemplate: String {
         switch self {
+        case .showWidgetToolDescription:
+            return AppToolKind.showWidget.toolDescription
+        case .askUserInputToolDescription:
+            return AppToolKind.askUserInput.toolDescription
+        case .getSystemTimeToolDescription:
+            return AppToolKind.getSystemTime.toolDescription
         case .systemTime:
             return NSLocalizedString(
                 "Built-in Prompt: System Time",

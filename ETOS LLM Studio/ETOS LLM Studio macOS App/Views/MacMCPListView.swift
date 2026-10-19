@@ -33,7 +33,7 @@ struct MacMCPListView: View {
             }
             ForEach(manager.servers) { server in
                 NavigationLink {
-                    MacMCPServerDetail(server: server)
+                    MacMCPServerDetail(server: server, isActive: isActive)
                 } label: {
                     VStack(alignment: .leading) {
                         Text(server.displayName)
@@ -91,6 +91,7 @@ private struct MacMCPServerDetail: View {
     @ObservedObject private var manager = MCPManager.shared
     @Environment(\.dismiss) private var dismiss
     @State var server: MCPServerConfiguration
+    let isActive: Bool
     @State private var editing = false
     @State private var deleting = false
     @State private var error: String?
@@ -116,7 +117,7 @@ private struct MacMCPServerDetail: View {
             }
             Section {
                 ForEach(status.tools) { tool in
-                    NavigationLink(tool.toolId) { MacMCPToolSettings(server: server, tool: tool) }
+                    NavigationLink(tool.toolId) { MacMCPToolSettings(server: server, tool: tool, isActive: isActive) }
                 }
             } header: { Text(NSLocalizedString("工具", comment: "")) }
             Section {
@@ -168,6 +169,7 @@ private struct MacMCPServerDetail: View {
                 documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Tools")],
                 tools: [GuidePageTool(definition: GuideToolCatalog.updateMCPServer, access: .proposeChange)]
             ),
+            isActive: isActive,
             snapshot: { GuideMCPServerSettingsSupport.snapshot(server: server, status: status) },
             buildProposal: { call, _ in
                 try GuideMCPServerSettingsSupport.buildProposal(call: call, pageID: GuidePageID(rawValue: "mac-mcp-detail-\(server.id)"), server: server)
@@ -195,11 +197,15 @@ private struct MacMCPToolSettings: View {
     @Environment(\.dismiss) private var dismiss
     @State var server: MCPServerConfiguration
     let tool: MCPToolDescription
+    let isActive: Bool
     @State private var error: String?
 
     var body: some View {
         Form {
-            Text(tool.description ?? "").font(.footnote).foregroundStyle(.secondary)
+            Text(server.effectiveDescription(for: tool) ?? "").font(.footnote).foregroundStyle(.secondary)
+            NavigationLink(NSLocalizedString("编辑工具描述", value: "Edit Tool Description", comment: "")) {
+                ToolDescriptionEditorView(target: .mcp(serverID: server.id, tool: tool), isActive: isActive)
+            }
             Toggle(NSLocalizedString("启用", comment: ""), isOn: Binding(
                 get: { server.isToolEnabled(tool.toolId) },
                 set: { value in var updated = server; updated.setToolEnabled(tool.toolId, isEnabled: value); save(updated) }
@@ -225,6 +231,7 @@ private struct MacMCPToolSettings: View {
                 documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Tools")],
                 tools: [GuidePageTool(definition: GuideToolCatalog.updateMCPTool, access: .proposeChange)]
             ),
+            isActive: isActive,
             snapshot: { GuideMCPToolSettingsSupport.snapshot(server: server, tool: tool) },
             buildProposal: { call, _ in
                 try GuideMCPToolSettingsSupport.buildProposal(call: call, pageID: GuidePageID(rawValue: "mac-mcp-tool-\(server.id)-\(tool.toolId)"), server: server, tool: tool)

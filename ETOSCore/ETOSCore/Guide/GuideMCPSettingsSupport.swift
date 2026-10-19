@@ -445,7 +445,12 @@ public enum GuideMCPToolSettingsSupport {
             ),
             "description": GuideSnapshotField(
                 label: NSLocalizedString("工具描述", comment: "MCP 工具向导快照字段"),
-                value: .string(tool.description ?? ""),
+                value: .string(server.effectiveDescription(for: tool) ?? ""),
+                access: .readOnly
+            ),
+            "description_requires_navigation": GuideSnapshotField(
+                label: NSLocalizedString("编辑工具描述", value: "Edit Tool Description", comment: ""),
+                value: .bool(true),
                 access: .readOnly
             ),
             "input_schema": GuideSnapshotField(

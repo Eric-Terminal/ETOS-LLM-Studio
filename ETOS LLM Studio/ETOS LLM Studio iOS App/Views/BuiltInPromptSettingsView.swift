@@ -22,10 +22,18 @@ struct BuiltInPromptSettingsView: View {
             if usesCategoryTabs {
                 TabView(selection: $selectedCategory) {
                     ForEach(BuiltInPromptCategory.allCases) { category in
-                        BuiltInPromptCategoryListView(
-                            category: category,
-                            isGuideActive: selectedCategory == category
-                        )
+                        Group {
+                            if category == .toolDescriptions {
+                                BuiltInToolDescriptionListView(isActive: selectedCategory == category) { target in
+                                    ToolDescriptionEditorView(target: target, isActive: selectedCategory == category)
+                                }
+                            } else {
+                                BuiltInPromptCategoryListView(
+                                    category: category,
+                                    isGuideActive: selectedCategory == category
+                                )
+                            }
+                        }
                             .tag(category)
                             .tabItem {
                                 Label(category.title, systemImage: category.systemImageName)
@@ -56,7 +64,13 @@ private struct BuiltInPromptOverviewListView: View {
             Section {
                 ForEach(BuiltInPromptCategory.allCases) { category in
                     NavigationLink {
-                        BuiltInPromptCategoryListView(category: category)
+                        if category == .toolDescriptions {
+                            BuiltInToolDescriptionListView { target in
+                                ToolDescriptionEditorView(target: target)
+                            }
+                        } else {
+                            BuiltInPromptCategoryListView(category: category)
+                        }
                     } label: {
                         Label(category.title, systemImage: category.systemImageName)
                     }

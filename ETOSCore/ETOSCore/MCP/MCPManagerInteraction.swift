@@ -298,7 +298,9 @@ extension MCPManager {
                 return nil
             }
             let description: String
-            if let desc = available.tool.description, !desc.isEmpty {
+            if let customDescription = available.server.toolDescriptionOverrides[available.tool.toolId] {
+                description = customDescription
+            } else if let desc = available.tool.description, !desc.isEmpty {
                 description = "[\(available.server.displayName)] \(desc)"
             } else {
                 let fallback = String(

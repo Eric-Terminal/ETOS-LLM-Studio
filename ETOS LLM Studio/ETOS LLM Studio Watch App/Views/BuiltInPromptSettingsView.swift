@@ -33,7 +33,15 @@ private struct BuiltInPromptOverviewListView: View {
             Section {
                 ForEach(BuiltInPromptCategory.allCases) { category in
                     NavigationLink {
-                        BuiltInPromptCategoryListView(category: category)
+                        if category == .toolDescriptions {
+                            BuiltInToolDescriptionListView { target in
+                                ToolDescriptionEditorView(target: target)
+                                    .watchGuideEntry()
+                            }
+                            .watchGuideEntry()
+                        } else {
+                            BuiltInPromptCategoryListView(category: category)
+                        }
                     } label: {
                         Label(category.title, systemImage: category.systemImageName)
                     }
