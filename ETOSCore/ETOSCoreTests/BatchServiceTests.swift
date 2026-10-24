@@ -5,12 +5,47 @@ import GRDB
 
 @Suite("批量服务生命周期")
 struct BatchServiceTests {
+    @Test("提交中断后返回已保存任务，恢复不会再次创建已接受的远端任务")
+    func interruptedSubmissionKeepsRecoveryPath() async throws {
+        let fixture = try BatchServiceFixture()
+        await fixture.server.cancelAfterCreation()
+        let service = fixture.service()
+        let report = try await fixture.submit(using: service)
+        #expect(report.submittedCount == 0 && report.attentionCount == 1)
+        let original = try #require(try await service.jobs().first)
+        #expect(original.submission == .creating)
+        try await service.resumeSubmission(id: original.id)
+        #expect(try await service.jobs().first?.remoteID == "batch_1")
+        #expect(await fixture.server.creationCount == 1)
+    }
+
+    @Test("部分模型不支持批量接口时保留全部任务，并报告成功和待处理数量")
+    func reportsPartialSubmission() async throws {
+        let fixture = try BatchServiceFixture(modelCount: 2)
+        await fixture.server.rejectNextCreation()
+        let service = fixture.service()
+        let ids = fixture.provider.models.map { RunnableModel(provider: fixture.provider, model: $0).id }
+        let report = try await service.submit(title: "部分失败", inputs: ["多行\n正文"], modelIDs: ids, temperature: nil, topP: nil)
+        let jobs = try await service.jobs()
+        #expect(report.submittedCount == 1)
+        #expect(report.attentionCount == 1)
+        #expect(jobs.count == 2)
+        #expect(jobs.filter { $0.remoteID != nil }.count == 1)
+        let failed = try #require(jobs.first { $0.remoteID == nil })
+        #expect(failed.submission == .failed)
+        #expect(failed.errorMessage == BatchError.batchEndpointUnavailable.localizedDescription)
+        #expect(jobs.allSatisfy { $0.requests[0].input == "多行\n正文" })
+        #expect(await fixture.server.creationCount == 1)
+    }
+
     @Test("创建响应丢失后重启恢复，远端只创建一次")
     func recoverLostCreationResponse() async throws {
         let fixture = try BatchServiceFixture()
         await fixture.server.loseNextCreationResponse()
         let service = fixture.service()
-        try await fixture.submit(using: service)
+        let report = try await fixture.submit(using: service)
+        #expect(report.submittedCount == 0)
+        #expect(report.attentionCount == 1)
         let original = try #require(try await service.jobs().first)
         #expect(original.submission == .uncertain)
         let restarted = fixture.service()
@@ -120,12 +155,12 @@ private final class BatchServiceFixture: @unchecked Sendable {
     private let lock = NSLock()
     private var store: PersistenceGRDBStore
 
-    init() throws {
+    init(modelCount: Int = 1) throws {
         directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         store = try PersistenceGRDBStore(chatsDirectory: directory, configuration: Configuration(), schedulesMaintenance: false)
         provider = Provider(name: "Fixture", baseURL: "https://example.invalid/v1", apiKeys: ["fixture-key"],
-            apiFormat: "openai-compatible", models: [Model(modelName: "fixture-model", isActivated: true)])
+            apiFormat: "openai-compatible", models: (0..<modelCount).map { Model(modelName: "fixture-model-\($0)", isActivated: true) })
     }
 
     deinit { try? FileManager.default.removeItem(at: directory) }
@@ -135,9 +170,10 @@ private final class BatchServiceFixture: @unchecked Sendable {
                      transport: { request, _ in try await self.server.send(request) })
     }
 
-    func submit(using service: BatchService) async throws {
+    @discardableResult
+    func submit(using service: BatchService) async throws -> BatchSubmissionReport {
         let id = RunnableModel(provider: provider, model: provider.models[0]).id
-        try await service.submit(title: "测试任务", inputs: ["第一条", "第二条"], modelIDs: [id], temperature: nil, topP: nil)
+        return try await service.submit(title: "测试任务", inputs: ["第一条", "第二条"], modelIDs: [id], temperature: nil, topP: nil)
     }
 
     func replaceDatabase(copying job: BatchJob) throws {
@@ -153,6 +189,8 @@ private actor BatchServerFixture {
     private(set) var creationCount = 0
     private(set) var statusCount = 0
     private var lostCreation = false
+    private var creationRejected = false
+    private var creationCancelled = false
     private var listingRejected = false
     private var errorDownloadFails = false
     private var remote: [String: JSONValue] = [:]
@@ -161,6 +199,8 @@ private actor BatchServerFixture {
     private var statusGate: (entered: AsyncStream<Void>.Continuation, release: AsyncStream<Void>)?
 
     func loseNextCreationResponse() { lostCreation = true }
+    func rejectNextCreation() { creationRejected = true }
+    func cancelAfterCreation() { creationCancelled = true }
     func rejectListing() { listingRejected = true }
 
     func holdNextStatus() -> (entered: AsyncStream<Void>, release: AsyncStream<Void>.Continuation) {
@@ -191,11 +231,16 @@ private actor BatchServerFixture {
             return Data(#"{"id":"input"}"#.utf8)
         }
         if path == "/v1/batches", request.httpMethod == "POST" {
+            if creationRejected {
+                creationRejected = false
+                throw ChatService.NetworkError.badStatusCode(code: 404, responseBody: nil)
+            }
             creationCount += 1
             let payload = try JSONDecoder().decode(JSONValue.self, from: request.httpBody!)
             guard case .dictionary(let fields) = payload else { throw BatchError.invalidInput }
             remote = ["id": .string("batch_\(creationCount)"), "status": .string("in_progress"),
                       "created_at": .int(1000), "metadata": fields["metadata"]!, "input_file_id": .string("input")]
+            if creationCancelled { creationCancelled = false; throw CancellationError() }
             if lostCreation { lostCreation = false; throw URLError(.networkConnectionLost) }
             return try JSONEncoder().encode(JSONValue.dictionary(remote))
         }

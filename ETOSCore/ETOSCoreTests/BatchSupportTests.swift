@@ -46,6 +46,28 @@ struct BatchSupportTests {
         for key in ["stream_options", "previous_response_id", "background", "conversation"] { #expect(body[key] == nil) }
     }
 
+    @Test("多行正文在 JSONL 中仍然是一条完整请求")
+    func multilineJSONL() throws {
+        let input = "请处理下面内容：\n\n第一段\n第二段"
+        let prepared = try OpenAIBatchSupport.prepare(title: "", inputs: [input], model: model(), temperature: nil, topP: nil)
+        let lines = String(decoding: try OpenAIBatchSupport.jsonl(prepared), as: UTF8.self).split(separator: "\n")
+        #expect(lines.count == 1)
+        let object = try #require(JSONSerialization.jsonObject(with: Data(lines[0].utf8)) as? [String: Any])
+        let body = try #require(object["body"] as? [String: Any])
+        let messages = try #require(body["messages"] as? [[String: Any]])
+        #expect(messages[0]["content"] as? String == input)
+    }
+
+    @Test("未取回的结果显示等待，不能伪装成空白成功结果")
+    func pendingResultPresentation() throws {
+        var job = try job()
+        #expect(BatchJobRow(job: job).results.allSatisfy(\.isPending))
+        job.results = [BatchResult(id: job.requests[0].id, text: "完成")]
+        let row = BatchJobRow(job: job)
+        #expect(!row.results[0].isPending)
+        #expect(row.results[1].isPending)
+    }
+
     @Test("Responses 独立协议使用匹配的 Batch 端点")
     func responsesEndpoint() throws {
         let job = try job(model(format: "openai-responses"))
@@ -190,7 +212,8 @@ struct BatchSupportTests {
     func guideKnowledge() {
         let document = BatchGuideSupport.document()
         #expect(document.id == "batch-tasks")
-        for word in ["设置→拓展功能→批量任务", "草稿", "原生确认", "metadata", "前台", "聊天数据库", "API Key"] {
+        for word in ["设置→拓展功能→批量任务", "草稿", "原生确认", "metadata", "前台", "聊天数据库", "API Key",
+                     "正文换行会保留", "按行添加多条", "batch-request-import", "batch-model-picker", "batch-review", "共 10 次处理"] {
             #expect(document.content.contains(word))
         }
         #expect(GuideDocumentCatalog.documents.contains { $0.id == document.id })

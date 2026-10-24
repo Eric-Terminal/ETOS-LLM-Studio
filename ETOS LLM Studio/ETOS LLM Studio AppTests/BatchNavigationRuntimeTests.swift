@@ -65,6 +65,23 @@ struct BatchNavigationRuntimeTests {
                 #expect(GuideContextCoordinator.shared.activePage?.id.rawValue == pageID)
             }
 
+            if pageID == "batch-editor" {
+                try await activate("batch.models.choose", in: host.view)
+                try await waitForPage("batch-model-picker")
+                #expect(navigation.viewControllers.count == listDepth + 2)
+                _ = navigation.popViewController(animated: false)
+                try await waitForPage("batch-editor")
+
+                for (entry, destination) in [("batch.request.add", "batch-request-editor-"), ("batch.request.import", "batch-request-import")] {
+                    try await activate(entry, in: host.view)
+                    try await waitForPage(destination, matchesPrefix: true)
+                    let presented = try #require(host.presentedViewController)
+                    try await activate("batch.request.cancel", in: presented.view)
+                    try await waitForPage("batch-editor")
+                    #expect(navigation.viewControllers.count == listDepth + 1)
+                }
+            }
+
             _ = navigation.popViewController(animated: false)
             try await waitForPage("batch-tasks")
             #expect(navigation.viewControllers.count == listDepth)
@@ -74,9 +91,10 @@ struct BatchNavigationRuntimeTests {
         try await waitForPage("settings-extended-features")
     }
 
-    private func waitForPage(_ pageID: String) async throws {
+    private func waitForPage(_ pageID: String, matchesPrefix: Bool = false) async throws {
         for _ in 0..<100 {
-            if GuideContextCoordinator.shared.activePage?.id.rawValue == pageID { return }
+            let current = GuideContextCoordinator.shared.activePage?.id.rawValue
+            if matchesPrefix ? current?.hasPrefix(pageID) == true : current == pageID { return }
             try await Task.sleep(for: .milliseconds(50))
         }
         try #require(GuideContextCoordinator.shared.activePage?.id.rawValue == pageID,

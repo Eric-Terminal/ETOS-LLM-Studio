@@ -8413,7 +8413,7 @@
 "batch.title" = "批量任務";
 "batch.help.title" = "如何使用批量任務";
 "batch.help.summary" = "一併提交多項獨立請求，稍後集中查看結果。";
-"batch.requests.footer" = "每個非空行是一項獨立文字請求，不包含聊天記錄或附件。";
+"batch.requests.footer" = "逐項加入請求，內文換行會保留。不包含聊天記錄或附件。";
 "batch.models.empty" = "請先在模型管理中啟用 OpenAI 相容聊天模型。";
 "batch.models" = "模型";
 "batch.models.footer" = "每個選取的模型建立一項獨立任務。Batch 支援與價格由供應商決定。";
@@ -8430,7 +8430,7 @@
 "batch.action.notice" = "重試會建立新的計費任務。取消會保留已完成結果。刪除記錄只移除本機副本。";
 "batch.input" = "原始輸入";
 "batch.output" = "輸出";
-"batch.help.body" = "每個非空行輸入一項獨立請求，再選擇一個或多個 OpenAI 相容聊天模型；每個模型會建立一項獨立任務。供應商須支援 Batch API，普通聊天可用不代表支援批量任務，價格和額度以供應商為準。\n\n任務在伺服器非同步執行，可能需要最多 24 小時。App 在前景低頻更新，再次開啟時繼續取得結果；通知在取回結果後發送，系統暫停期間無法保證及時通知。\n\n重新整理會儲存結果，取消或過期任務也會保留已完成的部分。只重試失敗項目會建立新的計費任務。提交結果不確定時，請先復原任務，並在再次提交前到供應商控制台核實。請保留原供應商網址、請求標頭和 API Key。\n\n任務和結果存放於聊天資料庫，包含在快照備份及手機／手錶聊天資料庫同步中，請同時同步對應供應商設定。iOS 和 macOS 可以分享 JSONL；手錶可先同步到手機再匯出。刪除本機記錄不會刪除遠端檔案。\n\n頁面嚮導經確認可修改新增任務的草稿，不能提交、取消、重試、刪除或匯出任務。批量請求不包含聊天記錄、附件或 App 工具。";
+"batch.help.body" = "逐項加入請求會保留內文換行；只有選擇「按行加入多項」才會拆分非空行，儲存前可核對項數。模型可搜尋、按供應商篩選或只看已選，批量選擇僅作用於目前顯示的模型。提交前核對目標模型和總處理次數，每個模型建立一項獨立任務。介面格式相容不代表供應商已開放 Batch，價格和額度以供應商為準。\n\n任務在伺服器非同步執行，可能需要最多 24 小時。App 在前景低頻更新，再次開啟時繼續取得結果；通知在取回結果後發送，系統暫停期間無法保證及時通知。\n\n重新整理會儲存結果，取消或過期任務也會保留已完成的部分。只重試失敗項目會建立新的計費任務。提交結果不確定時，請先復原任務，並在再次提交前到供應商控制台核實。請保留原供應商網址、請求標頭和 API Key。\n\n任務和結果存放於聊天資料庫，包含在快照備份及手機／手錶聊天資料庫同步中，請同時同步對應供應商設定。iOS 和 macOS 可以分享 JSONL；手錶可先同步到手機再匯出。刪除本機記錄不會刪除遠端檔案。\n\n頁面嚮導經確認可修改新增任務的草稿，不能提交、取消、重試、刪除或匯出任務。批量請求不包含聊天記錄、附件或 App 工具。";
 "batch.add" = "加入請求";
 "batch.requests.watch" = "逐項輸入並加入請求，可滑動移除已加入項目；只有已加入的請求會被提交。";
 
@@ -8457,3 +8457,30 @@
 "feedback.device.question_count" = "問題數量";
 "feedback.device.disclosure" = "回饋及隨機裝置識別碼將公開發佈到 GitHub。開發者可透過該識別碼向本機傳送私人追問，請勿在公開回饋中填寫聯絡資料。";
 "feedback.device.acknowledge" = "已了解";
+
+/* 批量任务编辑与模型筛选 */
+"batch.name.optional" = "名稱（選填）";
+"batch.request.footer" = "整段文字是一項請求，包含內文中的換行。儲存後加入批量任務草稿。";
+"batch.request.edit" = "編輯請求";
+"batch.requests.paste" = "按行加入多項";
+"batch.requests.lines.footer" = "每個非空行會加入為一項請求。需要保留內文換行時，請使用「加入請求」。儲存後才會加入草稿。";
+"batch.requests.count" = "%d 項請求";
+"batch.models.choose" = "選擇模型";
+"batch.models.selected" = "已選 %d 個模型";
+"batch.models.count" = "顯示 %d 個 · 已選 %d 個";
+"batch.models.search" = "搜尋模型或供應商";
+"batch.models.provider" = "供應商";
+"batch.models.allProviders" = "所有供應商";
+"batch.models.selectedOnly" = "只看已選";
+"batch.models.selectVisible" = "選擇目前顯示的模型";
+"batch.models.clearVisible" = "取消選擇目前顯示的模型";
+"batch.models.noMatches" = "沒有符合條件的模型。試試其他關鍵字，或關閉篩選。";
+"batch.models.compatibility" = "候選模型的介面格式相容；是否開放 Batch 及其價格仍以供應商為準。";
+"batch.review" = "核對並提交";
+"batch.review.total" = "共處理 %d 次 · 建立 %d 項遠端任務";
+"batch.review.notice" = "每項請求都會傳送給每個已選模型。任務非同步處理，可能需要最多 24 小時；是否支援、收費和折扣以供應商為準。";
+"batch.result.pending" = "等候取得結果";
+"batch.submission.success" = "已提交 %d 項任務，稍後可在這裏取得結果。";
+"batch.submission.attention" = "已提交 %d 項任務，另有 %d 項需要處理。請開啟已儲存的任務查看錯誤或恢復提交，避免整批重複傳送。";
+"batch.error.endpoint" = "供應商找不到或不接受該批量介面。請檢查基礎位址，並確認供應商支援檔案上載和 Batch 任務。";
+"batch.models.providerOptions" = "可篩選的供應商";

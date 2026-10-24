@@ -1,5 +1,17 @@
 import Foundation
 
+public struct BatchSubmissionReport: Sendable {
+    public let submittedCount: Int
+    public let attentionCount: Int
+
+    var notice: String {
+        if attentionCount == 0 {
+            return String(format: NSLocalizedString("batch.submission.success", value: "%d tasks submitted. Retrieve their results here later.", comment: "提交完成反馈"), submittedCount)
+        }
+        return String(format: NSLocalizedString("batch.submission.attention", value: "%d tasks submitted; %d need attention. Open the saved tasks to check errors or recover submission. Do not submit the whole batch again.", comment: "部分失败保留已提交任务"), submittedCount, attentionCount)
+    }
+}
+
 /// 远端状态与本地提交状态分开保存，网络中断不能被误认为远端任务失败。
 public enum BatchJobStatus: String, Codable, Sendable {
     case validating, inProgress = "in_progress", finalizing, completed, failed, expired, cancelling, cancelled
@@ -66,7 +78,7 @@ public struct BatchJob: Codable, Sendable, Identifiable {
 
 enum BatchError: LocalizedError {
     case invalidInput, unsupportedModel, credentialsChanged, unavailableStore, busy, invalidResponse
-    case uncertainSubmission, missingResult, noFailedItems, activeJob, storeReplaced
+    case uncertainSubmission, missingResult, noFailedItems, activeJob, storeReplaced, batchEndpointUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -81,6 +93,7 @@ enum BatchError: LocalizedError {
         case .noFailedItems: NSLocalizedString("batch.error.retry", value: "Download all results before retrying failed requests.", comment: "批量重试限制")
         case .activeJob: NSLocalizedString("batch.error.active", value: "Cancel the remote job and refresh its final status before removing it.", comment: "批量删除限制")
         case .storeReplaced: NSLocalizedString("batch.error.storage", value: "The batch job could not be saved. Unlock the database and try again.", comment: "批量存储失败")
+        case .batchEndpointUnavailable: NSLocalizedString("batch.error.endpoint", value: "The provider could not find or accept the Batch endpoint. Check the base URL and whether this provider supports file uploads and Batch tasks.", comment: "供应商批量端点不可用")
         }
     }
 }

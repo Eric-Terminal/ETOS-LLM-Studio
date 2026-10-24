@@ -8252,7 +8252,7 @@
 "batch.title" = "Batch Tasks";
 "batch.help.title" = "Using Batch Tasks";
 "batch.help.summary" = "Send independent requests together and collect their results later.";
-"batch.requests.footer" = "Each nonempty line is a separate text request. No chat history or attachments are included.";
+"batch.requests.footer" = "Add requests separately. Line breaks stay within a request. No chat history or attachments are included.";
 "batch.models.empty" = "Enable an OpenAI-compatible chat model in Model Management first.";
 "batch.models" = "Models";
 "batch.models.footer" = "Each selected model creates a separate task. Batch support and pricing depend on the provider.";
@@ -8269,7 +8269,7 @@
 "batch.action.notice" = "Retrying creates a new billable task. Cancelling keeps completed results. Removing a record only deletes its local copy.";
 "batch.input" = "Input";
 "batch.output" = "Output";
-"batch.help.body" = "Add one independent request per line, then choose one or more OpenAI-compatible chat models. Each model gets a separate task. Your provider must support the Batch API; normal chat availability does not guarantee Batch support. Provider pricing and limits apply.\n\nTasks run asynchronously on the server and may take up to 24 hours. The app refreshes periodically while active and resumes when reopened. Notifications arrive after results are retrieved; they are not guaranteed while the app is suspended.\n\nRefresh a task to save its results, including partial results from cancelled or expired tasks. Retry Failed Requests sends only failed items as a new task. If submission is uncertain, recover it first and check the provider dashboard before submitting again. Keep the original provider address, headers and API key available.\n\nTasks and results are stored in the chat database and included in snapshot backups and phone/watch chat database sync. Sync the provider configuration as well. iOS and macOS can share JSONL results; watch users can sync to iPhone to export. Removing a local record does not delete remote files.\n\nThe page guide can edit the new-task draft after confirmation, but cannot submit, cancel, retry, delete or export tasks. Requests do not include chat history, attachments or app tools.";
+"batch.help.body" = "Add each request separately to preserve its line breaks. Use Add Multiple Lines only when each nonempty line should become a separate request; check the count before saving. Search and filter models by provider, or show only selected models. Bulk selection affects only shown models. Review the models and total request count before submitting. Each model gets a separate task. Compatible API format does not guarantee Batch availability; provider pricing and limits apply.\n\nTasks run asynchronously on the server and may take up to 24 hours. The app refreshes periodically while active and resumes when reopened. Notifications arrive after results are retrieved; they are not guaranteed while the app is suspended.\n\nRefresh a task to save its results, including partial results from cancelled or expired tasks. Retry Failed Requests sends only failed items as a new task. If submission is uncertain, recover it first and check the provider dashboard before submitting again. Keep the original provider address, headers and API key available.\n\nTasks and results are stored in the chat database and included in snapshot backups and phone/watch chat database sync. Sync the provider configuration as well. iOS and macOS can share JSONL results; watch users can sync to iPhone to export. Removing a local record does not delete remote files.\n\nThe page guide can edit the new-task draft after confirmation, but cannot submit, cancel, retry, delete or export tasks. Requests do not include chat history, attachments or app tools.";
 "batch.add" = "Add Request";
 "batch.requests.watch" = "Enter and add each request separately. Swipe to remove an added request. Only added requests will be submitted.";
 
@@ -8296,3 +8296,30 @@
 "feedback.device.question_count" = "Question count";
 "feedback.device.disclosure" = "Feedback and a random device identifier are published on GitHub. The identifier lets the developer send private follow-up questions to this device. Do not include contact details in public feedback.";
 "feedback.device.acknowledge" = "Got it";
+
+/* 批量任务编辑与模型筛选 */
+"batch.name.optional" = "Name (optional)";
+"batch.request.footer" = "This entire text is one request, including line breaks. Save to add it to your batch draft.";
+"batch.request.edit" = "Edit Request";
+"batch.requests.paste" = "Add Multiple Lines";
+"batch.requests.lines.footer" = "Each nonempty line will become a separate request. To keep line breaks in one request, use Add Request instead. Save to add these requests to the draft.";
+"batch.requests.count" = "%d requests";
+"batch.models.choose" = "Choose Models";
+"batch.models.selected" = "%d models selected";
+"batch.models.count" = "%d shown · %d selected";
+"batch.models.search" = "Search models or providers";
+"batch.models.provider" = "Provider";
+"batch.models.allProviders" = "All Providers";
+"batch.models.selectedOnly" = "Selected Only";
+"batch.models.selectVisible" = "Select Shown Models";
+"batch.models.clearVisible" = "Deselect Shown Models";
+"batch.models.noMatches" = "No models match these filters. Try another search or show all models.";
+"batch.models.compatibility" = "These models use a compatible API format. Batch availability and pricing still depend on the provider.";
+"batch.review" = "Review Batch";
+"batch.review.total" = "%d requests in total · %d remote tasks";
+"batch.review.notice" = "Every request will be sent to every selected model. Tasks run asynchronously and may take up to 24 hours. Availability, charges and discounts depend on the provider.";
+"batch.result.pending" = "Awaiting results";
+"batch.submission.success" = "%d tasks submitted. Retrieve their results here later.";
+"batch.submission.attention" = "%d tasks submitted; %d need attention. Open the saved tasks to check errors or recover submission. Do not submit the whole batch again.";
+"batch.error.endpoint" = "The provider could not find or accept the Batch endpoint. Check the base URL and whether this provider supports file uploads and Batch tasks.";
+"batch.models.providerOptions" = "Available Providers";

@@ -8407,7 +8407,7 @@
 "batch.title" = "批量任务";
 "batch.help.title" = "如何使用批量任务";
 "batch.help.summary" = "一起提交多条独立请求，稍后集中查看结果。";
-"batch.requests.footer" = "每个非空行是一条独立文本请求，不包含聊天历史或附件。";
+"batch.requests.footer" = "逐条添加请求，正文换行会保留。不包含聊天历史或附件。";
 "batch.models.empty" = "请先在模型管理中启用 OpenAI 兼容聊天模型。";
 "batch.models" = "模型";
 "batch.models.footer" = "每个选中的模型创建一个独立任务。是否支持 Batch 及其价格由提供商决定。";
@@ -8424,7 +8424,7 @@
 "batch.action.notice" = "重试会创建新的计费任务。取消保留已完成结果。删除记录只移除本地副本。";
 "batch.input" = "原始输入";
 "batch.output" = "输出";
-"batch.help.body" = "每个非空行输入一条独立请求，再选择一个或多个 OpenAI 兼容聊天模型；每个模型会创建一个独立任务。提供商需要支持 Batch API，普通聊天可用不代表支持批量任务，价格和额度以提供商为准。\n\n任务在服务端异步执行，可能需要最多 24 小时。App 在前台低频刷新，再次打开时继续获取结果；通知在结果取回后发送，系统挂起期间无法保证及时通知。\n\n刷新任务会保存结果，取消或过期的任务也会保留已完成的部分。仅重试失败项会创建新的计费任务。提交结果不确定时，请先恢复任务，并在再次提交前到提供商控制台核实。请保留原提供商地址、请求头和 API Key。\n\n任务和结果存放于聊天数据库，包含在快照备份及手机／手表聊天库同步中，请同时同步对应提供商配置。iOS 和 macOS 可以分享 JSONL；手表可先同步到手机再导出。删除本地记录不会删除远端文件。\n\n页面向导经确认可以修改新建任务的草稿，不能提交、取消、重试、删除或导出任务。批量请求不包含聊天历史、附件或 App 工具。";
+"batch.help.body" = "逐条添加请求会保留正文换行；只有选择“按行添加多条”才会拆分非空行，保存前可核对条数。模型可搜索、按提供商筛选或只看已选，批量选择仅作用于当前显示的模型。提交前核对目标模型和总处理次数，每个模型创建一个独立任务。接口格式兼容不代表提供商已开放 Batch，价格和额度以提供商为准。\n\n任务在服务端异步执行，可能需要最多 24 小时。App 在前台低频刷新，再次打开时继续获取结果；通知在结果取回后发送，系统挂起期间无法保证及时通知。\n\n刷新任务会保存结果，取消或过期的任务也会保留已完成的部分。仅重试失败项会创建新的计费任务。提交结果不确定时，请先恢复任务，并在再次提交前到提供商控制台核实。请保留原提供商地址、请求头和 API Key。\n\n任务和结果存放于聊天数据库，包含在快照备份及手机／手表聊天库同步中，请同时同步对应提供商配置。iOS 和 macOS 可以分享 JSONL；手表可先同步到手机再导出。删除本地记录不会删除远端文件。\n\n页面向导经确认可以修改新建任务的草稿，不能提交、取消、重试、删除或导出任务。批量请求不包含聊天历史、附件或 App 工具。";
 "batch.add" = "添加请求";
 "batch.requests.watch" = "逐条输入并添加请求，可滑动移除已添加项；只有已添加的请求会被提交。";
 
@@ -8451,3 +8451,30 @@
 "feedback.device.question_count" = "问题数量";
 "feedback.device.disclosure" = "反馈及随机设备标识将公开发布到 GitHub。开发者可通过该标识向本机发送私密追问，请勿在公开反馈中填写联系方式。";
 "feedback.device.acknowledge" = "已了解";
+
+/* 批量任务编辑与模型筛选 */
+"batch.name.optional" = "名称（选填）";
+"batch.request.footer" = "整段文字是一条请求，包含正文中的换行。保存后加入批量任务草稿。";
+"batch.request.edit" = "编辑请求";
+"batch.requests.paste" = "按行添加多条";
+"batch.requests.lines.footer" = "每个非空行会添加为一条请求。需要保留正文换行时，请使用“添加请求”。保存后才会加入草稿。";
+"batch.requests.count" = "%d 条请求";
+"batch.models.choose" = "选择模型";
+"batch.models.selected" = "已选 %d 个模型";
+"batch.models.count" = "显示 %d 个 · 已选 %d 个";
+"batch.models.search" = "搜索模型或提供商";
+"batch.models.provider" = "提供商";
+"batch.models.allProviders" = "所有提供商";
+"batch.models.selectedOnly" = "只看已选";
+"batch.models.selectVisible" = "选择当前显示的模型";
+"batch.models.clearVisible" = "取消选择当前显示的模型";
+"batch.models.noMatches" = "没有符合条件的模型。试试其他关键词，或关闭筛选。";
+"batch.models.compatibility" = "候选模型的接口格式兼容；是否开放 Batch 及其价格仍以提供商为准。";
+"batch.review" = "核对并提交";
+"batch.review.total" = "共处理 %d 次 · 创建 %d 个远端任务";
+"batch.review.notice" = "每条请求都会发送给每个已选模型。任务异步处理，可能需要最多 24 小时；是否支持、收费和折扣以提供商为准。";
+"batch.result.pending" = "等待获取结果";
+"batch.submission.success" = "已提交 %d 个任务，稍后可在这里获取结果。";
+"batch.submission.attention" = "已提交 %d 个任务，另有 %d 个需要处理。请打开已保存的任务查看错误或恢复提交，避免整批重复发送。";
+"batch.error.endpoint" = "提供商未找到或不接受该批量接口。请检查基础地址，并确认提供商支持文件上传和 Batch 任务。";
+"batch.models.providerOptions" = "可筛选的提供商";

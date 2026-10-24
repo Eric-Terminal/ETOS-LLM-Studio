@@ -3,7 +3,11 @@ import Combine
 
 public struct BatchModelOption: Identifiable, Equatable, Sendable {
     public let id: String
-    public let title: String
+    public let providerID: String
+    public let providerName: String
+    public let name: String
+    public let modelName: String
+    public var title: String { "\(providerName) · \(name)" }
 }
 
 struct BatchResultRow: Identifiable, Sendable {
@@ -13,6 +17,7 @@ struct BatchResultRow: Identifiable, Sendable {
     let text: String
     let reasoning: String?
     let error: String?
+    let isPending: Bool
 }
 
 struct BatchJobRow: Identifiable, Sendable {
@@ -48,7 +53,7 @@ struct BatchJobRow: Identifiable, Sendable {
         results = job.requests.map { request in
             let result = byID[request.id]
             return BatchResultRow(id: request.id, input: request.input, preview: String(request.input.prefix(100)),
-                text: result?.text ?? "", reasoning: result?.reasoning, error: result?.error)
+                text: result?.text ?? "", reasoning: result?.reasoning, error: result?.error, isPending: result == nil)
         }
         resultsByID = Dictionary(uniqueKeysWithValues: results.map { ($0.id, $0) })
         canCancel = job.remoteID != nil && job.status?.isTerminal != true && job.status != .cancelling
@@ -92,7 +97,8 @@ extension BatchService {
     func presentation() throws -> BatchPresentation {
         let rows = try jobs().map(BatchJobRow.init)
         return BatchPresentation(jobs: rows, byID: Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) }),
-            models: models().map { BatchModelOption(id: $0.id, title: "\($0.provider.name) · \($0.model.displayName)") })
+            models: models().map { BatchModelOption(id: $0.id, providerID: $0.provider.id.uuidString,
+                providerName: $0.provider.name, name: $0.model.displayName, modelName: $0.model.modelName) })
     }
 }
 
@@ -103,7 +109,10 @@ final class BatchTasksModel: ObservableObject {
     @Published var busy = false
     @Published var exportURL: URL?
     @Published var exportJobID: UUID?
+    @Published var submissionReport: BatchSubmissionReport?
     private var loadRevision = UUID()
+
+    var submissionNotice: String? { submissionReport?.notice }
 
     func reload() async {
         let revision = UUID()
@@ -131,65 +140,5 @@ final class BatchTasksModel: ObservableObject {
             exportURL = url
         }
         catch { self.error = error.localizedDescription }
-    }
-}
-
-@MainActor
-final class BatchDraftModel: ObservableObject {
-    @Published var title = ""
-    @Published var nextInput = ""
-    @Published var inputText = "" { didSet { validate() } }
-    @Published var selectedIDs = Set<String>() { didSet { validate() } }
-    @Published private(set) var inputs: [String] = []
-    @Published private(set) var canSubmit = false
-    @Published private(set) var summary = ""
-    @Published private(set) var guideSettings: [GuidePageSetting] = []
-    private var validation: Task<Void, Never>?
-
-    func configure(models: [BatchModelOption]) {
-        guideSettings = [
-            .string("title", label: NSLocalizedString("batch.name", value: "Name", comment: "批量草稿名称"),
-                    get: { [weak self] in self?.title ?? "" }, set: { [weak self] in self?.title = $0 }),
-            .string("requests", label: NSLocalizedString("batch.requests", value: "Requests", comment: "批量草稿输入"),
-                    get: { [weak self] in self?.inputText ?? "" }, set: { [weak self] in self?.inputText = $0 }),
-            .readOnly("draft_only", label: NSLocalizedString("batch.draft.notice", value: "Changes affect this draft only. Submit manually to send requests.", comment: "批量向导草稿说明"), value: { .bool(true) })
-        ] + models.map { option in
-            .bool("model_" + option.id, label: option.title,
-                  get: { [weak self] in self?.selectedIDs.contains(option.id) == true },
-                  set: { [weak self] selected in
-                      if selected { self?.selectedIDs.insert(option.id) }
-                      else { self?.selectedIDs.remove(option.id) }
-                  })
-        }
-        #if os(watchOS)
-        guideSettings.append(.string("next_request", label: NSLocalizedString("batch.input", value: "Input", comment: "批量原始输入"),
-            get: { [weak self] in self?.nextInput ?? "" }, set: { [weak self] in self?.nextInput = $0 }))
-        #endif
-        validate()
-    }
-
-    func appendInput() {
-        inputText += (inputText.isEmpty ? "" : "\n") + nextInput
-        nextInput = ""
-    }
-
-    func removeInputs(at indices: IndexSet) {
-        inputText = inputs.enumerated().filter { !indices.contains($0.offset) }.map(\.element).joined(separator: "\n")
-    }
-
-    private func validate() {
-        validation?.cancel()
-        canSubmit = false
-        let text = inputText
-        let count = selectedIDs.count
-        validation = Task { [weak self] in
-            let inputs = await Task.detached(priority: .userInitiated) {
-                text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-            }.value
-            guard !Task.isCancelled, let self else { return }
-            self.inputs = inputs
-            self.canSubmit = !inputs.isEmpty && count > 0
-            self.summary = String(format: NSLocalizedString("batch.draft.count", value: "%d requests × %d models", comment: "批量草稿数量"), inputs.count, count)
-        }
     }
 }

@@ -5,9 +5,9 @@ public struct BatchTasksView: View {
     @StateObject private var model = BatchTasksModel()
     @ObservedObject private var appConfig = AppConfigStore.shared
     private let isActive: Bool
-    private let pageChrome: @MainActor (AnyView) -> AnyView
+    private let pageChrome: @MainActor @Sendable (AnyView) -> AnyView
 
-    public init(isActive: Bool = true, pageChrome: @escaping @MainActor (AnyView) -> AnyView = { $0 }) {
+    public init(isActive: Bool = true, pageChrome: @escaping @MainActor @Sendable (AnyView) -> AnyView = { $0 }) {
         self.isActive = isActive
         self.pageChrome = pageChrome
     }
@@ -37,7 +37,8 @@ public struct BatchTasksView: View {
                 settingsIntroCard
                 // 设置父页面使用视图导航；这里保持一致，避免值导航弹出父页面并丢失草稿。
                 NavigationLink {
-                    pageChrome(AnyView(BatchEditorView(model: model, isActive: isActive)))
+                    pageChrome(AnyView(BatchEditorView(model: model, isActive: isActive,
+                        pageChrome: { view in pageChrome(view) })))
                 } label: {
                     Label(NSLocalizedString("batch.new", value: "New Batch", comment: "新建批量任务"), systemImage: "plus")
                 }
@@ -49,6 +50,11 @@ public struct BatchTasksView: View {
                 }
                 .disabled(model.busy)
             }
+            if let notice = model.submissionNotice {
+                Section {
+                    Text(notice).font(.footnote).foregroundStyle(.secondary)
+                }
+            }
             Section {
                 if model.snapshot.jobs.isEmpty {
                     Text(NSLocalizedString("batch.empty", value: "No batch tasks yet.", comment: "批量任务空状态"))
@@ -57,7 +63,7 @@ public struct BatchTasksView: View {
                 ForEach(model.snapshot.jobs) { job in
                     NavigationLink {
                         pageChrome(AnyView(BatchJobDetailView(model: model, id: job.id,
-                            isActive: isActive, pageChrome: pageChrome)))
+                            isActive: isActive, pageChrome: { view in pageChrome(view) })))
                     } label: {
                         VStack(alignment: .leading) {
                             Text(job.title)
@@ -94,99 +100,11 @@ public struct BatchTasksView: View {
     }
 }
 
-private struct BatchEditorView: View {
-    @ObservedObject var model: BatchTasksModel
-    @ObservedObject private var appConfig = AppConfigStore.shared
-    @StateObject private var draft = BatchDraftModel()
-    @Environment(\.dismiss) private var dismiss
-    @State private var confirmsSubmission = false
-    let isActive: Bool
-
-    var body: some View {
-        Form {
-            Section {
-                TextField(NSLocalizedString("batch.name", value: "Name", comment: ""), text: $draft.title)
-            }
-            Section {
-                #if os(watchOS)
-                TextField(NSLocalizedString("batch.input", value: "Input", comment: "批量原始输入"), text: $draft.nextInput)
-                Button(NSLocalizedString("batch.add", value: "Add Request", comment: "手表逐条添加请求")) { draft.appendInput() }
-                    .disabled(draft.nextInput.isEmpty)
-                ForEach(draft.inputs.indices, id: \.self) { index in Text(draft.inputs[index]).lineLimit(3) }
-                    .onDelete { draft.removeInputs(at: $0) }
-                #else
-                TextEditor(text: $draft.inputText)
-                    .frame(minHeight: 160)
-                    .accessibilityLabel(NSLocalizedString("batch.requests", value: "Requests", comment: ""))
-                #endif
-            } header: {
-                Text(NSLocalizedString("batch.requests", value: "Requests", comment: ""))
-            } footer: {
-                #if os(watchOS)
-                Text(NSLocalizedString("batch.requests.watch", value: "Enter and add each request separately. Swipe to remove an added request. Only added requests will be submitted.", comment: "手表批量输入说明"))
-                    .font(.footnote).foregroundStyle(.secondary)
-                #else
-                Text(NSLocalizedString("batch.requests.footer", value: "Each nonempty line is a separate text request. No chat history or attachments are included.", comment: "批量输入说明"))
-                    .font(.footnote).foregroundStyle(.secondary)
-                #endif
-            }
-            Section {
-                ForEach(model.snapshot.models) { option in
-                    Toggle(option.title, isOn: Binding(get: { draft.selectedIDs.contains(option.id) }, set: { selected in
-                        if selected { draft.selectedIDs.insert(option.id) }
-                        else { draft.selectedIDs.remove(option.id) }
-                    }))
-                }
-                if model.snapshot.models.isEmpty {
-                    Text(NSLocalizedString("batch.models.empty", value: "Enable an OpenAI-compatible chat model in Model Management first.", comment: "批量没有可选模型"))
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-            } header: {
-                Text(NSLocalizedString("batch.models", value: "Models", comment: "批量选择模型"))
-            } footer: {
-                Text(NSLocalizedString("batch.models.footer", value: "Each selected model creates a separate task. Batch support and pricing depend on the provider.", comment: "批量模型说明"))
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-            Section {
-                Text(draft.summary).font(.caption).foregroundStyle(.secondary)
-                Button(NSLocalizedString("batch.submit", value: "Submit Batch", comment: "批量提交")) { confirmsSubmission = true }
-                    .disabled(!draft.canSubmit || model.busy)
-            }
-        }
-        .navigationTitle(NSLocalizedString("batch.new", value: "New Batch", comment: ""))
-        .onAppear { draft.configure(models: model.snapshot.models) }
-        .onChange(of: model.snapshot.models) { _, options in draft.configure(models: options) }
-        .onChange(of: appConfig.appLanguage) { _, _ in draft.configure(models: model.snapshot.models) }
-        .guideSettingsPageContext(id: "batch-editor", title: NSLocalizedString("batch.new", value: "New Batch", comment: ""),
-            documents: BatchGuideSupport.documents, isActive: isActive && !model.busy && !confirmsSubmission, settings: draft.guideSettings)
-        .confirmationDialog(NSLocalizedString("batch.submit.confirm", value: "Submit these requests to the selected providers? Charges may apply.", comment: "批量提交确认"),
-                            isPresented: $confirmsSubmission, titleVisibility: .visible) {
-            Button(NSLocalizedString("batch.submit", value: "Submit Batch", comment: "")) {
-                let title = draft.title
-                let inputs = draft.inputs
-                let ids = Array(draft.selectedIDs)
-                let config = AppConfigStore.shared
-                let temperature = config.aiTemperatureEnabled ? config.aiTemperature : nil
-                let topP = config.aiTopPEnabled ? config.aiTopP : nil
-                Task {
-                    model.error = nil
-                    await model.perform {
-                        _ = await AppLocalNotificationCenter.shared.requestAuthorizationIfNeeded()
-                        try await BatchService.shared.submit(title: title, inputs: inputs, modelIDs: ids, temperature: temperature, topP: topP)
-                    }
-                    if model.error == nil { dismiss() }
-                }
-            }
-            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
-        }
-    }
-}
-
 private struct BatchJobDetailView: View {
     @ObservedObject var model: BatchTasksModel
     let id: UUID
     let isActive: Bool
-    let pageChrome: @MainActor (AnyView) -> AnyView
+    let pageChrome: @MainActor @Sendable (AnyView) -> AnyView
     @Environment(\.dismiss) private var dismiss
     @State private var action: String?
     private var job: BatchJobRow? { model.snapshot.byID[id] }
@@ -242,6 +160,13 @@ private struct BatchJobDetailView: View {
                         } label: {
                             VStack(alignment: .leading) {
                                 Text(result.preview).lineLimit(3)
+                                Label(result.isPending
+                                      ? NSLocalizedString("batch.result.pending", value: "Awaiting results", comment: "结果尚未下载")
+                                      : result.error == nil
+                                      ? NSLocalizedString("batch.status.completed", value: "Completed", comment: "")
+                                      : NSLocalizedString("batch.status.failed", value: "Failed", comment: ""),
+                                      systemImage: result.isPending ? "clock" : result.error == nil ? "checkmark.circle" : "exclamationmark.circle")
+                                    .font(.caption).foregroundStyle(.secondary)
                                 if let error = result.error { Text(error).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
                             }
                         }
@@ -294,7 +219,15 @@ private struct BatchResultDetailView: View {
             if let result {
                 Section(NSLocalizedString("batch.input", value: "Input", comment: "批量原始输入")) { Text(result.input) }
                 Section(NSLocalizedString("batch.output", value: "Output", comment: "批量输出")) {
-                    Text(result.error ?? result.text)
+                    if result.isPending {
+                        Text(NSLocalizedString("batch.result.pending", value: "Awaiting results", comment: "结果尚未下载"))
+                            .font(.footnote).foregroundStyle(.secondary)
+                    } else {
+                        Text(result.error ?? result.text)
+                            #if !os(watchOS)
+                            .textSelection(.enabled)
+                            #endif
+                    }
                 }
                 if let reasoning = result.reasoning, !reasoning.isEmpty {
                     Section(NSLocalizedString("思考过程", comment: "")) { Text(reasoning) }
@@ -312,7 +245,7 @@ private struct BatchIntroductionView: View {
     let isActive: Bool
     var body: some View {
         ScrollView {
-            Text(NSLocalizedString("batch.help.body", value: "Add one independent request per line, then choose one or more OpenAI-compatible chat models. Each model gets a separate task. Your provider must support the Batch API; normal chat availability does not guarantee Batch support. Provider pricing and limits apply.\n\nTasks run asynchronously on the server and may take up to 24 hours. The app refreshes periodically while active and resumes when reopened. Notifications arrive after results are retrieved; they are not guaranteed while the app is suspended.\n\nRefresh a task to save its results, including partial results from cancelled or expired tasks. Retry Failed Requests sends only failed items as a new task. If submission is uncertain, recover it first and check the provider dashboard before submitting again. Keep the original provider address, headers and API key available.\n\nTasks and results are stored in the chat database and included in snapshot backups and phone/watch chat database sync. Sync the provider configuration as well. iOS and macOS can share JSONL results; watch users can sync to iPhone to export. Removing a local record does not delete remote files.\n\nThe page guide can edit the new-task draft after confirmation, but cannot submit, cancel, retry, delete or export tasks. Requests do not include chat history, attachments or app tools.", comment: "批量完整使用说明"))
+            Text(NSLocalizedString("batch.help.body", value: "Add each request separately to preserve its line breaks. Use Add Multiple Lines only when each nonempty line should become a separate request; check the count before saving. Search and filter models by provider, or show only selected models. Bulk selection affects only shown models. Review the models and total request count before submitting. Each model gets a separate task. Compatible API format does not guarantee Batch availability; provider pricing and limits apply.\n\nTasks run asynchronously on the server and may take up to 24 hours. The app refreshes periodically while active and resumes when reopened. Notifications arrive after results are retrieved; they are not guaranteed while the app is suspended.\n\nRefresh a task to save its results, including partial results from cancelled or expired tasks. Retry Failed Requests sends only failed items as a new task. If submission is uncertain, recover it first and check the provider dashboard before submitting again. Keep the original provider address, headers and API key available.\n\nTasks and results are stored in the chat database and included in snapshot backups and phone/watch chat database sync. Sync the provider configuration as well. iOS and macOS can share JSONL results; watch users can sync to iPhone to export. Removing a local record does not delete remote files.\n\nThe page guide can edit the new-task draft after confirmation, but cannot submit, cancel, retry, delete or export tasks. Requests do not include chat history, attachments or app tools.", comment: "批量完整使用说明"))
                 .font(.footnote).foregroundStyle(.secondary).padding()
         }
         .navigationTitle(NSLocalizedString("batch.help.title", value: "Using Batch Tasks", comment: ""))

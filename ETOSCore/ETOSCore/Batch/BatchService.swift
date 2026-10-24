@@ -38,7 +38,8 @@ public actor BatchService {
         }.filter(OpenAIBatchSupport.supports)
     }
 
-    public func submit(title: String, inputs: [String], modelIDs: [String], temperature: Double?, topP: Double?) async throws {
+    @discardableResult
+    public func submit(title: String, inputs: [String], modelIDs: [String], temperature: Double?, topP: Double?) async throws -> BatchSubmissionReport {
         let available = models()
         let selected = modelIDs.compactMap { id in available.first { $0.id == id } }
         guard !selected.isEmpty, selected.count == modelIDs.count else { throw BatchError.invalidInput }
@@ -48,14 +49,20 @@ public actor BatchService {
         }
         for job in prepared { try BatchJobStore.save(job, in: database()) }
         didChange()
+        var submittedCount = 0
         for job in prepared {
-            do { try await resumeSubmission(id: job.id) }
+            do {
+                try await resumeSubmission(id: job.id)
+                submittedCount += 1
+            }
             catch {
-                if error is CancellationError { throw error }
                 if case BatchError.storeReplaced = error { throw error }
+                // 草稿已全部落库；中断时也交还这些记录，避免表单重试再次发送已接受的任务。
+                if error is CancellationError { break }
                 // 普通网络失败随各任务保存，其他模型仍可正常提交。
             }
         }
+        return BatchSubmissionReport(submittedCount: submittedCount, attentionCount: prepared.count - submittedCount)
     }
 
     public func resumeSubmission(id: UUID) async throws {
@@ -107,9 +114,15 @@ public actor BatchService {
                     job.submission = job.submission == .creating || job.submission == .uncertain ? .uncertain : .failed
                 }
             }
-            job.errorMessage = error.localizedDescription
+            let submissionError: any Error
+            if case ChatService.NetworkError.badStatusCode(let code, _) = error, [404, 405].contains(code) {
+                submissionError = BatchError.batchEndpointUnavailable
+            } else {
+                submissionError = error
+            }
+            job.errorMessage = submissionError.localizedDescription
             try persist(&job)
-            throw error
+            throw submissionError
         }
     }
 
