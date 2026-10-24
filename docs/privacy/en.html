@@ -107,7 +107,8 @@
     <section>
         <h2>5. Feedback Assistant</h2>
 
-<p>Data is sent to the feedback service <strong>only when you actively choose to submit feedback</strong>.</p>
+<p>Feedback content is sent when you submit it. At startup, the app also checks for private developer messages addressed to this installation.</p>
+<p>New feedback publishes a random installation identifier on GitHub. A separate private credential is stored in the app sandbox, excluded from backup and synchronization; deleting local app data creates a new identity. Startup message checks authenticate with this credential. The identifier is not included in performance telemetry. Replies to developer messages, including contact details you voluntarily provide, go only to the developer’s feedback server, not GitHub or an AI model. A successful reply or refusal closes the message; choosing Later defers it to a future launch. The developer can view and delete these records in the private admin page; records remain until deleted. Public feedback and comments remain public.</p>
 <ul>
     <li><strong>User-entered content:</strong> feedback type, title, description, reproduction steps, expected behavior, actual behavior, and extra context.</li>
     <li><strong>Environment snapshot:</strong> platform, app version, build number, OS version, device model identifier, locale, and time zone.</li>
@@ -137,7 +138,7 @@
 <ul>
     <li><strong>Third-party AI providers:</strong> process the chat, image, and audio requests that you intentionally send.</li>
     <li><strong>Apple system services:</strong> such as WatchConnectivity and iCloud / CloudKit are governed by Apple’s own policies.</li>
-    <li><strong>Developer-operated feedback service:</strong> used only when you intentionally submit or refresh feedback tickets.</li>
+    <li><strong>Developer-operated feedback service:</strong> handles feedback tickets, startup checks for device messages, and private responses.</li>
     <li><strong>Developer-operated performance telemetry service:</strong> automatically receives the non-content data listed in Section 6 while performance telemetry is enabled.</li>
     <li><strong>Not uploaded automatically:</strong> chat content, local memory, local request and response logs, annual recap data, and API keys are not automatically uploaded to developer-controlled servers.</li>
     <li><strong>Ads and general analytics SDKs:</strong> apart from the MetricKit performance telemetry described in Section 6, the codebase does not include third-party ad SDKs or general-purpose behavioral analytics SDKs.</li>

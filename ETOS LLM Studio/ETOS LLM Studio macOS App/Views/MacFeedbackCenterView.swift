@@ -124,7 +124,11 @@ private struct MacFeedbackComposeView: View {
             }
             Section {
                 TextField(NSLocalizedString("补充信息（可选）", comment: ""), text: $context, axis: .vertical)
-            } footer: { Text(environmentSummary).font(.footnote).foregroundStyle(.secondary) }
+            } footer: {
+                Text(environmentSummary).font(.footnote).foregroundStyle(.secondary)
+                Text(NSLocalizedString("feedback.device.disclosure", value: "Feedback and a random device identifier are published on GitHub. The identifier lets the developer send private follow-up questions to this device. Do not include contact details in public feedback.", comment: "反馈设备标识披露"))
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
             Section {
                 if let error { Text(error).font(.footnote).foregroundStyle(.red) }
                 Button(NSLocalizedString("提交", comment: "")) { submit() }

@@ -7264,7 +7264,7 @@
 "%ds: %@" = "%ds: %@";
 /* 反馈 Markdown 与关联提交通知 */
 "反馈与处理进度" = "Feedback and progress";
-"反馈助手使用说明" = "Submit feedback with a title and description, then add comments and follow progress in the ticket. Descriptions and comments support Markdown, and you can scroll through the full text. When a developer references the ticket number in a commit message, the linked commit appears in the timeline. Tap it for details. New replies, status changes and linked commits trigger local notifications when the app starts or you refresh tickets, if notifications are allowed. These are not instant push notifications while the app is closed. A linked commit does not mean a fix has been released.";
+"反馈助手使用说明" = "Submit feedback with a title and description, then add comments and follow progress in the ticket. Descriptions and comments support Markdown, and you can scroll through the full text. When a developer references the ticket number in a commit message, the linked commit appears in the timeline. Tap it for details. New replies, status changes and linked commits trigger local notifications when the app starts or you refresh tickets, if notifications are allowed. These are not instant push notifications while the app is closed. A linked commit does not mean a fix has been released.\n\nFeedback and a random device identifier are published on GitHub. The identifier lets the developer send private follow-up questions to this device. Do not include contact details in public feedback. Only the developer can read your response on the feedback server. It will not be posted to GitHub. You can choose not to answer. Once sent, this message closes automatically. Later keeps it for your next launch.";
 "反馈有新的关联提交" = "New commit linked to your feedback";
 "工单 #%d 关联提交 %@：%@" = "Ticket #%d linked commit %@: %@";
 
@@ -8280,3 +8280,19 @@
 "默认描述" = "Default Description";
 "编辑工具描述" = "Edit Tool Description";
 "工具描述会随工具定义发送给模型并占用输入 token。可缩短描述，但应保留用途、限制和必要的调用说明。这里只修改描述，不修改工具名称、参数 Schema 或审批策略。MCP 自定义描述与服务器配置一起保存，断连、重连、开关切换及工具列表刷新都会保留，删除服务器时移除。向导只修改编辑草稿；请关闭“使用默认描述”并保存以应用自定义内容。" = "Tool descriptions are sent to the model and consume input tokens. You can shorten them, keeping their purpose, limits and essential calling instructions. Editing changes only the description, not the tool name, parameter schema or approval policy. MCP descriptions are saved with the server and survive disconnects, reconnects, toggles and tool-list refreshes. Deleting the server removes them. The guide edits only your draft. Turn off Use Default Description and save to apply custom text.";
+
+// 设备定向留言与私密回答
+"feedback.device.identity_error" = "The local feedback credential could not be loaded or saved. Please try again.";
+"feedback.device.network_error" = "Could not send your response. Your input is kept here; please try again.";
+"feedback.device.closed" = "This message has already been closed. Your response was not sent.";
+"feedback.device.privacy" = "Only the developer can read your response on the feedback server. It will not be posted to GitHub. You can choose not to answer.";
+"feedback.device.answer" = "Your response";
+"feedback.device.required" = "Required";
+"feedback.device.submit" = "Send response";
+"feedback.device.decline" = "Do not ask again";
+"feedback.device.completion" = "Once sent, this message closes automatically. Later keeps it for your next launch.";
+"feedback.device.title" = "Developer message";
+"feedback.device.decline_confirm" = "Close this message without answering?";
+"feedback.device.question_count" = "Question count";
+"feedback.device.disclosure" = "Feedback and a random device identifier are published on GitHub. The identifier lets the developer send private follow-up questions to this device. Do not include contact details in public feedback.";
+"feedback.device.acknowledge" = "Got it";

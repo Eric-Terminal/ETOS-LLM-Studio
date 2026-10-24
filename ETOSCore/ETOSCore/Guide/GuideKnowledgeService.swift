@@ -133,11 +133,13 @@ public enum GuideDocumentCatalog {
         GuideDocument(
             id: "feedback-assistant",
             title: "反馈助手与关联提交",
-            keywords: ["反馈", "工单", "开发者回复", "Markdown", "关联提交", "Commit", "通知"],
+            keywords: ["反馈", "工单", "开发者回复", "Markdown", "关联提交", "Commit", "通知", "设备留言", "私密回答"],
             content: """
             反馈助手位于设置的拓展功能中。新建反馈填写标题与详细描述，问题反馈还可填写复现步骤、预期与实际行为；提交后在“我的反馈”中查看工单。反馈正文及处理动态中的评论支持 Markdown 标题、列表、加粗、链接和代码块，iOS 与 watchOS 正文完整展开；列表标题和关联 Commit 卡片只作摘要，点击工单或 Commit 可查看详情。
 
             列表顶部的“反馈与处理进度”介绍卡保留简短摘要，点击“进一步了解…”进入独立介绍页阅读教程。介绍页只有只读向导上下文，不读取工单内容或提供提交操作；手表也有页面向导入口。
+
+            新反馈会公开附带应用随机生成的安装级设备标识，开发者据此在私有后台发送定向留言。iOS、watchOS 与 macOS 各自把凭据保存在应用沙盒，不使用钥匙串，不备份或同步到其他设备；删除本地数据后会产生新标识，标识不进入性能遥测。每次启动最多展示一条留言，并等待解锁和其他弹窗结束。用户可回答单选、多选、文字问题或确认收到；回答成功后服务端自动关闭，稍后处理保留到下次启动，不再回答会关闭当前留言。留言和回答只经过反馈服务器，不发送 GitHub、聊天模型或向导模型；后台可删除记录，未删除前保留。页面向导只能读取题目数量和提交状态，不能读取留言、联系方式、答案、标识或凭据，也不能代替用户提交。
 
             Mac 的拓展功能也提供反馈助手，复用相同工单数据库、提交接口、状态、评论和关联提交。工单正文在后台准备后完整展示；本机删除只移除记录，不关闭远端工单。工单、提交详情和介绍均有独立只读向导；点击通知在解锁后进入目标工单。Mac supports the same ticket submission, comments, status and linked commits. Local deletion does not close the remote ticket; the guide cannot read ticket bodies or credentials, or submit feedback.
 

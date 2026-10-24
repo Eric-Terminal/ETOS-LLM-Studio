@@ -7568,7 +7568,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "%ds: %@" = "%ds: %@";
 /* 反馈 Markdown 与关联提交通知 */
 "反馈与处理进度" = "Retours et suivi";
-"反馈助手使用说明" = "Envoyez un titre et une description, puis ajoutez des commentaires et suivez le ticket. Les descriptions et commentaires prennent en charge Markdown et restent lisibles en entier par défilement. Si un développeur cite le numéro du ticket dans un commit, celui-ci apparaît dans l’historique. Touchez-le pour voir les détails. Avec votre autorisation, de nouvelles réponses, des changements d’état et des commits liés déclenchent des notifications locales au démarrage de l’app ou à l’actualisation des tickets. Il ne s’agit pas de notifications instantanées lorsque l’app est fermée. Un commit lié ne signifie pas que le correctif a été publié.";
+"反馈助手使用说明" = "Envoyez un titre et une description, puis ajoutez des commentaires et suivez le ticket. Les descriptions et commentaires prennent en charge Markdown et restent lisibles en entier par défilement. Si un développeur cite le numéro du ticket dans un commit, celui-ci apparaît dans l’historique. Touchez-le pour voir les détails. Avec votre autorisation, de nouvelles réponses, des changements d’état et des commits liés déclenchent des notifications locales au démarrage de l’app ou à l’actualisation des tickets. Il ne s’agit pas de notifications instantanées lorsque l’app est fermée. Un commit lié ne signifie pas que le correctif a été publié.\n\nLe feedback et un identifiant aléatoire de l’appareil sont publiés sur GitHub. Cet identifiant permet au développeur d’envoyer des questions privées à cet appareil. N’incluez pas de coordonnées dans le feedback public. Seul le développeur peut consulter votre réponse sur le serveur de feedback. Elle ne sera pas publiée sur GitHub. Vous pouvez refuser de répondre. Ce message se ferme automatiquement après l’envoi. « Plus tard » le conserve pour le prochain lancement.";
 "反馈有新的关联提交" = "Nouveau commit lié à votre retour";
 "工单 #%d 关联提交 %@：%@" = "Ticket nº %d, commit lié %@ : %@";
 
@@ -8526,3 +8526,19 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "默认描述" = "Description par défaut";
 "编辑工具描述" = "Modifier la description de l’outil";
 "工具描述会随工具定义发送给模型并占用输入 token。可缩短描述，但应保留用途、限制和必要的调用说明。这里只修改描述，不修改工具名称、参数 Schema 或审批策略。MCP 自定义描述与服务器配置一起保存，断连、重连、开关切换及工具列表刷新都会保留，删除服务器时移除。向导只修改编辑草稿；请关闭“使用默认描述”并保存以应用自定义内容。" = "Les descriptions sont envoyées au modèle avec les définitions des outils et consomment des tokens d’entrée. Vous pouvez les raccourcir en conservant leur objectif, leurs limites et les instructions essentielles. Seule la description change, pas le nom, le schéma des paramètres ni la politique d’approbation. Les descriptions MCP sont enregistrées avec le serveur et conservées lors des déconnexions, reconnexions, activations, désactivations et actualisations de la liste des outils. Supprimer le serveur les supprime aussi. Le guide modifie uniquement le brouillon. Désactivez « Utiliser la description par défaut », puis enregistrez pour appliquer votre texte.";
+
+// 设备定向留言与私密回答
+"feedback.device.identity_error" = "Impossible de lire ou d’enregistrer les identifiants locaux de feedback. Réessayez.";
+"feedback.device.network_error" = "Votre réponse n’a pas pu être envoyée. Votre saisie reste sur cette page ; réessayez.";
+"feedback.device.closed" = "Ce message a déjà été fermé. Votre réponse n’a pas été envoyée.";
+"feedback.device.privacy" = "Seul le développeur peut consulter votre réponse sur le serveur de feedback. Elle ne sera pas publiée sur GitHub. Vous pouvez refuser de répondre.";
+"feedback.device.answer" = "Votre réponse";
+"feedback.device.required" = "Obligatoire";
+"feedback.device.submit" = "Envoyer la réponse";
+"feedback.device.decline" = "Ne plus demander";
+"feedback.device.completion" = "Ce message se ferme automatiquement après l’envoi. « Plus tard » le conserve pour le prochain lancement.";
+"feedback.device.title" = "Message du développeur";
+"feedback.device.decline_confirm" = "Fermer ce message sans répondre ?";
+"feedback.device.question_count" = "Nombre de questions";
+"feedback.device.disclosure" = "Le feedback et un identifiant aléatoire de l’appareil sont publiés sur GitHub. Cet identifiant permet au développeur d’envoyer des questions privées à cet appareil. N’incluez pas de coordonnées dans le feedback public.";
+"feedback.device.acknowledge" = "Compris";

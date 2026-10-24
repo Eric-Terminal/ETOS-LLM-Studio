@@ -101,6 +101,16 @@ The app refreshes tickets that are not closed at launch, and you can also refres
 
 The feedback list, composer and ticket detail each declare their own page guide context. The guide can read status and whether fields are filled, but not feedback text, comments or ticket credentials. You review and submit the content yourself.
 
+#### Private Developer Messages
+
+New feedback includes a random installation identifier on GitHub. The developer can use it to send follow-up questions to that device. iOS, watchOS and macOS check at launch, wait for unlocking and other presentations to finish, and show at most one message per launch.
+
+A message may request acknowledgment, text, a single choice or multiple choices. Answers remain on the developer’s feedback server; they are never posted to GitHub or sent to chat or page-guide models. Share contact details only in a private reply: ordinary feedback and comments remain public.
+
+A successful response closes the message on the server. Later defers it until a future launch; Do not ask again closes it without an answer. Failed submissions keep input in the current form for retry. The developer can close messages or delete their records and answers.
+
+The installation credential stays in the app sandbox, excluded from backup and synchronization, and is not included in telemetry. Deleting local app data creates a new identity; old messages do not migrate. Deleting only the macOS application may leave local data in place. Older feedback does not gain an identifier retroactively.
+
 #### Two-way Tickets
 
 - iPhone tickets sync to the Watch

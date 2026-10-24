@@ -107,7 +107,8 @@
     <section>
         <h2>5. Asistente de feedback</h2>
 
-<p>Los datos se envían al servicio de feedback <strong>solo cuando eliges enviar feedback de forma activa</strong>.</p>
+<p>El contenido de los comentarios se envía cuando lo presentas. Al iniciar, la app también consulta los mensajes privados del desarrollador dirigidos a esta instalación.</p>
+<p>Los nuevos comentarios publican en GitHub un identificador aleatorio de instalación. Una credencial privada independiente se guarda en el espacio aislado de la app, excluida de copias de seguridad y sincronización; al borrar los datos locales se crea una nueva identidad. La credencial autentica las consultas de mensajes al iniciar. El identificador no se incluye en la telemetría de rendimiento. Las respuestas, incluidos los datos de contacto facilitados voluntariamente, solo se envían al servidor de comentarios del desarrollador, nunca a GitHub ni a modelos de IA. El envío correcto o el rechazo cierra el mensaje; «Más tarde» lo aplaza. El desarrollador puede consultar y borrar estos registros desde el panel privado; se conservan hasta su eliminación. Los comentarios y respuestas ordinarios siguen siendo públicos.</p>
 <ul>
     <li><strong>Contenido introducido por el usuario:</strong> tipo de feedback, título, descripción, pasos de reproducción, comportamiento esperado, comportamiento real y contexto adicional.</li>
     <li><strong>Instantánea del entorno:</strong> plataforma, versión de la app, número de build, versión del sistema, identificador del modelo del dispositivo, idioma/región y zona horaria.</li>
@@ -137,7 +138,7 @@
 <ul>
     <li><strong>Proveedores de IA de terceros:</strong> procesan las solicitudes de chat, imagen y audio que envías voluntariamente.</li>
     <li><strong>Servicios del sistema Apple:</strong> como WatchConnectivity e iCloud / CloudKit, se rigen por las políticas de Apple.</li>
-    <li><strong>Servicio de feedback operado por el desarrollador:</strong> solo se usa cuando envías o consultas tickets de feedback de forma activa.</li>
+    <li><strong>Servicio de feedback operado por el desarrollador:</strong>gestiona los tickets, las consultas de mensajes al iniciar y las respuestas privadas.</li>
     <li><strong>Servicio de telemetría operado por el desarrollador:</strong> recibe automáticamente los datos sin contenido de la sección 6 mientras la telemetría está activada.</li>
     <li><strong>No se sube automáticamente:</strong> contenido de chat, memoria local, registros locales de solicitudes y respuestas, datos del resumen anual y claves API no se suben automáticamente a servidores del desarrollador.</li>
     <li><strong>Publicidad y SDK de analítica general:</strong> aparte de la telemetría MetricKit de la sección 6, el código no incluye SDK de publicidad de terceros ni SDK generales de analítica de comportamiento.</li>

@@ -31,6 +31,7 @@ struct ChallengeResponse: Decodable, Sendable {
 }
 
 struct SubmitIssuePayload: Encodable {
+    let deviceID: String?
     let type: String
     let title: String
     let detail: String
@@ -42,6 +43,7 @@ struct SubmitIssuePayload: Encodable {
     let logs: [String]
 
     enum CodingKeys: String, CodingKey {
+        case deviceID = "device_id"
         case type
         case title
         case detail
@@ -62,8 +64,10 @@ struct SubmitIssuePayload: Encodable {
         actualBehavior: String,
         extraContext: String,
         environment: FeedbackEnvironmentSnapshot,
-        logs: [String]
+        logs: [String],
+        deviceID: String? = nil
     ) {
+        self.deviceID = deviceID
         self.type = type
         self.title = title
         self.detail = detail

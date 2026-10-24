@@ -168,6 +168,8 @@ public final class FeedbackService: ObservableObject {
 
         // 自动诊断可能含多条完整事件，数据库统计、正则脱敏和编码必须离开主线程。
         let encoder = encoder
+        let deviceIdentity = try await FeedbackDeviceIdentityStore.shared.identity()
+        let deviceID = deviceIdentity.deviceID
         let prepared = try await Task.detached(priority: .userInitiated) {
             func normalizedOptionalField(_ value: String?) -> String? {
                 guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -193,7 +195,8 @@ public final class FeedbackService: ObservableObject {
                 actualBehavior: FeedbackTextSanitizer.redact(normalized.actualBehavior ?? ""),
                 extraContext: FeedbackTextSanitizer.redact(normalized.extraContext ?? ""),
                 environment: FeedbackEnvironmentCollector.collectSnapshot(),
-                logs: FeedbackEnvironmentCollector.collectMinimalLogs().map(FeedbackTextSanitizer.redact)
+                logs: FeedbackEnvironmentCollector.collectMinimalLogs().map(FeedbackTextSanitizer.redact),
+                deviceID: deviceID
             )
             let bodyData = try encoder.encode(payload)
             return (draft: normalized, bodyData: bodyData, bodyHash: FeedbackSignature.bodyHashHex(bodyData))
@@ -203,6 +206,7 @@ public final class FeedbackService: ObservableObject {
         let bodyData = prepared.bodyData
         let submitPath = config.issuesPath
         var request = try buildRequest(path: submitPath, method: "POST")
+        request.setValue("Bearer \(deviceIdentity.token)", forHTTPHeaderField: "Authorization")
         let timestamp = String(Int(Date().timeIntervalSince1970))
         let bodyHash = prepared.bodyHash
         let signingText = "POST\n\(submitPath)\n\(timestamp)\n\(bodyHash)\n\(challenge.nonce)"

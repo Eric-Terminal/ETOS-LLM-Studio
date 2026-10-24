@@ -107,7 +107,8 @@
     <section>
         <h2>5. Assistant de feedback</h2>
 
-<p>Les données sont envoyées au service de feedback <strong>uniquement lorsque vous choisissez activement d’envoyer un feedback</strong>.</p>
+<p>Le contenu du feedback est envoyé lorsque vous le soumettez. Au lancement, l’app recherche aussi les messages privés du développeur destinés à cette installation.</p>
+<p>Les nouveaux retours publient sur GitHub un identifiant aléatoire de l’installation. Un identifiant secret distinct reste dans le bac à sable de l’app, exclu des sauvegardes et de la synchronisation ; la suppression des données locales crée une nouvelle identité. Il authentifie les vérifications de messages au lancement. Cet identifiant n’entre pas dans la télémétrie de performances. Les réponses aux messages, y compris les coordonnées fournies volontairement, vont uniquement au serveur de feedback du développeur, jamais à GitHub ou à un modèle d’IA. Un envoi réussi ou un refus ferme le message ; « Plus tard » le reporte. Le développeur peut consulter et supprimer ces données dans son interface privée ; elles restent conservées jusqu’à leur suppression. Les retours ordinaires et commentaires restent publics.</p>
 <ul>
     <li><strong>Contenu saisi par l’utilisateur :</strong> type de feedback, titre, description détaillée, étapes de reproduction, comportement attendu, comportement observé et contexte supplémentaire.</li>
     <li><strong>Instantané d’environnement :</strong> plateforme, version de l’app, numéro de build, version du système, identifiant du modèle d’appareil, langue/région et fuseau horaire.</li>
@@ -137,7 +138,7 @@
 <ul>
     <li><strong>Fournisseurs d’IA tiers :</strong> traitent les requêtes de chat, image et audio que vous envoyez volontairement.</li>
     <li><strong>Services système Apple :</strong> comme WatchConnectivity et iCloud / CloudKit, sont régis par les politiques d’Apple.</li>
-    <li><strong>Service de feedback opéré par le développeur :</strong> utilisé uniquement lorsque vous soumettez ou consultez des tickets de feedback.</li>
+    <li><strong>Service de feedback opéré par le développeur :</strong>gère les tickets, les vérifications de messages au lancement et les réponses privées.</li>
     <li><strong>Service de télémétrie opéré par le développeur :</strong> reçoit automatiquement les données sans contenu décrites à la section 6 lorsque la télémétrie est activée.</li>
     <li><strong>Non téléversé automatiquement :</strong> contenu des chats, mémoire locale, journaux locaux de requêtes et de réponses, données du récapitulatif annuel et clés API ne sont pas téléversés automatiquement vers les serveurs du développeur.</li>
     <li><strong>Publicité et SDK d’analytique générique :</strong> hormis la télémétrie MetricKit de la section 6, le code n’inclut aucun SDK publicitaire tiers ni SDK générique d’analyse comportementale.</li>

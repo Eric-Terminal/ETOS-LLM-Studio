@@ -20,6 +20,7 @@ struct ContentView: View {
     @StateObject var guideController = GuideConversationController(historyStore: .contextualHelp)
     @StateObject var announcementManager = AnnouncementManager.shared
     @StateObject var surveyManager = SurveyManager.shared
+    @StateObject var deviceMessages = DeviceMessageManager.shared
     @StateObject var legacyJSONMigrationManager = LegacyJSONMigrationManager.shared
     @ObservedObject var notificationCenter = AppLocalNotificationCenter.shared
     @ObservedObject var appConfig = AppConfigStore.shared

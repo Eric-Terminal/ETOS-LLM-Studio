@@ -43,7 +43,7 @@ public struct SurveyQuestion: Codable, Identifiable, Equatable, Sendable {
         id = try container.decode(String.self, forKey: .id)
         question = try container.decode(String.self, forKey: .question)
         type = try container.decode(AppToolAskUserInputQuestionType.self, forKey: .type)
-        options = try container.decode([SurveyOption].self, forKey: .options)
+        options = try container.decodeIfPresent([SurveyOption].self, forKey: .options) ?? []
         allowOther = try container.decodeIfPresent(Bool.self, forKey: .allowOther) ?? false
         required = try container.decodeIfPresent(Bool.self, forKey: .required) ?? false
     }

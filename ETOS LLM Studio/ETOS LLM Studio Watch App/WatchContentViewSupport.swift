@@ -232,11 +232,25 @@ extension ContentView {
                     .appLockOverlayLayer()
             }
         }
+        .sheet(item: Binding(get: { deviceMessages.currentMessage }, set: { _ in deviceMessages.postpone() })) { message in
+            NavigationStack {
+                DeviceMessageResponseView(message: message, manager: deviceMessages)
+                    .watchGuideEntry()
+            }
+            .appLockOverlayLayer()
+        }
+        .task(id: canPresentDeviceMessage) {
+            guard canPresentDeviceMessage else { return }
+            do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
+            guard canPresentDeviceMessage else { return }
+            deviceMessages.presentIfPossible()
+        }
         .task {
             launchRecoveryRequest = Persistence.currentLaunchRecoveryRequest()
             launchRecoveryNoticeMessage = Persistence.consumeLaunchRecoveryNotice()
             await announcementManager.checkAnnouncement()
             await surveyManager.checkSurveys(canPresent: !announcementManager.shouldShowAlert)
+            await deviceMessages.checkMessages()
             scheduleDailyPulsePreparation(after: 1_500_000_000)
             if applyDailyPulseContinuationIfNeeded() {
                 return
@@ -385,6 +399,7 @@ extension ContentView {
             || isMessageSelectionMode
             || announcementManager.shouldShowAlert
             || surveyManager.shouldShowSurvey
+            || deviceMessages.currentMessage != nil
             || launchRecoveryNoticeMessage != nil
             || launchRecoveryRequest != nil
             || launchRecoveryErrorMessage != nil
@@ -406,6 +421,14 @@ extension ContentView {
     var watchToolPermissionAutoPresentationBlocked: Bool {
         watchModalBlocksAskUserInputPresentation
             || presentedAskUserInputRequest != nil
+    }
+
+    private var canPresentDeviceMessage: Bool {
+        deviceMessages.hasPendingMessage
+            && scenePhase == .active
+            && !watchModalBlocksAskUserInputPresentation
+            && presentedAskUserInputRequest == nil
+            && toolPermissionCenter.activeRequest == nil
     }
 
     var watchSurveyPresentationBinding: Binding<Bool> {

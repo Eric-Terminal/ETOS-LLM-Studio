@@ -172,6 +172,8 @@ private struct WatchFeedbackComposeView: View {
                 .disabled(isSubmitting || !isDraftValid)
             } footer: {
                 Text(environmentSummary)
+                Text(NSLocalizedString("feedback.device.disclosure", value: "Feedback and a random device identifier are published on GitHub. The identifier lets the developer send private follow-up questions to this device. Do not include contact details in public feedback.", comment: "反馈设备标识披露"))
+                    .font(.footnote).foregroundStyle(.secondary)
             }
         }
         .navigationTitle(NSLocalizedString("新建反馈", comment: "Create feedback title"))

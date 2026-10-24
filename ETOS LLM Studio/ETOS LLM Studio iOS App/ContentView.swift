@@ -29,6 +29,7 @@ struct ContentView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @StateObject private var announcementManager = AnnouncementManager.shared
     @StateObject private var surveyManager = SurveyManager.shared
+    @StateObject private var deviceMessages = DeviceMessageManager.shared
     @StateObject private var legacyJSONMigrationManager = LegacyJSONMigrationManager.shared
     @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
     @ObservedObject private var appConfig = AppConfigStore.shared
@@ -64,6 +65,12 @@ struct ContentView: View {
             // 启动时检查公告
             .task {
                 await handleLaunchTasks()
+            }
+            .task(id: canPresentDeviceMessage) {
+                guard canPresentDeviceMessage else { return }
+                do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
+                guard canPresentDeviceMessage else { return }
+                deviceMessages.presentIfPossible()
             }
             .onAppear {
                 refreshRootToolPermissionAutoPresentationBlocker()
@@ -171,6 +178,12 @@ struct ContentView: View {
             if let survey = surveyManager.currentSurvey {
                 SurveyResponseSheet(survey: survey, manager: surveyManager)
             }
+        }
+        .sheet(item: Binding(get: { deviceMessages.currentMessage }, set: { _ in deviceMessages.postpone() })) { message in
+            NavigationStack {
+                DeviceMessageResponseView(message: message, manager: deviceMessages)
+            }
+            .appLockOverlayLayer()
         }
         .sheet(item: $incomingSnapshotRestorePayload) { payload in
             NavigationStack {
@@ -404,6 +417,7 @@ struct ContentView: View {
         isNativeSettingsPresented
             || announcementManager.shouldShowAlert
             || surveyManager.shouldShowSurvey
+            || deviceMessages.currentMessage != nil
             || incomingSnapshotRestorePayload != nil
             || viewModel.showDimensionMismatchAlert
             || viewModel.externalDocumentImportErrorMessage != nil
@@ -421,6 +435,17 @@ struct ContentView: View {
 
     private func setRootToolPermissionAutoPresentationBlocked(_ blocked: Bool) {
         toolPermissionCenter.setAutoPresentationBlocked(blocked, reason: "ios.root.presentation")
+    }
+
+    private var canPresentDeviceMessage: Bool {
+        deviceMessages.hasPendingMessage
+            && scenePhase == .active
+            && !rootToolPermissionAutoPresentationBlocked
+            && toolPermissionCenter.activeRequest == nil
+            && !toolPermissionCenter.hasAutoPresentationBlockers(excluding: ["ios.root.presentation"])
+            && incomingSnapshotRestorePayload == nil
+            && systemEntryInboxPayload == nil
+            && systemEntryRoute == nil
     }
 
     private func refreshRootToolPermissionAutoPresentationBlocker() {
@@ -582,6 +607,7 @@ struct ContentView: View {
         legacyJSONMigrationManager.refreshStatus()
         await announcementManager.checkAnnouncement()
         await surveyManager.checkSurveys(canPresent: !announcementManager.shouldShowAlert)
+        await deviceMessages.checkMessages()
         scheduleDailyPulsePreparation(after: 1_500_000_000)
         if openDailyPulseContinuationIfNeeded() {
             return
