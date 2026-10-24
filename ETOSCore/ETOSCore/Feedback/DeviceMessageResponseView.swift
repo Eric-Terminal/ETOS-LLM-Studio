@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 @MainActor
 private final class DeviceMessageFormModel: ObservableObject {
@@ -70,9 +71,9 @@ public struct DeviceMessageResponseView: View {
     @StateObject private var form = DeviceMessageFormModel()
     @State private var confirmsDismissal = false
 
-    public init(message: DeviceMessage, manager: DeviceMessageManager = .shared) {
+    public init(message: DeviceMessage, manager: DeviceMessageManager? = nil) {
         self.message = message
-        self.manager = manager
+        self.manager = manager ?? .shared
     }
 
     public var body: some View {
