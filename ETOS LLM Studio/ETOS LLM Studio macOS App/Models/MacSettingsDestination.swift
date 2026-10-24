@@ -2,7 +2,7 @@ import Foundation
 
 enum MacSettingsDestination: String, Identifiable {
     case models, conversation, prompts, output, display, sync
-    case tools, pulse, usage, batch, memory, mcp, skills, shortcuts, roleplay, worldbook, speech, tts, browser, extended
+    case tools, pulse, usage, memory, mcp, skills, shortcuts, roleplay, worldbook, speech, tts, browser, extended
     case general, security, guide, about
 
     var id: String { rawValue }
@@ -17,7 +17,6 @@ enum MacSettingsDestination: String, Identifiable {
         case .tools: NSLocalizedString("工具中心", comment: "")
         case .pulse: NSLocalizedString("每日脉冲", comment: "")
         case .usage: NSLocalizedString("用量统计", comment: "")
-        case .batch: NSLocalizedString("batch.title", value: "Batch Tasks", comment: "批量任务入口")
         case .memory: NSLocalizedString("记忆系统", comment: "")
         case .mcp: NSLocalizedString("MCP 工具集成", comment: "")
         case .skills: NSLocalizedString("Agent Skills", comment: "")
@@ -45,7 +44,6 @@ enum MacSettingsDestination: String, Identifiable {
         case .tools: "wrench.and.screwdriver"
         case .pulse: "rectangle.stack"
         case .usage: "chart.bar"
-        case .batch: "tray.full"
         case .memory: "brain.head.profile"
         case .mcp: "puzzlepiece.extension"
         case .skills: "books.vertical"

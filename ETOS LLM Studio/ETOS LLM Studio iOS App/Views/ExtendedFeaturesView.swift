@@ -20,7 +20,8 @@ struct ExtendedFeaturesView: View {
                 settingsIntroCard(
                     title: NSLocalizedString("拓展功能", comment: "Extended features intro title"),
                     summary: NSLocalizedString("这里集中放置进阶能力、调试入口与跨平台工具集成。", comment: "Extended features intro summary"),
-                    details: NSLocalizedString("拓展功能说明正文", comment: "Extended features intro details"),
+                    details: NSLocalizedString("拓展功能说明正文", comment: "Extended features intro details")
+                        + "\n\n" + NSLocalizedString("batch.entry.description", value: "Open Batch Tasks to send independent requests together and retrieve results later. The provider must support the Batch API.", comment: "批量任务入口说明"),
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -44,6 +45,19 @@ struct ExtendedFeaturesView: View {
                 }
             } footer: {
                 Text(NSLocalizedString("用简短命令快速打开聊天操作和设置页面。", comment: "Slash commands entry footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                NavigationLink {
+                    BatchTasksView()
+                } label: {
+                    SettingsListIconLabel("batch.title", icon: .batch)
+                }
+                .accessibilityIdentifier("batch.tasks.entry")
+            } footer: {
+                Text(NSLocalizedString("batch.help.summary", value: "Send independent requests together and collect their results later.", comment: "批量介绍摘要"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -158,11 +172,12 @@ struct ExtendedFeaturesView: View {
         .guideSettingsPageContext(
             id: "settings-extended-features",
             title: NSLocalizedString("拓展功能", comment: "拓展功能向导上下文标题"),
-            documents: [GuideDocumentReference(id: "settings-extended", title: "Extended Features")],
+            documents: [GuideDocumentReference(id: "settings-extended", title: "Extended Features")] + BatchGuideSupport.documents,
+            isActive: !isShowingIntroDetails,
             settings: [
                 .readOnly("available_sections", label: NSLocalizedString("可用功能入口", comment: "向导设置字段"), value: {
                     .array([
-                        "slash_commands", "background_generation", "app_lock", "feedback", "local_models",
+                        "slash_commands", "batch_tasks", "background_generation", "app_lock", "feedback", "local_models",
                         "image_gallery", "remote_files", "storage", "data_import", "connection_exceptions"
                     ].map(JSONValue.string))
                 })
@@ -204,6 +219,11 @@ struct ExtendedFeaturesView: View {
                 }
                 .navigationTitle(NSLocalizedString(title, comment: "设置介绍卡片详情标题"))
                 .navigationBarTitleDisplayMode(.inline)
+                .guideSettingsPageContext(
+                    id: "settings-extended-introduction", title: title,
+                    documents: [GuideDocumentReference(id: "settings-extended", title: "Extended Features")] + BatchGuideSupport.documents,
+                    settings: [.readOnly("read_only", label: NSLocalizedString("使用说明", comment: ""), value: { .bool(true) })]
+                )
             }
         }
     }

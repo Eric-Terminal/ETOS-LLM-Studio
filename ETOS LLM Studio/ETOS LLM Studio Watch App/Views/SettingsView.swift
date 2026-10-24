@@ -90,7 +90,8 @@ struct SettingsView: View {
             descriptor: GuidePageDescriptor(
                 id: "watch-settings-root",
                 title: NSLocalizedString("设置", comment: "手表设置向导上下文标题"),
-                documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")]
+                documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview"),
+                    GuideDocumentReference(id: "settings-extended", title: "Extended Features")]
             ),
             isFallback: true,
             snapshot: {
@@ -254,12 +255,6 @@ struct SettingsView: View {
 
                     NavigationLink(destination: UsageAnalyticsView()) {
                         settingsNavigationLabel("用量统计", icon: .usageAnalytics)
-                    }
-
-                    NavigationLink {
-                        BatchTasksView(pageChrome: { AnyView($0.watchGuideEntry()) })
-                    } label: {
-                        settingsNavigationLabel("batch.title", icon: .batch)
                     }
 
                     NavigationLink(destination: ToolCenterView().environmentObject(viewModel)) {

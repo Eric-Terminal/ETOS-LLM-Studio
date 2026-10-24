@@ -24,7 +24,8 @@ public struct ExtendedFeaturesView: View {
                 settingsIntroCard(
                     title: NSLocalizedString("拓展功能", comment: "Extended features intro title"),
                     summary: NSLocalizedString("集中管理工具集成、语音能力与系统维护入口。", comment: "Watch extended features intro summary"),
-                    details: NSLocalizedString("拓展功能说明正文", comment: "Extended features intro details"),
+                    details: NSLocalizedString("拓展功能说明正文", comment: "Extended features intro details")
+                        + "\n\n" + NSLocalizedString("batch.entry.description", value: "Open Batch Tasks to send independent requests together and retrieve results later. The provider must support the Batch API.", comment: "批量任务入口说明"),
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -52,6 +53,19 @@ public struct ExtendedFeaturesView: View {
                 }
             } footer: {
                 Text(NSLocalizedString("用简短命令快速打开聊天操作和设置页面。", comment: "Watch slash commands entry footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                NavigationLink {
+                    BatchTasksView(pageChrome: { AnyView($0.watchGuideEntry()) })
+                } label: {
+                    settingsNavigationLabel("batch.title", icon: .batch)
+                }
+                .accessibilityIdentifier("batch.tasks.entry")
+            } footer: {
+                Text(NSLocalizedString("batch.help.summary", value: "Send independent requests together and collect their results later.", comment: "批量介绍摘要"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -323,11 +337,12 @@ public struct ExtendedFeaturesView: View {
         .guideSettingsPageContext(
             id: "settings-extended-features",
             title: NSLocalizedString("拓展功能", comment: "拓展功能向导上下文标题"),
-            documents: [GuideDocumentReference(id: "settings-extended", title: "Extended Features")],
+            documents: [GuideDocumentReference(id: "settings-extended", title: "Extended Features")] + BatchGuideSupport.documents,
+            isActive: !isShowingIntroDetails,
             settings: [
                 .readOnly("available_sections", label: NSLocalizedString("可用功能入口", comment: "向导设置字段"), value: {
                     .array([
-                        "slash_commands", "background_generation", "app_lock", "tts", "speech_input",
+                        "slash_commands", "batch_tasks", "background_generation", "app_lock", "tts", "speech_input",
                         "feedback", "memory", "mcp", "local_linux", "browser_agent", "shortcuts",
                         "agent_skills", "roleplay", "worldbook", "local_models", "remote_files",
                         "storage", "data_import", "image_gallery", "connection_exceptions"
@@ -362,12 +377,21 @@ public struct ExtendedFeaturesView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 2)
         .sheet(isPresented: isExpanded) {
-            ScrollView {
-                Text(NSLocalizedString(details, comment: "设置介绍卡片详情"))
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
+            NavigationStack {
+                ScrollView {
+                    Text(NSLocalizedString(details, comment: "设置介绍卡片详情"))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(title)
+                .guideSettingsPageContext(
+                    id: "settings-extended-introduction", title: title,
+                    documents: [GuideDocumentReference(id: "settings-extended", title: "Extended Features")] + BatchGuideSupport.documents,
+                    settings: [.readOnly("read_only", label: NSLocalizedString("使用说明", comment: ""), value: { .bool(true) })]
+                )
+                .watchGuideEntry()
             }
         }
     }

@@ -5,7 +5,7 @@ public enum BatchGuideSupport {
 
     public static func document() -> GuideDocument {
         GuideDocument(id: "batch-tasks", title: "批量任务", keywords: ["Batch", "批量", "JSONL", "异步", "取消", "重试", "多模型"], content: """
-        设置→拓展能力→批量任务提供 OpenAI 兼容 Batch API。提供商必须支持 /files 与 /batches；普通聊天可用不代表 Batch 可用。新建页每个非空行是一条独立文本请求，可选择多个已启用的 OpenAI Chat Completions 或 Responses 模型，每个模型创建一个独立远端任务。请求不携带聊天历史、附件、MCP 或快捷指令，也不执行返回的工具调用。模型参数及当前全局温度、top-p 会在提交时固定；流式和跨请求会话续接被关闭。
+        设置→拓展功能→批量任务提供 OpenAI 兼容 Batch API。iOS、watchOS 和 macOS 的设置首页不再单列批量任务，需先打开拓展功能。提供商必须支持 /files 与 /batches；普通聊天可用不代表 Batch 可用。新建页每个非空行是一条独立文本请求，可选择多个已启用的 OpenAI Chat Completions 或 Responses 模型，每个模型创建一个独立远端任务。请求不携带聊天历史、附件、MCP 或快捷指令，也不执行返回的工具调用。模型参数及当前全局温度、top-p 会在提交时固定；流式和跨请求会话续接被关闭。
 
         输入与模型选择是草稿。手表通过输入框逐条添加，请求列表可滑动移除；尚未添加的输入不会提交。向导只能经原生确认修改草稿字段，不能提交、取消、重试、删除、导出或授予通知权限。任务列表、详情、结果和介绍页只读；这些只读页面的快照不包含 API Key、请求正文或结果正文，编辑器仅公开当前草稿。离开页面后旧提案失效。
 
@@ -15,7 +15,7 @@ public enum BatchGuideSupport {
 
         iOS、watchOS、macOS 共用任务格式与聊天数据库。手机／手表使用现有聊天库同步功能传递任务，需同时具备对应提供商和凭据；覆盖同步仍遵守原同步页面的确认和冲突规则。快照备份包含这些数据。iOS/macOS 可导出 JSONL，手表可同步到手机后导出。导出包含模型原始响应，分享前自行检查内容。
 
-        Batch Tasks sends independent text requests through a provider's Batch API. Each selected model creates a separate job. Draft editing does not submit requests. Polling runs only while the application is active; completion notifications are delivered after a successful refresh and local save. Results, including partial failures, are retained in the chat database. Recovery checks remote metadata before retrying an uncertain submission. The guide cannot submit tasks or operate external tools.
+        Open Settings → Extensions → Batch Tasks on iOS, watchOS and macOS. Batch Tasks sends independent text requests through a provider's Batch API. Each selected model creates a separate job. Draft editing does not submit requests. Polling runs only while the application is active; completion notifications are delivered after a successful refresh and local save. Results, including partial failures, are retained in the chat database. Recovery checks remote metadata before retrying an uncertain submission. The guide cannot submit tasks or operate external tools.
         """)
     }
 }

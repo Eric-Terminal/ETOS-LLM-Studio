@@ -13,7 +13,9 @@ struct MacExtendedFeaturesView: View {
         List {
             Section {
                 MacSettingsIntroCard(id: "extended-features", title: NSLocalizedString("拓展功能", comment: ""),
-                    details: NSLocalizedString("Mac 拓展功能入口说明", comment: ""), documentID: "chat-quick-actions", isActive: available)
+                    details: NSLocalizedString("Mac 拓展功能入口说明", comment: "")
+                        + "\n\n" + NSLocalizedString("batch.entry.description", value: "Open Batch Tasks to send independent requests together and retrieve results later. The provider must support the Batch API.", comment: "批量任务入口说明"),
+                    documentID: "settings-extended", isActive: available)
             }
             if !achievements.entries.isEmpty {
                 Section {
@@ -26,6 +28,9 @@ struct MacExtendedFeaturesView: View {
                     label: { Label(NSLocalizedString("反馈助手", comment: ""), systemImage: "bubble.left.and.text.bubble.right") }
                 NavigationLink { MacSlashCommandSettingsView(isActive: available, model: workspace.slashCommands) }
                     label: { Label(NSLocalizedString("快速指令", comment: ""), systemImage: "command") }
+                NavigationLink { BatchTasksView(isActive: available) }
+                    label: { Label(NSLocalizedString("batch.title", value: "Batch Tasks", comment: "批量任务入口"), systemImage: "tray.full") }
+                    .accessibilityIdentifier("batch.tasks.entry")
                 NavigationLink { MacLocalModelLibraryView(isActive: available, library: workspace.localModels) }
                     label: { Label(NSLocalizedString("本地模型", comment: ""), systemImage: "cpu") }
                 NavigationLink { MacShellView(isActive: available, model: workspace.linux) }
@@ -57,7 +62,9 @@ struct MacExtendedFeaturesView: View {
         .onAppear { visible = true; achievements.reload() }
         .onDisappear { visible = false }
         .guideSettingsPageContext(id: "mac-extended-features", title: NSLocalizedString("拓展功能", comment: ""),
-            documents: [GuideDocumentReference(id: "chat-quick-actions", title: "Chat Quick Actions"),
+            documents: [GuideDocumentReference(id: "settings-extended", title: "Extended Features"),
+                GuideDocumentReference(id: "batch-tasks", title: "Batch Tasks"),
+                GuideDocumentReference(id: "chat-quick-actions", title: "Chat Quick Actions"),
                 GuideDocumentReference(id: "slash-commands", title: "Quick Commands"),
                 GuideDocumentReference(id: "feedback-assistant", title: NSLocalizedString("反馈助手", comment: "")),
                 GuideDocumentReference(id: "mac-image-gallery", title: NSLocalizedString("图片相册", comment: "")),
@@ -70,6 +77,7 @@ struct MacExtendedFeaturesView: View {
                 .readOnly("feedback_requires_navigation", label: NSLocalizedString("反馈助手", comment: ""), value: { .bool(true) }),
                 .readOnly("gallery_requires_navigation", label: NSLocalizedString("图片相册", comment: ""), value: { .bool(true) }),
                 .readOnly("slash_commands_require_navigation", label: NSLocalizedString("快速指令", comment: ""), value: { .bool(true) }),
+                .readOnly("batch_tasks_require_navigation", label: NSLocalizedString("batch.title", value: "Batch Tasks", comment: "批量任务入口"), value: { .bool(true) }),
                 .readOnly("local_models_require_navigation", label: NSLocalizedString("本地模型", comment: ""), value: { .bool(true) }),
                 .readOnly("shell_requires_navigation", label: NSLocalizedString("mac.shell.title", value: "Local Shell", comment: ""), value: { .bool(true) }),
                 .readOnly("backup_requires_navigation", label: NSLocalizedString("快照备份", comment: ""), value: { .bool(true) }),

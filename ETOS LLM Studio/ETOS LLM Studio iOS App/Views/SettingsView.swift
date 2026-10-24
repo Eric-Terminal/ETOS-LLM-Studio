@@ -134,12 +134,6 @@ struct SettingsView: View {
                 }
 
                 NavigationLink {
-                    BatchTasksView()
-                } label: {
-                    SettingsListIconLabel("batch.title", icon: .batch)
-                }
-
-                NavigationLink {
                     LongTermMemoryFeatureView()
                         .environmentObject(viewModel)
                 } label: {
@@ -252,7 +246,8 @@ struct SettingsView: View {
             descriptor: GuidePageDescriptor(
                 id: "settings-root",
                 title: NSLocalizedString("设置", comment: "设置页向导上下文标题"),
-                documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")]
+                documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview"),
+                    GuideDocumentReference(id: "settings-extended", title: "Extended Features")]
             ),
             isFallback: true,
             snapshot: {
@@ -564,13 +559,15 @@ struct SettingsListIconLabel: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
+        // 原生 Label 为文字提供分隔线对齐锚点，避免线条延伸到图标下方。
+        Label {
+            Text(title)
+        } icon: {
             if appConfig.settingsColorfulIconsEnabled {
                 SettingsListIconView(icon: icon)
             } else {
                 SettingsListPlainIconView(icon: icon)
             }
-            Text(title)
         }
     }
 }

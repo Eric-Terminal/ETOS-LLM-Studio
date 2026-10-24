@@ -8235,7 +8235,8 @@
 "batch.draft.notice" = "変更はこの下書きのみに適用されます。手動で送信してください。";
 "batch.draft.count" = "%d 件のリクエスト × %d モデル";
 "batch.notification.title" = "バッチ結果が届きました";
-"batch.notification.body" = "設定の「バッチタスク」で結果を確認してください。";
+"batch.notification.body" = "「設定 → 拡張機能 → バッチタスク」で結果を確認してください。";
+"batch.entry.description" = "「バッチタスク」では独立したリクエストをまとめて送信し、後で結果を確認できます。プロバイダーが Batch API に対応している必要があります。";
 "batch.new" = "新規バッチ";
 "batch.refresh" = "タスクを更新";
 "batch.empty" = "バッチタスクはまだありません。";

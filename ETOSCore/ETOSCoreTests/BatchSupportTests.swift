@@ -186,13 +186,17 @@ struct BatchSupportTests {
         #expect(try BatchJobStore.loadAll(in: store).isEmpty)
     }
 
-    @Test("向导文档说明草稿边界、同步、恢复与前台通知限制")
+    @Test("向导文档说明拓展功能入口、草稿边界、同步、恢复与前台通知限制")
     func guideKnowledge() {
         let document = BatchGuideSupport.document()
         #expect(document.id == "batch-tasks")
-        for word in ["草稿", "原生确认", "metadata", "前台", "聊天数据库", "API Key"] {
+        for word in ["设置→拓展功能→批量任务", "草稿", "原生确认", "metadata", "前台", "聊天数据库", "API Key"] {
             #expect(document.content.contains(word))
         }
         #expect(GuideDocumentCatalog.documents.contains { $0.id == document.id })
+        let extended = GuideDocumentCatalog.documents.first { $0.id == "settings-extended" }
+        #expect(extended?.keywords.contains("Batch") == true)
+        #expect(extended?.content.contains("设置→拓展功能→批量任务") == true)
+        #expect(extended?.content.contains(document.id) == true)
     }
 }

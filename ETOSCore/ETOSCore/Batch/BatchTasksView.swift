@@ -1,9 +1,5 @@
 import SwiftUI
 
-private enum BatchDestination: Hashable {
-    case editor, introduction, job(UUID), result(UUID, String)
-}
-
 /// 平台入口注入各自的向导工具栏；列表、详情和草稿共享同一任务状态。
 public struct BatchTasksView: View {
     @StateObject private var model = BatchTasksModel()
@@ -39,9 +35,13 @@ public struct BatchTasksView: View {
         List {
             Section {
                 settingsIntroCard
-                NavigationLink(value: BatchDestination.editor) {
+                // 设置父页面使用视图导航；这里保持一致，避免值导航弹出父页面并丢失草稿。
+                NavigationLink {
+                    pageChrome(AnyView(BatchEditorView(model: model, isActive: isActive)))
+                } label: {
                     Label(NSLocalizedString("batch.new", value: "New Batch", comment: "新建批量任务"), systemImage: "plus")
                 }
+                .accessibilityIdentifier("batch.new")
                 Button {
                     Task { await model.perform { await BatchService.shared.refreshPending(force: true) } }
                 } label: {
@@ -55,7 +55,10 @@ public struct BatchTasksView: View {
                         .foregroundStyle(.secondary)
                 }
                 ForEach(model.snapshot.jobs) { job in
-                    NavigationLink(value: BatchDestination.job(job.id)) {
+                    NavigationLink {
+                        pageChrome(AnyView(BatchJobDetailView(model: model, id: job.id,
+                            isActive: isActive, pageChrome: pageChrome)))
+                    } label: {
                         VStack(alignment: .leading) {
                             Text(job.title)
                             Text(job.model).font(.caption).foregroundStyle(.secondary)
@@ -75,28 +78,19 @@ public struct BatchTasksView: View {
         .guideSettingsPageContext(id: "batch-tasks", title: NSLocalizedString("batch.title", value: "Batch Tasks", comment: ""),
             documents: BatchGuideSupport.documents, isActive: isActive,
             settings: [.readOnly("job_count", label: NSLocalizedString("batch.tasks", value: "Tasks", comment: ""), value: { .int(model.snapshot.jobs.count) })])
-        .navigationDestination(for: BatchDestination.self) { destination in
-            switch destination {
-            case .editor:
-                pageChrome(AnyView(BatchEditorView(model: model, isActive: isActive)))
-            case .introduction:
-                pageChrome(AnyView(BatchIntroductionView(isActive: isActive)))
-            case .job(let id):
-                pageChrome(AnyView(BatchJobDetailView(model: model, id: id, isActive: isActive)))
-            case .result(let jobID, let resultID):
-                pageChrome(AnyView(BatchResultDetailView(model: model, jobID: jobID, resultID: resultID, isActive: isActive)))
-            }
-        }
     }
 
     private var settingsIntroCard: some View {
-        NavigationLink(value: BatchDestination.introduction) {
+        NavigationLink {
+            pageChrome(AnyView(BatchIntroductionView(isActive: isActive)))
+        } label: {
             VStack(alignment: .leading) {
                 Text(NSLocalizedString("batch.help.title", value: "Using Batch Tasks", comment: "批量介绍标题"))
                 Text(NSLocalizedString("batch.help.summary", value: "Send independent requests together and collect their results later.", comment: "批量介绍摘要"))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
+        .accessibilityIdentifier("batch.introduction")
     }
 }
 
@@ -192,6 +186,7 @@ private struct BatchJobDetailView: View {
     @ObservedObject var model: BatchTasksModel
     let id: UUID
     let isActive: Bool
+    let pageChrome: @MainActor (AnyView) -> AnyView
     @Environment(\.dismiss) private var dismiss
     @State private var action: String?
     private var job: BatchJobRow? { model.snapshot.byID[id] }
@@ -241,7 +236,10 @@ private struct BatchJobDetailView: View {
                 .disabled(model.busy)
                 Section(NSLocalizedString("batch.results", value: "Results", comment: "批量结果")) {
                     ForEach(job.results) { result in
-                        NavigationLink(value: BatchDestination.result(id, result.id)) {
+                        NavigationLink {
+                            pageChrome(AnyView(BatchResultDetailView(model: model, jobID: id,
+                                resultID: result.id, isActive: isActive)))
+                        } label: {
                             VStack(alignment: .leading) {
                                 Text(result.preview).lineLimit(3)
                                 if let error = result.error { Text(error).font(.caption).foregroundStyle(.secondary).lineLimit(2) }

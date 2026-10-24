@@ -8242,7 +8242,8 @@
 "batch.draft.notice" = "Changes affect this draft only. Submit manually to send requests.";
 "batch.draft.count" = "%d requests × %d models";
 "batch.notification.title" = "Batch results are ready";
-"batch.notification.body" = "Open Batch Tasks in Settings to view the results.";
+"batch.notification.body" = "Open Settings > Extensions > Batch Tasks to view the results.";
+"batch.entry.description" = "Open Batch Tasks to send independent requests together and retrieve results later. The provider must support the Batch API.";
 "batch.new" = "New Batch";
 "batch.refresh" = "Refresh Tasks";
 "batch.empty" = "No batch tasks yet.";

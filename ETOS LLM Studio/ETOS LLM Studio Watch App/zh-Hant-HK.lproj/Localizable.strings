@@ -8234,7 +8234,8 @@
 "batch.draft.notice" = "只修改目前草稿，手動提交後才發送請求。";
 "batch.draft.count" = "%d 項請求 × %d 個模型";
 "batch.notification.title" = "批量任務結果已就緒";
-"batch.notification.body" = "前往設定中的批量任務查看結果。";
+"batch.notification.body" = "前往「設定 → 擴展功能 → 批量任務」查看結果。";
+"batch.entry.description" = "在「批量任務」中一併提交多項獨立請求，稍後查看結果。供應商需要支援 Batch API。";
 "batch.new" = "新增批量任務";
 "batch.refresh" = "重新整理任務";
 "batch.empty" = "尚未有批量任務。";

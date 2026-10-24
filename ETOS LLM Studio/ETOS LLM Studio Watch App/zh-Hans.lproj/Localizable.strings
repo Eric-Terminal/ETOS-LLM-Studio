@@ -8228,7 +8228,8 @@
 "batch.draft.notice" = "仅修改当前草稿，手动提交后才发送请求。";
 "batch.draft.count" = "%d 条请求 × %d 个模型";
 "batch.notification.title" = "批量任务结果已就绪";
-"batch.notification.body" = "前往设置中的批量任务查看结果。";
+"batch.notification.body" = "前往“设置 → 拓展功能 → 批量任务”查看结果。";
+"batch.entry.description" = "在“批量任务”中一起提交多条独立请求，稍后查看结果。提供商需要支持 Batch API。";
 "batch.new" = "新建批量任务";
 "batch.refresh" = "刷新任务";
 "batch.empty" = "还没有批量任务。";

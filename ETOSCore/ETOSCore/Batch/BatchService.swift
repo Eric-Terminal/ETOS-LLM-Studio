@@ -276,7 +276,7 @@ public actor BatchService {
         guard status == .authorized || status == .provisional else { return true }
         let content = UNMutableNotificationContent()
         content.title = NSLocalizedString("batch.notification.title", value: "Batch results are ready", comment: "批量通知标题")
-        content.body = NSLocalizedString("batch.notification.body", value: "Open Batch Tasks in Settings to view the results.", comment: "批量通知内容，不含请求正文")
+        content.body = NSLocalizedString("batch.notification.body", value: "Open Settings > Extensions > Batch Tasks to view the results.", comment: "批量通知内容，不含请求正文")
         content.sound = .default
         return await center.addNotificationRequest(UNNotificationRequest(identifier: "batch.\(job.id.uuidString)", content: content, trigger: nil))
     }

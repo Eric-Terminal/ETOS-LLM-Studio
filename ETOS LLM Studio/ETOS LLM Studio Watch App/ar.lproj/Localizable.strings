@@ -8319,7 +8319,8 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "batch.draft.notice" = "تؤثر التغييرات على هذه المسودة فقط. أرسل الطلبات يدويًا.";
 "batch.draft.count" = "%d طلبات × %d نماذج";
 "batch.notification.title" = "نتائج الدفعة جاهزة";
-"batch.notification.body" = "افتح المهام المجمّعة في الإعدادات لعرض النتائج.";
+"batch.notification.body" = "لعرض النتائج، افتح الإعدادات، ثم الامتدادات، ثم المهام المجمّعة.";
+"batch.entry.description" = "افتح المهام المجمّعة لإرسال طلبات مستقلة معًا والاطّلاع على نتائجها لاحقًا. يجب أن يدعم المزوّد واجهة Batch API.";
 "batch.new" = "دفعة جديدة";
 "batch.refresh" = "تحديث المهام";
 "batch.empty" = "لا توجد مهام مجمّعة بعد.";
