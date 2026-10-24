@@ -275,7 +275,6 @@ struct DisplaySettingsView: View {
             get: { appConfig.appLanguage },
             set: { newValue in
                 appConfig.appLanguage = newValue
-                AppLanguageRuntime.apply(rawValue: newValue)
             }
         )
     }

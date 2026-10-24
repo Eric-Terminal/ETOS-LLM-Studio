@@ -116,6 +116,7 @@ public enum AppLanguageRuntime {
         if object_getClass(Bundle.main) !== AppLanguageBundle.self {
             object_setClass(Bundle.main, AppLanguageBundle.self)
         }
+        objc_setAssociatedObject(Bundle.main, &appLanguageSnapshotKey, nil, .OBJC_ASSOCIATION_RETAIN)
 
         if let identifier = preference.localizationIdentifier,
            let path = Bundle.main.path(forResource: identifier, ofType: "lproj"),
@@ -126,13 +127,29 @@ public enum AppLanguageRuntime {
         }
         #endif
     }
+
+    @MainActor
+    static func installCompressedSnapshot(_ snapshot: AppLocalizationSnapshot) {
+        #if canImport(ObjectiveC)
+        if object_getClass(Bundle.main) !== AppLanguageBundle.self {
+            object_setClass(Bundle.main, AppLanguageBundle.self)
+        }
+        objc_setAssociatedObject(Bundle.main, &appLanguageBundleKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        objc_setAssociatedObject(Bundle.main, &appLanguageSnapshotKey, snapshot, .OBJC_ASSOCIATION_RETAIN)
+        #endif
+    }
 }
 
 #if canImport(ObjectiveC)
 private var appLanguageBundleKey: UInt8 = 0
+private var appLanguageSnapshotKey: UInt8 = 0
 
 private final class AppLanguageBundle: Bundle, @unchecked Sendable {
     override func localizedString(forKey key: String, value: String?, table tableName: String?) -> String {
+        if tableName == nil || tableName == "Localizable",
+           let snapshot = objc_getAssociatedObject(self, &appLanguageSnapshotKey) as? AppLocalizationSnapshot {
+            return snapshot.localizedString(forKey: key, value: value)
+        }
         if let bundle = objc_getAssociatedObject(self, &appLanguageBundleKey) as? Bundle {
             return bundle.localizedString(forKey: key, value: value, table: tableName)
         }

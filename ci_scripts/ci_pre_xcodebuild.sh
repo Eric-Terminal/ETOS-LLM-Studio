@@ -8,6 +8,7 @@ WATCH_PLIST_PATH="$ROOT_PATH/ETOS LLM Studio/ETOS LLM Studio Watch App/Info.plis
 
 # 扩展只携带自身需要的翻译，新增文案必须先同步，不能带着缺失翻译发布。
 python3 "$ROOT_PATH/scripts/sync-extension-localizations.py" --check
+python3 "$ROOT_PATH/scripts/prepare-watch-localizations.py" --check
 
 # 云端构建写入完整 Commit，界面展示时再截为 7 位；源码向导必须依赖精确版本。
 if [ -n "${CI_COMMIT:-}" ]; then

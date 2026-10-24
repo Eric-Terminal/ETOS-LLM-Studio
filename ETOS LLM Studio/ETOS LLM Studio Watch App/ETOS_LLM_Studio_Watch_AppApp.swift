@@ -28,7 +28,6 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
     
     init() {
         _ = ChatBackgroundStartupCache.shared
-        AppLanguageRuntime.applyConfiguredLanguage()
         SyncTemporaryFileCleaner.cleanupResidualTemporaryDirectoriesInBackground()
         DailyPulseDeliveryCoordinator.shared.activate()
         FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
@@ -46,43 +45,47 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
     
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .networkConnectionApprovalHost()
-                .environmentObject(launchStateMachine)
-                .environmentObject(appConfig)
-                .environmentObject(syncManager)
-                .environmentObject(cloudSyncManager)
-                .onOpenURL { url in
-                    Task {
-                        if NewAPIProviderImportURLHandler.canHandle(url) {
-                            _ = try? await NewAPIProviderImportURLHandler.importProvider(from: url)
-                            return
-                        }
-                        if await WatchSystemEntryURLRouter.handle(url) {
-                            return
-                        }
-                        _ = await ShortcutURLRouter.shared.handleIncomingURL(url)
+            WatchLocalizedContentView {
+                ContentView()
+                    .networkConnectionApprovalHost()
+                    .environmentObject(launchStateMachine)
+                    .environmentObject(syncManager)
+                    .environmentObject(cloudSyncManager)
+                    .batchTaskLifecycle(isReady: launchStateMachine.phase == .ready)
+                    .onAppear {
+                        // 启动时自动重连已加入聊天路由的 MCP 服务器
+                        mcpManager.connectSelectedServersIfNeeded()
+                        dailyPulseDeliveryCoordinator.activate()
+                        updateTimelineManager.activateOnLaunchIfNeeded()
+                        triggerFeedbackRefreshOnLaunchIfNeeded()
+                        WatchSystemEntrySnapshotPublisher.shared.activate()
                     }
+                    .task {
+                        launchStateMachine.startIfNeeded()
+                    }
+                    .task(id: launchStateMachine.phase) {
+                        guard launchStateMachine.phase == .ready else { return }
+                        guard !Persistence.hasPendingLaunchRecoveryRequest() else { return }
+                        // 启动持久化预热完成后再触发自动同步，避免冷启动阶段覆盖未加载完的会话状态。
+                        syncManager.performAutoSyncIfEnabled()
+                        cloudSyncManager.performAutoSyncIfEnabled()
+                    }
+            }
+            .environmentObject(appConfig)
+            // 冷启动的 URL 入口必须始终挂载，不能等语言准备完成才注册。
+            .onOpenURL { url in
+                Task {
+                    await CompressedAppLanguageController.prepareConfiguredLanguage()
+                    if NewAPIProviderImportURLHandler.canHandle(url) {
+                        _ = try? await NewAPIProviderImportURLHandler.importProvider(from: url)
+                        return
+                    }
+                    if await WatchSystemEntryURLRouter.handle(url) {
+                        return
+                    }
+                    _ = await ShortcutURLRouter.shared.handleIncomingURL(url)
                 }
-                .batchTaskLifecycle(isReady: launchStateMachine.phase == .ready)
-                .onAppear {
-                    // 启动时自动重连已加入聊天路由的 MCP 服务器
-                    mcpManager.connectSelectedServersIfNeeded()
-                    dailyPulseDeliveryCoordinator.activate()
-                    updateTimelineManager.activateOnLaunchIfNeeded()
-                    triggerFeedbackRefreshOnLaunchIfNeeded()
-                    WatchSystemEntrySnapshotPublisher.shared.activate()
-                }
-                .task {
-                    launchStateMachine.startIfNeeded()
-                }
-                .task(id: launchStateMachine.phase) {
-                    guard launchStateMachine.phase == .ready else { return }
-                    guard !Persistence.hasPendingLaunchRecoveryRequest() else { return }
-                    // 启动持久化预热完成后再触发自动同步，避免冷启动阶段覆盖未加载完的会话状态。
-                    syncManager.performAutoSyncIfEnabled()
-                    cloudSyncManager.performAutoSyncIfEnabled()
-                }
+            }
         }
     }
     

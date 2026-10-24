@@ -72,7 +72,8 @@ def main() -> int:
     for extension, app in EXTENSIONS.items():
         destination = APP_ROOT / extension
         keys = required_keys(destination)
-        languages = sorted((APP_ROOT / app).glob("*.lproj/Localizable.strings"))
+        source_root = ROOT / "Localization/watchOS" if app == "ETOS LLM Studio Watch App" else APP_ROOT / app
+        languages = sorted(source_root.glob("*.lproj/Localizable.strings"))
         for source in languages:
             if source not in translations_cache:
                 translations_cache[source] = read_strings(source)

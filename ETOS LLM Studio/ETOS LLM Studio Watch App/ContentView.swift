@@ -192,9 +192,7 @@ struct ContentView: View {
         .onChange(of: sizeCategory) { _, _ in
             refreshRootBodyFont()
         }
-        .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage))
         .onAppear {
-            AppLanguageRuntime.apply(rawValue: appConfig.appLanguage)
             refreshRootBodyFont()
             refreshAttachmentSourceHistory()
         }
@@ -219,9 +217,6 @@ struct ContentView: View {
                 appConfig.fontCustomScale = normalizedValue
             }
             refreshRootBodyFont()
-        }
-        .onChange(of: appConfig.appLanguage) { _, newValue in
-            AppLanguageRuntime.apply(rawValue: newValue)
         }
         .onChange(of: appConfig.watchAttachmentSourceHistory) { _, _ in
             refreshAttachmentSourceHistory()

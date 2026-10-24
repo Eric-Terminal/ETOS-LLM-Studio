@@ -68,6 +68,7 @@ struct StartWatchETOSAgentTaskIntent: AppIntent {
     }
 
     func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<WatchETOSSessionEntity> {
+        await CompressedAppLanguageController.prepareConfiguredLanguage()
         let result = try await SystemEntryCoordinator.shared.startTask(
             prompt: prompt,
             mode: .agent,
@@ -99,6 +100,7 @@ struct ContinueWatchETOSSessionIntent: AppIntent {
     }
 
     func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<WatchETOSSessionEntity> {
+        await CompressedAppLanguageController.prepareConfiguredLanguage()
         _ = try await SystemEntryCoordinator.shared.continueTask(
             sessionID: session.id,
             prompt: prompt,
@@ -118,6 +120,7 @@ struct GetWatchETOSTaskStatusIntent: AppIntent {
     @Parameter(title: "会话") var session: WatchETOSSessionEntity?
 
     func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
+        await CompressedAppLanguageController.prepareConfiguredLanguage()
         let result = try await SystemEntryCoordinator.shared.status(sessionID: session?.id)
         let status: String
         switch result.status {
@@ -145,6 +148,7 @@ struct StopWatchETOSTaskIntent: AppIntent {
     @Parameter(title: "会话") var session: WatchETOSSessionEntity
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
+        await CompressedAppLanguageController.prepareConfiguredLanguage()
         try await SystemEntryCoordinator.shared.stop(sessionID: session.id)
         return .result(dialog: IntentDialog(stringLiteral: NSLocalizedString("已请求停止任务。", comment: "Stop watch task intent result")))
     }
@@ -157,6 +161,7 @@ struct SaveWatchETOSMemoryIntent: AppIntent {
     @Parameter(title: "内容") var content: String
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
+        await CompressedAppLanguageController.prepareConfiguredLanguage()
         _ = try await SystemEntryCoordinator.shared.saveMemory(
             content,
             shortcutName: NSLocalizedString("保存到 ETOS 记忆", comment: "Watch memory shortcut source")
@@ -173,6 +178,7 @@ struct SearchWatchETOSMemoryIntent: AppIntent {
     @Parameter(title: "数量", default: 5) var limit: Int
 
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
+        await CompressedAppLanguageController.prepareConfiguredLanguage()
         let items = try await SystemEntryCoordinator.shared.searchMemory(query, limit: limit)
         let summary = items.prefix(5).map { String($0.content.prefix(120)) }.joined(separator: "\n\n")
         let dialog = String(

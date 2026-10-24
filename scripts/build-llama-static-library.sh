@@ -189,6 +189,17 @@ case "$SDK_NAME" in
 esac
 LLAMA_WARNING_FLAGS="-Wno-ambiguous-macro -Wno-deprecated-declarations -Wno-documentation -Wno-shorten-64-to-32 -Wno-unreachable-code -Wno-unused-function -Wpointer-to-int-cast -Wint-to-pointer-cast"
 
+# watchOS 发布库只由 ETOSCore 内部调用。隐藏原生库符号后，链接器可以裁掉
+# 未使用的实现；C 桥接仍由 Xcode 正常导出，不影响现有推理接口和模型格式。
+SYMBOL_VISIBILITY="default"
+INLINE_VISIBILITY_HIDDEN="OFF"
+case "$SDK_FAMILY:$CONFIGURATION" in
+    watchos:Release|watchsimulator:Release)
+        SYMBOL_VISIBILITY="hidden"
+        INLINE_VISIBILITY_HIDDEN="ON"
+        ;;
+esac
+
 PRODUCT_DIR="$PRODUCT_ROOT/$SDK_FAMILY-$PRODUCT_CONFIGURATION"
 PRODUCT_LIBRARY="$PRODUCT_DIR/libetos-llama.a"
 PRODUCT_STAMP="$PRODUCT_DIR/libetos-llama.stamp"
@@ -212,7 +223,7 @@ case "$SDK_FAMILY" in
         ;;
 esac
 
-PRODUCT_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE generator=$CMAKE_GENERATOR archs=$REQUESTED_ARCHS deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED mtmd=ON warnings=$LLAMA_WARNING_FLAGS"
+PRODUCT_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE generator=$CMAKE_GENERATOR archs=$REQUESTED_ARCHS deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED mtmd=ON visibility=$SYMBOL_VISIBILITY inline_hidden=$INLINE_VISIBILITY_HIDDEN warnings=$LLAMA_WARNING_FLAGS"
 
 cleanup_intermediates() {
     if [ "$KEEP_CMAKE_BUILD" != "1" ]; then
@@ -303,7 +314,7 @@ for arch in $REQUESTED_ARCHS; do
     ARCH_PRODUCT_DIR="$PRODUCT_ROOT/$SDK_FAMILY-$arch-$PRODUCT_CONFIGURATION"
     ARCH_PRODUCT_LIBRARY="$ARCH_PRODUCT_DIR/libetos-llama.a"
     ARCH_PRODUCT_STAMP="$ARCH_PRODUCT_DIR/libetos-llama.stamp"
-    ARCH_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE generator=$CMAKE_GENERATOR arch=$arch deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED mtmd=ON warnings=$LLAMA_WARNING_FLAGS"
+    ARCH_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE generator=$CMAKE_GENERATOR arch=$arch deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED mtmd=ON visibility=$SYMBOL_VISIBILITY inline_hidden=$INLINE_VISIBILITY_HIDDEN warnings=$LLAMA_WARNING_FLAGS"
 
     if [ ! -f "$ARCH_PRODUCT_LIBRARY" ] ||
        [ ! -f "$ARCH_PRODUCT_STAMP" ] ||
@@ -327,6 +338,9 @@ for arch in $REQUESTED_ARCHS; do
             -DCMAKE_CXX_COMPILER="$CXX_PATH" \
             -DCMAKE_C_FLAGS="-D_DARWIN_C_SOURCE=1 $LLAMA_WARNING_FLAGS" \
             -DCMAKE_CXX_FLAGS="-D_DARWIN_C_SOURCE=1 $LLAMA_WARNING_FLAGS" \
+            -DCMAKE_C_VISIBILITY_PRESET="$SYMBOL_VISIBILITY" \
+            -DCMAKE_CXX_VISIBILITY_PRESET="$SYMBOL_VISIBILITY" \
+            -DCMAKE_VISIBILITY_INLINES_HIDDEN="$INLINE_VISIBILITY_HIDDEN" \
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
             -DBUILD_SHARED_LIBS=OFF \
             -DLLAMA_BUILD_COMMON=ON \
