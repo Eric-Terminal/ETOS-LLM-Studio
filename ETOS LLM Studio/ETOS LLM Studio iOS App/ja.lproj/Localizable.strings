@@ -8488,6 +8488,7 @@
 
 /* Gemini Interactions 协议与配置说明 */
 "Gemini Interactions" = "Gemini Interactions";
+"Gemini Interactions 签名回传说明" = "会話を継続するには、推論の再送が無効でも、Interactions に元のモデルのステップと署名を再送する必要があります。思考の要約を非表示にするには、generation_config.thinking_summaries を none に設定してください。";
 "Gemini Interactions API 地址说明" = "ベース URL の例：https://generativelanguage.googleapis.com/v1。リクエストは /interactions を使用します。";
 "Gemini Interactions 配置说明" = "Gemini Interactions を選び、Gemini API キーと /v1 で終わるベース URL を入力します。ゲートウェイで特定の API バージョンが必要な場合は、そのパスを維持してください。モデル一覧を取得するか対応モデルを追加し、必要な機能を有効にして保存します。既存の Gemini 設定は引き続き generateContent を使用します。\n\n既定では store=false で端末から会話履歴を送信します。テキスト、画像、音声、文書、動画、ローカル関数ツールは Interactions のステップ形式を使用します。推論を有効にすると generation_config に thinking_level と thinking_summaries のコントロールが追加されます。現在の API スキーマは全体設定の temperature、top_p、top_k を受け付けないため、これらは送信されません。\n\nカスタム JSON には Interactions のフィールド名を使い、generateContent のパラメータをそのままコピーしないでください。このアダプターはフォアグラウンドのモデルリクエストに対応し、マネージドエージェント、バックグラウンドジョブ、previous_interaction_id による会話の連結には対応しません。画像モデルは Interactions、埋め込みモデルは Gemini の埋め込みエンドポイントを使用します。";
 "Gemini Interactions 未返回完整的有效响应。" = "Gemini Interactions から完全で有効な応答が返されませんでした。";

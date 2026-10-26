@@ -103,12 +103,40 @@ struct GeminiInteractionsAdapterTests {
         let steps = try #require(try payload(request(messages: [message]))["input"] as? [[String: Any]])
         #expect(steps.compactMap { $0["type"] as? String } == ["thought", "model_output", "function_call"])
         #expect(steps.first?["signature"] as? String == "sig-a")
-        let noThoughts = try #require(try payload(request(messages: [message], common: [ReasoningContentEchoPayload.key: "never"]))["input"] as? [[String: Any]])
-        #expect(!noThoughts.contains { $0["type"] as? String == "thought" })
+        let requiredSteps = try #require(try payload(request(messages: [message], common: [ReasoningContentEchoPayload.key: "never"]))["input"] as? [[String: Any]])
+        #expect(requiredSteps.first?["signature"] as? String == "sig-a")
+        #expect((requiredSteps.first?["summary"] as? [[String: String]])?.first?["text"] == "思考")
         message.content = "已编辑"
         let edited = try #require(try payload(request(messages: [message]))["input"] as? [[String: Any]])
         #expect(!edited.contains { $0["type"] as? String == "thought" })
         #expect((edited.first?["content"] as? [[String: Any]])?.first?["text"] as? String == "已编辑")
+    }
+
+    @Test("普通响应收敛保留 Interactions 正文原貌，关闭思考回传也保留必需签名")
+    func responseFinalizationPreservesReplay() throws {
+        let service = ChatService()
+        for content in ["\n  缩进正文  \n", "<think>正文中的示例</think>\n答案"] {
+            let data = try JSONSerialization.data(withJSONObject: [
+                "status": "completed", "steps": [
+                    ["type": "thought", "signature": "required-signature"],
+                    ["type": "model_output", "content": [["type": "text", "text": content]]]
+                ]
+            ])
+            var message = try adapter.parseResponse(data: data)
+            let finalized = service.parseResponseThoughtTags(from: message)
+            #expect(finalized.content == content)
+            #expect(finalized.reasoning.isEmpty)
+            message.content = finalized.content
+            for mode in ReasoningContentEchoMode.allCases {
+                let body = try payload(request(messages: [message], common: [ReasoningContentEchoPayload.key: mode.rawValue]))
+                let steps = try #require(body["input"] as? [[String: Any]])
+                #expect(steps.first?["signature"] as? String == "required-signature")
+                #expect((steps.last?["content"] as? [[String: String]])?.first?["text"] == content)
+            }
+        }
+        let legacy = service.parseResponseThoughtTags(from: ChatMessage(role: .assistant, content: "<think>推理</think> 答案 "))
+        #expect(legacy.content == "答案")
+        #expect(legacy.reasoning == "推理")
     }
 
     @Test("流式工具参数与思考签名按消息累积，并发流互不污染")
@@ -192,7 +220,7 @@ struct GeminiInteractionsAdapterTests {
             }
         }
         let message = ChatMessage(role: .assistant, content: "答案", providerResponseMetadata: [GeminiInteractionsAdapter.stepsKey: try #require(stored)])
-        let steps = try #require(adapter.replaySteps(for: message, echoMode: .always))
+        let steps = try #require(adapter.replaySteps(for: message))
         let content = try #require(steps.first?["content"] as? [[String: Any]])
         #expect(content.first?["text"] as? String == "答案")
         #expect((content.first?["annotations"] as? [[String: String]])?.count == 1)
@@ -216,9 +244,10 @@ struct GeminiInteractionsAdapterTests {
             runnableModel: model, onContentDelta: { _ in }
         )
         #expect(message.toolCalls?.first?.arguments == "{}")
-        let replay = try #require(adapter.replaySteps(for: message, echoMode: .always))
+        let replay = try #require(adapter.replaySteps(for: message))
         #expect(replay.first?["signature"] as? String == "guide-signature")
         #expect(replay.last?["id"] as? String == "guide-call")
+        #expect((replay.last?["arguments"] as? [String: String])?.isEmpty == true)
     }
 
     @Test("基础地址保留网关版本，模型列表不过滤仅支持新协议的模型")
@@ -249,12 +278,27 @@ struct GeminiInteractionsAdapterTests {
         let body = try payload(imageRequest)
         #expect(imageRequest.url?.path == "/v1/interactions")
         #expect((body["response_format"] as? [[String: String]])?.first?["type"] == "image")
+        #expect((body["response_format"] as? [[String: String]])?.first?["delivery"] == "inline")
         #expect(body["stream"] as? Bool == false)
         let images = try adapter.parseImageGenerationResponse(data: Data(#"{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"猫"},{"type":"image","mime_type":"image/png","data":"AQID"}]}]}"#.utf8))
         #expect(images.first?.data == Data([1, 2, 3]))
         #expect(images.first?.revisedPrompt == "猫")
         let embedding = try #require(adapter.buildEmbeddingRequest(for: runnable(), texts: ["你好"]))
         #expect(embedding.url?.path.contains("embedContent") == true)
+    }
+
+    @Test("官方视频上传独立使用 Files 版本，上传与状态查询保留网关路径")
+    func videoFilesAPIVersion() throws {
+        for (base, upload, status) in [
+            ("https://generativelanguage.googleapis.com/v1", "/upload/v1beta/files", "/v1beta/files/video"),
+            ("https://generativelanguage.googleapis.com", "/upload/v1beta/files", "/v1beta/files/video"),
+            ("https://proxy.invalid/google/v1", "/google/upload/v1/files", "/google/v1/files/video"),
+            ("https://proxy.invalid/google", "/google/upload/v1beta/files", "/google/v1beta/files/video")
+        ] {
+            let url = try #require(URL(string: base))
+            #expect(GeminiVideoUploadRequestBuilder.uploadStartURL(from: url)?.path == upload)
+            #expect(GeminiVideoUploadRequestBuilder.statusURL(from: url, fileName: "files/video")?.path == status)
+        }
     }
 
     @Test("视频换 Key 只替换原生视频 URI，不改写文本和工具参数")
@@ -278,6 +322,7 @@ struct GeminiInteractionsAdapterTests {
         #expect(ProviderAPIFormatFamily(apiFormat: "gemini-interactions") == .geminiInteractions)
         #expect(SyncEngine.canonicalProviderAPIFormat("gemini-interactions") == "gemini-interactions")
         #expect(ThirdPartyImportService.normalizeProviderFormat(typeHint: "gemini-interactions", modelIDs: []) == "gemini-interactions")
+        #expect(ThirdPartyImportService.normalizeBaseURL(nil, for: "gemini-interactions") == "https://generativelanguage.googleapis.com/v1")
         let control = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "gemini-interactions")
         #expect(control.options.map(\.id) == ["minimal", "low", "medium", "high"])
         #expect(control.options.allSatisfy { $0.payload["generationConfig"] == nil && $0.payload["generation_config"] != nil })
@@ -315,7 +360,7 @@ private final class GeminiInteractionsGuideURLProtocol: URLProtocol {
 
         data: {"event_type":"step.delta","index":0,"delta":{"type":"thought_signature","signature":"guide-signature"}}
 
-        data: {"event_type":"step.start","index":1,"step":{"type":"function_call","name":"inspect_page","id":"guide-call","arguments":{}}}
+        data: {"event_type":"step.start","index":1,"step":{"type":"function_call","name":"inspect_page","id":"guide-call"}}
 
         data: {"event_type":"step.stop","index":1}
 

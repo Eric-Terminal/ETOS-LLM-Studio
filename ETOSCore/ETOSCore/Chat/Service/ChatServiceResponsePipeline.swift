@@ -441,8 +441,8 @@ extension ChatService {
 
             var finalAssistantMessage: ChatMessage?
             if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
-                let (finalContent, extractedReasoning) = parseThoughtTags(
-                    from: messages[index].content, trimWhitespace: !hasContentPrefix
+                let (finalContent, extractedReasoning) = parseResponseThoughtTags(
+                    from: messages[index], trimWhitespace: !hasContentPrefix
                 )
                 messages[index].content = finalContent
                 if !extractedReasoning.isEmpty {
@@ -781,8 +781,8 @@ extension ChatService {
         }
 
         // 续写须保留原文缩进与拼接边界；只拆分推理标签，不裁掉已有空白。
-        let (finalContent, extractedReasoning) = parseThoughtTags(
-            from: responseMessage.content, trimWhitespace: !isPrefillResponse
+        let (finalContent, extractedReasoning) = parseResponseThoughtTags(
+            from: responseMessage, trimWhitespace: !isPrefillResponse
         )
         responseMessage.content = finalContent
         if isPrefillResponse {

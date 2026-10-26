@@ -17,7 +17,6 @@ public final class GeminiInteractionsAdapter: APIAdapter {
         fileAttachments: [UUID: [FileAttachment]]
     ) -> URLRequest? {
         let overrides = model.effectiveOverrideParameters.mapValues { $0.toAny() }
-        let echoMode = resolvedReasoningContentEchoMode(from: commonPayload)
         var input: [[String: Any]] = []
         var instructions: [String] = []
         for message in messages {
@@ -37,7 +36,7 @@ public final class GeminiInteractionsAdapter: APIAdapter {
             }
             guard message.role == .user || message.role == .assistant else { continue }
             if message.role == .assistant,
-               let steps = replaySteps(for: message, echoMode: echoMode) {
+               let steps = replaySteps(for: message) {
                 input.append(contentsOf: steps)
                 continue
             }
@@ -176,7 +175,7 @@ public final class GeminiInteractionsAdapter: APIAdapter {
         var payload = mergedRequestPayload([
             "model": model.model.modelName, "input": input, "store": false
         ], with: model.effectiveOverrideParameters.mapValues { $0.toAny() })
-        if payload["response_format"] == nil { payload["response_format"] = [["type": "image"]] }
+        if payload["response_format"] == nil { payload["response_format"] = [["type": "image", "delivery": "inline"]] }
         payload["stream"] = false
         for key in ["previous_interaction_id", "background", "agent", "agent_config"] { payload.removeValue(forKey: key) }
         guard let request = makeRequest(for: model, payload: payload) else { return nil }

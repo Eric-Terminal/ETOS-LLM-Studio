@@ -8487,6 +8487,7 @@
 
 /* Gemini Interactions 协议与配置说明 */
 "Gemini Interactions" = "Gemini Interactions";
+"Gemini Interactions 签名回传说明" = "Interactions 續聊必須回傳原始模型步驟和簽章，關閉「思考回傳」也會保留這些必要步驟。若要隱藏思考摘要，請將 generation_config.thinking_summaries 設為 none。";
 "Gemini Interactions API 地址说明" = "基礎位址例如 https://generativelanguage.googleapis.com/v1；請求使用 /interactions。";
 "Gemini Interactions 配置说明" = "選擇 Gemini Interactions，填寫 Gemini API Key 和以 /v1 結尾的基礎位址。閘道要求特定 API 版本時保留對應版本路徑。取得模型清單或手動新增支援的模型，啟用相應能力後儲存。原有 Gemini 設定繼續使用 generateContent。\n\n預設以 store=false 從本機傳送聊天記錄。文字、圖片、音訊、文件、影片和本機函數工具均使用 Interactions 步驟格式。啟用推理會在 generation_config 下新增 thinking_level 和 thinking_summaries 控制。目前 API schema 不接受全域 temperature、top_p、top_k，因此不會傳送這些參數。\n\n自訂 JSON 需使用 Interactions 欄位，不能原樣複製 generateContent 參數。此配接器用於前景模型請求，不接入託管代理、背景工作或 previous_interaction_id 對話串接。圖片模型使用 Interactions；嵌入模型繼續使用 Gemini 嵌入端點。";
 "Gemini Interactions 未返回完整的有效响应。" = "Gemini Interactions 未傳回完整的有效回應。";

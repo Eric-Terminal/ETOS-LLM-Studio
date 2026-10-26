@@ -436,6 +436,14 @@ extension ChatService {
         }
     }
 
+    func parseResponseThoughtTags(from message: ChatMessage, trimWhitespace: Bool = true) -> (content: String, reasoning: String) {
+        // Interactions 已单独解析 thought；修改正文会让带签名的原生步骤无法匹配后续历史。
+        guard message.providerResponseMetadata?[GeminiInteractionsAdapter.stepsKey] == nil else {
+            return (message.content, "")
+        }
+        return parseThoughtTags(from: message.content, trimWhitespace: trimWhitespace)
+    }
+
     /// 仅当思考标签位于回复开头时，才解析并移除其中内容。
     func parseThoughtTags(from text: String, trimWhitespace: Bool = true) -> (content: String, reasoning: String) {
         var scanIndex = text.startIndex

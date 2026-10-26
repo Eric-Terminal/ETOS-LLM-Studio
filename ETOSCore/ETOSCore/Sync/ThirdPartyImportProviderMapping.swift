@@ -396,6 +396,8 @@ extension ThirdPartyImportService {
                 return "https://api.anthropic.com/v1"
             case "gemini":
                 return "https://generativelanguage.googleapis.com/v1beta"
+            case "gemini-interactions":
+                return "https://generativelanguage.googleapis.com/v1"
             default:
                 return "https://api.openai.com/v1"
             }

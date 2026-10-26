@@ -189,6 +189,8 @@ public enum GuideDocumentCatalog {
 
             Interactions 以前台模型请求为范围，默认 store=false，每轮发送本地整理的历史，按原生步骤回传未编辑消息的思考签名和工具调用；不使用 previous_interaction_id、不启动后台任务，也不调用托管 agent。若自定义 JSON 显式设置 store=true，上游会保存请求，但应用仍不使用服务端会话串联。文本、图片、音频、文档和视频输入，以及本地函数工具均使用新协议。启用推理会添加 generation_config.thinking_level（minimal/low/medium/high）和 thinking_summaries=auto；minimal 不代表完全关闭思考。当前官方 schema 不接受 temperature/top_p/top_k，全局这些参数不会发送；自定义 JSON 必须使用 Interactions 字段，不能直接复制旧 Gemini generationConfig。图片模型走 Interactions，嵌入模型仍走 Gemini embedding 端点。官方协议依据：https://ai.google.dev/api/interactions-api-v1 。
 
+            Interactions 无状态续聊要求原样回传模型步骤及签名，因此通用“思考回传”开关不会删除这些必需步骤；隐藏思考摘要应设置 generation_config.thinking_summaries=none。官方视频上传与状态查询仍使用 Files API 的 v1beta，不随聊天端点升级为 v1。
+
             Mac 的模型草稿可以为远端模型单独覆盖 API 格式，空值表示跟随提供商；本地模型不提供远端协议选择。修改模型用途会恢复该用途默认的输入、输出与能力，不清除请求体参数。价格设置另开独立草稿，支持按 Token、按次、阶梯及峰谷价格；每个编辑子页和介绍页都有自己的向导上下文。完成价格编辑、完成模型编辑后仍需保存提供商。导入的未改动请求体控件和其他模型字段继续保留；JSON 修改只替换参数对象，不执行请求。
 
             提供商认证区支持用逗号粘贴多个 API Key，也可以开启“多 Key 模式”进入“管理 API Key”。管理页逐条添加密钥和备注，统一显示或隐藏全部密钥。关闭多 Key 模式只使用第一条，其他密钥和备注保留。请求按列表顺序轮换，聊天请求遇到可重试错误或 401/403 认证失败时先换下一条；取消和连接许可拒绝不会重试。多 Key 的“最大换 Key 次数”（maximum_key_retries）为 0 到 10，默认 3，不包含首次请求，与全局 maximum_request_retries 独立计数，设为 0 仅禁用换 Key 重试。该配置只控制聊天请求的换 Key，不影响模型列表、嵌入等请求。

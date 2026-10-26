@@ -8403,6 +8403,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 
 /* Gemini Interactions 协议与配置说明 */
 "Gemini Interactions" = "Gemini Interactions";
+"Gemini Interactions 签名回传说明" = "لمتابعة المحادثة، يجب على Interactions إعادة إرسال خطوات النموذج وتوقيعاته الأصلية، حتى عند تعطيل إعادة إرسال الاستدلال. لإخفاء ملخصات التفكير، اضبط generation_config.thinking_summaries على none.";
 "Gemini Interactions API 地址说明" = "استخدم عنوانًا أساسيًا مثل https://generativelanguage.googleapis.com/v1. تستخدم الطلبات المسار /interactions.";
 "Gemini Interactions 配置说明" = "اختر Gemini Interactions وأدخل مفتاح Gemini API وعنوانًا أساسيًا ينتهي بـ /v1. احتفظ بإصدار API الذي تتطلبه بوابتك. اجلب قائمة النماذج أو أضف نموذجًا مدعومًا، ثم فعّل قدراته واحفظ. تواصل إعدادات Gemini الحالية استخدام generateContent.\n\nيُرسل سجل المحادثة من هذا الجهاز مع store=false افتراضيًا. تستخدم النصوص والصور والصوت والمستندات والفيديو وأدوات الدوال المحلية تنسيق خطوات Interactions. يضيف تفعيل الاستدلال عناصر تحكم thinking_level وthinking_summaries ضمن generation_config. لا تُرسل إعدادات temperature وtop_p وtop_k العامة لأن مخطط API الحالي لا يقبلها.\n\nيجب أن يستخدم JSON المخصص حقول Interactions؛ لا يمكن نسخ معلمات generateContent دون تعديل. يدعم هذا المحوّل طلبات النماذج المباشرة، ولا يدعم الوكلاء المُدارين أو المهام الخلفية أو سلاسل previous_interaction_id. تستخدم نماذج الصور Interactions؛ وتستمر نماذج التضمين باستخدام نقطة نهاية التضمين في Gemini.";
 "Gemini Interactions 未返回完整的有效响应。" = "لم تُرجع Gemini Interactions استجابة كاملة وصالحة.";

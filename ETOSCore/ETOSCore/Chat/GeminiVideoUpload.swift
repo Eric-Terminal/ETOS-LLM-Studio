@@ -350,13 +350,11 @@ enum GeminiVideoUploadRequestBuilder {
         ) else {
             return nil
         }
-        var pathParts = components.path.split(separator: "/").map(String.init)
+        var pathParts = fileAPIPathComponents(from: baseURL)
         if let versionIndex = pathParts.lastIndex(where: isGeminiAPIVersion) {
             pathParts.insert("upload", at: versionIndex)
-            pathParts.append("files")
-        } else {
-            pathParts.append(contentsOf: ["upload", "v1beta", "files"])
         }
+        pathParts.append("files")
         components.path = "/" + pathParts.joined(separator: "/")
         components.query = nil
         components.fragment = nil
@@ -370,12 +368,23 @@ enum GeminiVideoUploadRequestBuilder {
         ) else {
             return nil
         }
-        var pathParts = components.path.split(separator: "/").map(String.init)
+        var pathParts = fileAPIPathComponents(from: baseURL)
         pathParts.append(contentsOf: fileName.split(separator: "/").map(String.init))
         components.path = "/" + pathParts.joined(separator: "/")
         components.query = nil
         components.fragment = nil
         return components.url
+    }
+
+    private static func fileAPIPathComponents(from baseURL: URL) -> [String] {
+        var parts = baseURL.path.split(separator: "/").map(String.init)
+        // 官方 Files 接口仍属于 v1beta，不能跟随 Interactions 的聊天版本升级为 v1。
+        if baseURL.host == "generativelanguage.googleapis.com", parts == ["v1"] {
+            return ["v1beta"]
+        }
+        // 上传与状态查询必须使用同一版本；未指定版本的网关仍保留其路径前缀。
+        if !parts.contains(where: isGeminiAPIVersion) { parts.append("v1beta") }
+        return parts
     }
 
     private static func isGeminiAPIVersion(_ component: String) -> Bool {

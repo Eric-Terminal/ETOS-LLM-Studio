@@ -219,7 +219,7 @@ extension GeminiInteractionsAdapter {
         return .dictionary(steps)
     }
 
-    func replaySteps(for message: ChatMessage, echoMode: ReasoningContentEchoMode) -> [[String: Any]]? {
+    func replaySteps(for message: ChatMessage) -> [[String: Any]]? {
         guard let stored = message.providerResponseMetadata?[Self.stepsKey]?.toAny() as? [String: [String: Any]] else { return nil }
         var steps = stored.keys.sorted { (Int($0) ?? 0) < (Int($1) ?? 0) }.compactMap { stored[$0] }
         for index in steps.indices where steps[index]["type"] as? String == "function_call" {
@@ -227,6 +227,9 @@ extension GeminiInteractionsAdapter {
                 guard let data = arguments.data(using: .utf8),
                       let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
                 steps[index]["arguments"] = object
+            } else if steps[index]["arguments"] == nil {
+                // 零参数工具可能只有起始事件，没有参数分片；回放仍需要完整参数对象。
+                steps[index]["arguments"] = [String: Any]()
             }
         }
         let originalText = steps.filter { $0["type"] as? String == "model_output" }.map { textContent($0["content"]) }.joined()
@@ -241,9 +244,7 @@ extension GeminiInteractionsAdapter {
                   let value = try? JSONDecoder().decode(JSONValue.self, from: arguments),
                   jsonValue(original["arguments"] ?? [:]) == value else { return nil }
         }
-        if !shouldEchoReasoningMetadata(for: message, mode: echoMode) {
-            steps.removeAll { $0["type"] as? String == "thought" }
-        }
+        // 无状态 Interactions 必须原样回传模型步骤及签名，不能受通用思考文本回传开关裁剪。
         return steps.filter { $0["type"] as? String != "user_input" && $0["type"] as? String != "function_result" }
     }
 }

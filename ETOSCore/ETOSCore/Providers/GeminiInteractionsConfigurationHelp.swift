@@ -15,6 +15,11 @@ public enum GeminiInteractionsConfigurationHelp {
             value: "Select Gemini Interactions and enter your Gemini API key and a base URL ending in /v1. Keep an explicitly configured API version when your gateway requires it. Fetch the model list or add a supported model, enable its capabilities, then save. Existing Gemini configurations continue to use generateContent.\n\nChat history is sent from this device with store=false by default. Text, images, audio, documents, video and local function tools use the Interactions step format. Enable reasoning to add thinking_level and thinking_summaries controls under generation_config. Global temperature, top_p and top_k are not sent because the current API schema does not accept them.\n\nCustom JSON uses Interactions field names; generateContent parameters cannot be copied unchanged. This adapter handles foreground model requests, not managed agents, background jobs or previous_interaction_id chains. Image models use Interactions; embedding models still use Gemini's embedding endpoint.",
             comment: "Interactions 配置介绍卡教程"
         )
+        + "\n\n" + NSLocalizedString(
+            "Gemini Interactions 签名回传说明",
+            value: "To continue conversations, Interactions must resend the original model steps and signatures, even when reasoning echo is disabled. To hide thought summaries, set generation_config.thinking_summaries to none.",
+            comment: "解释原生步骤回放与通用思考回传设置的区别"
+        )
     }
 }
 
