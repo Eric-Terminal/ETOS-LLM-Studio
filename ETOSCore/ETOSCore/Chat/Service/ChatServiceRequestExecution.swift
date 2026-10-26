@@ -661,7 +661,7 @@ extension ChatService {
         }
 
         var selectedGeminiAPIKey: String?
-        if let geminiAdapter = adapter as? GeminiAdapter {
+        if let geminiAdapter = (adapter as? GeminiAdapter) ?? (adapter as? GeminiInteractionsAdapter)?.geminiAdapter {
             do {
                 let preparation = try await prepareGeminiNativeVideoAttachments(
                     fileAttachments,
@@ -812,7 +812,7 @@ extension ChatService {
             },
             prepareKeyRetryRequest: { retryRequest in
                 guard let previousKey = selectedGeminiAPIKey,
-                      let geminiAdapter = adapter as? GeminiAdapter,
+                      let geminiAdapter = (adapter as? GeminiAdapter) ?? (adapter as? GeminiInteractionsAdapter)?.geminiAdapter,
                       let nextKey = retryRequest.value(forHTTPHeaderField: "x-goog-api-key"),
                       nextKey != previousKey else { return retryRequest }
                 // Files API 的文件归属随凭据变化；切换 Key 后复用该 Key 的缓存或重新上传。

@@ -424,7 +424,7 @@ extension ChatService {
 
         var preparedFileAttachments = fileAttachments
         var selectedGeminiAPIKey: String?
-        if let geminiAdapter = adapter as? GeminiAdapter {
+        if let geminiAdapter = (adapter as? GeminiAdapter) ?? (adapter as? GeminiInteractionsAdapter)?.geminiAdapter {
             let preparation = try await prepareGeminiNativeVideoAttachments(
                 fileAttachments,
                 provider: targetModel.provider,

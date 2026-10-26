@@ -72,6 +72,9 @@ struct ProviderEditView: View {
         let preview = headerOverridesPreview
 
         Form {
+            if provider.apiFormat == ProviderAPIFormatOption.geminiInteractions.rawValue {
+                Section { GeminiInteractionsSettingsIntroCard() }
+            }
             Section(header: Text(NSLocalizedString("基础信息", comment: "")), footer: Text(apiBaseURLHint)) {
                 TextField(NSLocalizedString("提供商名称", comment: ""), text: $provider.name.watchKeyboardNewlineBinding())
                 TextField(NSLocalizedString("API 地址", comment: ""), text: $provider.baseURL.watchKeyboardNewlineBinding())
@@ -86,6 +89,7 @@ struct ProviderEditView: View {
                     Text(NSLocalizedString("OpenAI 兼容", comment: "")).tag("openai-compatible")
                     Text(NSLocalizedString("OpenAI Responses", comment: "")).tag("openai-responses")
                     Text(NSLocalizedString("Gemini", comment: "Provider API format")).tag("gemini")
+                    Text(ProviderAPIFormatOption.geminiInteractions.localizedName).tag("gemini-interactions")
                     Text(NSLocalizedString("Anthropic", comment: "Provider API format")).tag("anthropic")
                 }
                 .disabled(isLocalProvider)
@@ -296,7 +300,7 @@ struct ProviderEditView: View {
         }
         let arguments = try GuideToolArguments.decode(call.arguments)
         if let format = try GuideToolArguments.optionalString("api_format", in: arguments),
-           !["openai-compatible", "openai-responses", "gemini", "anthropic"].contains(format) {
+           !ProviderAPIFormatOption.allCases.map(\.rawValue).contains(format) {
             throw GuideError.invalidToolArguments
         }
         let labels: [String: String] = [
@@ -432,6 +436,8 @@ struct ProviderEditView: View {
             return NSLocalizedString("本地提供商只用于模型管理和排序；API 地址、认证、请求头和代理会被保留但不会参与本地推理。", comment: "Local provider base URL hint")
         }
         switch provider.apiFormat {
+        case "gemini-interactions":
+            return GeminiInteractionsConfigurationHelp.baseURLHint
         case "gemini":
             return NSLocalizedString("API 地址应为基础地址，例如: https://generativelanguage.googleapis.com/v1beta", comment: "")
         case "anthropic":

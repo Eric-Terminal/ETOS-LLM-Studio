@@ -365,7 +365,7 @@ extension ModelSettingsView {
 
     private func addToggleControl() {
         model.requestBodyControls.append(
-            ModelRequestBodyControlDefaults.initialToggleControl(existingControls: model.requestBodyControls)
+            ModelRequestBodyControlDefaults.initialToggleControl(existingControls: model.requestBodyControls, apiFormat: model.effectiveAPIFormat(providerAPIFormat: provider.apiFormat))
         )
     }
 
@@ -406,6 +406,11 @@ extension ModelSettingsView {
         let overridesAny = overrides.mapValues { $0.toAny() }
 
         switch ProviderAPIFormatFamily(apiFormat: apiFormat) {
+        case .geminiInteractions:
+            return mergedPreviewRequestPayload([
+                "model": model.modelName, "store": false,
+                "input": [["type": "user_input", "content": [["type": "text", "text": "<message>"]]]]
+            ], with: overridesAny)
         case .gemini:
             var payload: [String: Any] = [:]
             payload["contents"] = [

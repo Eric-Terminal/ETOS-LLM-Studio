@@ -8492,3 +8492,9 @@
 "batch.submission.attention" = "%d tasks submitted; %d need attention. Open the saved tasks to check errors or recover submission. Do not submit the whole batch again.";
 "batch.error.endpoint" = "The provider could not find or accept the Batch endpoint. Check the base URL and whether this provider supports file uploads and Batch tasks.";
 "batch.models.providerOptions" = "Available Providers";
+
+/* Gemini Interactions 协议与配置说明 */
+"Gemini Interactions" = "Gemini Interactions";
+"Gemini Interactions API 地址说明" = "Use a base URL such as https://generativelanguage.googleapis.com/v1. Requests use /interactions.";
+"Gemini Interactions 配置说明" = "Select Gemini Interactions and enter your Gemini API key and a base URL ending in /v1. Keep an explicitly configured API version when your gateway requires it. Fetch the model list or add a supported model, enable its capabilities, then save. Existing Gemini configurations continue to use generateContent.\n\nChat history is sent from this device with store=false by default. Text, images, audio, documents, video and local function tools use the Interactions step format. Enable reasoning to add thinking_level and thinking_summaries controls under generation_config. Global temperature, top_p and top_k are not sent because the current API schema does not accept them.\n\nCustom JSON uses Interactions field names; generateContent parameters cannot be copied unchanged. This adapter handles foreground model requests, not managed agents, background jobs or previous_interaction_id chains. Image models use Interactions; embedding models still use Gemini's embedding endpoint.";
+"Gemini Interactions 未返回完整的有效响应。" = "Gemini Interactions did not return a complete, valid response.";

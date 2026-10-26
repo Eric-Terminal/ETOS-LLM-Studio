@@ -20,6 +20,7 @@ extension ThirdPartyImportService {
         let hint = (typeHint ?? "").lowercased()
 
         if !hint.isEmpty {
+            if hint == "gemini-interactions" { return hint }
             if isOpenAIResponsesType(hint) {
                 return "openai-responses"
             }

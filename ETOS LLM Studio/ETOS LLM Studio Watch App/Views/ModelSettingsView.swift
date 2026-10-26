@@ -278,7 +278,7 @@ struct ModelSettingsView: View {
             )
         case GuideToolCatalog.updateModelConfiguration.name:
             if let format = try GuideToolArguments.optionalString("api_format_override", in: arguments),
-               !["", "openai-compatible", "openai-responses", "gemini", "anthropic"].contains(format) {
+               !([""] + ProviderAPIFormatOption.allCases.map(\.rawValue)).contains(format) {
                 throw GuideError.invalidToolArguments
             }
             let labels: [String: String] = [
@@ -619,7 +619,7 @@ extension ModelSettingsView {
             Toggle(ModelCapability.toolCalling.localizedName, isOn: capabilityBinding(.toolCalling))
             Toggle(ModelCapability.reasoning.localizedName, isOn: capabilityBinding(.reasoning))
             switch ProviderAPIFormatFamily(apiFormat: effectiveAPIFormat) {
-            case .anthropic, .gemini:
+            case .anthropic, .gemini, .geminiInteractions:
                 Toggle(ModelCapability.promptCaching.localizedName, isOn: capabilityBinding(.promptCaching))
             case .openAICompatible, .openAIResponses:
                 EmptyView()
@@ -636,7 +636,7 @@ extension ModelSettingsView {
         switch ProviderAPIFormatFamily(apiFormat: effectiveAPIFormat) {
         case .anthropic:
             protocolDescription = NSLocalizedString("开启推理或提示缓存能力后会自动添加对应的结构化控制；关闭能力不会删除已经配置的控制。", comment: "模型能力与结构化控制联动说明")
-        case .gemini:
+        case .gemini, .geminiInteractions:
             protocolDescription = NSLocalizedString("Gemini 的提示缓存由服务端自动管理；此选项只记录模型能力，不会添加请求参数或结构化控制。", comment: "Gemini 隐式提示缓存说明")
         case .openAICompatible, .openAIResponses:
             protocolDescription = NSLocalizedString("推理能力开启后会自动添加思考预算控制；关闭能力不会删除已经配置的控制。", comment: "推理能力与结构化控制联动说明")
@@ -647,7 +647,7 @@ extension ModelSettingsView {
     private var availableInputModalities: [ModelModality] {
         ModelModality.allCases.filter { modality in
             modality != .video
-                || effectiveAPIFormat == ProviderAPIFormatOption.gemini.rawValue
+                || [ProviderAPIFormatOption.gemini.rawValue, ProviderAPIFormatOption.geminiInteractions.rawValue].contains(effectiveAPIFormat)
         }
     }
 

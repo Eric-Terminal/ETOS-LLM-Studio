@@ -18,6 +18,7 @@ public enum ModelChatRequestBodyPreview {
         case .openAIResponses: adapter = OpenAIResponsesAdapter()
         case .anthropic: adapter = AnthropicAdapter()
         case .gemini: adapter = GeminiAdapter()
+        case .geminiInteractions: adapter = GeminiInteractionsAdapter()
         }
         // 固定占位密钥绕过密钥轮换；关闭请求快照日志，示例不进入真实请求历史。
         let common: [String: Any] = [providerAPIKeyControlKey: "preview", requestLogSuppressionControlKey: true]

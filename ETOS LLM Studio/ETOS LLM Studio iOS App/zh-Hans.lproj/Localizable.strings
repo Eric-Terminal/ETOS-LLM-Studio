@@ -8478,3 +8478,9 @@
 "batch.submission.attention" = "已提交 %d 个任务，另有 %d 个需要处理。请打开已保存的任务查看错误或恢复提交，避免整批重复发送。";
 "batch.error.endpoint" = "提供商未找到或不接受该批量接口。请检查基础地址，并确认提供商支持文件上传和 Batch 任务。";
 "batch.models.providerOptions" = "可筛选的提供商";
+
+/* Gemini Interactions 协议与配置说明 */
+"Gemini Interactions" = "Gemini Interactions";
+"Gemini Interactions API 地址说明" = "基础地址例如 https://generativelanguage.googleapis.com/v1；请求使用 /interactions。";
+"Gemini Interactions 配置说明" = "选择 Gemini Interactions，填写 Gemini API Key 和以 /v1 结尾的基础地址。网关要求特定 API 版本时保留对应版本路径。获取模型列表或手动添加受支持的模型，启用相应能力后保存。原有 Gemini 配置继续使用 generateContent。\n\n默认以 store=false 从本机发送聊天历史。文本、图片、音频、文档、视频和本地函数工具均使用 Interactions 步骤格式。启用推理会在 generation_config 下添加 thinking_level 和 thinking_summaries 控制。当前 API schema 不接受全局 temperature、top_p、top_k，因此不会发送这些参数。\n\n自定义 JSON 需使用 Interactions 字段，不能原样复制 generateContent 参数。此适配器用于前台模型请求，不接入托管代理、后台任务或 previous_interaction_id 会话串联。图片模型使用 Interactions；嵌入模型继续使用 Gemini 嵌入端点。";
+"Gemini Interactions 未返回完整的有效响应。" = "Gemini Interactions 未返回完整的有效响应。";

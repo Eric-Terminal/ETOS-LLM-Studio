@@ -179,11 +179,15 @@ public enum GuideDocumentCatalog {
         GuideDocument(
             id: "provider-model-basics",
             title: "提供商、API 凭据与聊天模型",
-            keywords: ["提供商", "模型", "API", "Key", "激活", "选择", "Base URL", "模型测试", "连通性", "并发", "connectivity"],
+            keywords: ["提供商", "模型", "API", "Key", "激活", "选择", "Base URL", "模型测试", "连通性", "并发", "connectivity", "Gemini", "Interactions"],
             content: """
             可聊天状态需要同时满足：存在提供商；需要凭据的远程提供商已经填写 API Key；提供商下存在聊天模型；模型已经激活；最后有一个可运行聊天模型被选中。
 
             提供商负责 Base URL、API 格式、请求路径、凭据和独立代理；模型负责模型名、显示名、能力、激活状态及请求体覆盖。只有模型明确启用了“工具调用”能力时，才可被选作用户自有向导模型。
+
+            Gemini Interactions 是独立 API 格式 gemini-interactions，三端均可在提供商或模型覆盖中选择；原有 gemini 仍使用 generateContent，不自动迁移。基础地址建议 https://generativelanguage.googleapis.com/v1，请求拼接 /interactions，明确填写的版本与网关路径会保留。模型列表沿用 Gemini Models API，列表并不保证每个模型都支持当前 Interactions 版本；应按上游支持情况选择模型。使用同一 Gemini API Key，支持自定义请求头、独立代理和多 Key 重试，视频换 Key 时会重新上传并替换 URI。
+
+            Interactions 以前台模型请求为范围，默认 store=false，每轮发送本地整理的历史，按原生步骤回传未编辑消息的思考签名和工具调用；不使用 previous_interaction_id、不启动后台任务，也不调用托管 agent。若自定义 JSON 显式设置 store=true，上游会保存请求，但应用仍不使用服务端会话串联。文本、图片、音频、文档和视频输入，以及本地函数工具均使用新协议。启用推理会添加 generation_config.thinking_level（minimal/low/medium/high）和 thinking_summaries=auto；minimal 不代表完全关闭思考。当前官方 schema 不接受 temperature/top_p/top_k，全局这些参数不会发送；自定义 JSON 必须使用 Interactions 字段，不能直接复制旧 Gemini generationConfig。图片模型走 Interactions，嵌入模型仍走 Gemini embedding 端点。官方协议依据：https://ai.google.dev/api/interactions-api-v1 。
 
             Mac 的模型草稿可以为远端模型单独覆盖 API 格式，空值表示跟随提供商；本地模型不提供远端协议选择。修改模型用途会恢复该用途默认的输入、输出与能力，不清除请求体参数。价格设置另开独立草稿，支持按 Token、按次、阶梯及峰谷价格；每个编辑子页和介绍页都有自己的向导上下文。完成价格编辑、完成模型编辑后仍需保存提供商。导入的未改动请求体控件和其他模型字段继续保留；JSON 修改只替换参数对象，不执行请求。
 

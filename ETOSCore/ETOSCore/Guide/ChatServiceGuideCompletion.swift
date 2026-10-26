@@ -58,6 +58,7 @@ extension ChatService {
         let responseMessageID = UUID()
         var content = ""
         var reasoningContent: String?
+        var responseMetadata: [String: JSONValue]?
         var tokenUsage: MessageTokenUsage?
         var builders: [Int: (id: String?, name: String?, arguments: String, fields: [String: JSONValue]?)] = [:]
         var order: [Int] = []
@@ -88,6 +89,10 @@ extension ChatService {
             }
             if let delta = part.reasoningContent {
                 reasoningContent = (reasoningContent ?? "") + delta
+            }
+            if let metadata = part.providerResponseMetadata {
+                // 仅在本轮内存历史保留原生步骤，工具续聊需要其中的签名；历史存储层仍负责剥离。
+                responseMetadata = mergeProviderResponseMetadata(existing: responseMetadata, incoming: metadata)
             }
             for delta in part.toolCallDeltas ?? [] {
                 let index: Int
@@ -136,7 +141,7 @@ extension ChatService {
             return InternalToolCall(
                 id: builder.id ?? "guide-tool-\(responseMessageID.uuidString)-\(index)",
                 toolName: resolveToolName(name, availableTools: tools),
-                arguments: builder.arguments,
+                arguments: builder.arguments.isEmpty ? "{}" : builder.arguments,
                 providerSpecificFields: builder.fields
             )
         }
@@ -145,6 +150,7 @@ extension ChatService {
             role: .assistant,
             content: content,
             reasoningContent: reasoningContent,
+            providerResponseMetadata: responseMetadata,
             toolCalls: calls.isEmpty ? nil : calls,
             tokenUsage: tokenUsage
         )

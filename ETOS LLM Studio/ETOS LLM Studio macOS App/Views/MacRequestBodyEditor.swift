@@ -148,7 +148,7 @@ struct MacRequestBodyEditor: View {
         let controls = draft.controls, format = apiFormat
         Task {
             let control = await Task.detached {
-                kind == .toggle ? ModelRequestBodyControlDefaults.initialToggleControl(existingControls: controls)
+                kind == .toggle ? ModelRequestBodyControlDefaults.initialToggleControl(existingControls: controls, apiFormat: format)
                     : ModelRequestBodyControlDefaults.initialOptionGroupControl(existingControls: controls, apiFormat: format)
             }.value
             guard !workspace.isRestoringData else { return }

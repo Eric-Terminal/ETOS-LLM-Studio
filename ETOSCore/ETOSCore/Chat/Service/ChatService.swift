@@ -850,6 +850,7 @@ public class ChatService {
             "openai-compatible": OpenAIAdapter(),
             "openai-responses": OpenAIResponsesAdapter(),
             "gemini": GeminiAdapter(),
+            "gemini-interactions": GeminiInteractionsAdapter(),
             "anthropic": AnthropicAdapter(),
         ]
 

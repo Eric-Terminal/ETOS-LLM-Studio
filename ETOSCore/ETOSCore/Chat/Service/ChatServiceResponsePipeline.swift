@@ -277,7 +277,7 @@ extension ChatService {
                             return InternalToolCall(
                                 id: id,
                                 toolName: resolvedName,
-                                arguments: builder.arguments,
+                                arguments: builder.arguments.isEmpty ? "{}" : builder.arguments,
                                 providerSpecificFields: builder.providerSpecificFields
                             )
                         }
@@ -460,7 +460,7 @@ extension ChatService {
                         return InternalToolCall(
                             id: id,
                             toolName: resolvedName,
-                            arguments: builder.arguments,
+                            arguments: builder.arguments.isEmpty ? "{}" : builder.arguments,
                             providerSpecificFields: builder.providerSpecificFields
                         )
                     }

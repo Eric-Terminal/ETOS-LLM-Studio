@@ -46,7 +46,7 @@ extension Provider {
         guard let key = ProviderAPIKeyRotation.shared.next(for: self, after: previous) else { return request }
         var result = request
         switch apiFormat {
-        case "gemini": result.setValue(key, forHTTPHeaderField: "x-goog-api-key")
+        case "gemini", "gemini-interactions": result.setValue(key, forHTTPHeaderField: "x-goog-api-key")
         case "anthropic": result.setValue(key, forHTTPHeaderField: "x-api-key")
         default: result.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         }

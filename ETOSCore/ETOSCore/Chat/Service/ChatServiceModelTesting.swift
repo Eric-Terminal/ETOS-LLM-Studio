@@ -561,7 +561,7 @@ extension ChatService {
             return InternalToolCall(
                 id: builder.id ?? "tool-\(responseMessageID.uuidString)-\(orderIdx)",
                 toolName: resolvedName,
-                arguments: builder.arguments,
+                arguments: builder.arguments.isEmpty ? "{}" : builder.arguments,
                 providerSpecificFields: builder.providerSpecificFields
             )
         }

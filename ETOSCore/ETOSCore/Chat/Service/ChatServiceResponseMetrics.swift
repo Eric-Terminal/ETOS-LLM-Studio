@@ -59,7 +59,9 @@ extension ChatService {
     ) -> [String: JSONValue] {
         var merged = existing ?? [:]
         for (key, value) in incoming {
-            if key == OpenAIAdapter.responsesOutputItemsKey,
+            if key == GeminiInteractionsAdapter.stepsKey {
+                merged[key] = GeminiInteractionsAdapter.mergingSteps(existing: merged[key], incoming: value)
+            } else if key == OpenAIAdapter.responsesOutputItemsKey,
                case let .array(incomingItems) = value {
                 let existingItems: [JSONValue]
                 if case let .array(rawExistingItems) = merged[key] {

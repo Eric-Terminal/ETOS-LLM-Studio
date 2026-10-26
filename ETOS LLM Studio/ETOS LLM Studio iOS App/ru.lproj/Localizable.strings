@@ -8485,3 +8485,9 @@
 "batch.submission.attention" = "Отправлено задач: %d; требуют внимания: %d. Откройте сохранённые задачи для проверки ошибок или восстановления отправки. Не отправляйте весь пакет повторно.";
 "batch.error.endpoint" = "Провайдер не нашёл или не принимает запросы к Batch. Проверьте базовый URL, поддержку загрузки файлов и пакетных задач.";
 "batch.models.providerOptions" = "Доступные провайдеры";
+
+/* Gemini Interactions 协议与配置说明 */
+"Gemini Interactions" = "Gemini Interactions";
+"Gemini Interactions API 地址说明" = "Базовый URL, например: https://generativelanguage.googleapis.com/v1. Запросы используют /interactions.";
+"Gemini Interactions 配置说明" = "Выберите Gemini Interactions, введите ключ API Gemini и базовый URL с окончанием /v1. Сохраните версию API, требуемую вашим шлюзом. Загрузите список моделей или добавьте поддерживаемую модель, включите её возможности и сохраните. Существующие настройки Gemini продолжают использовать generateContent.\n\nПо умолчанию история отправляется с устройства с параметром store=false. Текст, изображения, аудио, документы, видео и локальные функции используют формат шагов Interactions. Включение рассуждений добавляет thinking_level и thinking_summaries в generation_config. Глобальные temperature, top_p и top_k не отправляются, поскольку текущая схема API их не принимает.\n\nВ пользовательском JSON нужны поля Interactions; параметры generateContent нельзя копировать без изменений. Адаптер обрабатывает обычные запросы к моделям, но не управляемых агентов, фоновые задания или цепочки previous_interaction_id. Модели изображений используют Interactions, а модели эмбеддингов — прежний endpoint Gemini для эмбеддингов.";
+"Gemini Interactions 未返回完整的有效响应。" = "Gemini Interactions не вернул полный корректный ответ.";

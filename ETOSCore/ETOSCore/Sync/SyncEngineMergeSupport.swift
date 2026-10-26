@@ -597,6 +597,7 @@ extension SyncEngine {
 
     static func canonicalProviderAPIFormat(_ value: String) -> String {
         let normalized = normalizeAPIFormatToken(value)
+        if normalized == "gemini-interactions" { return normalized }
         if normalized == "openai-responses"
             || normalized == "openai-response"
             || normalized.contains("responses") {

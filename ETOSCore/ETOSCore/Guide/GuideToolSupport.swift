@@ -135,7 +135,7 @@ public enum GuideToolCatalog {
             "name": stringProperty("提供商显示名称"),
             "base_url": stringProperty("API 基础地址"),
             "chat_endpoint_path": stringProperty("OpenAI 兼容聊天端点后缀"),
-            "api_format": stringProperty("openai-compatible、openai-responses、gemini 或 anthropic"),
+            "api_format": stringProperty("openai-compatible、openai-responses、gemini、gemini-interactions 或 anthropic"),
             "api_key": stringProperty("用户刚刚主动提供的新 API Key；可用逗号分隔多条；不可尝试读取现有值"),
             "multi_key_enabled": .dictionary(["type": .string("boolean"), "description": .string("是否启用多 Key 顺序轮换；关闭后保留全部密钥，只使用第一条")]),
             "maximum_key_retries": .dictionary(["type": .string("integer"), "minimum": .int(0), "maximum": .int(10), "description": .string("当前提供商每轮聊天请求最多换 Key 几次；与全局自动重试独立计数，0 只禁用换 Key，不包含首次请求")])
@@ -516,6 +516,7 @@ public enum GuideProviderModelsProposalSupport {
         "openai-compatible",
         "openai-responses",
         "gemini",
+        "gemini-interactions",
         "anthropic"
     ]
 
@@ -757,7 +758,7 @@ public enum GuideProviderModelsProposalSupport {
                 model.capabilities = Model.orderedCapabilities(Array(capabilities))
             }
             if model.inputModalities.contains(.video),
-               model.effectiveAPIFormat(providerAPIFormat: updated.apiFormat) != "gemini" {
+               !["gemini", "gemini-interactions"].contains(model.effectiveAPIFormat(providerAPIFormat: updated.apiFormat)) {
                 throw GuideError.invalidToolArguments
             }
             if let requestBody = draft.requestBody {

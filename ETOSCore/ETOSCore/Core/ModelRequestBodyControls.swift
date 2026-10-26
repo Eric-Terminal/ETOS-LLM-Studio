@@ -470,6 +470,7 @@ public enum ProviderAPIFormatOption: String, CaseIterable, Identifiable, Hashabl
     case openAICompatible = "openai-compatible"
     case openAIResponses = "openai-responses"
     case gemini
+    case geminiInteractions = "gemini-interactions"
     case anthropic
 
     public var id: String { rawValue }
@@ -482,6 +483,8 @@ public enum ProviderAPIFormatOption: String, CaseIterable, Identifiable, Hashabl
             return NSLocalizedString("OpenAI Responses", comment: "Provider API format")
         case .gemini:
             return NSLocalizedString("Gemini", comment: "Provider API format")
+        case .geminiInteractions:
+            return NSLocalizedString("Gemini Interactions", value: "Gemini Interactions", comment: "提供商 API 格式")
         case .anthropic:
             return NSLocalizedString("Anthropic", comment: "Provider API format")
         }
@@ -492,13 +495,16 @@ public enum ProviderAPIFormatFamily {
     case openAICompatible
     case openAIResponses
     case gemini
+    case geminiInteractions
     case anthropic
 
     public init(apiFormat: String) {
         let normalized = apiFormat
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
-        if normalized == "openai-responses"
+        if normalized == "gemini-interactions" {
+            self = .geminiInteractions
+        } else if normalized == "openai-responses"
             || normalized == "openai-response"
             || normalized.contains("responses") {
             self = .openAIResponses
@@ -534,9 +540,16 @@ public enum ModelRequestBodyControlDefaults {
         )
     }
 
-    public static func initialToggleControl(existingControls: [ModelRequestBodyControl]) -> ModelRequestBodyControl {
+    public static func initialToggleControl(existingControls: [ModelRequestBodyControl], apiFormat: String = "openai-compatible") -> ModelRequestBodyControl {
         if existingControls.contains(where: { $0.kind == .toggle }) {
             return ModelRequestBodyControl(title: "", kind: .toggle)
+        }
+        if ProviderAPIFormatFamily(apiFormat: apiFormat) == .geminiInteractions {
+            // Interactions 不接受温度参数，默认示例应能直接提交到该协议。
+            return ModelRequestBodyControl(
+                title: NSLocalizedString("最大输出 token", comment: ""), kind: .toggle, defaultIsActive: true,
+                payload: ["generation_config": .dictionary(["max_output_tokens": .int(8192)])]
+            )
         }
         return temperatureControl()
     }
@@ -565,6 +578,19 @@ public enum ModelRequestBodyControlDefaults {
                     ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: anthropicThinkingPayload(effort: "high")),
                     ModelRequestBodyControlOption(id: "xhigh", title: NSLocalizedString("xhigh", comment: ""), payload: anthropicThinkingPayload(effort: "xhigh"))
                 ]
+            )
+        case .geminiInteractions:
+            return ModelRequestBodyControl(
+                title: NSLocalizedString("思考预算", comment: ""), kind: .optionGroup,
+                defaultOptionID: "medium", isSliderEnabled: true,
+                options: ["minimal", "low", "medium", "high"].map { level in
+                    ModelRequestBodyControlOption(
+                        id: level, title: NSLocalizedString(level, comment: "思考等级"),
+                        payload: ["generation_config": .dictionary([
+                            "thinking_level": .string(level), "thinking_summaries": .string("auto")
+                        ])]
+                    )
+                }
             )
         case .gemini:
             // Gemini 适配器统一使用当前的 thinkingLevel，不根据模型名称猜测协议能力。

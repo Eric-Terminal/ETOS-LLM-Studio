@@ -665,6 +665,8 @@ enum AppLogRedactor {
         "thinking"
     ]
     private static let responseBodySensitiveKeys: Set<String> = [
+        "step",
+        "steps",
         "message",
         "messages",
         "content",

@@ -3,10 +3,10 @@ import Testing
 @testable import ETOSCore
 
 struct ModelChatRequestBodyPreviewTests {
-    @Test("聊天示例复用四种协议的实际请求体，并优先使用模型独立协议")
+    @Test("聊天示例复用各协议的实际请求体，并优先使用模型独立协议")
     func protocolBodies() throws {
         let expected: [(String, String)] = [("openai-compatible", "messages"), ("openai-responses", "input"),
-                                          ("anthropic", "messages"), ("gemini", "contents")]
+                                          ("anthropic", "messages"), ("gemini", "contents"), ("gemini-interactions", "input")]
         for (format, field) in expected {
             let model = Model(modelName: "example", apiFormatOverride: format)
             let text = try ModelChatRequestBodyPreview.body(model: model, providerAPIFormat: "openai-compatible")

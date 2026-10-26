@@ -88,6 +88,9 @@ private struct MacProviderEditor: View {
     var body: some View {
         NavigationStack {
             Form {
+                if draft.apiFormat == ProviderAPIFormatOption.geminiInteractions.rawValue {
+                    Section { GeminiInteractionsSettingsIntroCard() }
+                }
                 Section {
                     TextField(NSLocalizedString("名称", comment: ""), text: $draft.name)
                     TextField(NSLocalizedString("API 地址", comment: ""), text: $draft.baseURL)
@@ -99,6 +102,7 @@ private struct MacProviderEditor: View {
                         Text(NSLocalizedString("OpenAI Responses", comment: "")).tag("openai-responses")
                         Text(NSLocalizedString("Anthropic", comment: "")).tag("anthropic")
                         Text(NSLocalizedString("Gemini", comment: "")).tag("gemini")
+                        Text(ProviderAPIFormatOption.geminiInteractions.localizedName).tag("gemini-interactions")
                     }
                     TextField(NSLocalizedString("聊天端点后缀", comment: ""), text: $draft.chatEndpointPath)
                     Toggle(NSLocalizedString("多 Key 模式", comment: ""), isOn: $keys.draft.multiKeyEnabled)
@@ -106,6 +110,9 @@ private struct MacProviderEditor: View {
                         ProviderAPIKeyManagementForm(editor: keys, providerID: draft.id)
                     }
                 } footer: {
+                    if draft.apiFormat == ProviderAPIFormatOption.geminiInteractions.rawValue {
+                        Text(GeminiInteractionsConfigurationHelp.baseURLHint).font(.footnote).foregroundStyle(.secondary)
+                    }
                     Text(NSLocalizedString("修改保留为草稿，点击保存后生效。", comment: ""))
                         .font(.footnote).foregroundStyle(.secondary)
                 }
@@ -182,7 +189,7 @@ private struct MacProviderEditor: View {
                 ] + (isBusy || !didPrepare || workspace.isRestoringData ? [] : [
                     .string("name", label: NSLocalizedString("名称", comment: ""), get: { draft.name }, set: { draft.name = $0 }),
                     .string("base_url", label: NSLocalizedString("API 地址", comment: ""), get: { draft.baseURL }, set: { draft.baseURL = $0 }),
-                    .string("api_format", label: NSLocalizedString("API 格式", comment: ""), allowedValues: ["openai-compatible", "openai-responses", "anthropic", "gemini"], get: { draft.apiFormat }, set: { draft.apiFormat = $0 }),
+                    .string("api_format", label: NSLocalizedString("API 格式", comment: ""), allowedValues: ProviderAPIFormatOption.allCases.map(\.rawValue), get: { draft.apiFormat }, set: { draft.apiFormat = $0 }),
                     .string("chat_endpoint", label: NSLocalizedString("聊天端点后缀", comment: ""), get: { draft.chatEndpointPath }, set: { draft.chatEndpointPath = $0 }),
                     .bool("multi_key", label: NSLocalizedString("多 Key 模式", comment: ""), get: { keys.draft.multiKeyEnabled }, set: { keys.draft.multiKeyEnabled = $0 }),
                     .writeOnlyString("api_keys", label: NSLocalizedString("API Key", comment: ""), isConfigured: { keys.keyCount > 0 }, set: { keys.replaceKeys(from: $0) })

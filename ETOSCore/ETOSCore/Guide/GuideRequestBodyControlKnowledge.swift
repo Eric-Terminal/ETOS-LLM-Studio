@@ -67,6 +67,8 @@ public enum GuideRequestBodyControlKnowledge {
     public static let customExample = #"{"controls":[{"title":"自定义请求预设","kind":"toggle","default_active":true,"payload":{"vendor_config":{"search":{"enabled":true},"response":{"format":"json"}}}}]}"#
 
     private static let chineseDocument = """
+    Gemini Interactions（gemini-interactions）使用 generation_config.thinking_level 与 thinking_summaries，不使用旧 Gemini 的 generationConfig.thinkingConfig。思考档位为 minimal、low、medium、high；minimal 不表示完全关闭。新建首个开关默认示例为 generation_config.max_output_tokens=8192；当前协议不接受 temperature、top_p、top_k，不要直接套用下文的温度示例。原有 Gemini 控制不会自动迁移，切换协议后需要按新字段修改。
+
     结构化控制不是仅用于思考的特殊功能，而是把任意 API 请求 JSON 包装成聊天时可快速切换的开关、选项组或滑块。路径：模型管理 → 提供商 → 模型信息 → 结构化控制。不要把“键值对/表达式/原始 JSON”三种自定义 Body 编辑方式与结构化控制混为一谈；它们是基础参数的编辑方式，控制项则在发送时叠加到基础参数上。
 
     Mac 的“聊天请求体示例”是独立只读页，后台将当前草稿与控制默认值送入实际协议适配器，使用 <message> 示例消息，不发送网络、不读取真实提供商密钥、不写运行态或请求日志。它不含当前聊天、附件、全局采样配置和已启用工具；显式自定义参数及适配器默认字段仍会保留，因此不能用它承诺真实请求的完整内容或上游兼容性。已知敏感字段脱敏；向导不能读取正文，也没有发送、执行或修改工具。仅远程聊天模型显示此入口。
@@ -99,6 +101,8 @@ public enum GuideRequestBodyControlKnowledge {
     """
 
     private static let englishDocument = """
+    Gemini Interactions (gemini-interactions) uses generation_config.thinking_level and thinking_summaries, not Gemini generateContent's generationConfig.thinkingConfig. Levels are minimal, low, medium and high; minimal does not disable reasoning. The first new toggle defaults to generation_config.max_output_tokens=8192. The current protocol does not accept temperature, top_p or top_k, so the temperature examples below do not apply. Existing Gemini controls are not migrated automatically; update their fields after switching protocols.
+
     Structured Controls wrap arbitrary API request JSON into reusable chat switches, option groups or sliders, not just reasoning settings. Path: Model Management → Provider → Model Information → Structured Controls. Key/value, expression and raw JSON are three editors for the base custom Body, not structured controls themselves.
 
     Mac Sample Chat Request Body is a separate read-only page. In the background, actual protocol adapters use the current draft, control defaults and a <message> sample. It sends no network request, reads no real provider credentials, and writes no runtime state or request log. Current chat, attachments, global sampling configuration and enabled tools are excluded; explicit custom parameters and adapter defaults remain. Do not present it as the complete actual request or proof of upstream compatibility. Known sensitive fields are redacted. The guide cannot read the body or send, execute or edit it. Only remote chat models offer this entry.

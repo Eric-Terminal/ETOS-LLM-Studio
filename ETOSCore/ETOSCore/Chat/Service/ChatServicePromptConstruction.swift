@@ -182,7 +182,7 @@ extension ChatService {
             return .system
         }
         switch ProviderAPIFormatFamily(apiFormat: normalizedAPIFormat) {
-        case .anthropic, .gemini:
+        case .anthropic, .gemini, .geminiInteractions:
             // 这两类协议会把所有 system 消息提升到请求前缀，尾部上下文统一使用 user。
             return .user
         case .openAICompatible, .openAIResponses:
@@ -210,7 +210,7 @@ extension ChatService {
         let normalizedAPIFormat = apiFormat.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let movesSystemMessagesToPrefix: Bool
         switch ProviderAPIFormatFamily(apiFormat: normalizedAPIFormat) {
-        case .anthropic, .gemini:
+        case .anthropic, .gemini, .geminiInteractions:
             movesSystemMessagesToPrefix = true
         case .openAICompatible, .openAIResponses:
             movesSystemMessagesToPrefix = false
