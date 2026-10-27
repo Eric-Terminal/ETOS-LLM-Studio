@@ -330,6 +330,19 @@ public extension Persistence {
     }
 
     @discardableResult
+    static func refreshLocalLinuxMountBookmark(id: UUID, replacing previous: Data, with bookmark: Data) -> Bool {
+        do {
+            guard let store = activeAuxiliaryStore(kind: .config) else { return false }
+            try store.refreshLocalLinuxMountBookmark(id: id, replacing: previous, with: bookmark)
+            LocalLinuxJobNotifications.storageChanged()
+            return true
+        } catch {
+            logger.error("刷新 Linux 目录书签失败：\(error.localizedDescription)")
+            return false
+        }
+    }
+
+    @discardableResult
     static func updateLocalLinuxMountLeaseCount(id: UUID, delta: Int64) -> Bool {
         do {
             guard let store = activeAuxiliaryStore(kind: .config) else { return false }

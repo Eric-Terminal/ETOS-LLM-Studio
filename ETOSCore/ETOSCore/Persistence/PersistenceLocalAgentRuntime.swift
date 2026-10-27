@@ -862,6 +862,16 @@ extension PersistenceAuxiliaryGRDBStore {
         }
     }
 
+    func refreshLocalLinuxMountBookmark(id: UUID, replacing previous: Data, with bookmark: Data) throws {
+        try dbPool.write { db in
+            // 自动刷新只替换本次解析的旧书签，不能覆盖重新授权或复活已删除记录。
+            try db.execute(
+                sql: "UPDATE local_linux_mounts SET bookmark = ? WHERE id = ? AND bookmark = ?",
+                arguments: [bookmark, id.uuidString, previous]
+            )
+        }
+    }
+
     func updateLocalLinuxMountLeaseCount(id: UUID, delta: Int64) throws {
         try dbPool.write { db in
             try db.execute(

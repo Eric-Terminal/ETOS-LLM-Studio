@@ -80,8 +80,10 @@ public actor LocalAgentRuntimeContextManager {
         #if os(macOS)
         let mountIDs: [UUID] = []
         #else
+        // 探测失败不是撤销授权：保留本机已授权且启用的目录，执行前由租约入口重试恢复。
+        // 若只收集 available，暂时离线的目录会被静默漏掉，Shell 可能写入同名裸挂载点。
         let mountIDs = Persistence.loadLocalLinuxMounts()
-            .filter { $0.isEnabled && $0.authorizationState == .available }
+            .filter { $0.isEnabled && $0.bookmark != nil }
             .map(\.id)
             .sorted { $0.uuidString < $1.uuidString }
         #endif

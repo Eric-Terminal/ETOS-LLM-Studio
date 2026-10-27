@@ -2,6 +2,22 @@ import Foundation
 
 /// 外部目录必须先取得安全作用域，再交给文件提供者准备；路径检查不能早于协调访问。
 enum LocalLinuxExternalDirectory {
+    static func resolveBookmark(_ bookmark: Data) throws -> (url: URL, isStale: Bool) {
+        var stale = false
+        #if os(macOS)
+        let options: URL.BookmarkResolutionOptions = [.withoutUI, .withSecurityScope]
+        #else
+        let options: URL.BookmarkResolutionOptions = [.withoutUI]
+        #endif
+        let url = try URL(
+            resolvingBookmarkData: bookmark,
+            options: options,
+            relativeTo: nil,
+            bookmarkDataIsStale: &stale
+        )
+        return (url, stale)
+    }
+
     static func createBookmark(for url: URL) throws -> Data {
         let shouldStop = url.startAccessingSecurityScopedResource()
         defer {

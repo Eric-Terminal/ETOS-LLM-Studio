@@ -2,6 +2,8 @@ import Foundation
 import Testing
 @testable import ETOSCore
 
+// 桥接替身覆盖恢复与失败路径；系统签发的安全作用域仍需真机补测：目录移动后
+// 重启 App、云目录暂时离线后再次执行，以及写入文件是否出现在“文件”App 中。
 @Suite("挂载状态切换与失败恢复", .serialized)
 struct LocalLinuxMountLifecycleTests {
     @Test("旧目录确认不能切换、重新授权或删除后来修改的挂载")
@@ -156,6 +158,164 @@ struct LocalLinuxMountLifecycleTests {
         #expect(!Persistence.loadLocalLinuxMounts().contains { $0.id == id })
     }
 
+    @Test("取得租约时自动恢复内核缺失的已授权挂载")
+    func missingMountIsRestoredBeforeLease() async throws {
+        let root = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let saved = try saveRecord(directory: root, access: .readWrite)
+        defer { _ = Persistence.deleteLocalLinuxMount(id: saved.id) }
+        _ = Persistence.updateLocalLinuxMountAuthorizationState(id: saved.id, state: .unavailable)
+        let bridge = MountBridgeStub()
+        let manager = makeManager(root: root, bridge: bridge)
+
+        let leases = try await manager.acquireLeases(ids: [saved.id])
+
+        #expect(leases.map(\.mountID) == [saved.id])
+        #expect(await bridge.addedIDs == [saved.id])
+        #expect(await bridge.leaseAttempts == [saved.id, saved.id])
+        let restored = try #require(Persistence.loadLocalLinuxMounts().first { $0.id == saved.id })
+        #expect(restored.authorizationState == .available)
+        #expect(restored.activeLeaseCount == 1)
+        #expect(restored.guestPath == saved.guestPath)
+        #expect(restored.access == saved.access)
+
+        try await manager.mountNow(id: saved.id)
+        #expect(await bridge.addedIDs == [saved.id])
+        leases.forEach { $0.release() }
+    }
+
+    @Test("恢复失败不会取得租约或把目录标记为可用")
+    func failedMountRecoveryStopsLeaseAcquisition() async throws {
+        let root = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let saved = try saveRecord(directory: root, access: .readWrite)
+        defer { _ = Persistence.deleteLocalLinuxMount(id: saved.id) }
+        let bridge = MountBridgeStub(addError: -5)
+        let manager = makeManager(root: root, bridge: bridge)
+
+        await #expect(throws: LocalLinuxRuntimeError.self) {
+            _ = try await manager.acquireLeases(ids: [saved.id])
+        }
+
+        #expect(await bridge.leaseAttempts == [saved.id])
+        #expect(Persistence.loadLocalLinuxMounts().first { $0.id == saved.id }?.authorizationState == .unavailable)
+        #expect(Persistence.loadLocalLinuxMounts().first { $0.id == saved.id }?.activeLeaseCount == 0)
+    }
+
+    @Test("租约恢复不能复活已停用或已删除的目录")
+    func leaseRecoveryHonorsDisabledAndDeletedMounts() async throws {
+        let root = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let saved = try saveRecord(directory: root, access: .readWrite, enabled: false)
+        defer { _ = Persistence.deleteLocalLinuxMount(id: saved.id) }
+        let bridge = MountBridgeStub()
+        let manager = makeManager(root: root, bridge: bridge)
+
+        for id in [saved.id, UUID()] {
+            await #expect(throws: LocalLinuxRuntimeError.self) {
+                _ = try await manager.acquireLeases(ids: [id])
+            }
+        }
+        #expect(await bridge.addedIDs.isEmpty)
+        #expect(Persistence.loadLocalLinuxMounts().first { $0.id == saved.id }?.isEnabled == false)
+    }
+
+    @Test("忙碌或失效的原生租约不能被自动重新挂载掩盖", arguments: [Int32(-16), -116])
+    func nonMissingLeaseFailureDoesNotRemount(code: Int32) async throws {
+        let root = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let saved = try saveRecord(directory: root, access: .readOnly)
+        defer { _ = Persistence.deleteLocalLinuxMount(id: saved.id) }
+        let bridge = MountBridgeStub(leaseError: code)
+        let manager = makeManager(root: root, bridge: bridge)
+
+        await #expect(throws: LocalLinuxRuntimeError.self) {
+            _ = try await manager.acquireLeases(ids: [saved.id])
+        }
+        #expect(await bridge.addedIDs.isEmpty)
+        #expect(await bridge.leaseAttempts == [saved.id])
+    }
+
+    @Test("可解析的旧书签自动刷新，新的管理器可继续访问")
+    func staleBookmarkRefreshesWithoutReauthorization() async throws {
+        let root = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let saved = try saveRecord(directory: root, access: .readOnly)
+        defer { _ = Persistence.deleteLocalLinuxMount(id: saved.id) }
+        let relocated = root.appendingPathComponent("移动后的目录", isDirectory: true)
+        try FileManager.default.createDirectory(at: relocated, withIntermediateDirectories: true)
+        try Data("原目录内容".utf8).write(to: relocated.appendingPathComponent("note.txt"))
+        let manager = LocalLinuxMountManager(
+            storage: LocalLinuxStorageManager(fileManager: NoCloudFileManager(), documentsDirectory: root, appGroupLayout: nil),
+            bridge: MountBridgeStub(),
+            resolveBookmark: { _ in (relocated, true) }
+        )
+
+        let access = try await manager.accessExternalDirectory(id: saved.id)
+        #expect(access.url == relocated)
+        let updated = try #require(Persistence.loadLocalLinuxMounts().first { $0.id == saved.id })
+        #expect(updated.bookmark != saved.bookmark)
+        #expect(updated.guestPath == saved.guestPath)
+        #expect(updated.access == saved.access)
+        #expect(updated.authorizationState == .available)
+
+        let restored = try await makeManager(root: root, bridge: MountBridgeStub()).accessExternalDirectory(id: saved.id)
+        #expect(try String(contentsOf: restored.url.appendingPathComponent("note.txt"), encoding: .utf8) == "原目录内容")
+    }
+
+    @Test("启用挂载不会覆盖准备过程中刷新的书签")
+    func enablingKeepsRefreshedBookmark() async throws {
+        let root = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let saved = try saveRecord(directory: root, access: .readOnly, enabled: false)
+        defer { _ = Persistence.deleteLocalLinuxMount(id: saved.id) }
+        let relocated = root.appendingPathComponent("新位置", isDirectory: true)
+        try FileManager.default.createDirectory(at: relocated, withIntermediateDirectories: true)
+        let manager = LocalLinuxMountManager(
+            storage: LocalLinuxStorageManager(fileManager: NoCloudFileManager(), documentsDirectory: root, appGroupLayout: nil),
+            bridge: MountBridgeStub(),
+            resolveBookmark: { _ in (relocated, true) }
+        )
+
+        let updated = try await manager.setEnabled(true, id: saved.id)
+
+        #expect(updated.isEnabled)
+        #expect(updated.bookmark != saved.bookmark)
+        let bookmark = try #require(updated.bookmark)
+        let resolved = try LocalLinuxExternalDirectory.resolveBookmark(bookmark)
+        #expect(resolved.url.resolvingSymlinksInPath() == relocated.resolvingSymlinksInPath())
+    }
+
+    @Test("迟到的书签刷新保留新授权和配置且不会复活删除记录")
+    func bookmarkRefreshDoesNotOverwriteNewConfiguration() async throws {
+        let root = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let saved = try saveRecord(directory: root, access: .readOnly)
+        defer { _ = Persistence.deleteLocalLinuxMount(id: saved.id) }
+        let originalBookmark = try #require(saved.bookmark)
+        var updated = saved
+        updated.bookmark = Data("重新授权的书签".utf8)
+        updated.displayName = "新配置"
+        updated.access = .readWrite
+        updated.isEnabled = false
+        #expect(Persistence.saveLocalLinuxMount(updated))
+        #expect(Persistence.updateLocalLinuxMountLeaseCount(id: saved.id, delta: 2))
+        let baseline = try #require(Persistence.loadLocalLinuxMounts().first { $0.id == saved.id })
+
+        #expect(Persistence.refreshLocalLinuxMountBookmark(id: saved.id, replacing: originalBookmark, with: Data([1])))
+        #expect(Persistence.loadLocalLinuxMounts().first { $0.id == saved.id } == baseline)
+        let refreshed = Data("更新后的书签".utf8)
+        let currentBookmark = try #require(baseline.bookmark)
+        #expect(Persistence.refreshLocalLinuxMountBookmark(id: saved.id, replacing: currentBookmark, with: refreshed))
+        var expected = baseline
+        expected.bookmark = refreshed
+        #expect(Persistence.loadLocalLinuxMounts().first { $0.id == saved.id } == expected)
+
+        #expect(Persistence.deleteLocalLinuxMount(id: saved.id))
+        #expect(Persistence.refreshLocalLinuxMountBookmark(id: saved.id, replacing: refreshed, with: Data([2])))
+        #expect(!Persistence.loadLocalLinuxMounts().contains { $0.id == saved.id })
+    }
+
     private func makeManager(root: URL, bridge: MountBridgeStub) -> LocalLinuxMountManager {
         LocalLinuxMountManager(
             storage: LocalLinuxStorageManager(fileManager: NoCloudFileManager(), documentsDirectory: root, appGroupLayout: nil),
@@ -193,22 +353,33 @@ private actor MountBridgeStub: LocalLinuxMountBridge {
     private let removeError: Int32?
     private let incrementLeaseOnAdd: Bool
     private let pauseRemoval: Bool
+    private let leaseError: Int32?
+    private var activeMounts: [UUID: LocalLinuxBridgeMount] = [:]
+    private(set) var addedIDs: [UUID] = []
+    private(set) var leaseAttempts: [UUID] = []
     private var removal: CheckedContinuation<Void, Never>?
     private var removalWaiter: CheckedContinuation<Void, Never>?
 
-    init(addError: Int32? = nil, removeError: Int32? = nil, incrementLeaseOnAdd: Bool = false, pauseRemoval: Bool = false) {
+    init(addError: Int32? = nil, removeError: Int32? = nil, incrementLeaseOnAdd: Bool = false, pauseRemoval: Bool = false, leaseError: Int32? = nil) {
         self.addError = addError
         self.removeError = removeError
         self.incrementLeaseOnAdd = incrementLeaseOnAdd
         self.pauseRemoval = pauseRemoval
+        self.leaseError = leaseError
     }
 
     func runtimePhase() -> Int32 { 2 }
-    func mounts() -> [LocalLinuxBridgeMountInfo] { [] }
+    func mounts() -> [LocalLinuxBridgeMountInfo] {
+        activeMounts.values.map {
+            LocalLinuxBridgeMountInfo(id: $0.id, access: $0.access, state: 2, activeLeases: 0, activeReferences: 0, guestDirectory: $0.guestDirectory)
+        }
+    }
     func allowAddition() { addError = nil }
 
     func addMount(_ mount: LocalLinuxBridgeMount) throws {
         if let addError { throw LocalLinuxRuntimeError.bridgeFailure(operation: "添加测试挂载", linuxError: addError) }
+        addedIDs.append(mount.id)
+        activeMounts[mount.id] = mount
         if incrementLeaseOnAdd { _ = Persistence.updateLocalLinuxMountLeaseCount(id: mount.id, delta: 1) }
     }
 
@@ -221,6 +392,7 @@ private actor MountBridgeStub: LocalLinuxMountBridge {
                 removalWaiter = nil
             }
         }
+        activeMounts[id] = nil
     }
 
     func waitForRemoval() async {
@@ -234,6 +406,11 @@ private actor MountBridgeStub: LocalLinuxMountBridge {
     }
 
     func acquireMountLease(id: UUID) throws -> iSHAppleBridgeMountLease {
-        throw LocalLinuxRuntimeError.bridgeFailure(operation: "测试挂载不提供原生租约", linuxError: -2)
+        leaseAttempts.append(id)
+        if let leaseError { throw LocalLinuxRuntimeError.bridgeFailure(operation: "取得测试挂载租约", linuxError: leaseError) }
+        guard activeMounts[id] != nil else {
+            throw LocalLinuxRuntimeError.bridgeFailure(operation: "取得测试挂载租约", linuxError: -2)
+        }
+        return iSHAppleBridgeMountLease(native: nil, mountID: id)
     }
 }

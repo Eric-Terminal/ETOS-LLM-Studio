@@ -101,6 +101,7 @@ public actor LocalLinuxMountManager {
 
     private let storage: LocalLinuxStorageManager
     private let bridge: any LocalLinuxMountBridge
+    private let resolveBookmark: @Sendable (Data) throws -> (url: URL, isStale: Bool)
     private var mutatingMountIDs: Set<UUID> = []
     private var scopedResources: [UUID: LocalLinuxDirectoryAccess] = [:]
     private var runtimeGeneration = UUID()
@@ -117,11 +118,17 @@ public actor LocalLinuxMountManager {
     ) {
         self.storage = storage
         self.bridge = bridge
+        resolveBookmark = { try LocalLinuxExternalDirectory.resolveBookmark($0) }
     }
 
-    init(storage: LocalLinuxStorageManager, bridge: any LocalLinuxMountBridge) {
+    init(
+        storage: LocalLinuxStorageManager,
+        bridge: any LocalLinuxMountBridge,
+        resolveBookmark: @escaping @Sendable (Data) throws -> (url: URL, isStale: Bool) = { try LocalLinuxExternalDirectory.resolveBookmark($0) }
+    ) {
         self.storage = storage
         self.bridge = bridge
+        self.resolveBookmark = resolveBookmark
     }
 
     public func records() -> [LocalLinuxMountRecord] {
@@ -250,6 +257,8 @@ public actor LocalLinuxMountManager {
                     try await bridge.addMount(prepared.mount)
                     scopedResources[id] = prepared.resource
                     record.authorizationState = .available
+                    // 准备目录可能已自动刷新书签，启用配置不能再写回解析前的旧副本。
+                    record.bookmark = records().first(where: { $0.id == id })?.bookmark ?? record.bookmark
                 } catch {
                     if records().first(where: { $0.id == id })?.authorizationState == .materializing {
                         persistAuthorizationState(record, state: .unavailable)
@@ -350,8 +359,12 @@ public actor LocalLinuxMountManager {
     public func mountNow(id: UUID) async throws {
         try beginMutation(id: id)
         defer { mutatingMountIDs.remove(id) }
-        guard let record = records().first(where: { $0.id == id }) else {
+        guard let record = records().first(where: { $0.id == id && $0.isEnabled }) else {
             throw LocalLinuxRuntimeError.invalidPath(id.uuidString)
+        }
+        // 重复恢复不能覆盖已有挂载，也不能提前释放它持有的安全作用域。
+        if let mounted = try await bridge.mounts().first(where: { $0.id == id }), mounted.state == 2 {
+            return
         }
         do {
             let prepared = try prepareExternalMount(record)
@@ -371,7 +384,15 @@ public actor LocalLinuxMountManager {
         var leases: [LocalLinuxMountLease] = []
         do {
             for id in ids {
-                let bridgeLease = try await bridge.acquireMountLease(id: id)
+                let bridgeLease: iSHAppleBridgeMountLease
+                do {
+                    bridgeLease = try await bridge.acquireMountLease(id: id)
+                } catch LocalLinuxRuntimeError.bridgeFailure(_, let code) where code == LocalLinuxBridgeConstants.linuxENOENT {
+                    // 启动时云目录可能暂时不可用，宿主文件浏览也可能只恢复授权而没有
+                    // 挂入内核。仅恢复仍启用的记录一次；失败就中止，不能写进裸挂载点。
+                    try await mountNow(id: id)
+                    bridgeLease = try await bridge.acquireMountLease(id: id)
+                }
                 incrementPersistedLeaseCount(id: id)
                 leases.append(
                     LocalLinuxMountLease(bridgeLease: bridgeLease) { [weak self, runtimeGeneration] releasedID in
@@ -575,36 +596,30 @@ public actor LocalLinuxMountManager {
                 NSLocalizedString("挂载缺少文件访问授权。", comment: "Linux mount bookmark missing error")
             )
         }
-        var stale = false
-        let url: URL
+        let resolved: (url: URL, isStale: Bool)
         do {
-            #if os(macOS)
-            let options: URL.BookmarkResolutionOptions = [.withoutUI, .withSecurityScope]
-            #else
-            let options: URL.BookmarkResolutionOptions = [.withoutUI]
-            #endif
-            url = try URL(
-                resolvingBookmarkData: bookmark,
-                options: options,
-                relativeTo: nil,
-                bookmarkDataIsStale: &stale
-            )
+            resolved = try resolveBookmark(bookmark)
         } catch {
             // 重装后的书签可能直接抛错，而不是返回 stale；同样不能沿用快照中的 available。
             if persistState { persistAuthorizationState(record, state: .needsReauthorization) }
             LocalLinuxExternalDirectory.recordFailure("恢复目录授权", error: error)
             throw error
         }
-        guard !stale else {
-            if persistState { persistAuthorizationState(record, state: .needsReauthorization) }
-            throw LocalLinuxRuntimeError.runtimeUnavailable(
-                NSLocalizedString("挂载授权已失效，请重新选择目录。", comment: "Linux mount bookmark stale error")
-            )
-        }
+        let url = resolved.url
         let shouldStop = url.startAccessingSecurityScopedResource()
         if persistState { persistAuthorizationState(record, state: .materializing) }
         do {
             let directoryURL = try LocalLinuxExternalDirectory.coordinateRead(at: url) { $0 }
+            if resolved.isStale, persistState {
+                // stale 表示书签元数据需要更新，不等于系统撤销授权。先确认目录可访问，
+                // 再保存新书签，保留原挂载身份、权限与并发变化的租约计数。
+                let refreshed = try LocalLinuxExternalDirectory.createBookmark(for: directoryURL)
+                guard Persistence.refreshLocalLinuxMountBookmark(id: record.id, replacing: bookmark, with: refreshed) else {
+                    throw LocalLinuxRuntimeError.runtimeUnavailable(
+                        NSLocalizedString("无法保存重新授权的 Linux 挂载。", comment: "Save reauthorized Linux mount failure")
+                    )
+                }
+            }
             // 文件提供者可能在协调期间更新目录位置；使用新 URL，释放时仍配对原授权 URL。
             return LocalLinuxDirectoryAccess(
                 url: directoryURL,

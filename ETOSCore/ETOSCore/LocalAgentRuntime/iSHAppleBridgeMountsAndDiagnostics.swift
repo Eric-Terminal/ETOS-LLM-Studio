@@ -7,10 +7,11 @@
 import Foundation
 
 public final class iSHAppleBridgeMountLease: @unchecked Sendable {
-    private let native: UnsafeMutableRawPointer
+    private let native: UnsafeMutableRawPointer?
     public let mountID: UUID
 
-    fileprivate init(native: UnsafeMutableRawPointer, mountID: UUID) {
+    // 测试桥接可提供空句柄；实际内核入口仍要求成功返回非空原生租约。
+    init(native: UnsafeMutableRawPointer?, mountID: UUID) {
         self.native = native
         self.mountID = mountID
     }
