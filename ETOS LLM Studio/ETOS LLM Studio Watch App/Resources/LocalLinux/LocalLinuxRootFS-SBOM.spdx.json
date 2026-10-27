@@ -10,7 +10,7 @@
   "documentDescribes": [
     "SPDXRef-ETOS-Local-Linux-RootFS"
   ],
-  "documentNamespace": "https://github.com/Eric-Terminal/ETOS-LLM-Studio/spdx/323c3f8a51a7865415540454c3916ca92877eddd3404970d9abdda1027dfaed6",
+  "documentNamespace": "https://github.com/Eric-Terminal/ETOS-LLM-Studio/spdx/5420cb3a8edcbdddf42ff1537514bf8361e2e1cda442b09e63fce24121f0c704",
   "name": "ETOS-Local-Linux-RootFS-SBOM",
   "packages": [
     {
