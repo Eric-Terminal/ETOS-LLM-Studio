@@ -80,7 +80,7 @@ extension ChatView {
         Task { @MainActor in
             do {
                 let imageConfiguration = format == .png
-                    ? await transcriptSwiftUIImageConfiguration(session: session)
+                    ? try await transcriptSwiftUIImageConfiguration(session: session)
                     : nil
                 let exportSource = await Task.detached(priority: .userInitiated) {
                     let resolvedMessages: [ChatMessage]

@@ -11,6 +11,7 @@ import CoreGraphics
 import ETOSCore
 import SwiftUI
 import Testing
+import UIKit
 @testable import ETOS_LLM_Studio_App
 
 struct ChatTranscriptExportLayoutTests {
@@ -29,12 +30,15 @@ struct ChatTranscriptExportLayoutTests {
             .frame(width: 200)
             .fixedSize(horizontal: false, vertical: true)
         FontLibrary.updateRuntimeSettings(isCustomFontEnabled: false, fallbackScope: .segment, customFontScale: 1)
+        let sourceWindow = try sourceWindow()
         let regular = try await ChatTranscriptSwiftUIImageCapture.capture(
-            canvas: canvas, width: 200, viewportHeight: 400, prefersDarkAppearance: false
+            canvas: canvas, width: 200, viewportHeight: 400, prefersDarkAppearance: false,
+            sourceWindow: sourceWindow
         )
         FontLibrary.updateRuntimeSettings(isCustomFontEnabled: false, fallbackScope: .segment, customFontScale: 2)
         let enlarged = try await ChatTranscriptSwiftUIImageCapture.capture(
-            canvas: canvas, width: 200, viewportHeight: 400, prefersDarkAppearance: false
+            canvas: canvas, width: 200, viewportHeight: 400, prefersDarkAppearance: false,
+            sourceWindow: sourceWindow
         )
         #expect(enlarged.image.height > regular.image.height * 3 / 2)
     }
@@ -81,11 +85,38 @@ struct ChatTranscriptExportLayoutTests {
             canvas: canvas,
             width: 200,
             viewportHeight: 400,
-            prefersDarkAppearance: false
+            prefersDarkAppearance: false,
+            sourceWindow: try sourceWindow()
         )
 
         #expect(captured.image.width == 400)
         #expect(captured.image.height == 2_400)
+    }
+
+    @MainActor
+    @Test("导出窗口来源随所在视图迁移，不绑定任意全局窗口")
+    func sourceWindowFollowsHostingView() {
+        let firstWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let secondWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 744, height: 570))
+        let view = UIView()
+        let source = ChatTranscriptSourceWindow()
+        source.view = view
+        firstWindow.addSubview(view)
+        #expect(source.window === firstWindow)
+        secondWindow.addSubview(view)
+        #expect(source.window === secondWindow)
+        #expect(source.window?.bounds.size == CGSize(width: 744, height: 570))
+        view.removeFromSuperview()
+        #expect(source.window == nil)
+    }
+
+    @MainActor
+    private func sourceWindow() throws -> UIWindow {
+        // 仅测试夹具寻找宿主窗口；生产代码必须从实际发起导出的视图传入。
+        try #require(UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow))
     }
 }
 

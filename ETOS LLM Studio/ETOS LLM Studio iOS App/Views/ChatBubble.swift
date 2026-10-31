@@ -20,7 +20,7 @@ struct ChatBubble: View {
     @ObservedObject var messageState: ChatMessageRenderState
     let roleplaySessionID: UUID?
     let roleplayMessages: [ChatMessage]
-    let layoutWidth: CGFloat?
+    let layoutWidth: CGFloat
     let reasoningPreviewMaxHeight: CGFloat
     let preparedMarkdownPayload: ETPreparedMarkdownRenderPayload?
     let preparedReasoningMarkdownPayload: ETPreparedMarkdownRenderPayload?
@@ -76,12 +76,13 @@ struct ChatBubble: View {
     @ObservedObject var appearanceProfileManager = ChatAppearanceProfileManager.shared
     @ObservedObject var appConfig = AppConfigStore.shared
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.displayScale) var displayScale
 
     init(
         messageState: ChatMessageRenderState,
         roleplaySessionID: UUID? = nil,
         roleplayMessages: [ChatMessage] = [],
-        layoutWidth: CGFloat? = nil,
+        layoutWidth: CGFloat,
         reasoningPreviewMaxHeight: CGFloat = 177,
         preparedMarkdownPayload: ETPreparedMarkdownRenderPayload? = nil,
         preparedReasoningMarkdownPayload: ETPreparedMarkdownRenderPayload? = nil,

@@ -54,15 +54,23 @@ struct SettingsCoreGridLayout: Equatable {
 
     let columnCount: Int
     let preferredCardHeight: CGFloat
+    let usesListRows: Bool
 
     static func resolved(
-        horizontalSizeClass: UserInterfaceSizeClass?,
-        verticalSizeClass: UserInterfaceSizeClass?
+        availableSize: CGSize,
+        hasVerticalDivision: Bool,
+        usesAccessibilitySize: Bool
     ) -> SettingsCoreGridLayout {
-        let usesWideLayout = horizontalSizeClass == .regular || verticalSizeClass == .compact
-        return usesWideLayout
-            ? SettingsCoreGridLayout(columnCount: 3, preferredCardHeight: wideCardHeight)
-            : SettingsCoreGridLayout(columnCount: 2, preferredCardHeight: compactCardHeight)
+        // 矮窗口不一定宽；活动折痕下改用系统列表行，避免自定义卡片跨过折痕。
+        let columns = usesAccessibilitySize || availableSize.width < 340 ? 1
+            : (availableSize.width >= 720 ? 3 : 2)
+        let height = availableSize.width >= 720 && availableSize.height >= 500
+            ? wideCardHeight : compactCardHeight
+        return SettingsCoreGridLayout(
+            columnCount: columns,
+            preferredCardHeight: height,
+            usesListRows: hasVerticalDivision
+        )
     }
 }
 
@@ -71,12 +79,12 @@ struct SettingsView: View {
         repeating: GridItem(.flexible()),
         count: 2
     )
+    private static let singleCoreSettingsColumn = [GridItem(.flexible())]
     private static let landscapeCoreSettingsColumns = Array(
         repeating: GridItem(.flexible()),
         count: 3
     )
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var viewModel: ChatViewModel
     @ObservedObject private var announcementManager = AnnouncementManager.shared
     @ObservedObject private var pulseManager = DailyPulseManager.shared
@@ -91,12 +99,33 @@ struct SettingsView: View {
     }
     
     var body: some View {
+        GeometryReader { proxy in
+            settingsContent(layout: SettingsCoreGridLayout.resolved(
+                availableSize: proxy.size,
+                hasVerticalDivision: hasVerticalDivision(in: proxy),
+                usesAccessibilitySize: dynamicTypeSize.isAccessibilitySize
+            ))
+        }
+    }
+
+    private func hasVerticalDivision(in proxy: GeometryProxy) -> Bool {
+        if #available(iOS 27.1, *), let division = proxy.reservedRegions(kind: .division).first {
+            return division.frame.height > division.frame.width
+        }
+        return false
+    }
+
+    private func settingsContent(layout: SettingsCoreGridLayout) -> some View {
         List {
             Section {
-                coreSettingsGrid
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
+                if layout.usesListRows {
+                    coreSettingsEntries(layout: layout)
+                } else {
+                    coreSettingsGrid(layout: layout)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
             }
 
             Section(NSLocalizedString("拓展能力", comment: "设置拓展能力分组")) {
@@ -247,6 +276,7 @@ struct SettingsView: View {
                 id: "settings-root",
                 title: NSLocalizedString("设置", comment: "设置页向导上下文标题"),
                 documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview"),
+                    GuideDocumentReference(id: "adaptive-layout", title: "Adaptive Layout"),
                     GuideDocumentReference(id: "settings-extended", title: "Extended Features")]
             ),
             isFallback: true,
@@ -330,72 +360,83 @@ struct SettingsView: View {
         }
     }
 
-    /// 使用导航开始前已经确定的尺寸等级，避免在 List 布局过程中切换网格结构。
-    private var coreSettingsGrid: some View {
-        let layout = SettingsCoreGridLayout.resolved(
-            horizontalSizeClass: horizontalSizeClass,
-            verticalSizeClass: verticalSizeClass
-        )
+    /// 由外层容器同步提供宽度；键盘和折叠不会沿用进入页面时的旧尺寸等级。
+    private func coreSettingsGrid(layout: SettingsCoreGridLayout) -> some View {
         let columns = layout.columnCount == 3
             ? Self.landscapeCoreSettingsColumns
-            : Self.portraitCoreSettingsColumns
+            : (layout.columnCount == 1 ? Self.singleCoreSettingsColumn : Self.portraitCoreSettingsColumns)
 
         return LazyVGrid(columns: columns) {
-            coreSettingsButton(
-                titleKey: "模型管理",
-                icon: .providerManagement,
-                destination: .modelManagement,
-                preferredHeight: layout.preferredCardHeight
-            )
-            coreSettingsButton(
-                titleKey: "会话",
-                icon: .conversationSettings,
-                destination: .conversation,
-                preferredHeight: layout.preferredCardHeight
-            )
-            coreSettingsButton(
-                titleKey: "提示词",
-                icon: .promptSettings,
-                destination: .prompts,
-                preferredHeight: layout.preferredCardHeight
-            )
-            coreSettingsButton(
-                titleKey: "输出",
-                icon: .outputSettings,
-                destination: .output,
-                preferredHeight: layout.preferredCardHeight
-            )
-            coreSettingsButton(
-                titleKey: "背景与视觉",
-                icon: .display,
-                destination: .display,
-                preferredHeight: layout.preferredCardHeight
-            )
-            coreSettingsButton(
-                titleKey: "同步与备份",
-                icon: .sync,
-                destination: .sync,
-                preferredHeight: layout.preferredCardHeight
-            )
+            coreSettingsEntries(layout: layout)
         }
     }
 
+    @ViewBuilder
+    private func coreSettingsEntries(layout: SettingsCoreGridLayout) -> some View {
+        coreSettingsButton(
+            titleKey: "模型管理",
+            icon: .providerManagement,
+            destination: .modelManagement,
+            layout: layout
+        )
+        coreSettingsButton(
+            titleKey: "会话",
+            icon: .conversationSettings,
+            destination: .conversation,
+            layout: layout
+        )
+        coreSettingsButton(
+            titleKey: "提示词",
+            icon: .promptSettings,
+            destination: .prompts,
+            layout: layout
+        )
+        coreSettingsButton(
+            titleKey: "输出",
+            icon: .outputSettings,
+            destination: .output,
+            layout: layout
+        )
+        coreSettingsButton(
+            titleKey: "背景与视觉",
+            icon: .display,
+            destination: .display,
+            layout: layout
+        )
+        coreSettingsButton(
+            titleKey: "同步与备份",
+            icon: .sync,
+            destination: .sync,
+            layout: layout
+        )
+    }
+
+    @ViewBuilder
     private func coreSettingsButton(
         titleKey: String,
         icon: SettingsListIcon,
         destination: CoreSettingsNavigationDestination,
-        preferredHeight: CGFloat
+        layout: SettingsCoreGridLayout
     ) -> some View {
-        Button {
-            coreSettingsDestination = destination
-        } label: {
-            SettingsCategoryCard(
-                titleKey,
-                icon: icon,
-                preferredHeight: preferredHeight
-            )
+        if layout.usesListRows {
+            Button {
+                coreSettingsDestination = destination
+            } label: {
+                SettingsListIconLabel(titleKey, icon: icon)
+            }
+            .tint(.primary)
+        } else {
+            Button {
+                coreSettingsDestination = destination
+            } label: {
+                SettingsCategoryCard(
+                    titleKey,
+                    icon: icon,
+                    preferredHeight: layout.preferredCardHeight
+                )
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
     }
 
     // MARK: - 辅助方法

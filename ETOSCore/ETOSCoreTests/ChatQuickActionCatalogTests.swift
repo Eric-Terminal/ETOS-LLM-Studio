@@ -23,6 +23,11 @@ struct ChatQuickActionCatalogTests {
         #expect(ChatQuickActionSelection.decode("unknown,,") == ChatQuickAction.allCases)
     }
 
+    @Test("临时对话在存储列表末尾时仍保留工具栏直接入口所需顺序")
+    func temporaryChatIsNormalizedBeforeOverflowActions() {
+        #expect(ChatQuickActionSelection.decode("settings,browser,temporaryChat") == [.temporaryChat, .settings, .browser])
+    }
+
     @Test("临时聊天三种状态共享隐私图标，其他功能不受状态影响")
     func temporaryModeSymbolsRemainCompatible() {
         #expect(ChatQuickAction.temporaryChat.systemImage(isTemporaryChatEnabled: false) == "eye")

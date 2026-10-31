@@ -42,12 +42,11 @@ struct ETIOSMarkdownInlineImageProvider: InlineImageProvider {
             return try await DefaultInlineImageProvider.default.image(with: url, label: label)
         }
 
-        guard let data = await ETIOSMathImageRenderer.imageData(for: request, textColor: textColor, fontScale: fontScale),
-              let image = UIImage(data: data, scale: UIScreen.main.scale) else {
+        guard let renderedImage = await ETIOSMathImageRenderer.image(for: request, textColor: textColor, fontScale: fontScale) else {
             return Image(systemName: "function")
         }
 
-        return Image(uiImage: image)
+        return Image(uiImage: renderedImage.image)
     }
 }
 
@@ -56,14 +55,14 @@ private struct ETIOSMathBlockImageView: View {
     let textColor: ETIOSMathColorComponents
     let fontScale: Double
 
-    @State private var renderedImageData: Data?
+    @State private var renderedImage: ETIOSRenderedMathImage?
     @State private var didAttemptRender = false
 
     var body: some View {
         Group {
             if let renderedImage {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    Image(uiImage: renderedImage)
+                    Image(uiImage: renderedImage.image)
                         .interpolation(.high)
                         .antialiased(true)
                 }
@@ -82,15 +81,12 @@ private struct ETIOSMathBlockImageView: View {
         .accessibilityLabel(request.latex)
         .task(id: taskKey) {
             didAttemptRender = false
-            renderedImageData = nil
-            renderedImageData = await ETIOSMathImageRenderer.imageData(for: request, textColor: textColor, fontScale: fontScale)
+            renderedImage = nil
+            let preparedImage = await ETIOSMathImageRenderer.image(for: request, textColor: textColor, fontScale: fontScale)
+            guard !Task.isCancelled else { return }
+            renderedImage = preparedImage
             didAttemptRender = true
         }
-    }
-
-    private var renderedImage: UIImage? {
-        guard let renderedImageData else { return nil }
-        return UIImage(data: renderedImageData, scale: UIScreen.main.scale)
     }
 
     private var taskKey: String {
@@ -137,24 +133,33 @@ struct ETIOSMathColorComponents: Hashable, Sendable {
     }
 }
 
+/// 只传递已经完成的不可变图片，保留渲染器的像素比例，避免在另一块显示器上按新比例重解码。
+final class ETIOSRenderedMathImage: @unchecked Sendable {
+    let image: UIImage
+
+    init(image: UIImage) {
+        self.image = image
+    }
+}
+
 enum ETIOSMathImageRenderer {
 #if canImport(SwiftMath)
-    private static let cache = NSCache<NSString, NSData>()
+    private static let cache = NSCache<NSString, ETIOSRenderedMathImage>()
     // SwiftMath 共享字体及排版缓存；整个渲染操作必须串行，且不能占用主线程。
     private static let renderQueue = DispatchQueue(label: "com.ericterminal.els.math-render", qos: .userInitiated)
 
-    static func imageData(
+    static func image(
         for request: ETNativeMathMarkdownCodec.Request,
         textColor: ETIOSMathColorComponents,
         fontScale: Double
-    ) async -> Data? {
+    ) async -> ETIOSRenderedMathImage? {
         guard !Task.isCancelled else { return nil }
-        return await withCheckedContinuation { (continuation: CheckedContinuation<Data?, Never>) in
+        return await withCheckedContinuation { (continuation: CheckedContinuation<ETIOSRenderedMathImage?, Never>) in
             renderQueue.async {
                 let cacheKey = "\(request.renderKind.rawValue)|\(request.latex)|\(textColor.cacheKey)|\(fontScale)" as NSString
                 // 队列内复查，使并发请求同一公式时只实际渲染一次。
-                if let cachedData = cache.object(forKey: cacheKey) {
-                    continuation.resume(returning: cachedData as Data)
+                if let cachedImage = cache.object(forKey: cacheKey) {
+                    continuation.resume(returning: cachedImage)
                     return
                 }
                 let image = MTMathImage(
@@ -170,20 +175,18 @@ enum ETIOSMathImageRenderer {
                     continuation.resume(returning: nil)
                     return
                 }
-                let data = renderedImage.pngData()
-                if let data {
-                    cache.setObject(data as NSData, forKey: cacheKey)
-                }
-                continuation.resume(returning: data)
+                let preparedImage = ETIOSRenderedMathImage(image: renderedImage)
+                cache.setObject(preparedImage, forKey: cacheKey)
+                continuation.resume(returning: preparedImage)
             }
         }
     }
 #else
-    static func imageData(
+    static func image(
         for request: ETNativeMathMarkdownCodec.Request,
         textColor: ETIOSMathColorComponents,
         fontScale: Double
-    ) async -> Data? {
+    ) async -> ETIOSRenderedMathImage? {
         _ = request
         _ = textColor
         _ = fontScale

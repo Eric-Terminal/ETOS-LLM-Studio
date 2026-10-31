@@ -12,6 +12,7 @@ import ETOSCore
 
 struct AskUserInputComposerPanel: View {
     let request: AppToolAskUserInputRequest
+    let availableHeight: CGFloat
     let submitAction: ([AppToolAskUserInputQuestionAnswer]) -> Void
     let cancelAction: () -> Void
 
@@ -19,6 +20,7 @@ struct AskUserInputComposerPanel: View {
     @State private var otherTextByQuestion: [String: String] = [:]
     @State private var currentQuestionIndex = 0
     @State private var measuredQuestionContentHeight: CGFloat = 0
+    @State private var measuredInputBarHeight: CGFloat = 0
 
     private var canSubmit: Bool {
         request.questions.allSatisfy { question in
@@ -38,29 +40,51 @@ struct AskUserInputComposerPanel: View {
     }
 
     private var questionContentMaxHeight: CGFloat {
-        min(UIScreen.main.bounds.height * 0.42, 340)
+        // 标题和问题共用滚动区，底部作答操作优先保留实际所需的高度。
+        max(0, min(availableHeight, 500) - measuredInputBarHeight - 28 - 12)
     }
 
     private var questionContentFrameHeight: CGFloat {
         let measured = measuredQuestionContentHeight
-        guard measured > 1 else { return 180 }
+        guard measured > 1 else { return min(180, questionContentMaxHeight) }
         return min(max(measured + 4, 120), questionContentMaxHeight)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            topBar
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    topBar
+                    if let question = currentQuestion {
+                        questionBlock(question)
+                    } else {
+                        Text(NSLocalizedString("暂无可填写问题", comment: ""))
+                            .etFont(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .background {
+                    GeometryReader { geometry in
+                        Color.clear.preference(
+                            key: AskUserInputQuestionContentHeightPreferenceKey.self,
+                            value: geometry.size.height
+                        )
+                    }
+                }
+            }
+            .frame(height: questionContentFrameHeight, alignment: .top)
+            .onPreferenceChange(AskUserInputQuestionContentHeightPreferenceKey.self) { newHeight in
+                measuredQuestionContentHeight = newHeight
+            }
 
             if let question = currentQuestion {
-                questionContent(for: question)
                 navigationInputBar(for: question)
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(NSLocalizedString("暂无可填写问题", comment: ""))
-                        .etFont(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .onGeometryChange(for: CGFloat.self) { geometry in
+                        geometry.size.height
+                    } action: { height in
+                        measuredInputBarHeight = height
+                    }
             }
         }
         .padding(14)
@@ -119,25 +143,6 @@ struct AskUserInputComposerPanel: View {
             }
             .padding(.top, 2)
             .padding(.leading, 2)
-        }
-    }
-
-    private func questionContent(for question: AppToolAskUserInputQuestion) -> some View {
-        ScrollView {
-            questionBlock(question)
-                .padding(.vertical, 2)
-                .background(
-                    GeometryReader { geometry in
-                        Color.clear.preference(
-                            key: AskUserInputQuestionContentHeightPreferenceKey.self,
-                            value: geometry.size.height
-                        )
-                    }
-                )
-        }
-        .frame(height: questionContentFrameHeight, alignment: .top)
-        .onPreferenceChange(AskUserInputQuestionContentHeightPreferenceKey.self) { newHeight in
-            measuredQuestionContentHeight = newHeight
         }
     }
 

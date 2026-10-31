@@ -19,6 +19,201 @@ struct ChatSendFlightComposerLayoutTests {
         case suggestions
     }
 
+    @Test("同一输入框随聊天列收窄和展开重新换行且保留草稿")
+    func resizingComposerRemeasuresDraftWithoutReplacingEditor() async throws {
+        let config = AppConfigStore.shared
+        await config.waitForPersistentStoreLoaded()
+        let originalStyle = config.chatComposerStyle
+        let originalCustomFonts = config.fontUseCustomFonts
+        config.chatComposerStyle = "adaptive"
+        config.fontUseCustomFonts = false
+        defer {
+            config.chatComposerStyle = originalStyle
+            config.fontUseCustomFonts = originalCustomFonts
+        }
+
+        let service = ChatService()
+        await service.waitForInitialPersistenceStateIfNeeded()
+        let viewModel = ChatViewModel(chatService: service)
+        await viewModel.globalSystemPromptReloadTask?.value
+        await viewModel.conversationMemoryReloadTask?.value
+        viewModel.cancellables.removeAll()
+        let draft = "Keep this draft while the chat column changes width."
+        let controller = ChatSendFlightController()
+        let sources = ChatSendFlightSources()
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 900, height: 500)
+        let host = UIHostingController(rootView: ComposerHost(
+            viewModel: viewModel, controller: controller, sources: sources,
+            draft: draft, startsExpanded: false, availableHeight: 260
+        ))
+        window.rootViewController = host
+        window.isHidden = false
+        host.view.frame = window.bounds
+        host.view.layoutIfNeeded()
+        defer {
+            controller.cancel()
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+
+        var originalEditor: UITextView?
+        let initialDeadline = ContinuousClock.now + .seconds(3)
+        while ContinuousClock.now < initialDeadline {
+            originalEditor = editor(in: host.view, containing: draft) as? UITextView
+            if originalEditor != nil { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let textView = try #require(originalEditor)
+
+        for (width, heightBudget, expectsExpanded) in [
+            (CGFloat(320), CGFloat(260), true),
+            (CGFloat(320), CGFloat(100), true),
+            (CGFloat(900), CGFloat(260), false)
+        ] {
+            host.rootView = ComposerHost(
+                viewModel: viewModel, controller: controller, sources: sources,
+                draft: draft, startsExpanded: false, availableHeight: heightBudget
+            )
+            window.frame.size.width = width
+            host.view.frame = window.bounds
+            host.view.setNeedsLayout()
+            host.view.layoutIfNeeded()
+            let deadline = ContinuousClock.now + .seconds(3)
+            let expandedThreshold = min(100, heightBudget - 20)
+            while ContinuousClock.now < deadline {
+                let height = controller.composerContentAnchor?.bounds.height ?? 0
+                let matchesExpansion = expectsExpanded ? height > expandedThreshold : (height > 0 && height < 100)
+                if matchesExpansion && height <= heightBudget { break }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            #expect(editor(in: host.view, containing: draft) === textView)
+            #expect(textView.text == draft)
+            let height = try #require(controller.composerContentAnchor?.bounds.height)
+            #expect(expectsExpanded ? height > expandedThreshold : height < 100)
+            #expect(height <= heightBudget)
+            let content = try #require(controller.composerContentAnchor)
+            let editorFrame = textView.convert(textView.bounds, to: content)
+            #expect(editorFrame.minY >= -0.5)
+            #expect(editorFrame.maxY <= content.bounds.maxY + 0.5)
+            if expectsExpanded {
+                #expect(textView.isScrollEnabled)
+            }
+        }
+    }
+
+    @Test("过高预览和脚本共存时停靠区可滚动到编辑器与脚本操作", arguments: ["capsule", "adaptive", "card"])
+    func overflowingDockKeepsComposerAndScriptReachable(style: String) async throws {
+        let config = AppConfigStore.shared
+        await config.waitForPersistentStoreLoaded()
+        let originalStyle = config.chatComposerStyle
+        config.chatComposerStyle = style
+        defer { config.chatComposerStyle = originalStyle }
+        let service = ChatService()
+        await service.waitForInitialPersistenceStateIfNeeded()
+        let viewModel = ChatViewModel(chatService: service)
+        await viewModel.globalSystemPromptReloadTask?.value
+        await viewModel.conversationMemoryReloadTask?.value
+        viewModel.cancellables.removeAll()
+        let draft = (1...20).map { "第 \($0) 行：停靠区缩短后正文仍可访问。" }.joined(separator: "\n")
+        let controller = ChatSendFlightController()
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 400, height: 500)
+        let host = UIHostingController(rootView: ComposerHost(
+            viewModel: viewModel, controller: controller, sources: ChatSendFlightSources(),
+            draft: draft, startsExpanded: style != "card", availableHeight: 220,
+            previewHeight: 320, scriptHeight: 180
+        ))
+        window.rootViewController = host
+        window.isHidden = false
+        host.view.frame = window.bounds
+        host.view.layoutIfNeeded()
+        defer {
+            controller.cancel()
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+
+        let deadline = ContinuousClock.now + .seconds(3)
+        while ContinuousClock.now < deadline {
+            if controller.composerAnchor?.bounds.height == 220,
+               controller.composerContentAnchor != nil,
+               editor(in: host.view, containing: draft) != nil { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let outer = try #require(controller.composerAnchor)
+        #expect(outer.bounds.height <= 220.5)
+        let input = try #require(editor(in: host.view, containing: draft))
+        let content = try #require(controller.composerContentAnchor)
+        var ancestor = content.superview
+        while let view = ancestor, !(view is UIScrollView) { ancestor = view.superview }
+        let dock = try #require(ancestor as? UIScrollView)
+        #expect(dock.contentSize.height > dock.bounds.height + 300)
+        #expect(dock.isScrollEnabled)
+
+        dock.scrollRectToVisible(content.convert(content.bounds, to: dock), animated: false)
+        let inputFrame = input.convert(input.bounds, to: dock)
+        #expect(inputFrame.minY >= dock.bounds.minY - 0.5)
+        #expect(inputFrame.maxY <= dock.bounds.maxY + 0.5)
+        if style != "card" {
+            #expect((input as? UITextView)?.isScrollEnabled == true)
+        }
+
+        let script = try #require(scriptButton(in: host.view))
+        dock.scrollRectToVisible(script.convert(script.bounds, to: dock), animated: false)
+        let scriptFrame = script.convert(script.bounds, to: dock)
+        #expect(scriptFrame.minY >= dock.bounds.minY - 0.5)
+        #expect(scriptFrame.maxY <= dock.bounds.maxY + 0.5)
+        let touchPoint = script.convert(CGPoint(x: script.bounds.midX, y: script.bounds.midY), to: window)
+        #expect(window.hitTest(touchPoint, with: nil)?.isDescendant(of: script) == true)
+        #expect(editor(in: host.view, containing: draft) === input)
+    }
+
+    @Test("长问答说明不会挤出短窗口中的作答输入")
+    func questionPanelKeepsInputReachableInShortViewport() async throws {
+        let request = AppToolAskUserInputRequest(
+            requestID: "short-viewport", title: "需要补充的详细说明",
+            description: String(repeating: "折叠后仍能滚动阅读全部说明。", count: 12),
+            submitLabel: "提交", questions: [
+                AppToolAskUserInputQuestion(
+                    id: "choice", question: "请选择或填写偏好", type: .singleSelect,
+                    options: [AppToolAskUserInputOption(id: "one", label: "选项", description: nil)],
+                    allowOther: true, required: false
+                )
+            ]
+        )
+        let measurement = QuestionPanelMeasurement()
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 320, height: 400)
+        let host = UIHostingController(rootView: QuestionPanelHost(
+            request: request, availableHeight: 100, measurement: measurement
+        ))
+        window.rootViewController = host
+        window.isHidden = false
+        host.view.frame = window.bounds
+        host.view.layoutIfNeeded()
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+
+        let deadline = ContinuousClock.now + .seconds(3)
+        while ContinuousClock.now < deadline {
+            if measurement.height > 0, measurement.height <= 100.5,
+               editor(in: host.view, containing: "") != nil { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(measurement.height > 0 && measurement.height <= 100.5)
+        let input = try #require(editor(in: host.view, containing: ""))
+        let frame = input.convert(input.bounds, to: host.view)
+        #expect(frame.height > 0)
+        #expect(frame.minY >= host.view.safeAreaInsets.top - 0.5)
+        #expect(frame.maxY <= host.view.bounds.maxY - host.view.safeAreaInsets.bottom + 0.5)
+    }
+
     @Test("键盘高度预算内附件和建议不与展开编辑器重叠", arguments: ["capsule", "adaptive", "card"], UpperContent.allCases)
     func expandedComposerKeepsUpperContentVisible(style: String, upperContent: UpperContent) async throws {
         let config = AppConfigStore.shared
@@ -225,12 +420,12 @@ struct ChatSendFlightComposerLayoutTests {
                 #expect(capture.frame.maxY <= contentFrame.minY + 0.5)
                 #expect(departure.maxY <= capture.frame.minY + 0.5)
             } else if style != "card" {
-                #expect(abs(outerFrame.height - 66) < 1)
-                #expect(contentFrame.minY < outerFrame.minY - 80)
+                #expect(abs(contentFrame.minY - outerFrame.minY) < 1)
+                #expect(contentFrame.maxY <= outerFrame.maxY + 0.5)
                 #expect(editor.bounds.height > 100)
                 if scenario == .expandedFirstLine {
-                    // 首行本来就高于旧占位锚点，这一断言区分真实 overlay 与手工高度夹具。
-                    #expect(capture.frame.maxY < outerFrame.minY)
+                    // 展开正文在停靠区实际边界内，不能依赖向上溢出来保持首行可见。
+                    #expect(capture.frame.minY >= outerFrame.minY - 0.5)
                 } else {
                     #expect(capture.contentVerticalPosition > 0.9)
                     #expect(capture.frame.height <= editor.bounds.height + 0.5)
@@ -273,6 +468,48 @@ struct ChatSendFlightComposerLayoutTests {
         }
         return nil
     }
+
+    private func scriptButton(in view: UIView) -> UIButton? {
+        if let button = view as? UIButton, button.accessibilityIdentifier == "test.dock.script" { return button }
+        for child in view.subviews {
+            if let button = scriptButton(in: child) { return button }
+        }
+        return nil
+    }
+}
+
+private struct DockScriptTestButton: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIButton {
+        let button = UIButton(type: .system)
+        button.setTitle("脚本操作", for: .normal)
+        button.accessibilityIdentifier = "test.dock.script"
+        return button
+    }
+
+    func updateUIView(_ uiView: UIButton, context: Context) {}
+}
+
+@MainActor
+private final class QuestionPanelMeasurement {
+    var height: CGFloat = 0
+}
+
+@MainActor
+private struct QuestionPanelHost: View {
+    let request: AppToolAskUserInputRequest
+    let availableHeight: CGFloat
+    let measurement: QuestionPanelMeasurement
+
+    var body: some View {
+        VStack {
+            Spacer(minLength: 0)
+            AskUserInputComposerPanel(
+                request: request, availableHeight: availableHeight,
+                submitAction: { _ in }, cancelAction: {}
+            )
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { measurement.height = $0 }
+        }
+    }
 }
 
 @MainActor
@@ -283,27 +520,39 @@ private struct ComposerHost: View {
     let draft: String
     let startsExpanded: Bool
     var availableHeight: CGFloat = .infinity
+    var previewHeight: CGFloat = 0
+    var scriptHeight: CGFloat = 0
     @FocusState private var focused: Bool
 
     var body: some View {
-        Color.clear
-            .background(ChatSendFlightLayoutAnchor(controller: controller, region: .viewport))
-            .safeAreaInset(edge: .bottom) {
-                // 复用生产的占位与 overlay，不用 UIView 人为指定输入框高度。
-                VStack(spacing: 0) {
-                    TelegramMessageComposer(
-                        submissionState: viewModel.sendSubmissionState,
-                        sendFlightController: controller,
-                        text: .constant(draft), isRequestControlsExpanded: .constant(false),
-                        localAgentMode: .constant(.chat), sendAction: { false }, stopAction: {},
-                        slashCommandAction: { _ in }, focus: $focused,
-                        availableHeight: availableHeight,
-                        isExpandedComposer: startsExpanded
-                    )
+        GeometryReader { geometry in
+            Color.clear
+                .background(ChatSendFlightLayoutAnchor(controller: controller, region: .viewport))
+                .safeAreaInset(edge: .bottom) {
+                    ChatInputDock(maximumHeight: min(availableHeight, geometry.size.height)) {
+                        VStack(spacing: 0) {
+                            if previewHeight > 0 {
+                                Color.clear.frame(height: previewHeight)
+                            }
+                            TelegramMessageComposer(
+                                submissionState: viewModel.sendSubmissionState,
+                                sendFlightController: controller,
+                                text: .constant(draft), isRequestControlsExpanded: .constant(false),
+                                localAgentMode: .constant(.chat), sendAction: { false }, stopAction: {},
+                                slashCommandAction: { _ in }, focus: $focused,
+                                availableWidth: geometry.size.width,
+                                availableHeight: min(availableHeight, geometry.size.height),
+                                isExpandedComposer: startsExpanded
+                            )
+                            if scriptHeight > 0 {
+                                DockScriptTestButton().frame(height: scriptHeight)
+                            }
+                        }
+                    }
+                    .background(ChatSendFlightLayoutAnchor(controller: controller, region: .composer))
                 }
-                .background(ChatSendFlightLayoutAnchor(controller: controller, region: .composer))
-            }
-            .environmentObject(viewModel)
-            .environment(\.chatSendFlightSources, sources)
+                .environmentObject(viewModel)
+                .environment(\.chatSendFlightSources, sources)
+        }
     }
 }

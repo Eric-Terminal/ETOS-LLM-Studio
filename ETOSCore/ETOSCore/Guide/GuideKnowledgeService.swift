@@ -76,6 +76,7 @@ public enum GuideDocumentCatalog {
         GuideMacWorkspaceKnowledge.document(),
         GuideContextCompressionKnowledge.document(),
         GuideChatQuickActionsKnowledge.document(),
+        GuideAdaptiveLayoutKnowledge.document(),
         GuideDataImportKnowledge.document(),
         GuideRemoteAccessKnowledge.document(),
         GuideDocument(
@@ -327,6 +328,8 @@ public enum GuideDocumentCatalog {
             keywords: ["显示", "背景", "裁切", "照片图库", "Markdown", "字体", "字体优先级", "字体规则", "回退范围", "行距", "颜色", "气泡", "自动切换", "功能栏", "快捷入口", "动画", "长消息", "截断", "预览字符数"],
             content: """
             显示设置包括背景图片与填充方式、模糊和透明度、Markdown 与高级渲染器、思考预览、流式显示、聊天气泡、字体路由、颜色配置、消息功能栏、输入快捷功能和动画。iPhone 与 Apple Watch 提供相同的配置能力，但二级页面和控件布局会按屏幕调整。
+
+            iOS 背景预览与“手机比例”裁切使用当前页面可用尺寸，随 iPhone Duo 折叠、展开以及 iPad 分屏更新；手表比例保持 0.82。改变窗口大小后保留缩放并约束取景位置，避免裁切边缘露空。裁切弹窗是独立的只读向导页面，只提供裁切目标、当前预览尺寸和未保存状态，不发送图片数据或文件路径。比例和拖动只改变本页草稿，须手动点击“保存”才创建背景；向导不能代替保存、导入或删除。照片选择器属于系统页面，打开照片选择器或裁切页时停用背景选择页上下文。
 
             Mac 功能栏自定义页沿用 chat.messageActionBar.configuration，助手与用户分别设置有序项目和靠左/靠右延伸，第一项靠近指定边缘；外围边框和 50%–200% 字号共用并叠加正文全局比例。修改只写当前草稿，点击保存才应用；外部配置改变后须重新载入，离页丢弃草稿。根页、功能栏页与介绍独立接入向导；当前角色只读，确认后的提案只能改有序项目、位置、边框与字号草稿，不能保存或执行消息动作。切角色、页面、锁定和外部配置更新使旧提案失效。请求时间使用测速起点或旧 requestedAt，缺失 Token 隐藏、零值保留；费用优先读取已保存快照，缺少时由 Core 按当前价格估算并标注来源，不假设币种。时间、数字和价格匹配后台准备；价格变化刷新旧消息。窄窗口可横向滚动，复制使用完整原文并显示短暂确认，朗读复用 TTS；重试和版本切换遵守当前会话编辑状态，隐藏功能栏仍可使用右键操作。
 

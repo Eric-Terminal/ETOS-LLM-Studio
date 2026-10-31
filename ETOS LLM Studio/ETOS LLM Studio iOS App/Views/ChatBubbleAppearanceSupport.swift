@@ -347,7 +347,7 @@ extension ChatBubble {
     }
 
     var separatorThickness: CGFloat {
-        1 / UIScreen.main.scale
+        1 / displayScale
     }
 
     var separatorColor: Color {
@@ -443,7 +443,7 @@ extension ChatBubble {
     }
 
     var bubbleLayoutBaseWidth: CGFloat {
-        max(layoutWidth ?? UIScreen.main.bounds.width, 1)
+        max(layoutWidth, 1)
     }
 
     var bubbleMaxWidth: CGFloat {

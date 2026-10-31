@@ -296,18 +296,9 @@ extension ChatView {
         resolvePendingSearchJumpIfNeeded()
     }
 
-    func handleChatLayoutChange(isLandscape: Bool) {
-        guard isChatLayoutLandscape != isLandscape else { return }
-        isChatLayoutLandscape = isLandscape
-        if isLandscape {
-            if activeChatPickerSheet == .session {
-                activeChatPickerSheet = nil
-            }
-            isLandscapeSessionSidebarPresented = true
-            return
-        }
-        isLandscapeSessionSidebarPresented = false
-        resetSessionPickerSearchState()
+    func handleChatLayoutChange(isWide: Bool) {
+        // 折叠不等于用户关闭侧栏，也不应关闭正在操作的原生会话 sheet。
+        isChatLayoutWide = isWide
     }
 
     @ViewBuilder

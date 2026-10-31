@@ -14,6 +14,7 @@ import SwiftUI
 import UIKit
 
 struct ChatTranscriptSwiftUIImageConfiguration {
+    let sourceWindow: UIWindow
     let width: CGFloat
     let viewportHeight: CGFloat
     let title: String
@@ -90,7 +91,8 @@ enum ChatTranscriptSwiftUIImageRenderer {
             canvas: canvas,
             width: configuration.width,
             viewportHeight: configuration.viewportHeight,
-            prefersDarkAppearance: configuration.prefersDarkAppearance
+            prefersDarkAppearance: configuration.prefersDarkAppearance,
+            sourceWindow: configuration.sourceWindow
         )
         return try await encodePNG(capturedImage.image, scale: capturedImage.scale)
     }
@@ -760,12 +762,11 @@ private final class ChatTranscriptCGImageBox: @unchecked Sendable {
 extension ChatView {
     func transcriptSwiftUIImageConfiguration(
         session: ChatSession?
-    ) async -> ChatTranscriptSwiftUIImageConfiguration {
-        let windowBounds = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-            .first(where: \.isKeyWindow)?
-            .bounds ?? UIScreen.main.bounds
+    ) async throws -> ChatTranscriptSwiftUIImageConfiguration {
+        guard let sourceWindow = transcriptSourceWindow.window else {
+            throw ChatTranscriptExportError.imageRenderFailed
+        }
+        let windowBounds = sourceWindow.bounds
         let exportWidth = min(430, max(1, windowBounds.width))
         let viewportHeight = max(1, windowBounds.height)
         let backgroundImage = await viewModel.backgroundImageForExport(
@@ -798,6 +799,7 @@ extension ChatView {
         }
 
         return ChatTranscriptSwiftUIImageConfiguration(
+            sourceWindow: sourceWindow,
             width: exportWidth,
             viewportHeight: viewportHeight,
             title: resolvedTitle,

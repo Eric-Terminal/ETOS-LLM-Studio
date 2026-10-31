@@ -158,6 +158,32 @@ struct CodePreviewRuntimeTests {
             if host.presentedViewController?.transitionCoordinator == nil { break }
             try await Task.sleep(for: .milliseconds(20))
         }
+        if scenario == .fullDocument {
+            let presented = try #require(host.presentedViewController)
+            let originalInsets = presented.additionalSafeAreaInsets
+            defer { presented.additionalSafeAreaInsets = originalInsets }
+            // 不改窗口尺寸，只交换侧边保留区域；验证预览不会依赖朝向或对称边距。
+            for insets in [
+                UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 92),
+                UIEdgeInsets(top: 0, left: 92, bottom: 0, right: 0),
+            ] {
+                presented.additionalSafeAreaInsets = insets
+                var contentIsWithinSafeArea = false
+                for _ in 0..<100 {
+                    presented.view.layoutIfNeeded()
+                    let visibleBounds = webView.bounds.inset(by: webView.scrollView.adjustedContentInset)
+                    let contentFrame = webView.convert(visibleBounds, to: presented.view)
+                    let safeFrame = presented.view.safeAreaLayoutGuide.layoutFrame
+                    contentIsWithinSafeArea = contentFrame.width > 0
+                        && contentFrame.minX >= safeFrame.minX - 1
+                        && contentFrame.maxX <= safeFrame.maxX + 1
+                    if contentIsWithinSafeArea { break }
+                    try await Task.sleep(for: .milliseconds(20))
+                }
+                #expect(contentIsWithinSafeArea, "侧边安全区变化后，网页交互内容应仍可完整访问")
+                #expect(try await webView.evaluateJavaScript("document.getElementById('code-action').textContent") as? String == "交互成功")
+            }
+        }
         // DOM 更新完成与 WebKit 提交显示帧并非同一时刻。
         try await Task.sleep(for: .milliseconds(200))
         let previewPNG = UIGraphicsImageRenderer(bounds: window.bounds).pngData { _ in

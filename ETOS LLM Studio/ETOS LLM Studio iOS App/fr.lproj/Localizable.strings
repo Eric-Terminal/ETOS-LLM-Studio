@@ -935,6 +935,8 @@ Veuillez Générer a short, concise Titre for ce conversation based activé le u
 "手表比例" = "Ratio montre";
 "裁切背景" = "Recadrage Arrière-plan";
 "裁切比例" = "Recadrage ratio";
+"guide.background.crop.draft" = "Recadrage non enregistré ; utilisez Enregistrer pour l’appliquer";
+"chat.quickActions.adaptiveFooter" = "Les actions choisies apparaissent dans la barre d’outils du chat ou son menu. Conservez au moins une action.";
 "拖动和缩放以调整取景范围" = "Faites glisser et zoomez pour ajuster le cadrage";
 "错误: 生图提示词不能为空。" = "Erreur : Image Prompt impossible être vide.";
 "当前模型未启用生图能力，请在模型设置中开启“生图”。" = "Ce Modèle doesn't have Image Génération Activé. Tour activé \"Image Génération\" dans Modèle Réglages.";

@@ -18,7 +18,6 @@ extension TelegramMessageComposer {
         cardComposerContent
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .fixedSize(horizontal: false, vertical: !hasUpperComposerContent)
             .frame(maxWidth: .infinity, alignment: .bottom)
             .background(ChatSendFlightLayoutAnchor(controller: sendFlightController, region: .composerContent))
             .animation(adaptiveComposerAnimation, value: adaptivePresentation)
@@ -48,6 +47,8 @@ extension TelegramMessageComposer {
             }
 
             cardToolbar
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(1)
         }
         .frame(maxWidth: .infinity)
         .background(glassRoundedBackground(cornerRadius: 22))
@@ -56,7 +57,9 @@ extension TelegramMessageComposer {
     }
 
     private var cardTextEditor: some View {
-        TextField(
+        // 矮窗口先让出装饰留白，保留一行正文及底部发送工具栏。
+        let verticalPadding = min(22, max(0, availableHeight - 90))
+        return TextField(
             NSLocalizedString("Message", comment: "聊天输入框占位文本"),
             text: $text,
             axis: .vertical
@@ -72,8 +75,8 @@ extension TelegramMessageComposer {
         // 交给系统文本控件逐行扩展；达到六行后内部滚动，避免在输入链路中重复测量全文。
         .lineLimit(1...6)
         .padding(.horizontal, 16)
-        .padding(.top, 14)
-        .padding(.bottom, 8)
+        .padding(.top, verticalPadding * 14 / 22)
+        .padding(.bottom, verticalPadding * 8 / 22)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(ChatSendSourceAnchor(id: .text))
     }

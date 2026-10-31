@@ -935,6 +935,8 @@ Por favor Generar a short, concise Título for este conversation based encendido
 "手表比例" = "Proporción de reloj";
 "裁切背景" = "Recorte Fondo";
 "裁切比例" = "Recorte ratio";
+"guide.background.crop.draft" = "Recorte sin guardar; usa Guardar para aplicarlo";
+"chat.quickActions.adaptiveFooter" = "Las acciones seleccionadas aparecen en la barra del chat o en su menú. Mantén al menos una acción seleccionada.";
 "拖动和缩放以调整取景范围" = "Arrastra y amplía para ajustar el encuadre";
 "错误: 生图提示词不能为空。" = "Error: Imagen Prompt no puede ser vacío.";
 "当前模型未启用生图能力，请在模型设置中开启“生图”。" = "Este Modelo doesn't have Imagen Generación Activado. Turno encendido \"Imagen Generación\" en Modelo Configuración.";

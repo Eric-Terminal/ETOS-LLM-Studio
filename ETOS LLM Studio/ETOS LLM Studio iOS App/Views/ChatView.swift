@@ -92,9 +92,9 @@ struct ChatView: View {
     @State var isQuickWorldbookBindingPresented = false
     @State var selectedModelPickerProviderID: UUID?
     @State var modelPickerShowsAllModels = false
-    @State var isChatLayoutLandscape = false
+    @State var isChatLayoutWide = false
     @State var isLandscapeSessionSidebarPresented = true
-    @State var bottomSafeAreaInset: CGFloat = 0
+    @State var transcriptSourceWindow = ChatTranscriptSourceWindow()
     @State var isKeyboardVisible = false
     @State var chatInputBarHeight: CGFloat = 0
     @State var isComposerRequestControlsExpanded = false
@@ -150,22 +150,11 @@ struct ChatView: View {
     let scrollNavigationButtonHitSize: CGFloat = 44
     let scrollNavigationButtonSpacing: CGFloat = 4
     let scrollToBottomButtonInputSpacing: CGFloat = 16
-    let landscapeSessionSidebarMinWidth: CGFloat = 220
-    let landscapeSessionSidebarMaxWidth: CGFloat = 300
-    let landscapeSessionSidebarWidthRatio: CGFloat = 0.32
     let reasoningPreviewHeightRatio: CGFloat = 0.208
     let reasoningPreviewMinHeight: CGFloat = 118
     let reasoningPreviewMaxHeightLimit: CGFloat = 220
     let sessionPickerMaxSessionsPerPage = 100
     let sessionPickerInfiniteScrollTriggerRemainingCount = 5
-    var tabBarCompensation: CGFloat {
-        guard !isKeyboardVisible else { return 0 }
-        let tabBarHeight = scrollCoordinator.tabBarBaselineHeight
-        guard bottomSafeAreaInset > tabBarHeight + 8, bottomSafeAreaInset < 160 else {
-            return 0
-        }
-        return tabBarHeight
-    }
     var navBarPillHeight: CGFloat {
         navBarTitleFont.lineHeight
             + navBarSubtitleFont.lineHeight
@@ -189,7 +178,11 @@ struct ChatView: View {
         return min(max(scaledHeight, reasoningPreviewMinHeight), reasoningPreviewMaxHeightLimit)
     }
     var usesLandscapeSessionSidebar: Bool {
-        isChatLayoutLandscape
+        isChatLayoutWide
+    }
+    var usesSystemChatToolbar: Bool {
+        if #available(iOS 27.1, *) { return true }
+        return false
     }
     var isModelPickerPresented: Bool {
         activeChatPickerSheet == .model
@@ -397,26 +390,19 @@ struct ChatView: View {
     @ViewBuilder
     var adaptiveChatLayout: some View {
         GeometryReader { proxy in
-            let measuredIsLandscape = proxy.size.width > proxy.size.height
-            let shouldFreezeLayout = isKeyboardVisible || composerFocused || sessionPickerSearchFocused
-            let isLandscape = shouldFreezeLayout ? isChatLayoutLandscape : measuredIsLandscape
-            let chatViewportWidth = max(1, proxy.size.width)
+            let layout = ChatAdaptiveLayout.resolve(
+                size: proxy.size,
+                showsSidebar: isLandscapeSessionSidebarPresented && activeChatPickerSheet != .session,
+                division: chatDivision(in: proxy)
+            )
 
-            Group {
-                if isLandscape {
-                    landscapeChatLayout(chatViewportSize: proxy.size)
-                } else {
-                    chatConversationContent(
-                        chatViewportWidth: chatViewportWidth,
-                        chatViewportSize: proxy.size
-                    )
-                }
-            }
+            // 始终保留同一棵会话子树；宽度变化不能取消录音、附件导入或重建文本编辑器。
+            adaptiveConversationLayout(layout: layout)
             .onAppear {
-                handleChatLayoutChange(isLandscape: isLandscape)
+                handleChatLayoutChange(isWide: layout.canShowSidebar)
             }
-            .onChange(of: isLandscape) { _, newValue in
-                handleChatLayoutChange(isLandscape: newValue)
+            .onChange(of: layout.canShowSidebar) { _, newValue in
+                handleChatLayoutChange(isWide: newValue)
             }
         }
     }

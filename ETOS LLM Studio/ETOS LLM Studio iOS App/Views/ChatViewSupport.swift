@@ -186,14 +186,6 @@ enum ChatScrollTargetID: Hashable {
     case bottom
 }
 
-struct SafeAreaBottomKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
 struct ChatInputBarHeightPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
 

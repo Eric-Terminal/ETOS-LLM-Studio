@@ -33,6 +33,29 @@ struct ChatTranscriptCapturedImage {
 }
 
 @MainActor
+final class ChatTranscriptSourceWindow {
+    weak var view: UIView?
+
+    var window: UIWindow? { view?.window }
+}
+
+/// 导出必须使用发起操作的聊天窗口；弱引用局部视图也能跟随其 scene 迁移。
+struct ChatTranscriptSourceWindowReader: UIViewRepresentable {
+    let source: ChatTranscriptSourceWindow
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.isUserInteractionEnabled = false
+        source.view = view
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        source.view = uiView
+    }
+}
+
+@MainActor
 enum ChatTranscriptSwiftUIImageCapture {
     private static let maximumPixelHeight: CGFloat = 50_000
     private static let maximumBitmapBytes: CGFloat = 128 * 1_024 * 1_024
@@ -43,7 +66,8 @@ enum ChatTranscriptSwiftUIImageCapture {
         canvas: Canvas,
         width: CGFloat,
         viewportHeight: CGFloat,
-        prefersDarkAppearance: Bool
+        prefersDarkAppearance: Bool,
+        sourceWindow: UIWindow
     ) async throws -> ChatTranscriptCapturedImage {
         let fontPreparation = ETFontExportPreparation()
         let hostingController = UIHostingController(rootView: canvas.environment(\.etFontExportPreparation, fontPreparation))
@@ -73,7 +97,7 @@ enum ChatTranscriptSwiftUIImageCapture {
         rootController.view.addSubview(scrollView)
         hostingController.didMove(toParent: rootController)
 
-        let window = makeOffscreenWindow(rootController: rootController)
+        let window = try makeOffscreenWindow(rootController: rootController, sourceWindow: sourceWindow)
         defer {
             hostingController.willMove(toParent: nil)
             hostingController.view.removeFromSuperview()
@@ -221,17 +245,12 @@ enum ChatTranscriptSwiftUIImageCapture {
         throw ChatTranscriptExportError.imageTooLong
     }
 
-    private static func makeOffscreenWindow(rootController: UIViewController) -> UIWindow {
-        let scene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first { $0.activationState == .foregroundActive }
-        let window: UIWindow
-        if let scene {
-            window = UIWindow(windowScene: scene)
-            window.frame = scene.screen.bounds
-        } else {
-            window = UIWindow(frame: UIScreen.main.bounds)
+    private static func makeOffscreenWindow(rootController: UIViewController, sourceWindow: UIWindow) throws -> UIWindow {
+        guard let scene = sourceWindow.windowScene else {
+            throw ChatTranscriptExportError.imageRenderFailed
         }
+        let window = UIWindow(windowScene: scene)
+        window.frame = sourceWindow.frame
         window.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.normal.rawValue - 1)
         window.isUserInteractionEnabled = false
         window.rootViewController = rootController

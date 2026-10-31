@@ -24,52 +24,63 @@ public struct DatabaseUnlockOverlayView: View {
                 .fill(.ultraThinMaterial)
                 .ignoresSafeArea()
 
-            VStack(spacing: 16) {
-                Image(systemName: "externaldrive.badge.key")
-                    .font(.system(size: 40, weight: .semibold))
-                    .foregroundStyle(.primary)
-
-                VStack(spacing: 6) {
-                    Text(NSLocalizedString("数据库已锁定", comment: ""))
-                        .font(.headline)
-                    Text(NSLocalizedString("输入数据库主密码以解锁本机数据。", comment: ""))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-
-                SecureField(NSLocalizedString("数据库主密码", comment: ""), text: $passphrase)
-                    .textContentType(.password)
-                    .submitLabel(.go)
-                    .onSubmit(unlock)
-
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
-                }
-
-                Button {
-                    unlock()
-                } label: {
-                    Label(NSLocalizedString("解锁数据库", comment: ""), systemImage: "lock.open")
+            GeometryReader { geometry in
+                ScrollView(.vertical) {
+                    unlockContent
                         .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(passphrase.isEmpty || isUnlocking)
-
-                if isUnlocking {
-                    ProgressView(NSLocalizedString("正在验证数据库主密码…", comment: ""))
+                        .frame(minHeight: geometry.size.height)
                 }
             }
-            .padding()
-            .frame(maxWidth: 360)
         }
         .onAppear {
             passphrase = ""
             errorMessage = nil
         }
+    }
+
+    // 安全区缩短时允许滚动，避免解锁按钮被键盘或窗口边缘裁掉。
+    private var unlockContent: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "externaldrive.badge.key")
+                .font(.system(size: 40, weight: .semibold))
+                .foregroundStyle(.primary)
+
+            VStack(spacing: 6) {
+                Text(NSLocalizedString("数据库已锁定", comment: ""))
+                    .font(.headline)
+                Text(NSLocalizedString("输入数据库主密码以解锁本机数据。", comment: ""))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            SecureField(NSLocalizedString("数据库主密码", comment: ""), text: $passphrase)
+                .textContentType(.password)
+                .submitLabel(.go)
+                .onSubmit(unlock)
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+            }
+
+            Button {
+                unlock()
+            } label: {
+                Label(NSLocalizedString("解锁数据库", comment: ""), systemImage: "lock.open")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(passphrase.isEmpty || isUnlocking)
+
+            if isUnlocking {
+                ProgressView(NSLocalizedString("正在验证数据库主密码…", comment: ""))
+            }
+        }
+        .padding()
+        .frame(maxWidth: 360)
     }
 
     private func unlock() {

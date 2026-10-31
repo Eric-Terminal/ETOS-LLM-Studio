@@ -292,10 +292,13 @@ extension TelegramMessageComposer {
     }
 
     private var adaptiveRequestControlsPanelHeight: CGFloat {
-        let maximumHeight = min(UIScreen.main.bounds.height * 0.38, 340)
         let agentModeHeight: CGFloat = appConfig.localLinuxEnabled && viewModel.currentSession != nil ? 150 : 0
         let estimatedContentHeight = 82 + agentModeHeight + CGFloat(adaptiveRequestControls.count) * 68
-        return min(maximumHeight, max(124, estimatedContentHeight))
+        return ComposerViewportSizing.requestControlsHeight(
+            availableHeight: availableHeight,
+            estimatedContentHeight: estimatedContentHeight,
+            inputHeight: usesCardComposer ? 100 : adaptiveControlSize
+        )
     }
 
     private var adaptiveInputStrip: some View {
@@ -321,7 +324,7 @@ extension TelegramMessageComposer {
             }
             .frame(height: adaptiveControlSize, alignment: .top)
         }
-        .frame(minHeight: adaptiveControlSize, idealHeight: targetHeight, maxHeight: targetHeight)
+        .frame(minHeight: min(adaptiveControlSize, targetHeight), idealHeight: targetHeight, maxHeight: targetHeight)
         .animation(adaptiveComposerAnimation, value: adaptiveShowsRequestControlsButton)
         .animation(adaptiveComposerAnimation, value: viewModel.enableSpeechInput)
     }
@@ -389,8 +392,10 @@ extension TelegramMessageComposer {
                 isCustomFontEnabled: appConfig.fontUseCustomFonts
             )
         )
-        let rawHeight = UIScreen.main.bounds.height * 0.3
-        return max(160 * fontScale, min(rawHeight, 360 * fontScale))
+        return ComposerViewportSizing.expandedTextHeight(
+            availableHeight: availableHeight,
+            fontScale: fontScale
+        )
     }
 
     private var adaptiveRequestControlsButton: some View {

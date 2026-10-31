@@ -23,18 +23,21 @@ struct SurveyResponseSheet: View {
             .font(.footnote)
             .foregroundStyle(.secondary)
 
-            AskUserInputComposerPanel(
-                request: survey.inputRequest,
-                submitAction: { answers in
-                    Task {
-                        await manager.submit(answers)
+            GeometryReader { geometry in
+                AskUserInputComposerPanel(
+                    request: survey.inputRequest,
+                    availableHeight: geometry.size.height,
+                    submitAction: { answers in
+                        Task {
+                            await manager.submit(answers)
+                        }
+                    },
+                    cancelAction: {
+                        isCancellationConfirmationPresented = true
                     }
-                },
-                cancelAction: {
-                    isCancellationConfirmationPresented = true
-                }
-            )
-            .allowsHitTesting(!manager.isSubmitting)
+                )
+                .allowsHitTesting(!manager.isSubmitting)
+            }
 
             if manager.isSubmitting {
                 ProgressView(NSLocalizedString("正在提交…", comment: "Survey submission progress"))

@@ -32,11 +32,6 @@ struct BackgroundPickerView: View {
     
     private let gridSpacing: CGFloat = 16
     private let gridPadding: CGFloat = 16
-    private var previewAspectRatio: CGFloat {
-        let size = UIScreen.main.bounds.size
-        guard size.height > 0 else { return 9.0 / 16.0 }
-        return size.width / size.height
-    }
     
     private var selectedCropTarget: BackgroundCropTarget {
         get { BackgroundCropTarget(rawValue: appConfig.backgroundCropTarget) ?? .phone }
@@ -50,6 +45,7 @@ struct BackgroundPickerView: View {
                 id: "settings-background-picker",
                 title: NSLocalizedString("选择背景", comment: "背景选择向导上下文标题"),
                 documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+                isActive: !isShowingPhotoPicker && !isShowingCropEditor,
                 settings: backgroundGuideSettings
             )
             .toolbar { addBackgroundToolbar }
@@ -59,12 +55,6 @@ struct BackgroundPickerView: View {
                 Task {
                     await prepareBackground(from: newItem)
                 }
-            }
-            .sheet(isPresented: $isShowingCropEditor, onDismiss: {
-                pendingCropImage = nil
-                selectedItem = nil
-            }) {
-                cropEditorSheetContent
             }
             .alert(NSLocalizedString("无法保存背景", comment: ""), isPresented: saveErrorAlertPresentedBinding) {
                 Button(NSLocalizedString("确定", comment: ""), role: .cancel) {}
@@ -116,6 +106,7 @@ struct BackgroundPickerView: View {
     
     private var contentView: some View {
         GeometryReader { proxy in
+            let previewAspectRatio = BackgroundCropTarget.phone.aspectRatio(in: proxy.size)
             let availableWidth = proxy.size.width - gridPadding * 2
             let itemWidth = max((availableWidth - gridSpacing) / 2, 0)
             let itemHeight = itemWidth / previewAspectRatio
@@ -154,6 +145,12 @@ struct BackgroundPickerView: View {
                 .padding(.horizontal, gridPadding)
                 .padding(.vertical, gridPadding)
             }
+            .sheet(isPresented: $isShowingCropEditor, onDismiss: {
+                pendingCropImage = nil
+                selectedItem = nil
+            }) {
+                cropEditorSheetContent(viewportSize: proxy.size)
+            }
         }
     }
     
@@ -170,11 +167,12 @@ struct BackgroundPickerView: View {
     }
     
     @ViewBuilder
-    private var cropEditorSheetContent: some View {
+    private func cropEditorSheetContent(viewportSize: CGSize) -> some View {
         if let pendingCropImage {
             BackgroundCropEditorView(
                 sourceImage: pendingCropImage,
                 initialTarget: selectedCropTarget,
+                viewportSize: viewportSize,
                 onCancel: {
                     isShowingCropEditor = false
                     selectedItem = nil
@@ -356,7 +354,7 @@ struct BackgroundPickerView: View {
     }
 }
 
-private enum BackgroundCropTarget: String, CaseIterable, Identifiable {
+enum BackgroundCropTarget: String, CaseIterable, Identifiable {
     case phone
     case watch
     
@@ -371,12 +369,10 @@ private enum BackgroundCropTarget: String, CaseIterable, Identifiable {
         }
     }
     
-    var aspectRatio: CGFloat {
+    func aspectRatio(in viewportSize: CGSize) -> CGFloat {
         switch self {
         case .phone:
-            let size = UIScreen.main.bounds.size
-            guard size.height > 0 else { return 9.0 / 16.0 }
-            return size.width / size.height
+            return max(viewportSize.width, 1) / max(viewportSize.height, 1)
         case .watch:
             return 0.82
         }
@@ -386,11 +382,13 @@ private enum BackgroundCropTarget: String, CaseIterable, Identifiable {
 private struct BackgroundCropEditorView: View {
     let sourceImage: UIImage
     let initialTarget: BackgroundCropTarget
+    let viewportSize: CGSize
     let onCancel: () -> Void
     let onConfirm: (UIImage, BackgroundCropTarget) -> Void
     @Environment(\.colorScheme) private var colorScheme
     
     @State private var selectedTarget: BackgroundCropTarget
+    @State private var guideViewportSize: CGSize
     @State private var zoomScale: CGFloat = 1
     @State private var imageOffset: CGSize = .zero
     @GestureState private var dragTranslation: CGSize = .zero
@@ -399,14 +397,17 @@ private struct BackgroundCropEditorView: View {
     init(
         sourceImage: UIImage,
         initialTarget: BackgroundCropTarget,
+        viewportSize: CGSize,
         onCancel: @escaping () -> Void,
         onConfirm: @escaping (UIImage, BackgroundCropTarget) -> Void
     ) {
         self.sourceImage = sourceImage
         self.initialTarget = initialTarget
+        self.viewportSize = viewportSize
         self.onCancel = onCancel
         self.onConfirm = onConfirm
         _selectedTarget = State(initialValue: initialTarget)
+        _guideViewportSize = State(initialValue: viewportSize)
     }
     
     var body: some View {
@@ -427,7 +428,7 @@ private struct BackgroundCropEditorView: View {
                 
                 GeometryReader { proxy in
                     let canvasSize = proxy.size
-                    let cropRect = cropRect(in: canvasSize, aspectRatio: selectedTarget.aspectRatio)
+                    let cropRect = cropRect(in: canvasSize, aspectRatio: selectedTarget.aspectRatio(in: viewportSize))
                     let currentScale = combinedScale
                     let renderedSize = renderedImageSize(for: cropRect, scale: currentScale)
                     let effectiveOffset = effectiveOffset(for: renderedSize, cropRect: cropRect)
@@ -457,6 +458,10 @@ private struct BackgroundCropEditorView: View {
                                 imageOffset = clampOffset(imageOffset, renderedSize: renderedSize, cropRect: cropRect)
                             }
                             .onChange(of: zoomScale) { _, _ in
+                                imageOffset = clampOffset(imageOffset, renderedSize: renderedSize, cropRect: cropRect)
+                            }
+                            .onChange(of: cropRect) { _, _ in
+                                // 折叠或分屏会改变取景比例，沿用缩放并把焦点约束在新裁切范围内。
                                 imageOffset = clampOffset(imageOffset, renderedSize: renderedSize, cropRect: cropRect)
                             }
                         
@@ -489,6 +494,28 @@ private struct BackgroundCropEditorView: View {
             .navigationTitle(NSLocalizedString("裁切背景", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
             .background(editorPageBackground.ignoresSafeArea())
+            .guideSettingsPageContext(
+                id: "settings-background-crop",
+                title: NSLocalizedString("裁切背景", comment: "背景裁切向导标题"),
+                documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+                settings: [
+                    .readOnly("crop_target", label: NSLocalizedString("裁切比例", comment: ""), value: {
+                        .string(selectedTarget.rawValue)
+                    }),
+                    .readOnly("preview_size", label: NSLocalizedString("预览", comment: ""), value: {
+                        .dictionary([
+                            "width": .double(Double(guideViewportSize.width)),
+                            "height": .double(Double(guideViewportSize.height))
+                        ])
+                    }),
+                    .readOnly("requires_native_save", label: NSLocalizedString("guide.background.crop.draft", value: "Unsaved crop; use Save to apply", comment: "裁切草稿须原生保存"), value: {
+                        .bool(true)
+                    })
+                ]
+            )
+            .onChange(of: viewportSize) { _, newSize in
+                guideViewportSize = newSize
+            }
         }
         .presentationDragIndicator(.visible)
         .presentationDetents([.large])

@@ -73,7 +73,7 @@ enum BrowserFullPageCapture {
         #if os(macOS)
         let scale = max(webView.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 1, 1)
         #else
-        let scale = max(webView.window?.screen.scale ?? UIScreen.main.scale, 1)
+        let scale = max(webView.traitCollection.displayScale, 1)
         #endif
         let pixelLimitedHeight = CGFloat(Self.maximumPixels) / (viewportWidth * scale * scale)
         let captureHeight = min(metrics.scrollHeight, Self.maximumCSSHeight, pixelLimitedHeight)

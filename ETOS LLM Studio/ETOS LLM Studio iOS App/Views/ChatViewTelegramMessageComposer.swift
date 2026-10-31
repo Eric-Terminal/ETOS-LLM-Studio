@@ -33,7 +33,8 @@ struct TelegramMessageComposer: View {
     let stopAction: () -> Void
     let slashCommandAction: (ChatSlashCommand) -> Void
     let focus: FocusState<Bool>.Binding
-    var availableHeight: CGFloat = .infinity
+    let availableWidth: CGFloat
+    let availableHeight: CGFloat
 
     @State private var showImagePicker = false
     @State private var showCamera = false
@@ -45,6 +46,7 @@ struct TelegramMessageComposer: View {
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var photoImportTask: Task<Void, Never>?
     @State private var cameraImagePreparationTask: Task<Void, Never>?
+    @State private var autoExpandTask: Task<Void, Never>?
     @State var isExpandedComposer = false
     @State var adaptiveRequestControls: [ModelRequestBodyControl] = []
     @State var adaptiveHasSendableText = false
@@ -62,19 +64,13 @@ struct TelegramMessageComposer: View {
     private var measuredInputPointSize: CGFloat {
         CGFloat(FontLibrary.scaledPointSize(Double(inputBasePointSize), scale: appConfig.fontCustomScale, isCustomFontEnabled: appConfig.fontUseCustomFonts))
     }
-    private var inputUIFont: UIFont {
-        .systemFont(ofSize: measuredInputPointSize)
-    }
-    private var composerReservedHeight: CGFloat {
-        adaptiveControlSize + 16
-    }
     var hasUpperComposerContent: Bool {
         !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil
             || !viewModel.pendingFileAttachments.isEmpty
             || (!slashCommandSuggestions.isEmpty && !isRequestControlsExpanded)
     }
     private var estimatedCompactInputWidth: CGFloat {
-        max(0, UIScreen.main.bounds.width - 16 * 2 - adaptiveControlSize * 2 - 10 * 2)
+        max(0, availableWidth - 16 * 2 - adaptiveControlSize * 2 - 10 * 2)
     }
     private let textContainerInset: CGFloat = 8
     private let textHorizontalPadding: CGFloat = 10
@@ -117,9 +113,8 @@ struct TelegramMessageComposer: View {
                     cardComposerLayout
                         .zIndex(1)
                 } else {
-                    // 上方存在附件或建议时必须报告真实高度，不能从固定占位向上盖住兄弟控件。
+                    // 停靠区负责整体滚动；展开编辑器必须报告真实高度，不能溢出占位后被裁切。
                     composerOverlayContent
-                        .frame(height: hasUpperComposerContent ? nil : composerReservedHeight, alignment: .bottom)
                         .zIndex(1)
                 }
             }
@@ -175,6 +170,10 @@ struct TelegramMessageComposer: View {
         .onChange(of: text) { _, newValue in
             handleAutoExpand(for: newValue)
         }
+        .onChange(of: availableWidth) { _, _ in
+            // 折叠和侧栏变化也会重新换行，不能等下一次输入才更新展开状态。
+            handleAutoExpand(for: text)
+        }
         .onChange(of: appConfig.enableSlashCommands) { _, _ in
             refreshSlashCommandState(for: text)
         }
@@ -201,9 +200,13 @@ struct TelegramMessageComposer: View {
                     }
                 }
                 handleAutoExpand(for: text)
-            } else if isExpandedComposer {
-                withAnimation(adaptiveComposerAnimation) {
-                    isExpandedComposer = false
+            } else {
+                autoExpandTask?.cancel()
+                autoExpandTask = nil
+                if isExpandedComposer {
+                    withAnimation(adaptiveComposerAnimation) {
+                        isExpandedComposer = false
+                    }
                 }
             }
         }
@@ -213,6 +216,8 @@ struct TelegramMessageComposer: View {
             Text(inlineSpeechErrorMessage ?? NSLocalizedString("发生未知错误，请稍后重试。", comment: ""))
         }
         .onDisappear {
+            autoExpandTask?.cancel()
+            autoExpandTask = nil
             photoImportTask?.cancel()
             photoImportTask = nil
             cameraImagePreparationTask?.cancel()
@@ -293,13 +298,13 @@ struct TelegramMessageComposer: View {
     }
 
     private var composerOverlayContent: some View {
-        // 无附件时保留向上展开；有兄弟时接受键盘上方的有限高度，让正文在编辑器内滚动。
+        // 无附件时使用已限制的理想高度；有兄弟时接受剩余提案，让正文在编辑器内滚动。
         adaptiveComposerContent
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .fixedSize(horizontal: false, vertical: !hasUpperComposerContent)
             .frame(maxWidth: .infinity, alignment: .bottom)
-            // 测真实展开内容，不能把外层 60pt 占位当成输入框顶部。
+            // 发送动画始终取实际编辑区边界。
             .background(ChatSendFlightLayoutAnchor(controller: sendFlightController, region: .composerContent))
             .animation(adaptiveComposerAnimation, value: isExpandedComposer)
             .animation(adaptiveComposerAnimation, value: inlineSpeechRecorder.phase)
@@ -547,6 +552,8 @@ struct TelegramMessageComposer: View {
     }
 
     private func handleAutoExpand(for newValue: String) {
+        autoExpandTask?.cancel()
+        autoExpandTask = nil
         refreshSlashCommandState(for: newValue)
         let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
         // 复用自动展开时的文本规整结果，避免视图渲染时重复扫描草稿。
@@ -573,27 +580,30 @@ struct TelegramMessageComposer: View {
             showsRequestControls: !adaptiveRequestControls.isEmpty,
             showsSpeechButton: viewModel.enableSpeechInput
         )
-        let hasExplicitNewline = newValue.contains("\n")
-        var shouldExpand = hasExplicitNewline
-
-        if availableWidth > 0 {
-            let lineCount = measuredTextLineCount(for: newValue, width: availableWidth)
-            shouldExpand = hasExplicitNewline || lineCount > 1
-        }
-
-        if shouldExpand {
-            let wasFocused = focus.wrappedValue
-            guard !isExpandedComposer else { return }
-            withAnimation(adaptiveComposerAnimation) {
-                isExpandedComposer = true
+        let pointSize = measuredInputPointSize
+        autoExpandTask = Task { @MainActor in
+            // 窗口连续缩放时只应用最后一次测量，长草稿的 TextKit 排版不占用主线程。
+            let measurement = Task.detached(priority: .userInitiated) {
+                newValue.contains("\n") || (
+                    availableWidth > 0 && Self.measuredTextLineCount(
+                        for: newValue,
+                        width: availableWidth,
+                        pointSize: pointSize
+                    ) > 1
+                )
             }
-            if wasFocused {
-                focus.wrappedValue = true
+            let shouldExpand = await withTaskCancellationHandler {
+                await measurement.value
+            } onCancel: {
+                measurement.cancel()
             }
-        } else if isExpandedComposer {
-            withAnimation(adaptiveComposerAnimation) {
-                isExpandedComposer = false
+            guard !Task.isCancelled else { return }
+            if shouldExpand != isExpandedComposer {
+                withAnimation(adaptiveComposerAnimation) {
+                    isExpandedComposer = shouldExpand
+                }
             }
+            autoExpandTask = nil
         }
     }
 
@@ -640,15 +650,17 @@ struct TelegramMessageComposer: View {
         }
     }
 
-    private func measuredTextLineCount(for value: String, width: CGFloat) -> Int {
-        let textStorage = NSTextStorage(string: value, attributes: [.font: inputUIFont])
+    nonisolated private static func measuredTextLineCount(for value: String, width: CGFloat, pointSize: CGFloat) -> Int {
+        guard !Task.isCancelled else { return 1 }
+        let textStorage = NSTextStorage(string: value, attributes: [.font: UIFont.systemFont(ofSize: pointSize)])
         let layoutManager = NSLayoutManager()
         layoutManager.usesFontLeading = true
 
         let textContainer = NSTextContainer(size: CGSize(width: width, height: .greatestFiniteMagnitude))
         // 数实际行片段，避免单行字体 leading 被高度换算误判成两行。
         textContainer.lineFragmentPadding = 0
-        textContainer.maximumNumberOfLines = 0
+        // 只需区分单行与多行，避免为展开判定排版整份长草稿。
+        textContainer.maximumNumberOfLines = 2
         textContainer.lineBreakMode = .byWordWrapping
 
         layoutManager.addTextContainer(textContainer)

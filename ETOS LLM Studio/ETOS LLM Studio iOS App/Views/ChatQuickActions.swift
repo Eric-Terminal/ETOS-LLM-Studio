@@ -48,14 +48,16 @@ struct ChatQuickActionSettingsView: View {
                     .disabled(selectedActions.count == 1 && selectedActions.contains(action))
                 }
             } footer: {
-                Text(NSLocalizedString("选择一个功能时会直接执行；选择多个功能时，聊天页按钮会展开自适应快捷文件夹。至少保留一个功能。", comment: "聊天快捷功能设置说明"))
+                Text(NSLocalizedString("chat.quickActions.adaptiveFooter", value: "Selected actions appear in the chat toolbar or its menu. Keep at least one action selected.", comment: "自适应聊天快捷功能设置说明"))
             }
         }
         .navigationTitle(NSLocalizedString("聊天快捷功能", comment: "聊天快捷功能设置页标题"))
         .guideSettingsPageContext(
             id: "settings-chat-quick-actions",
             title: NSLocalizedString("聊天快捷功能", comment: "聊天快捷功能向导上下文标题"),
-            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings"),
+                GuideDocumentReference(id: "chat-quick-actions", title: "Chat Quick Actions"),
+                GuideDocumentReference(id: "adaptive-layout", title: "Adaptive Layout")],
             settings: [
                 .json(
                     "actions",

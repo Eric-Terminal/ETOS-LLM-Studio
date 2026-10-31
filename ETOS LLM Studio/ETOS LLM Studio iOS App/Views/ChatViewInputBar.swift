@@ -35,10 +35,11 @@ extension ChatView {
 
     /// Telegram 风格输入栏
     @ViewBuilder
-    func telegramInputBar(availableHeight: CGFloat) -> some View {
+    func telegramInputBar(availableSize: CGSize) -> some View {
         if let request = viewModel.activeAskUserInputRequest {
             AskUserInputComposerPanel(
                 request: request,
+                availableHeight: max(0, availableSize.height - 6),
                 submitAction: { answers in
                     composerFocused = false
                     draftText = ""
@@ -51,7 +52,7 @@ extension ChatView {
                 }
             )
             .padding(.horizontal, 12)
-            .padding(.bottom, 6 - tabBarCompensation)
+            .padding(.bottom, 6)
         } else {
             TelegramMessageComposer(
                 submissionState: viewModel.sendSubmissionState,
@@ -93,9 +94,9 @@ extension ChatView {
                 },
                 slashCommandAction: performSlashCommand,
                 focus: $composerFocused,
-                availableHeight: availableHeight
+                availableWidth: availableSize.width,
+                availableHeight: availableSize.height
             )
-            .padding(.bottom, -tabBarCompensation)
         }
     }
 

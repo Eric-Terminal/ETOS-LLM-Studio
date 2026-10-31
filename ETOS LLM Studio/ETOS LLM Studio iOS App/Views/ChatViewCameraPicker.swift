@@ -9,26 +9,13 @@
 import SwiftUI
 import UIKit
 
-final class PortraitCameraImagePickerController: UIImagePickerController {
-    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        .portrait
-    }
-
-    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
-        .portrait
-    }
-
-    override var shouldAutorotate: Bool {
-        false
-    }
-}
-
 struct CameraImagePicker: UIViewControllerRepresentable {
     @Binding var isPresented: Bool
     let onImagePicked: (UIImage?) -> Void
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = PortraitCameraImagePickerController()
+        // 系统相机不支持子类化，方向与不同显示区域的适配交由系统控制。
+        let picker = UIImagePickerController()
         picker.sourceType = .camera
         picker.cameraCaptureMode = .photo
         picker.allowsEditing = false

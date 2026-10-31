@@ -205,13 +205,12 @@ private struct ETCodePreviewSheet: View {
                     prefersDarkPalette: prefersDarkPalette
                 )
             )
-            .ignoresSafeArea()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
                         dismiss()
                     } label: {
-                        Image(systemName: "xmark")
+                        Label(NSLocalizedString("关闭", comment: "关闭代码预览"), systemImage: "xmark")
                     }
                 }
             }
@@ -237,9 +236,6 @@ private struct ETCodePreviewWebView: UIViewRepresentable {
         webView.scrollView.backgroundColor = .clear
         webView.scrollView.isScrollEnabled = true
         webView.scrollView.bounces = true
-        webView.scrollView.contentInsetAdjustmentBehavior = .never
-        webView.scrollView.contentInset = .zero
-        webView.scrollView.scrollIndicatorInsets = .zero
         webView.allowsBackForwardNavigationGestures = true
         webView.allowsLinkPreview = true
         webView.isUserInteractionEnabled = true

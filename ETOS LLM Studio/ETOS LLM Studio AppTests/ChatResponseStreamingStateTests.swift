@@ -13,6 +13,7 @@ struct ChatResponseStreamingStateTests {
         let state = ChatMessageRenderState(message: message)
         let bubble = ChatBubble(
             messageState: state,
+            layoutWidth: 370,
             isReasoningExpanded: .constant(false),
             isToolCallsExpanded: .constant(false),
             enableMarkdown: true,

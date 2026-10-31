@@ -16,20 +16,15 @@ import AVFoundation
 import UniformTypeIdentifiers
 
 extension ChatView {
-    func landscapeChatLayout(chatViewportSize: CGSize) -> some View {
-        let chatViewportWidth = max(1, chatViewportSize.width)
-        let expandedSidebarWidth = landscapeSessionSidebarWidth(for: chatViewportWidth)
-        let sidebarWidth = isLandscapeSessionSidebarPresented ? expandedSidebarWidth : 0
-        let detailWidth = max(1, chatViewportWidth - sidebarWidth)
-
-        return ZStack {
+    func adaptiveConversationLayout(layout: ChatAdaptiveLayout) -> some View {
+        ZStack {
             telegramBackgroundLayer
                 .ignoresSafeArea()
 
             HStack(spacing: 0) {
-                if isLandscapeSessionSidebarPresented {
+                if layout.sidebarWidth > 0 {
                     landscapeSessionSidebar
-                        .frame(width: expandedSidebarWidth)
+                        .frame(width: layout.sidebarWidth)
                         .frame(maxHeight: .infinity)
                         .background(.regularMaterial)
                         .overlay(alignment: .trailing) {
@@ -37,47 +32,42 @@ extension ChatView {
                                 .frame(width: 0.5)
                                 .frame(maxHeight: .infinity)
                         }
-                        .transition(.move(edge: .leading).combined(with: .opacity))
+                    Color.clear.frame(width: layout.sidebarGap)
                 }
 
                 chatConversationContent(
-                    chatViewportWidth: detailWidth,
-                    chatViewportSize: CGSize(width: detailWidth, height: chatViewportSize.height),
-                    showsBackground: false
+                    chatViewportWidth: layout.detailWidth,
+                    chatViewportSize: CGSize(width: layout.detailWidth, height: layout.size.height),
+                    composerWidth: layout.composerWidth,
+                    composerOnLeadingSide: layout.composerOnLeadingSide,
+                    composerHeightLimit: layout.composerHeightLimit,
+                    composerBottomInset: layout.composerBottomInset
                 )
-                .frame(width: detailWidth)
+                .frame(width: layout.detailWidth)
                 .frame(maxHeight: .infinity)
             }
-            .frame(width: chatViewportWidth, alignment: .leading)
+            .frame(width: layout.size.width, alignment: .leading)
             .frame(maxHeight: .infinity)
         }
-    }
-
-    func landscapeSessionSidebarWidth(for viewportWidth: CGFloat) -> CGFloat {
-        min(
-            landscapeSessionSidebarMaxWidth,
-            max(landscapeSessionSidebarMinWidth, viewportWidth * landscapeSessionSidebarWidthRatio)
-        )
     }
 
     @ViewBuilder
     func chatConversationContent(
         chatViewportWidth: CGFloat,
         chatViewportSize: CGSize,
-        showsBackground: Bool = true
+        composerWidth: CGFloat,
+        composerOnLeadingSide: Bool,
+        composerHeightLimit: CGFloat,
+        composerBottomInset: CGFloat
     ) -> some View {
         let displayedMessages = viewModel.displayMessages
         let sessionMessages = viewModel.allMessagesForSession
         let retryableMessageIDs = viewModel.retryableMessageIDs
         let messageLayoutWidth = max(1, chatViewportWidth - 16)
         let reasoningPreviewMaxHeight = responsiveReasoningPreviewMaxHeight(for: chatViewportSize.height)
+        let composerAvailableHeight = max(0, min(composerHeightLimit, chatViewportSize.height
+            - (usesSystemChatToolbar ? 0 : navBarHeight)) - 8)
         ZStack {
-                // Z-Index 0: 背景壁纸层（穿透安全区）
-                if showsBackground {
-                    telegramBackgroundLayer
-                        .ignoresSafeArea()
-                }
-
                 // Z-Index 1: 消息列表
                 ScrollViewReader { chatScrollProxy in
                 ScrollView {
@@ -621,42 +611,46 @@ extension ChatView {
                     }
                 }
                 .overlay(alignment: .top) {
-                    if viewModel.enableChatTopBlurFade {
+                    if viewModel.enableChatTopBlurFade && !usesSystemChatToolbar {
                         navBarFadeBlurOverlay
                     }
                 }
                 // Telegram 风格：顶部导航栏
                 .safeAreaInset(edge: .top) {
-                    telegramNavBar
-                        .frame(width: chatViewportWidth)
+                    if !usesSystemChatToolbar {
+                        telegramNavBar
+                            .frame(width: chatViewportWidth)
+                    }
                 }
                 // Telegram 风格：底部输入栏
                 .safeAreaInset(edge: .bottom) {
-                    VStack(spacing: 0) {
-                        if LocalLinuxChatPreviewPlacement.normalized(appConfig.localLinuxChatPreviewPlacement) == .aboveInput {
-                            LocalLinuxChatDockedPreview(
-                                mode: LocalLinuxChatPreviewMode
-                                    .normalized(appConfig.localLinuxChatPreviewMode)
-                                    .resolved(for: currentLocalAgentMode),
-                                isLocalLinuxEnabled: appConfig.localLinuxEnabled,
-                                agentToolPreview: viewModel.latestAgentToolExecutionPreview,
-                                isLiquidGlassEnabled: isLiquidGlassEnabled,
-                                onOpenTerminal: { jobID in
-                                    localTerminalInitialJobID = jobID
-                                    navigationDestination = .localTerminal
-                                },
-                                onOpenBrowser: {
-                                    navigationDestination = .browser
-                                }
-                            )
-                            .padding(.horizontal, 12)
-                            .padding(.bottom, 6)
-                        }
+                    ChatInputDock(maximumHeight: composerAvailableHeight) {
+                        VStack(spacing: 0) {
+                            if LocalLinuxChatPreviewPlacement.normalized(appConfig.localLinuxChatPreviewPlacement) == .aboveInput {
+                                LocalLinuxChatDockedPreview(
+                                    mode: LocalLinuxChatPreviewMode
+                                        .normalized(appConfig.localLinuxChatPreviewMode)
+                                        .resolved(for: currentLocalAgentMode),
+                                    isLocalLinuxEnabled: appConfig.localLinuxEnabled,
+                                    agentToolPreview: viewModel.latestAgentToolExecutionPreview,
+                                    isLiquidGlassEnabled: isLiquidGlassEnabled,
+                                    onOpenTerminal: { jobID in
+                                        localTerminalInitialJobID = jobID
+                                        navigationDestination = .localTerminal
+                                    },
+                                    onOpenBrowser: {
+                                        navigationDestination = .browser
+                                    }
+                                )
+                                .padding(.horizontal, 12)
+                                .padding(.bottom, 6)
+                            }
 
-                        telegramInputBar(
-                            availableHeight: max(0, chatViewportSize.height - navBarHeight - 8)
-                        )
-                        RoleplayScriptButtonBar(sessionID: viewModel.currentSession?.id)
+                            telegramInputBar(
+                                availableSize: CGSize(width: composerWidth, height: composerAvailableHeight)
+                            )
+                            RoleplayScriptButtonBar(sessionID: viewModel.currentSession?.id)
+                        }
                     }
                         .animation(
                             accessibilityReduceMotion
@@ -664,7 +658,9 @@ extension ChatView {
                                 : .spring(response: 0.32, dampingFraction: 1),
                             value: appConfig.localLinuxChatPreviewPlacement
                         )
-                        .frame(width: chatViewportWidth)
+                        .frame(width: composerWidth)
+                        .frame(width: chatViewportWidth, alignment: composerOnLeadingSide ? .leading : .trailing)
+                        .padding(.bottom, composerBottomInset)
                         .background(ChatSendFlightLayoutAnchor(controller: sendFlightController, region: .composer))
                         .background(
                             GeometryReader { proxy in
@@ -702,7 +698,7 @@ extension ChatView {
                 }
                 }
 
-                if selectedChatQuickActions.count > 1 {
+                if !usesSystemChatToolbar && selectedChatQuickActions.count > 1 {
                     chatQuickActionFolderOverlay(viewportWidth: chatViewportWidth)
                         .zIndex(40)
                 }
@@ -710,7 +706,7 @@ extension ChatView {
                 if shouldShowLocalResourceUsageFloatingPanel {
                     LocalResourceUsageFloatingPanel(
                         containerSize: chatViewportSize,
-                        topPadding: navBarHeight + 12,
+                        topPadding: (usesSystemChatToolbar ? 0 : navBarHeight) + 12,
                         leadingPadding: 16,
                         offset: $localResourceUsagePanelOffset,
                         isLiquidGlassEnabled: isLiquidGlassEnabled
@@ -728,7 +724,7 @@ extension ChatView {
                         agentToolPreview: viewModel.latestAgentToolExecutionPreview,
                         sessionID: viewModel.currentSession?.id,
                         containerSize: chatViewportSize,
-                        topPadding: navBarHeight + 12,
+                        topPadding: (usesSystemChatToolbar ? 0 : navBarHeight) + 12,
                         bottomPadding: max(16, chatInputBarHeight + 16),
                         offset: $localTerminalPreviewOffset,
                         isLiquidGlassEnabled: isLiquidGlassEnabled,
@@ -794,15 +790,7 @@ extension ChatView {
             .onPreferenceChange(FlightTargetRectKey.self) { rect in
                 handleFlightTargetRect(rect)
             }
-            .background(
-                GeometryReader { proxy in
-                    Color.clear
-                        .preference(key: SafeAreaBottomKey.self, value: proxy.safeAreaInsets.bottom)
-                }
-            )
-            .onPreferenceChange(SafeAreaBottomKey.self) { newValue in
-                bottomSafeAreaInset = newValue
-            }
+            .background(ChatTranscriptSourceWindowReader(source: transcriptSourceWindow))
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                 beginChatLayoutSettling(
                     keepBottomPinned: resolvedBottomPinIntentForViewportChange(),
@@ -851,7 +839,15 @@ extension ChatView {
                 chatTransientNoticeDismissTask = nil
                 chatTransientNotice = nil
             }
-            .toolbar(.hidden, for: .navigationBar)
+            .toolbar(usesSystemChatToolbar ? .visible : .hidden, for: .navigationBar)
+            .navigationTitle(viewModel.currentSession?.name ?? NSLocalizedString("新的对话", comment: ""))
+            .navigationBarTitleDisplayMode(.inline)
+            .modifier(ChatNavigationSubtitle(modelName: modelSubtitle))
+            .toolbar {
+                if #available(iOS 27.1, *) {
+                    adaptiveChatToolbar
+                }
+            }
             .toolbar(.hidden, for: .tabBar)
             .animation(.easeInOut(duration: 0.2), value: viewModel.memoryRetryStoppedNoticeMessage)
         }

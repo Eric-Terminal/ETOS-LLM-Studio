@@ -25,7 +25,7 @@ public struct AppLockOverlayView: View {
                 .fill(.ultraThinMaterial)
                 .ignoresSafeArea()
 
-            #if os(watchOS)
+            // 矮窗口与键盘出现时仍能滚到所有解锁控件，空间充足时保持居中。
             GeometryReader { geometry in
                 ScrollView(.vertical) {
                     lockContent
@@ -33,9 +33,6 @@ public struct AppLockOverlayView: View {
                         .frame(minHeight: geometry.size.height)
                 }
             }
-            #else
-            lockContent
-            #endif
         }
         .onAppear {
             password = ""
