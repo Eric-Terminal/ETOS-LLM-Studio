@@ -502,6 +502,7 @@ public final class AppConfigStore: ObservableObject {
         modelPickerFolderPathsByProvider = updated
     }
     @Published public var chatQuickActionIDs: String { didSet { write(.chatQuickActionIDs, chatQuickActionIDs) } }
+    @Published public var chatToolbarActionIDs: String { didSet { write(.chatToolbarActionIDs, chatToolbarActionIDs) } }
     @Published public var temporaryChatMemoryEnabled: Bool {
         didSet { write(.temporaryChatMemoryEnabled, temporaryChatMemoryEnabled) }
     }
@@ -796,6 +797,7 @@ public final class AppConfigStore: ObservableObject {
             from: Self.textValue(.modelPickerFolderPathsByProvider, userDefaults: userDefaults)
         ) ?? [:]
         chatQuickActionIDs = Self.textValue(.chatQuickActionIDs, userDefaults: userDefaults)
+        chatToolbarActionIDs = Self.textValue(.chatToolbarActionIDs, userDefaults: userDefaults)
         temporaryChatMemoryEnabled = Self.boolValue(.temporaryChatMemoryEnabled, userDefaults: userDefaults)
         enableSlashCommands = Self.boolValue(.enableSlashCommands, userDefaults: userDefaults)
         chatComposerStyle = ChatComposerStyle.normalized(

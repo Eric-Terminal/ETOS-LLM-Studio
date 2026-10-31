@@ -36,6 +36,8 @@ struct ChatView: View {
     @State var navigationDestination: ChatQuickAction?
     @State var fullMessageContentTarget: ChatMessage?
     @State var selectedChatQuickActions: [ChatQuickAction] = ChatQuickActionSelection.fallback
+    @State var chatToolbarActions: [ChatQuickAction] = [.temporaryChat, .modelPicker]
+    @State var chatOverflowActions: [ChatQuickAction] = []
     @State var isChatQuickActionFolderPresented = false
     @State var isTemporaryChatEnabled = false
     @State var temporaryChatMemoryMode: TemporaryChatMemoryMode = .enabled
@@ -312,6 +314,9 @@ struct ChatView: View {
                 refreshChatToolPermissionAutoPresentationBlocker()
             }
             .onChange(of: appConfig.chatQuickActionIDs) { _, _ in
+                reloadChatQuickActions()
+            }
+            .onChange(of: appConfig.chatToolbarActionIDs) { _, _ in
                 reloadChatQuickActions()
             }
             .onChange(of: viewModel.currentSession?.id) { _, _ in

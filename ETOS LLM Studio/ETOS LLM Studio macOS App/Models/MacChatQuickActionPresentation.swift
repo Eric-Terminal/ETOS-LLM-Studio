@@ -11,39 +11,36 @@ struct MacChatQuickActionPresentation: Sendable {
     }
 
     let rawValue: String
+    let toolbarRawValue: String
     let rows: [Row]
     let selectedRows: [Row]
     let selected: Set<ChatQuickAction>
+    let toolbar: Set<ChatQuickAction>
+    let toolbarRows: [Row]
+    let menuRows: [Row]
     let guideValue: JSONValue
     let guideSchema: JSONValue
 
-    init(rawValue: String) {
+    init(rawValue: String, toolbarRawValue: String = "temporaryChat,modelPicker") {
         self.rawValue = rawValue
+        self.toolbarRawValue = toolbarRawValue
         let actions = ChatQuickActionSelection.decode(rawValue)
         let selected = Set(actions)
         self.selected = selected
-        rows = ChatQuickAction.allCases.map { Row(action: $0, title: $0.title, systemImage: $0.systemImage) }
-        selectedRows = rows.filter { selected.contains($0.action) }
+        let toolbar = ChatQuickActionSelection.decodeToolbarActions(toolbarRawValue)
+        self.toolbar = toolbar
+        rows = (actions + ChatQuickAction.allCases.filter { !selected.contains($0) })
+            .map { Row(action: $0, title: $0.title, systemImage: $0.systemImage) }
+        let selectedRows = Array(rows.prefix(actions.count))
+        self.selectedRows = selectedRows
+        toolbarRows = selectedRows.filter { toolbar.contains($0.action) }
+        menuRows = selectedRows.filter { !toolbar.contains($0.action) }
         guideValue = .array(actions.map { .string($0.rawValue) })
-        guideSchema = .dictionary([
-            "type": .string("array"), "minItems": .int(1), "maxItems": .int(ChatQuickAction.allCases.count),
-            "uniqueItems": .bool(true), "items": .dictionary([
-                "type": .string("string"), "enum": .array(ChatQuickAction.allCases.map { .string($0.rawValue) })
-            ])
-        ])
+        guideSchema = GuideChatQuickActionSettingsSupport.actionsSchema
     }
 
     /// 向导输入是外部边界；拒绝未知、重复及空集合，不把错误提案当作重置全部。
     static func guideActions(_ value: JSONValue) throws -> [ChatQuickAction] {
-        guard case .array(let items) = value, !items.isEmpty, items.count <= ChatQuickAction.allCases.count else {
-            throw GuideError.invalidToolArguments
-        }
-        var actions = Set<ChatQuickAction>()
-        for item in items {
-            guard case .string(let id) = item, let action = ChatQuickAction(rawValue: id), actions.insert(action).inserted else {
-                throw GuideError.invalidToolArguments
-            }
-        }
-        return ChatQuickAction.allCases.filter { actions.contains($0) }
+        try GuideChatQuickActionSettingsSupport.actions(from: value)
     }
 }

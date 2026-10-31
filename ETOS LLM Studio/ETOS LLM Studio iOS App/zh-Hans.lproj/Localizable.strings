@@ -8487,3 +8487,13 @@
 "Gemini Interactions API 地址说明" = "基础地址例如 https://generativelanguage.googleapis.com/v1；请求使用 /interactions。";
 "Gemini Interactions 配置说明" = "选择 Gemini Interactions，填写 Gemini API Key 和以 /v1 结尾的基础地址。网关要求特定 API 版本时保留对应版本路径。获取模型列表或手动添加受支持的模型，启用相应能力后保存。原有 Gemini 配置继续使用 generateContent。\n\n默认以 store=false 从本机发送聊天历史。文本、图片、音频、文档、视频和本地函数工具均使用 Interactions 步骤格式。启用推理会在 generation_config 下添加 thinking_level 和 thinking_summaries 控制。当前 API schema 不接受全局 temperature、top_p、top_k，因此不会发送这些参数。\n\n自定义 JSON 需使用 Interactions 字段，不能原样复制 generateContent 参数。此适配器用于前台模型请求，不接入托管代理、后台任务或 previous_interaction_id 会话串联。图片模型使用 Interactions；嵌入模型继续使用 Gemini 嵌入端点。";
 "Gemini Interactions 未返回完整的有效响应。" = "Gemini Interactions 未返回完整的有效响应。";
+/* 聊天快捷功能的位置与顺序 */
+"chat.quickActions.placement.toolbar" = "优先显示在工具栏";
+"chat.quickActions.placement.menu" = "放入更多";
+"chat.quickActions.placement.hidden" = "隐藏";
+"chat.quickActions.orderFooter" = "点“编辑”调整顺序。至少保留一项，修改立即保存。";
+"chat.quickActions.introduction" = "每项功能（包括选择模型）都可设为优先显示在工具栏、放入更多或隐藏。点“编辑”拖动已启用项排序。空间不足时，系统仍可能将工具栏项目移入更多。iPhone Duo 会自动切换横向和竖向工具栏，会话列表入口独立保留。修改立即保存，并与 Mac 同步。旧版 iOS 在原有快捷菜单中保留启用项及顺序。";
+"chat.quickActions.moveUp" = "上移";
+"chat.quickActions.moveDown" = "下移";
+"chat.quickActions.macOrderFooter" = "使用箭头调整顺序。至少保留一项，修改立即保存。";
+"chat.quickActions.macIntroduction" = "每项功能（包括选择模型）都可设为优先显示在工具栏、放入更多或隐藏。使用箭头调整已启用项顺序；窗口过窄时，快捷功能统一收进菜单。修改立即保存，并与 iPhone 同步。iPhone Duo 由系统调整工具栏方向，空间不足时将项目移入更多。向导可提议修改配置，不能触发快捷功能。";

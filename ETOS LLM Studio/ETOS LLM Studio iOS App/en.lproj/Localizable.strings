@@ -8501,3 +8501,13 @@
 "Gemini Interactions API 地址说明" = "Use a base URL such as https://generativelanguage.googleapis.com/v1. Requests use /interactions.";
 "Gemini Interactions 配置说明" = "Select Gemini Interactions and enter your Gemini API key and a base URL ending in /v1. Keep an explicitly configured API version when your gateway requires it. Fetch the model list or add a supported model, enable its capabilities, then save. Existing Gemini configurations continue to use generateContent.\n\nChat history is sent from this device with store=false by default. Text, images, audio, documents, video and local function tools use the Interactions step format. Enable reasoning to add thinking_level and thinking_summaries controls under generation_config. Global temperature, top_p and top_k are not sent because the current API schema does not accept them.\n\nCustom JSON uses Interactions field names; generateContent parameters cannot be copied unchanged. This adapter handles foreground model requests, not managed agents, background jobs or previous_interaction_id chains. Image models use Interactions; embedding models still use Gemini's embedding endpoint.";
 "Gemini Interactions 未返回完整的有效响应。" = "Gemini Interactions did not return a complete, valid response.";
+/* 聊天快捷功能的位置与顺序 */
+"chat.quickActions.placement.toolbar" = "Prefer Toolbar";
+"chat.quickActions.placement.menu" = "More Menu";
+"chat.quickActions.placement.hidden" = "Hidden";
+"chat.quickActions.orderFooter" = "Use Edit to reorder. Keep at least one action enabled. Changes save immediately.";
+"chat.quickActions.introduction" = "Choose Prefer Toolbar, More Menu, or Hidden for each action, including Choose Model. Reorder enabled actions with Edit. When space is limited, the system may move toolbar actions into More. iPhone Duo automatically switches between horizontal and vertical bars. The session list remains available. Changes save immediately and sync with Mac. On older iOS versions, enabled actions keep their order in the existing shortcut menu.";
+"chat.quickActions.moveUp" = "Move Up";
+"chat.quickActions.moveDown" = "Move Down";
+"chat.quickActions.macOrderFooter" = "Use the arrows to reorder. Keep at least one action enabled. Changes save immediately.";
+"chat.quickActions.macIntroduction" = "Choose Prefer Toolbar, More Menu, or Hidden for each action, including Choose Model. Use the arrows to reorder enabled actions. Narrow windows collect actions in a menu. Changes save immediately and sync with iPhone. On iPhone Duo, the system adapts toolbar orientation and moves items into More when space is limited. The guide can propose configuration changes but cannot launch actions.";

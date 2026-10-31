@@ -530,6 +530,7 @@ extension AppConfigStore {
         case .modelPickerFolderPathsByProvider:
             return .text(Self.encodeStringDictionary(modelPickerFolderPathsByProvider))
         case .chatQuickActionIDs: return .text(chatQuickActionIDs)
+        case .chatToolbarActionIDs: return .text(chatToolbarActionIDs)
         case .temporaryChatMemoryEnabled: return .bool(temporaryChatMemoryEnabled)
         case .enableSlashCommands: return .bool(enableSlashCommands)
         case .chatComposerStyle: return .text(chatComposerStyle)

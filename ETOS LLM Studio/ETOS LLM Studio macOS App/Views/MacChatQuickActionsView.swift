@@ -9,15 +9,24 @@ struct MacChatQuickActionsView: View {
     @StateObject private var model = MacChatQuickActionsModel()
     @State private var destination: MacChatQuickActionDestination?
     @State private var showsTemporaryIntroduction = false
+    @State private var showsModelPicker = false
     @State private var visible = false
     private var available: Bool { visible && workspace.canManageLocalModels }
 
     var body: some View {
         Group {
             if let state = model.presentation {
-                if state.selectedRows.count == 1, let row = state.selectedRows.first {
-                    entry(row)
-                } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        ForEach(state.toolbarRows) { entry($0) }
+                        if !state.menuRows.isEmpty {
+                            Menu {
+                                ForEach(state.menuRows) { entry($0) }
+                            } label: {
+                                Label(NSLocalizedString("聊天快捷功能", comment: ""), systemImage: "ellipsis")
+                            }
+                        }
+                    }
                     Menu {
                         ForEach(state.selectedRows) { entry($0) }
                     } label: {
@@ -35,13 +44,14 @@ struct MacChatQuickActionsView: View {
         .popover(isPresented: $showsTemporaryIntroduction) {
             MacTemporaryChatIntroductionView(isActive: showsTemporaryIntroduction && available)
         }
+        .sheet(isPresented: $showsModelPicker) { MacSlashCommandModelPicker() }
         .onAppear { visible = true; model.setActive(available) }
-        .onDisappear { visible = false; model.setActive(false); destination = nil; showsTemporaryIntroduction = false }
+        .onDisappear { visible = false; model.setActive(false); destination = nil; showsTemporaryIntroduction = false; showsModelPicker = false }
         .onChange(of: workspace.canManageLocalModels) { _, _ in
             model.setActive(available)
             if !available { showsTemporaryIntroduction = false }
         }
-        .onChange(of: appLock.state) { _, state in if state == .locked { destination = nil } }
+        .onChange(of: appLock.state) { _, state in if state == .locked { destination = nil; showsModelPicker = false } }
         .onChange(of: workspace.currentSession?.id) { _, _ in
             if destination?.page.requiresSession == true { destination = nil }
         }
@@ -53,6 +63,8 @@ struct MacChatQuickActionsView: View {
     @ViewBuilder
     private func entry(_ row: MacChatQuickActionPresentation.Row) -> some View {
         switch row.action {
+        case .modelPicker:
+            Button { showsModelPicker = true } label: { Label(row.title, systemImage: row.systemImage) }
         case .temporaryChat: MacTemporaryChatMenu(showingIntroduction: $showsTemporaryIntroduction)
         case .settings: SettingsLink { Label(row.title, systemImage: row.systemImage) }
         case .dailyPulse: MacDailyPulseEntry(model: workspace.dailyPulse)

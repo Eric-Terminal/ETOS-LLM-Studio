@@ -39,7 +39,7 @@ struct ChatQuickActionSelectionTests {
         #expect(ChatQuickActionSelection.decode(rawValue) == ChatQuickAction.allCases)
     }
 
-    @Test("多选配置去重并按界面顺序保存")
+    @Test("多选配置去重并按用户调整的顺序保存")
     func multipleSelectionIsNormalized() {
         let encoded = ChatQuickActionSelection.encode([
             .agentSkills,
@@ -48,8 +48,8 @@ struct ChatQuickActionSelectionTests {
             .agentSkills
         ])
 
-        #expect(encoded == "usageAnalytics,agentSkills,browser")
-        #expect(ChatQuickActionSelection.decode(encoded) == [.usageAnalytics, .agentSkills, .browser])
+        #expect(encoded == "agentSkills,browser,usageAnalytics")
+        #expect(ChatQuickActionSelection.decode(encoded) == [.agentSkills, .browser, .usageAnalytics])
     }
 
     @Test("快捷文件夹按数量估算自适应网格")

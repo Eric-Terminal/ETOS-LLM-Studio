@@ -4,18 +4,18 @@ import Testing
 @testable import ETOS_LLM_Studio_macOS_App
 
 struct MacChatQuickActionsTests {
-    @Test("已保存的选择按共同目录顺序展示，未知值不产生空白入口")
+    @Test("已保存的选择按用户顺序展示，未知值不产生空白入口")
     func preparedSelectionUsesKnownOrderedEntries() {
         let state = MacChatQuickActionPresentation(rawValue: "browser,unknown,usageAnalytics,browser")
-        #expect(state.selectedRows.map(\.action) == [.usageAnalytics, .browser])
-        #expect(state.rows.map(\.action) == ChatQuickAction.allCases)
+        #expect(state.selectedRows.map(\.action) == [.browser, .usageAnalytics])
+        #expect(state.rows.map(\.action) == [.browser, .usageAnalytics] + ChatQuickAction.allCases.filter { !state.selected.contains($0) })
         #expect(state.selected == Set([.browser, .usageAnalytics]))
-        #expect(state.guideValue == .array([.string("usageAnalytics"), .string("browser")]))
+        #expect(state.guideValue == .array([.string("browser"), .string("usageAnalytics")]))
     }
 
-    @Test("空配置回退到全部，单项配置保留直接入口")
+    @Test("空配置回退到全部，单项配置保留选择")
     func fallbackAndSingleEntryRemainUsable() {
-        #expect(MacChatQuickActionPresentation(rawValue: "").selectedRows.count == 15)
+        #expect(MacChatQuickActionPresentation(rawValue: "").selectedRows.count == 16)
         let state = MacChatQuickActionPresentation(rawValue: "contextCompression")
         #expect(state.selectedRows.map(\.action) == [.contextCompression])
         #expect(state.selectedRows.first?.systemImage == "rectangle.compress.vertical")
@@ -32,22 +32,34 @@ struct MacChatQuickActionsTests {
         }
     }
 
-    @Test("向导确认的选择采用数据库规范顺序")
-    func guideSelectionNormalizesBeforeSaving() throws {
+    @Test("向导确认的选择保留用户顺序")
+    func guideSelectionRetainsOrderBeforeSaving() throws {
         let actions = try MacChatQuickActionPresentation.guideActions(.array([.string("worldbook"), .string("settings")]))
-        #expect(actions == [.settings, .worldbook])
-        #expect(ChatQuickActionSelection.encode(actions) == "settings,worldbook")
+        #expect(actions == [.worldbook, .settings])
+        #expect(ChatQuickActionSelection.encode(actions) == "worldbook,settings")
     }
 
     @Test("目录中每项都有独立页面或明确的原生入口")
     func allActionsHaveDestinations() {
-        let native: Set<ChatQuickAction> = [.temporaryChat, .settings, .dailyPulse, .contextCompression]
+        let native: Set<ChatQuickAction> = [.temporaryChat, .modelPicker, .settings, .dailyPulse, .contextCompression]
         for action in ChatQuickAction.allCases {
             let page = MacChatQuickActionPage(rawValue: action.rawValue)
             #expect((page != nil) != native.contains(action))
             if let page { #expect(page.action == action) }
         }
         #expect(MacChatQuickActionPage.allCases.count + native.count == ChatQuickAction.allCases.count)
+    }
+
+    @Test("工具栏和更多分别保持用户顺序，隐藏项即使有工具栏偏好也不显示")
+    func preferredAndOverflowActionsRetainOrder() {
+        let state = MacChatQuickActionPresentation(rawValue: "browser,modelPicker,settings,temporaryChat",
+            toolbarRawValue: "temporaryChat,usageAnalytics,browser,modelPicker")
+        #expect(state.toolbarRows.map(\.action) == [.browser, .modelPicker, .temporaryChat])
+        #expect(state.menuRows.map(\.action) == [.settings])
+        #expect(!state.toolbarRows.contains { $0.action == .usageAnalytics })
+        let allInMenu = MacChatQuickActionPresentation(rawValue: "modelPicker,browser", toolbarRawValue: "")
+        #expect(allInMenu.toolbarRows.isEmpty)
+        #expect(allInMenu.menuRows.map(\.action) == [.modelPicker, .browser])
     }
 
     @Test("只有浏览器入口固定来源会话，管理页面和用户终端保留各自范围")

@@ -1,8 +1,9 @@
 import Foundation
 
-/// iOS 与 Mac 共享稳定标识和显示顺序，继续读写 ui.chatQuickActionIDs。
+/// iOS 与 Mac 共享稳定标识；数据库中的选中顺序决定实际显示顺序。
 public enum ChatQuickAction: String, CaseIterable, Identifiable, Sendable {
     case temporaryChat
+    case modelPicker
     case contextCompression
     case settings
     case toolCenter
@@ -23,6 +24,7 @@ public enum ChatQuickAction: String, CaseIterable, Identifiable, Sendable {
     public var title: String {
         switch self {
         case .temporaryChat: return NSLocalizedString("临时对话", comment: "聊天快捷功能标题")
+        case .modelPicker: return NSLocalizedString("选择模型", comment: "聊天快捷功能标题")
         case .contextCompression: return NSLocalizedString("压缩为续聊", comment: "聊天快捷功能标题")
         case .settings: return NSLocalizedString("设置", comment: "聊天快捷功能标题")
         case .toolCenter: return NSLocalizedString("工具中心", comment: "聊天快捷功能标题")
@@ -48,6 +50,7 @@ public enum ChatQuickAction: String, CaseIterable, Identifiable, Sendable {
     public var systemImage: String {
         switch self {
         case .temporaryChat: return "eye.slash"
+        case .modelPicker: return "cpu"
         case .contextCompression: return "rectangle.compress.vertical"
         case .settings: return "gearshape"
         case .toolCenter: return "wrench"
@@ -76,14 +79,39 @@ public enum ChatQuickActionSelection {
     public static let fallback = ChatQuickAction.allCases
 
     public static func decode(_ rawValue: String) -> [ChatQuickAction] {
-        let selectedIDs = Set(rawValue.split(separator: ",").map(String.init))
-        let actions = ChatQuickAction.allCases.filter { selectedIDs.contains($0.rawValue) }
+        let actions = orderedActions(rawValue.split(separator: ",").compactMap { ChatQuickAction(rawValue: String($0)) })
         return actions.isEmpty ? fallback : actions
     }
 
     public static func encode(_ actions: [ChatQuickAction]) -> String {
-        let selectedIDs = Set(actions.map(\.rawValue))
-        let normalized = ChatQuickAction.allCases.filter { selectedIDs.contains($0.rawValue) }
+        let normalized = orderedActions(actions)
         return (normalized.isEmpty ? fallback : normalized).map(\.rawValue).joined(separator: ",")
+    }
+
+    public static func decodeToolbarActions(_ rawValue: String) -> Set<ChatQuickAction> {
+        Set(rawValue.split(separator: ",").compactMap { ChatQuickAction(rawValue: String($0)) })
+    }
+
+    /// 工具栏允许为空，此时所有已启用功能都进入更多菜单。
+    public static func encodeToolbarActions(_ actions: Set<ChatQuickAction>) -> String {
+        ChatQuickAction.allCases.filter(actions.contains).map(\.rawValue).joined(separator: ",")
+    }
+
+    private static func orderedActions(_ actions: [ChatQuickAction]) -> [ChatQuickAction] {
+        var seen = Set<ChatQuickAction>()
+        return actions.filter { seen.insert($0).inserted }
+    }
+}
+
+public enum ChatQuickActionPlacement: String, CaseIterable, Identifiable, Sendable {
+    case toolbar, menu, hidden
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .toolbar: NSLocalizedString("chat.quickActions.placement.toolbar", value: "Prefer Toolbar", comment: "快捷功能显示位置")
+        case .menu: NSLocalizedString("chat.quickActions.placement.menu", value: "More Menu", comment: "快捷功能显示位置")
+        case .hidden: NSLocalizedString("chat.quickActions.placement.hidden", value: "Hidden", comment: "快捷功能显示位置")
+        }
     }
 }

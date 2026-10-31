@@ -976,6 +976,19 @@ extension PersistenceAuxiliaryGRDBStore {
             migrator.registerMigration("v24_add_mcp_tool_description_overrides") { db in
                 try db.execute(sql: "ALTER TABLE mcp_servers ADD COLUMN tool_description_overrides_json TEXT")
             }
+            migrator.registerMigration("v25_configurable_chat_model_picker") { db in
+                // 旧版模型入口始终存在；只在升级时将它纳入已有选择，此后尊重用户隐藏。
+                guard let raw = try String.fetchOne(db,
+                    sql: "SELECT value_text FROM app_config WHERE key = 'ui.chatQuickActionIDs'"),
+                      !raw.isEmpty else { return }
+                var identifiers = raw.split(separator: ",").map(String.init)
+                // 全部未知的旧值仍应触发“全部功能”回退，不能被模型这一项取代。
+                guard identifiers.contains(where: { ChatQuickAction(rawValue: $0) != nil }) else { return }
+                guard !identifiers.contains("modelPicker") else { return }
+                identifiers.insert("modelPicker", at: identifiers.first == "temporaryChat" ? 1 : 0)
+                try db.execute(sql: "UPDATE app_config SET value_text = ?, updated_at = ? WHERE key = 'ui.chatQuickActionIDs'",
+                    arguments: [identifiers.joined(separator: ","), Date().timeIntervalSince1970])
+            }
         }
 
         if supportsMemoryRelationalSchema {

@@ -278,6 +278,7 @@ extension AppConfigStore {
         case .modelPickerFolderPathsByProvider:
             modelPickerFolderPathsByProvider = Self.decodeStringDictionary(from: value) ?? [:]
         case .chatQuickActionIDs: chatQuickActionIDs = value
+        case .chatToolbarActionIDs: chatToolbarActionIDs = value
         case .chatComposerStyle:
             chatComposerStyle = ChatComposerStyle.normalized(value).rawValue
         case .chatComposerDraft: chatComposerDraft = value

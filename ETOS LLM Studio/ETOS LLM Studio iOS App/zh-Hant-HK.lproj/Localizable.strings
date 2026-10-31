@@ -8493,3 +8493,13 @@
 "Gemini Interactions API 地址说明" = "基礎位址例如 https://generativelanguage.googleapis.com/v1；請求使用 /interactions。";
 "Gemini Interactions 配置说明" = "選擇 Gemini Interactions，填寫 Gemini API Key 和以 /v1 結尾的基礎位址。閘道要求特定 API 版本時保留對應版本路徑。取得模型清單或手動新增支援的模型，啟用相應能力後儲存。原有 Gemini 設定繼續使用 generateContent。\n\n預設以 store=false 從本機傳送聊天記錄。文字、圖片、音訊、文件、影片和本機函數工具均使用 Interactions 步驟格式。啟用推理會在 generation_config 下新增 thinking_level 和 thinking_summaries 控制。目前 API schema 不接受全域 temperature、top_p、top_k，因此不會傳送這些參數。\n\n自訂 JSON 需使用 Interactions 欄位，不能原樣複製 generateContent 參數。此配接器用於前景模型請求，不接入託管代理、背景工作或 previous_interaction_id 對話串接。圖片模型使用 Interactions；嵌入模型繼續使用 Gemini 嵌入端點。";
 "Gemini Interactions 未返回完整的有效响应。" = "Gemini Interactions 未傳回完整的有效回應。";
+/* 聊天快捷功能的位置与顺序 */
+"chat.quickActions.placement.toolbar" = "優先顯示於工具列";
+"chat.quickActions.placement.menu" = "放入更多";
+"chat.quickActions.placement.hidden" = "隱藏";
+"chat.quickActions.orderFooter" = "點按「編輯」調整順序。至少保留一項，修改會即時儲存。";
+"chat.quickActions.introduction" = "每項功能（包括選擇模型）都可設為優先顯示於工具列、放入更多或隱藏。點按「編輯」拖動已啟用項目排序。空間不足時，系統仍可能將工具列項目移入更多。iPhone Duo 會自動切換橫向及直向工具列，對話列表入口會獨立保留。修改會即時儲存，並與 Mac 同步。舊版 iOS 在原有快捷選單中保留啟用項目及順序。";
+"chat.quickActions.moveUp" = "上移";
+"chat.quickActions.moveDown" = "下移";
+"chat.quickActions.macOrderFooter" = "使用箭頭調整順序。至少保留一項，修改會即時儲存。";
+"chat.quickActions.macIntroduction" = "每項功能（包括選擇模型）都可設為優先顯示於工具列、放入更多或隱藏。使用箭頭調整已啟用項目順序；視窗過窄時，快捷功能會收進選單。修改會即時儲存，並與 iPhone 同步。iPhone Duo 由系統調整工具列方向，空間不足時將項目移入更多。嚮導可提議修改設定，但不能啟動快捷功能。";

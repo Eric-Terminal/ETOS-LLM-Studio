@@ -410,6 +410,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case watchModelPickerExpandedGroupIDs = "ui.modelPicker.expandedGroupIDs.watchOS"
     case modelPickerFolderPathsByProvider = "ui.modelPicker.folderPathsByProvider"
     case chatQuickActionIDs = "ui.chatQuickActionIDs"
+    case chatToolbarActionIDs = "ui.chatToolbarActionIDs"
     case temporaryChatMemoryEnabled = "chat.temporary.memoryEnabled"
     case enableSlashCommands = "chat.slashCommands.enabled"
     case customChatSlashCommands = "chat.slashCommands.custom"
@@ -776,6 +777,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .chatQuickActionIDs:
             return .text([
                 "temporaryChat",
+                "modelPicker",
                 "contextCompression",
                 "settings",
                 "toolCenter",
@@ -791,6 +793,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
                 "browser",
                 "localTerminal"
             ].joined(separator: ","))
+        case .chatToolbarActionIDs:
+            return .text("temporaryChat,modelPicker")
         case .restoreLastSessionOnLaunch,
              .restoreLastSessionOnlyIfRecent:
             return .bool(false)

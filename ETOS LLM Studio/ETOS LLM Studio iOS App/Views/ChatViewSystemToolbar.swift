@@ -17,27 +17,15 @@ extension ChatView {
                 }
             }
         }
-        .visibilityPriority(.high)
+        // 会话导航比用户优先项更早保留，避免大量快捷项挤走侧栏入口。
+        .visibilityPriority(ToolbarItemVisibilityPriority(higherThan: .high))
 
-        ToolbarItem(placement: .primaryAction) {
-            Button(action: presentModelPickerSheet) {
-                Label(NSLocalizedString("选择模型", comment: ""), systemImage: "cpu")
+        ForEach(chatToolbarActions) { action in
+            // 同一 placement 保留用户顺序；空间不足时仍由系统安全地移入溢出菜单。
+            ToolbarItem(id: action.rawValue, placement: .topBarTrailing) {
+                systemQuickActionButton(action)
             }
-            .accessibilityValue(modelSubtitle)
-        }
-        .visibilityPriority(.high)
-
-        if let action = selectedChatQuickActions.first,
-           selectedChatQuickActions.count == 1 || action == .temporaryChat {
-            // decode 已按目录顺序归一化，选中临时对话时它一定在首位；保留连续点击切换模式。
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    performQuickAction(action)
-                } label: {
-                    Label(action.title, systemImage: singleQuickActionSystemImage(for: action))
-                }
-                .disabled(!isQuickActionAvailable(action))
-            }
+            .visibilityPriority(.high)
         }
 
         ToolbarOverflowMenu {
@@ -60,17 +48,22 @@ extension ChatView {
                     .disabled(selectedMessageIDs.isEmpty)
                 }
             }
-            ForEach(selectedChatQuickActions) { action in
-                if selectedChatQuickActions.count > 1 && action != .temporaryChat {
-                    Button {
-                        performQuickAction(action)
-                    } label: {
-                        Label(action.title, systemImage: singleQuickActionSystemImage(for: action))
-                    }
-                    .disabled(!isQuickActionAvailable(action))
-                }
+            ForEach(chatOverflowActions) { action in
+                systemQuickActionButton(action)
             }
         }
+    }
+
+    private func systemQuickActionButton(_ action: ChatQuickAction) -> some View {
+        Button {
+            performQuickAction(action)
+        } label: {
+            Label(action.title, systemImage: singleQuickActionSystemImage(for: action))
+        }
+        .disabled(!isQuickActionAvailable(action))
+        .accessibilityValue(action == .modelPicker ? modelSubtitle : "")
+        // 临时对话放进更多后仍支持连续点击切换记忆模式。
+        .menuActionDismissBehavior(action == .temporaryChat ? .disabled : .automatic)
     }
 }
 
