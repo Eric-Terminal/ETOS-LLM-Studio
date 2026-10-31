@@ -30,6 +30,50 @@ struct ChatAdaptiveLayoutTests {
         #expect(layout.detailWidth == 1000)
     }
 
+    @Test("单栏输入区在系统栏位于任一侧时都保留对称留白", arguments: [false, true])
+    func singleColumnComposerBalancesSafeAreas(barAtLeading: Bool) {
+        let layout = ChatAdaptiveLayout.resolve(
+            size: CGSize(width: 900, height: 700), showsSidebar: false,
+            safeAreaInsets: EdgeInsets(
+                top: 0, leading: barAtLeading ? 92 : 12,
+                bottom: 0, trailing: barAtLeading ? 12 : 92
+            )
+        )
+        #expect(layout.detailWidth == 900)
+        #expect(layout.composerWidth == 820)
+        #expect(layout.composerOnLeadingSide == barAtLeading)
+    }
+
+    @Test("两侧安全区相等时不会再次缩窄输入区")
+    func equalSafeAreasKeepComposerWidth() {
+        let layout = ChatAdaptiveLayout.resolve(
+            size: CGSize(width: 900, height: 700), showsSidebar: false,
+            safeAreaInsets: EdgeInsets(top: 0, leading: 32, bottom: 0, trailing: 32)
+        )
+        #expect(layout.composerWidth == 900)
+    }
+
+    @Test("展开侧栏后输入区仍填满聊天列")
+    func visibleSidebarKeepsComposerAlignedWithConversation() {
+        let layout = ChatAdaptiveLayout.resolve(
+            size: CGSize(width: 1000, height: 700), showsSidebar: true,
+            safeAreaInsets: EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 92)
+        )
+        #expect(layout.sidebarWidth == 300)
+        #expect(layout.composerWidth == 699)
+    }
+
+    @Test("窄窗口无法显示侧栏时也保持输入区对称")
+    func collapsedSidebarBalancesComposerInNarrowWindow() {
+        let layout = ChatAdaptiveLayout.resolve(
+            size: CGSize(width: 500, height: 250), showsSidebar: true,
+            safeAreaInsets: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 84)
+        )
+        #expect(layout.sidebarWidth == 0)
+        #expect(layout.composerWidth == 416)
+        #expect(!layout.composerOnLeadingSide)
+    }
+
     @Test("半折叠时侧栏和会话之间留出折痕及其边距")
     func verticalDivisionSeparatesColumns() {
         let layout = ChatAdaptiveLayout.resolve(
@@ -45,20 +89,24 @@ struct ChatAdaptiveLayoutTests {
     func horizontalDivisionLimitsComposer() {
         let layout = ChatAdaptiveLayout.resolve(
             size: CGSize(width: 600, height: 900), showsSidebar: true,
+            safeAreaInsets: EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 92),
             division: CGRect(x: 0, y: 430, width: 600, height: 40)
         )
         #expect(layout.composerHeightLimit == 430)
         #expect(layout.detailWidth == 600)
+        #expect(layout.composerWidth == 520)
     }
 
     @Test("隐藏侧栏后输入区仍避开折痕，消息列表继续使用完整宽度")
     func hiddenSidebarStillProtectsComposer() {
         let layout = ChatAdaptiveLayout.resolve(
             size: CGSize(width: 820, height: 700), showsSidebar: false,
+            safeAreaInsets: EdgeInsets(top: 0, leading: 92, bottom: 0, trailing: 12),
             division: CGRect(x: 370, y: 0, width: 40, height: 700)
         )
         #expect(layout.detailWidth == 820)
         #expect(layout.composerWidth == 410)
+        #expect(!layout.composerOnLeadingSide)
     }
 
     @Test("分屏只剩折痕左侧空间时编辑器使用可用侧")

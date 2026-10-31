@@ -17,7 +17,12 @@ struct ChatAdaptiveLayout: Equatable {
 
     var detailWidth: CGFloat { max(1, size.width - sidebarWidth - sidebarGap) }
 
-    static func resolve(size: CGSize, showsSidebar: Bool, division: CGRect? = nil) -> Self {
+    static func resolve(
+        size: CGSize,
+        showsSidebar: Bool,
+        safeAreaInsets: EdgeInsets = EdgeInsets(),
+        division: CGRect? = nil
+    ) -> Self {
         let size = CGSize(width: max(1, size.width), height: max(1, size.height))
         let canShowSidebar = size.width >= minimumSidebarWidth + minimumConversationWidth + sidebarSpacing
         var sidebarWidth = canShowSidebar && showsSidebar
@@ -28,8 +33,16 @@ struct ChatAdaptiveLayout: Equatable {
         var composerHeight = size.height
         var composerBottomInset: CGFloat = 0
 
+        if sidebarWidth == 0 {
+            // 单栏输入区刻意相对窗口居中；size 已扣除安全区，只补两侧差值，避免重复扣边。
+            // 这是输入区的视觉留白，消息和其他页面仍遵循系统的不对称安全区。
+            composerWidth = max(1, composerWidth - abs(safeAreaInsets.leading - safeAreaInsets.trailing))
+            composerOnLeadingSide = safeAreaInsets.leading > safeAreaInsets.trailing
+        }
+
         if let division, division.intersects(CGRect(origin: .zero, size: size)) {
             if division.height > division.width {
+                // 活动折痕的可操作区域优先于单栏输入区的对称留白。
                 // 部分折叠时让两栏边界贴合折痕，不能把折痕留在编辑器正中。
                 if sidebarWidth > 0,
                    division.minX >= minimumSidebarWidth,

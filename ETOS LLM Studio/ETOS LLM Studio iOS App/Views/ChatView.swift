@@ -393,6 +393,7 @@ struct ChatView: View {
             let layout = ChatAdaptiveLayout.resolve(
                 size: proxy.size,
                 showsSidebar: isLandscapeSessionSidebarPresented && activeChatPickerSheet != .session,
+                safeAreaInsets: proxy.safeAreaInsets,
                 division: chatDivision(in: proxy)
             )
 
