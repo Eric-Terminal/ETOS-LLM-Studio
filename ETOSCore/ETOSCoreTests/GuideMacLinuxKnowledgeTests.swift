@@ -3,28 +3,28 @@ import Testing
 @testable import ETOSCore
 
 struct GuideMacLinuxKnowledgeTests {
-    @Test("常用环境与合规指引区分一次发送、guest 作用域及随包声明")
+    @Test("Mac 环境指引使用本机进程，不提供移动端 Linux 安装流程")
     func recipesAndComplianceGuidance() {
         let chinese = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "zh-Hans"))
-        #expect(chinese.content.contains("终端页只附着"))
-        #expect(chinese.content.contains("不修改 /etc/apk/repositories"))
-        #expect(chinese.content.contains("不会回滚已经安装的包"))
-        #expect(chinese.content.contains("不表示页面已重新计算压缩包哈希"))
+        #expect(chinese.content.contains("系统 UNIX/POSIX 进程"))
+        #expect(chinese.content.contains("不安装 iSH、Linux 或 RootFS"))
+        #expect(chinese.content.contains("没有 Linux 安装、重置、挂载或环境准备页面"))
+        #expect(chinese.content.contains("依赖程序由用户在 Mac 上安装"))
         let english = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "en"))
-        #expect(english.content.contains("reopening never resends"))
-        #expect(english.content.contains("without rolling back installed packages"))
+        #expect(english.content.contains("native UNIX/POSIX processes"))
+        #expect(english.content.contains("not filesystem isolation"))
     }
 
-    @Test("文件指引说明预览预算、原件比较、递归删除和向导隐私")
+    @Test("Mac 文件指引区分 Documents 工具地址与宿主 Shell 路径")
     func fileBrowserGuidance() {
         let chinese = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "zh-Hans"))
-        #expect(chinese.content.contains("文件预览最多 256 KiB"))
-        #expect(chinese.content.contains("inode 元数据与原始字节"))
-        #expect(chinese.content.contains("递归删除失败也可能已删除部分内容"))
-        #expect(chinese.content.contains("不提供路径、文件名或正文"))
+        #expect(chinese.content.contains("相对路径和 app:// 指向 App Documents"))
+        #expect(chinese.content.contains("访问其他 Mac 路径使用本机 Shell 命令"))
+        #expect(chinese.content.contains("linux:// 和 mount:// 不适用于 Mac"))
+        #expect(chinese.content.contains("不能读取正文、运行查询或清理"))
         let english = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "en"))
-        #expect(english.content.contains("not a guest file lock"))
-        #expect(english.content.contains("Restore never replays saves or deletions"))
+        #expect(english.content.contains("Structured file tools accept relative paths and app:// within App Documents"))
+        #expect(english.content.contains("linux:// and mount:// are unavailable on Mac"))
     }
 
     @Test("配置指引明确值的只写权限、规则优先顺序和快捷栏草稿边界")
@@ -39,19 +39,19 @@ struct GuideMacLinuxKnowledgeTests {
         #expect(english.content.contains("Modifier-only combinations cannot be saved"))
     }
 
-    @Test("工作区与挂载指引区分草稿、目录授权和删除范围")
+    @Test("Mac 工作区指引保留任务停止、导出一致性与删除范围边界")
     func workspaceAndMountGuidance() {
         let chinese = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "zh-Hans"))
-        #expect(chinese.content.contains("数据库删除失败时恢复原目录"))
-        #expect(chinese.content.contains("应用目录权限必须重新选择目录"))
-        #expect(chinese.content.contains("目录名、宿主路径和书签"))
-        #expect(chinese.content.contains("不是一致性快照"))
+        #expect(chinese.content.contains("取消并等待相关任务及输出落盘后删除目录和记录"))
+        #expect(chinese.content.contains("不删除其他会话和外部文件"))
+        #expect(chinese.content.contains("页面及详情向导只读，不能导出或删除"))
+        #expect(chinese.content.contains("不保证运行中写入文件的一致性快照"))
     }
 
-    @Test("Mac Linux 指引区分宿主 MCP、手动执行及向导隐私边界")
+    @Test("Mac 本机 Shell 指引区分 MCP、手动执行及向导隐私边界")
     func executionAndPrivacyBoundaries() {
         let english = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "en"))
-        #expect(english.content.contains("native Process separately from the Linux terminal"))
+        #expect(english.content.contains("stdio uses a native Process with stdin/stdout"))
         #expect(english.content.contains("no input, environment values or output"))
         #expect(english.content.contains("Stop failure prevents database replacement"))
         let chinese = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "zh-Hans"))

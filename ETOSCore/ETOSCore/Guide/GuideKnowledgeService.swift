@@ -48,7 +48,9 @@ public actor GuideKnowledgeService {
                 let body = document.content.lowercased()
                 let score = terms.reduce(into: 0) { result, term in
                     if title.contains(term) { result += 8 }
-                    if keywords.contains(term) { result += 4 }
+                    // 专属词应优先于“备份”等泛化词的反向匹配，避免相关页面抢占直接命中。
+                    if document.keywords.contains(where: { $0.lowercased() == term }) { result += 12 }
+                    else if keywords.contains(term) { result += 4 }
                     // 中文常整句输入，不能只用空格分词后拿整句匹配文档。
                     else if document.keywords.contains(where: { keyword in
                         keyword.count >= 2 && term.contains(keyword.lowercased())
