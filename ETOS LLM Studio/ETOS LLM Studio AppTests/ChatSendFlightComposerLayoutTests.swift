@@ -281,7 +281,8 @@ struct ChatSendFlightComposerLayoutTests {
                    let outer = controller.composerAnchor,
                    let content = controller.composerContentAnchor,
                    outer.window === window, content.window === window,
-                   outer.bounds.height > content.bounds.height + 40,
+                   // 停靠区初始占位高度也大于编辑器；必须等兄弟内容真正占据顶部空间。
+                   content.convert(content.bounds, to: outer).minY >= (upperContent == .audio ? 40 : 59.5),
                    upperContent != .audio || audioCapture != nil {
                     break
                 }
@@ -293,6 +294,13 @@ struct ChatSendFlightComposerLayoutTests {
             let outerFrame = outer.convert(outer.bounds, to: surface)
             let contentFrame = content.convert(content.bounds, to: surface)
             let editorFrame = editor.convert(editor.bounds, to: surface)
+            if contentFrame.minY <= outerFrame.minY + 40 {
+                let png = UIGraphicsImageRenderer(bounds: window.bounds).pngData { _ in
+                    window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+                }
+                Attachment.record(png, named: "展开输入框-\(style)-\(upperContent).png")
+                #expect(config.enableSlashCommands, "建议测试期间快速指令开关应保持开启")
+            }
             #expect(outerFrame.height <= 360.5)
             #expect(outerFrame.minY >= host.view.safeAreaInsets.top - 0.5)
             #expect(contentFrame.minY > outerFrame.minY + 40)

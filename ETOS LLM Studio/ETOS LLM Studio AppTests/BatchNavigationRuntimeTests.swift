@@ -46,15 +46,18 @@ struct BatchNavigationRuntimeTests {
         }
 
         try await waitForPage("settings-extended-features")
+        let navigation = try #require(navigationController(in: host))
+        let settingsDepth = navigation.viewControllers.count
         try await activate("batch.tasks.entry", in: host.view)
         try await waitForPage("batch-tasks")
-        let navigation = try #require(navigationController(in: host))
+        try await waitForNavigationDepth(settingsDepth + 1, in: navigation)
         let listDepth = navigation.viewControllers.count
         #expect(listDepth > 1, "必须从真实拓展功能入口进入，覆盖视图导航父页面")
 
         for (identifier, pageID) in [("batch.new", "batch-editor"), ("batch.introduction", "batch-introduction")] {
             try await activate(identifier, in: host.view)
             try await waitForPage(pageID)
+            try await waitForNavigationDepth(listDepth + 1, in: navigation)
             #expect(navigation.viewControllers.count == listDepth + 1)
 
             // 列表更新不能移除已经打开的新建页，也不能抢走它的向导上下文。
@@ -68,6 +71,7 @@ struct BatchNavigationRuntimeTests {
             if pageID == "batch-editor" {
                 try await activate("batch.models.choose", in: host.view)
                 try await waitForPage("batch-model-picker")
+                try await waitForNavigationDepth(listDepth + 2, in: navigation)
                 #expect(navigation.viewControllers.count == listDepth + 2)
                 _ = navigation.popViewController(animated: false)
                 try await waitForPage("batch-editor")
@@ -91,6 +95,16 @@ struct BatchNavigationRuntimeTests {
         try await waitForPage("settings-extended-features")
     }
 
+    private func waitForNavigationDepth(_ depth: Int, in navigation: UINavigationController) async throws {
+        // 向导在 onAppear 激活时，原生入场动画可能尚未提交新栈；刷新回归从真正显示的子页开始。
+        for _ in 0..<100 {
+            if navigation.viewControllers.count == depth, navigation.transitionCoordinator == nil { return }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        try #require(navigation.viewControllers.count == depth && navigation.transitionCoordinator == nil,
+                     "原生导航完成后应保留预期页面层级")
+    }
+
     private func waitForPage(_ pageID: String, matchesPrefix: Bool = false) async throws {
         for _ in 0..<100 {
             let current = GuideContextCoordinator.shared.activePage?.id.rawValue
@@ -105,14 +119,30 @@ struct BatchNavigationRuntimeTests {
         for _ in 0..<100 {
             view.layoutIfNeeded()
             if let link = accessibilityObjects(view).first(where: {
-                ($0 as? UIAccessibilityIdentification)?.accessibilityIdentifier == identifier
+                accessibilityIdentifier(of: $0) == identifier
             }) {
                 try #require(link.accessibilityActivate(), "应通过真实入口打开页面")
                 return
             }
             try await Task.sleep(for: .milliseconds(50))
         }
-        Issue.record("未找到批量任务导航入口：\(identifier)")
+        let elements = accessibilityObjects(view).map {
+            "\(type(of: $0)) id=\(accessibilityIdentifier(of: $0) ?? "") label=\($0.accessibilityLabel ?? "")"
+        }.joined(separator: "\n")
+        Attachment.record(Data(elements.utf8), named: "批量导航入口-\(identifier).txt")
+        let png = UIGraphicsImageRenderer(bounds: view.bounds).pngData { _ in
+            view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
+        }
+        Attachment.record(png, named: "批量导航入口-\(identifier).png")
+        let link = try #require(accessibilityObjects(view).first { accessibilityIdentifier(of: $0) == identifier },
+                               "未找到批量任务导航入口：\(identifier)")
+        try #require(link.accessibilityActivate(), "应通过真实入口打开页面")
+    }
+
+    private func accessibilityIdentifier(of object: NSObject) -> String? {
+        // SwiftUI 的 AccessibilityNode 提供 ObjC getter，但不一定声明遵循 UIKit 的标识协议。
+        guard object.responds(to: NSSelectorFromString("accessibilityIdentifier")) else { return nil }
+        return object.value(forKey: "accessibilityIdentifier") as? String
     }
 
     private func navigationController(in controller: UIViewController) -> UINavigationController? {
