@@ -16,7 +16,8 @@ struct GeminiInteractionsAdapterTests {
 
     private func payload(_ request: URLRequest?) throws -> [String: Any] {
         let request = try #require(request)
-        return try #require(JSONSerialization.jsonObject(with: #require(request.httpBody)) as? [String: Any])
+        let body = try #require(request.httpBody)
+        return try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
     }
 
     private func request(messages: [ChatMessage], common: [String: Any] = [:], model: RunnableModel? = nil) -> URLRequest? {

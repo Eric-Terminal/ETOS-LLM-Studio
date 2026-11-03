@@ -61,7 +61,7 @@ struct BatchSupportTests {
     @Test("未取回的结果显示等待，不能伪装成空白成功结果")
     func pendingResultPresentation() throws {
         var job = try job()
-        #expect(BatchJobRow(job: job).results.allSatisfy(\.isPending))
+        #expect(BatchJobRow(job: job).results.allSatisfy { $0.isPending })
         job.results = [BatchResult(id: job.requests[0].id, text: "完成")]
         let row = BatchJobRow(job: job)
         #expect(!row.results[0].isPending)

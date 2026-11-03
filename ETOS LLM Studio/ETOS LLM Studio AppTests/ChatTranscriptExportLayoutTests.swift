@@ -95,9 +95,13 @@ struct ChatTranscriptExportLayoutTests {
 
     @MainActor
     @Test("导出窗口来源随所在视图迁移，不绑定任意全局窗口")
-    func sourceWindowFollowsHostingView() {
-        let firstWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
-        let secondWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 744, height: 570))
+    func sourceWindowFollowsHostingView() throws {
+        let hostWindow = try sourceWindow()
+        let scene = try #require(hostWindow.windowScene)
+        let firstWindow = UIWindow(windowScene: scene)
+        firstWindow.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        let secondWindow = UIWindow(windowScene: scene)
+        secondWindow.frame = CGRect(x: 0, y: 0, width: 744, height: 570)
         let view = UIView()
         let source = ChatTranscriptSourceWindow()
         source.view = view
@@ -116,7 +120,7 @@ struct ChatTranscriptExportLayoutTests {
         try #require(UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .flatMap(\.windows)
-            .first(where: \.isKeyWindow))
+            .first(where: { $0.isKeyWindow }))
     }
 }
 
