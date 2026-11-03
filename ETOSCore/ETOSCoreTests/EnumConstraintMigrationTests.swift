@@ -374,7 +374,10 @@ private func prepareConfigDatabaseBeforeV5(
             // 此夹具只构造 v5 枚举约束所需的旧表，跳过无关领域的后续迁移。
             "v20_add_local_linux_command_rule_suffix",
             "v21_add_feedback_referenced_commit_tracking",
-            "v22_add_provider_model_prompt"
+            "v22_add_provider_model_prompt",
+            "v23_add_provider_multi_key_configuration",
+            "v24_add_mcp_tool_description_overrides",
+            "v25_configurable_chat_model_picker"
         ] {
             try db.execute(
                 sql: "INSERT OR IGNORE INTO grdb_migrations(identifier) VALUES (?)",

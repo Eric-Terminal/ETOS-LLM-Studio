@@ -270,7 +270,10 @@ private func prepareConfigDatabase(
             "v19_add_mcp_local_stdio_transport",
             "v20_add_local_linux_command_rule_suffix",
             "v21_add_feedback_referenced_commit_tracking",
-            "v22_add_provider_model_prompt"
+            "v22_add_provider_model_prompt",
+            "v23_add_provider_multi_key_configuration",
+            "v24_add_mcp_tool_description_overrides",
+            "v25_configurable_chat_model_picker"
         ]
         for migration in appliedMigrations + migrationsAfterV4 {
             try db.execute(

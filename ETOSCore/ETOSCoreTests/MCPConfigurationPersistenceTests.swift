@@ -40,6 +40,7 @@ struct MCPConfigurationPersistenceTests {
         let created = try await worker.save(draft, replacing: nil)
         let original = try #require(created.snapshot.servers.first { $0.id == draft.id })
         let metadata = MCPServerMetadataCache(
+            cachedAt: Date(timeIntervalSince1970: 1_744_416_000.125),
             info: nil, tools: [.init(toolId: "old_tool", description: nil, inputSchema: nil, examples: nil)],
             resources: [], resourceTemplates: [], prompts: [], roots: []
         )

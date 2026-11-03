@@ -12,14 +12,16 @@ struct UsageAnalyticsSyncTests {
             _ = Persistence.mergeUsageStatsDayBundles(originalBundles)
         }
         let sessionID = UUID()
+        // 使用两种时间纪元都能精确表示的小数，避免 Date() 的亚微秒舍入掩盖字段回归。
+        let requestedAt = Date(timeIntervalSince1970: 1_744_416_000.125)
         let usage = MessageTokenUsage(promptTokens: 100, completionTokens: 20, totalTokens: 120)
         let ownEvent = makeEvent(
             eventID: UUID(), requestSource: .chat, sessionID: sessionID, providerID: nil,
-            providerName: "测试", modelID: "test", requestedAt: Date(), status: .success, tokenUsage: usage
+            providerName: "测试", modelID: "test", requestedAt: requestedAt, status: .success, tokenUsage: usage
         )
         let otherEvent = makeEvent(
             eventID: UUID(), requestSource: .chat, sessionID: UUID(), providerID: nil,
-            providerName: "测试", modelID: "test", requestedAt: Date(), status: .success, tokenUsage: usage
+            providerName: "测试", modelID: "test", requestedAt: requestedAt, status: .success, tokenUsage: usage
         )
         let bundle = UsageStatsDayBundle(dayKey: ownEvent.dayKey, events: [ownEvent, otherEvent])
         _ = Persistence.mergeUsageStatsDayBundles([bundle])
