@@ -14,9 +14,12 @@ struct ChatSendFlightContentModifier: ViewModifier {
     let target: ChatSendFlightTarget?
 
     func body(content: Content) -> some View {
-        content
-            .id(layoutIdentity)
-            .opacity(opacity)
+        // 用稳定容器隔开显式 ID；否则 SwiftUI 会把内容重建传播到 overlay，拆掉正在交接的承载层。
+        VStack(spacing: 0) {
+            content
+                .id(layoutIdentity)
+                .opacity(opacity)
+        }
             .overlay {
                 if let target {
                     GeometryReader { proxy in
