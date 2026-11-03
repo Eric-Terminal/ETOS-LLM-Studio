@@ -9,6 +9,7 @@
 import Testing
 import Foundation
 import Combine
+import Darwin
 @testable import ETOSCore
 
 extension ChatServiceTests {
@@ -128,7 +129,7 @@ extension ChatServiceTests {
         #expect(finalCurrentSession?.id == session1.id)
     }
 
-    @Test("删除会话不会移除其他会话仍在引用的附件实体文件")
+    @Test("删除会话不会移除其他会话仍在引用的附件实体文件", .timeLimit(.minutes(1)))
     func testDeleteSessionKeepsFileAttachmentReferencedByOtherSession() async {
         let fileName = "shared-delete-check-\(UUID().uuidString).txt"
         defer { Persistence.deleteFile(fileName: fileName) }
@@ -169,12 +170,13 @@ extension ChatServiceTests {
         #expect(newCurrentSession?.name == "新的对话")
     }
 
-    @Test("Branch Session With Message Copy")
+    @Test("创建分支复制当前会话消息及 Agent 模式")
     func testBranchSession() throws {
         let sourceSession = chatService.currentSessionSubject.value!
         #expect(Persistence.saveLocalAgentMode(.agent, sessionID: sourceSession.id))
         let message = ChatMessage(role: .user, content: "message to be copied")
-        Persistence.saveMessages([message], for: sourceSession.id)
+        // 从服务写入，保持当前会话发布值与持久化状态一致。
+        chatService.updateMessages([message], for: sourceSession.id)
         let initialCount = chatService.chatSessionsSubject.value.count
 
         chatService.branchSession(from: sourceSession, copyMessages: true)
@@ -192,7 +194,7 @@ extension ChatServiceTests {
         #expect(Persistence.localAgentMode(sessionID: branchSession.id) == .agent)
     }
 
-    @Test("复制历史创建分支会复用文件附件引用")
+    @Test("复制历史创建分支会复用文件附件引用", .timeLimit(.minutes(1)))
     func testBranchSessionReusesFileAttachmentReference() async {
         let fileName = "branch-shared-\(UUID().uuidString).txt"
         defer { Persistence.deleteFile(fileName: fileName) }
@@ -200,7 +202,7 @@ extension ChatServiceTests {
         _ = Persistence.saveFile(Data("分支共享附件".utf8), fileName: fileName)
         let sourceSession = chatService.currentSessionSubject.value!
         let message = ChatMessage(role: .user, content: "[文件]", fileFileNames: [fileName])
-        Persistence.saveMessages([message], for: sourceSession.id)
+        chatService.updateMessages([message], for: sourceSession.id)
 
         let branch = chatService.branchSession(from: sourceSession, copyMessages: true)
         let branchFileName = Persistence.loadMessages(for: branch.id).first?.fileFileNames?.first
@@ -216,13 +218,23 @@ extension ChatServiceTests {
     }
 
     private func waitUntilFileAttachmentIsDeleted(_ fileName: String) async -> Bool {
-        for _ in 0..<20 {
-            if !Persistence.fileExists(fileName: fileName) {
-                return true
-            }
-            try? await Task.sleep(for: .milliseconds(50))
+        let url = Persistence.getFileDirectory().appendingPathComponent(fileName)
+        let descriptor = open(url.path, O_EVTONLY)
+        guard descriptor >= 0 else { return errno == ENOENT }
+        // 清理在后台执行；等待实际文件删除事件，而不是假定它能在一秒内拿到磁盘时间。
+        let events = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: descriptor, eventMask: .delete, queue: .global(qos: .utility)
+        )
+        source.setEventHandler { events.continuation.yield(()) }
+        source.setCancelHandler { close(descriptor); events.continuation.finish() }
+        source.activate()
+        defer { source.cancel() }
+        if !Persistence.fileExists(fileName: fileName) { return true }
+        for await _ in events.stream {
+            return !Persistence.fileExists(fileName: fileName)
         }
-        return !Persistence.fileExists(fileName: fileName)
+        return false
     }
 
     @Test("删除文件夹时会递归删除子文件夹并将会话回到未分类")

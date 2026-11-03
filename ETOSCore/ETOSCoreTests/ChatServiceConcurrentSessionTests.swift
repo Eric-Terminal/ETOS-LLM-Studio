@@ -15,7 +15,7 @@ import Combine
 struct ChatServiceConcurrentSessionTests {
 
     @MainActor
-    @Test("runningSessionIDs 会按会话并发生命周期更新")
+    @Test("runningSessionIDs 会按会话并发生命周期更新", .timeLimit(.minutes(2)))
     func testRunningSessionIDsLifecycle() async throws {
         let originalProviders = ConfigLoader.loadProviders()
         defer {
@@ -36,6 +36,11 @@ struct ChatServiceConcurrentSessionTests {
         ControlledSessionURLProtocol.reset()
         ControlledSessionURLProtocol.register(marker: "A", responseBody: "回复-A")
         ControlledSessionURLProtocol.register(marker: "B", responseBody: "回复-B")
+        // 先订阅再发送：检查请求启动时的状态，不把磁盘与运行时冷启动当成两秒性能门槛。
+        let starts = AsyncStream<String>.makeStream()
+        let subscription = ControlledSessionURLProtocol.startedMarkers.sink { starts.continuation.yield($0) }
+        defer { subscription.cancel(); starts.continuation.finish() }
+        var startedRequests = starts.stream.makeAsyncIterator()
 
         let sessionConfiguration = URLSessionConfiguration.ephemeral
         sessionConfiguration.protocolClasses = [ControlledSessionURLProtocol.self]
@@ -71,9 +76,9 @@ struct ChatServiceConcurrentSessionTests {
             )
         }
 
-        try await waitUntil("会话 A 请求启动") {
-            ControlledSessionURLProtocol.hasStarted(marker: "A")
-        }
+        defer { taskA.cancel() }
+        let firstStarted = await startedRequests.next()
+        try #require(firstStarted == "A")
 
         #expect(service.runningSessionIDsSubject.value == Set([sessionA.id]))
 
@@ -93,9 +98,9 @@ struct ChatServiceConcurrentSessionTests {
             )
         }
 
-        try await waitUntil("会话 B 请求启动") {
-            ControlledSessionURLProtocol.hasStarted(marker: "B")
-        }
+        defer { taskB.cancel() }
+        let secondStarted = await startedRequests.next()
+        try #require(secondStarted == "B")
 
         let runningAfterBStarted = service.runningSessionIDsSubject.value
         #expect(runningAfterBStarted.contains(sessionA.id))

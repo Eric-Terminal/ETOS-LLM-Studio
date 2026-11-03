@@ -22,7 +22,11 @@ extension ChatServiceTests {
         #expect(chatService.deleteHistoryMessage(second, sessionID: source.id, kind: .currentVersion))
         #expect(chatService.messagesSnapshot(for: source.id).map(\.id) == [user.id, first.id, firstTool.id])
         #expect(chatService.messagesForSessionSubject.value == messages)
-        #expect(chatService.deleteHistoryMessage(first, sessionID: source.id, kind: .allVersions))
+        // 切换版本会更新选择元数据，旧菜单引用必须失效；重新读取后才可删除。
+        #expect(!chatService.deleteHistoryMessage(first, sessionID: source.id, kind: .allVersions))
+        let selected = try #require(chatService.messagesSnapshot(for: source.id).first { $0.id == first.id })
+        #expect(selected.selectedResponseAttemptID == firstID)
+        #expect(chatService.deleteHistoryMessage(selected, sessionID: source.id, kind: .allVersions))
         let remaining = chatService.messagesSnapshot(for: source.id)
         #expect(remaining.map(\.id) == [user.id])
         #expect(remaining.first?.selectedResponseAttemptID == nil)

@@ -446,7 +446,7 @@ struct ChatServiceConcurrentSessionInteractionTests {
     }
 
     @MainActor
-    @Test("流式输出期间编辑历史用户消息不会被后续分片覆盖")
+    @Test("流式输出期间编辑历史用户消息不会被后续分片覆盖", .timeLimit(.minutes(2)))
     func testEditingUserMessageDuringStreamingIsPreserved() async throws {
         let originalProviders = ConfigLoader.loadProviders()
         defer {
@@ -485,6 +485,10 @@ struct ChatServiceConcurrentSessionInteractionTests {
         }
         service.setCurrentSession(testSession)
 
+        // 订阅真实首段发布；在它出现前编辑就没有覆盖到“流式期间编辑”的契约。
+        let updates = AsyncStream<[ChatMessage]>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let subscription = service.messagesForSessionSubject.sink { updates.continuation.yield($0) }
+        defer { subscription.cancel(); updates.continuation.finish() }
         let task = Task {
             await service.sendAndProcessMessage(
                 content: "edit-me",
@@ -500,11 +504,15 @@ struct ChatServiceConcurrentSessionInteractionTests {
             )
         }
 
-        try await waitUntil("流式第一段已发布") {
-            service.messagesForSessionSubject.value.contains { message in
-                message.role == .assistant && message.content == "第一段"
+        defer { task.cancel() }
+        var receivedFirstChunk = false
+        for await messages in updates.stream {
+            if messages.contains(where: { $0.role == .assistant && $0.content == "第一段" }) {
+                receivedFirstChunk = true
+                break
             }
         }
+        try #require(receivedFirstChunk)
 
         let userMessage = try #require(service.messagesForSessionSubject.value.first(where: { $0.role == .user }))
         var editedUserMessage = userMessage
@@ -893,6 +901,7 @@ private final class ControlledStreamingURLProtocol: URLProtocol {
 }
 
 final class ControlledSessionURLProtocol: URLProtocol {
+    static let startedMarkers = PassthroughSubject<String, Never>()
     private struct RegisteredResponse {
         let gate: DispatchSemaphore
         let responseBody: Data
@@ -972,6 +981,7 @@ final class ControlledSessionURLProtocol: URLProtocol {
             failWithError(message: "未注册 marker: \(marker)")
             return
         }
+        Self.startedMarkers.send(marker)
 
         DispatchQueue.global().async {
             gate.wait()
