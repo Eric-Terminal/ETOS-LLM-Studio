@@ -90,11 +90,18 @@ struct ModelChatRequestBodyPreviewTests {
         #expect(Set([disabled, enabled]).count == 1)
     }
 
-    @Test("非法 JSON 数值返回生成错误而不是空示例")
-    func invalidJSONFails() {
-        let model = Model(modelName: "example", overrideParameters: ["temperature": .double(.nan)])
-        #expect(throws: ModelChatRequestBodyPreview.PreviewError.self) {
-            try ModelChatRequestBodyPreview.body(model: model, providerAPIFormat: "openai-compatible")
+    @Test("各协议拒绝非法 JSON 数值并返回生成错误", arguments: [
+        "openai-compatible", "openai-responses", "anthropic", "gemini", "gemini-interactions"
+    ])
+    func invalidJSONFails(format: String) {
+        for value in [Double.nan, .infinity, -.infinity] {
+            let model = Model(modelName: "example", overrideParameters: [
+                "temperature": .double(value),
+                "extra": .dictionary(["values": .array([.double(value)])])
+            ])
+            #expect(throws: ModelChatRequestBodyPreview.PreviewError.self) {
+                try ModelChatRequestBodyPreview.body(model: model, providerAPIFormat: format)
+            }
         }
     }
 }

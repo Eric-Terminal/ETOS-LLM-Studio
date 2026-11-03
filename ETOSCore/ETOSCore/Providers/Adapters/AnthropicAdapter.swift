@@ -395,7 +395,9 @@ public class AnthropicAdapter: APIAdapter {
 
         payload = mergedRequestPayload(payload, with: passthroughAnthropicRequestOverrides(overrides))
         payload.removeValue(forKey: requestLogSuppressionControlKey)
-        
+
+        // 拒绝嵌套参数中的非有限数值，避免 JSONSerialization 抛出 Objective-C 异常。
+        guard JSONSerialization.isValidJSONObject(payload) else { return nil }
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
             logger.debug("已构建 Anthropic 聊天请求体，共 \(request.httpBody?.count ?? 0) 字节。")

@@ -128,6 +128,7 @@ public final class GeminiInteractionsAdapter: APIAdapter {
         guard let provider = normalizedProvider(model.provider), let baseURL = URL(string: provider.baseURL),
               let key = (commonPayload[GeminiAdapter.apiKeyControlKey] as? String)
                 ?? (commonPayload[providerAPIKeyControlKey] as? String) ?? provider.nextAPIKey(), !key.isEmpty,
+              JSONSerialization.isValidJSONObject(payload),
               let body = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]) else { return nil }
         var request = URLRequest(url: baseURL.appendingPathComponent("interactions"))
         request.httpMethod = "POST"

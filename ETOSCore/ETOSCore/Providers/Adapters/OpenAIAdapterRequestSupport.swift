@@ -222,6 +222,8 @@ extension OpenAIAdapter {
             }
         }
 
+        // 非有限数值会触发无法由 Swift catch 捕获的 Foundation 异常，必须在序列化边界拒绝。
+        guard JSONSerialization.isValidJSONObject(finalPayload) else { return nil }
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: [.sortedKeys])
             logger.debug("已构建聊天请求体，共 \(request.httpBody?.count ?? 0) 字节。")
@@ -384,6 +386,7 @@ extension OpenAIAdapter {
             finalPayload["input"] = incremental.inputItems
         }
 
+        guard JSONSerialization.isValidJSONObject(finalPayload) else { return nil }
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: [.sortedKeys])
             logger.debug("已构建 Responses 请求体，共 \(request.httpBody?.count ?? 0) 字节。")
