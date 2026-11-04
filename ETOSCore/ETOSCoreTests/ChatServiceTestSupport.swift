@@ -18,6 +18,7 @@ final class MockAPIAdapter: APIAdapter {
     var receivedConversationSummaryMessages: [ChatMessage]?
     var receivedConversationProfileMessages: [ChatMessage]?
     var receivedContextCompressionMessages: [ChatMessage]?
+    var receivedContextCompressionModel: RunnableModel?
     var contextCompressionRequestCount = 0
     var receivedTools: [InternalToolDefinition]?
     var receivedAudioAttachments: [UUID: AudioAttachment]?
@@ -40,6 +41,7 @@ final class MockAPIAdapter: APIAdapter {
             return URLRequest(url: URL(string: "https://fake.url/reasoning-summary")!)
         } else if messages.first?.content == ContextCompressionPromptBuilder.systemPrompt {
             receivedContextCompressionMessages = messages
+            receivedContextCompressionModel = model
             contextCompressionRequestCount += 1
             return URLRequest(url: URL(string: "https://fake.url/chat")!)
         } else if firstContent == BuiltInPromptStore.render(.conversationSummarySystem) {

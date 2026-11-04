@@ -24,10 +24,21 @@ extension ChatService {
         guard let sourceSession = chatSessionsSubject.value.first(where: { $0.id == sourceSessionID }) else {
             throw ContextCompressionError.sourceSessionNotFound
         }
-        guard let compressionModel = resolvedChatCapableModel(
-            storedIdentifier: options.compressionModelIdentifier
-        ) else {
-            throw ContextCompressionError.compressionModelNotFound
+        let candidates = activatedChatModels
+        let compressionModel: RunnableModel
+        if let identifier = options.compressionModelIdentifier, !identifier.isEmpty {
+            // 用户指定的提供商与模型是本次请求的边界，失效时不能悄悄改用其他账户。
+            guard let selected = candidates.first(where: { $0.id == identifier }) else {
+                throw ContextCompressionError.selectedCompressionModelUnavailable
+            }
+            compressionModel = selected
+        } else {
+            let sessionModel = candidates.first { $0.id == sourceSession.preferredModelIdentifier }
+            let mainModel = candidates.first { $0.id == selectedModelSubject.value?.id }
+            guard let automatic = sessionModel ?? mainModel ?? candidates.first else {
+                throw ContextCompressionError.compressionModelNotFound
+            }
+            compressionModel = automatic
         }
 
         let sourceMessages = await contextCompressionSourceMessagesSnapshot(for: sourceSessionID)

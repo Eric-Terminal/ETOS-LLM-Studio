@@ -684,6 +684,7 @@ struct ContextCompressionOptionsView: View {
 
     @State private var retainedRoundCount = ContextCompressionOptions.defaultRetainedRoundCount
     @State private var compressionModelID: String?
+    @State private var hasInitializedModelSelection = false
     @State private var focusInstruction = ""
     @State private var progress: ContextCompressionProgress?
     @State private var compressionTask: Task<Void, Never>?
@@ -727,7 +728,7 @@ struct ContextCompressionOptionsView: View {
                         Text(NSLocalizedString("自动选择", comment: "Automatic context compression model choice"))
                             .tag(String?.none)
                         ForEach(models) { model in
-                            Text("\(model.model.displayName) · \(model.provider.name)")
+                            Text(String(format: NSLocalizedString("%@ · %@", comment: "模型与提供商"), model.model.displayName, model.provider.name))
                                 .tag(Optional(model.id))
                         }
                     }
@@ -736,7 +737,11 @@ struct ContextCompressionOptionsView: View {
                         "最近轮次会保留原文，其余历史将一次性生成续聊摘要，原会话不会改变。",
                         comment: "Context compression retention explanation"
                     ))
+                    Text(GuideContextCompressionSettingsSupport.modelRoutingHelp)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
+                .disabled(compressionTask != nil)
 
                 Section {
                     TextEditor(text: $focusInstruction)
@@ -749,6 +754,7 @@ struct ContextCompressionOptionsView: View {
                         comment: "Context compression focus explanation"
                     ))
                 }
+                .disabled(compressionTask != nil)
 
                 if let progress {
                     Section {
@@ -798,10 +804,26 @@ struct ContextCompressionOptionsView: View {
             }
             .interactiveDismissDisabled(compressionTask != nil)
             .onAppear {
-                compressionModelID = models.contains { $0.id == selectedModelID }
-                    ? selectedModelID
-                    : nil
+                // 返回 Picker 或向导时保留用户选择，包括主动选择的“自动选择”。
+                guard !hasInitializedModelSelection else { return }
+                hasInitializedModelSelection = true
+                if let preferred = session.preferredModelIdentifier, models.contains(where: { $0.id == preferred }) {
+                    compressionModelID = preferred
+                } else {
+                    compressionModelID = models.contains { $0.id == selectedModelID } ? selectedModelID : nil
+                }
             }
+            .guideSettingsPageContext(
+                id: GuidePageID(rawValue: "compression-options-\(session.id)"),
+                title: NSLocalizedString("压缩为续聊", comment: ""),
+                documents: [GuideDocumentReference(id: "context-compression", title: "Context Compression")],
+                isActive: compressionTask == nil,
+                settings: GuideContextCompressionSettingsSupport.settings(
+                    sessionID: session.id, models: models,
+                    retainedRoundCount: $retainedRoundCount, modelIdentifier: $compressionModelID,
+                    focusInstruction: $focusInstruction
+                )
+            )
             .alert(NSLocalizedString("压缩失败", comment: "Context compression failure title"), isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }

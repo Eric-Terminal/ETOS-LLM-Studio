@@ -12,6 +12,95 @@ import Combine
 @testable import ETOSCore
 
 extension ChatServiceTests {
+    @Test("手动压缩模型使用所选提供商与凭据，不被同名主模型替换")
+    func compressionUsesExplicitProviderAndModel() async throws {
+        await cleanup()
+        setupMockResponsesForChatAndTitle()
+        let automatic = try #require(dummyModel)
+        let provider = Provider(
+            name: "手动压缩提供商", baseURL: "https://explicit.example/v1",
+            apiKeys: ["explicit-test-key"], apiFormat: "openai-compatible",
+            models: [Model(modelName: automatic.model.modelName, displayName: automatic.model.displayName, isActivated: true)]
+        )
+        ConfigLoader.saveProvider(provider)
+        chatService.reloadProviders()
+        chatService.setSelectedModel(automatic)
+        let selected = RunnableModel(provider: provider, model: provider.models[0])
+        let source = chatService.createSavedSession(
+            name: "手动选择压缩来源",
+            initialMessages: [ChatMessage(role: .user, content: "需要生成摘要")],
+            preferredModelIdentifier: automatic.id
+        )
+        defer { chatService.deleteSessions([source]) }
+
+        let child = try await chatService.createCompressedContinuation(
+            from: source.id,
+            options: ContextCompressionOptions(retainedRoundCount: 0, compressionModelIdentifier: selected.id)
+        )
+        defer { chatService.deleteSessions([child]) }
+        let requested = try #require(mockAdapter.receivedContextCompressionModel)
+        #expect(requested.id == selected.id)
+        #expect(requested.provider.baseURL == provider.baseURL)
+        #expect(requested.provider.apiKeys == provider.apiKeys)
+        #expect(requested.model.modelName == automatic.model.modelName)
+        #expect(requested.provider.id != automatic.provider.id)
+        let context = try #require(try Persistence.loadConversationContinuationContext(for: child.id))
+        #expect(context.compressionModelIdentifier == selected.id)
+    }
+
+    @Test("自动压缩优先使用来源会话的首选模型而不是全局主模型")
+    func automaticCompressionUsesSourceSessionModel() async throws {
+        await cleanup()
+        setupMockResponsesForChatAndTitle()
+        let selected = try #require(chatService.activatedChatModels.first { $0.id != dummyModel.id })
+        let source = chatService.createSavedSession(
+            name: "会话首选模型压缩来源",
+            initialMessages: [ChatMessage(role: .user, content: "沿用这个会话的模型")],
+            preferredModelIdentifier: selected.id
+        )
+        defer { chatService.deleteSessions([source]) }
+        let child = try await chatService.createCompressedContinuation(
+            from: source.id, options: ContextCompressionOptions(retainedRoundCount: 0)
+        )
+        defer { chatService.deleteSessions([child]) }
+        #expect(mockAdapter.receivedContextCompressionModel?.id == selected.id)
+        #expect(mockAdapter.receivedContextCompressionModel?.provider.id != dummyModel.provider.id)
+    }
+
+    @Test("手动指定的压缩模型丢失或停用时不发送其他模型请求")
+    func unavailableExplicitCompressionModelDoesNotFallback() async throws {
+        await cleanup()
+        setupMockResponsesForChatAndTitle()
+        let disabledProvider = Provider(
+            name: "停用的压缩提供商", baseURL: "https://disabled.example/v1",
+            apiKeys: ["disabled-test-key"], apiFormat: "openai-compatible",
+            models: [Model(modelName: "disabled", isActivated: false)]
+        )
+        ConfigLoader.saveProvider(disabledProvider)
+        chatService.reloadProviders()
+        let disabled = RunnableModel(provider: disabledProvider, model: disabledProvider.models[0])
+        let source = chatService.createSavedSession(
+            name: "禁止回退压缩来源",
+            initialMessages: [ChatMessage(role: .user, content: "不允许发送到另一个账户")]
+        )
+        defer { chatService.deleteSessions([source]) }
+        let originalSessionIDs = Set(chatService.chatSessionsSubject.value.map(\.id))
+        for identifier in ["missing-provider-model", disabled.id] {
+            do {
+                _ = try await chatService.createCompressedContinuation(
+                    from: source.id,
+                    options: ContextCompressionOptions(retainedRoundCount: 0, compressionModelIdentifier: identifier)
+                )
+                Issue.record("失效的手动选择不应生成续聊会话")
+            } catch ContextCompressionError.selectedCompressionModelUnavailable {
+                // 明确失败，不能触发自动选择，也不能留下部分会话。
+            }
+        }
+        #expect(mockAdapter.contextCompressionRequestCount == 0)
+        #expect(mockAdapter.receivedContextCompressionModel == nil)
+        #expect(Set(chatService.chatSessionsSubject.value.map(\.id)) == originalSessionIDs)
+    }
+
     @Test("后台压缩保存续聊但不替桌面窗口切换当前会话")
     func compressionCanSaveWithoutActivation() async throws {
         await cleanup()
@@ -21,6 +110,7 @@ extension ChatServiceTests {
         let source = chatService.createSavedSession(name: "桌面来源", initialMessages: original)
         let child = try await chatService.createCompressedContinuation(from: source.id,
             options: ContextCompressionOptions(retainedRoundCount: 0), activate: false)
+        #expect(mockAdapter.receivedContextCompressionModel?.id == dummyModel.id)
         #expect(chatService.currentSessionSubject.value?.id == source.id)
         #expect(chatService.messagesForSessionSubject.value == original)
         #expect(chatService.chatSessionsSubject.value.contains { $0.id == child.id })

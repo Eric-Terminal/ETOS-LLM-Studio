@@ -46,7 +46,8 @@ private struct MacContextCompressionView: View {
             Form {
                 Section {
                     MacSettingsIntroCard(id: "compression-options", title: NSLocalizedString("压缩为续聊", comment: ""),
-                        details: NSLocalizedString("Mac 续聊压缩说明正文", comment: ""), documentID: "context-compression", isActive: available)
+                        details: NSLocalizedString("Mac 续聊压缩说明正文", comment: "") + "\n\n" + GuideContextCompressionSettingsSupport.modelRoutingHelp,
+                        documentID: "context-compression", isActive: available)
                     LabeledContent(NSLocalizedString("会话", comment: ""), value: session.name)
                 }
                 Section {
@@ -62,6 +63,8 @@ private struct MacContextCompressionView: View {
                     }
                 } footer: {
                     Text(NSLocalizedString("最近轮次会保留原文，其余历史将一次性生成续聊摘要，原会话不会改变。", comment: ""))
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Text(GuideContextCompressionSettingsSupport.modelRoutingHelp)
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section(NSLocalizedString("额外侧重点（可选）", comment: "")) {
@@ -100,6 +103,7 @@ private struct MacContextCompressionView: View {
                 settings: [
                     .readOnly("source_session", label: NSLocalizedString("会话", comment: ""), value: { .string(session.id.uuidString) }),
                     .readOnly("requires_manual_creation", label: NSLocalizedString("创建续聊会话", comment: ""), value: { .bool(true) }),
+                    .readOnly("model_routing", label: NSLocalizedString("压缩模型", comment: ""), value: { .string(GuideContextCompressionSettingsSupport.modelRoutingHelp) }),
                     .string("retained_rounds", label: NSLocalizedString("保留最近原文", comment: ""), allowedValues: ["0", "2", "4", "6", "10"],
                         get: { String(retainedRounds) }, set: { if let count = Int($0) { retainedRounds = count } }),
                     .string("model", label: NSLocalizedString("压缩模型", comment: ""), allowedValues: workspace.sessionModelCatalog.guideIDs,

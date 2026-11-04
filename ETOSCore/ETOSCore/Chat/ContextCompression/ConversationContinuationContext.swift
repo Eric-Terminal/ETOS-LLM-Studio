@@ -213,6 +213,7 @@ public enum ContextCompressionError: LocalizedError, Equatable {
     case emptySummary
     case sourceSessionNotFound
     case compressionModelNotFound
+    case selectedCompressionModelUnavailable
 
     public var errorDescription: String? {
         switch self {
@@ -229,6 +230,8 @@ public enum ContextCompressionError: LocalizedError, Equatable {
             return NSLocalizedString("找不到要压缩的原会话。", comment: "Context compression source session missing error")
         case .compressionModelNotFound:
             return NSLocalizedString("找不到可用于上下文压缩的聊天模型。", comment: "Context compression model missing error")
+        case .selectedCompressionModelUnavailable:
+            return NSLocalizedString("context_compression.selected_model_unavailable", value: "The selected compression model is no longer available. Choose an enabled chat model and try again. No other model was used.", comment: "手动指定的压缩模型失效时禁止自动回退")
         }
     }
 }
