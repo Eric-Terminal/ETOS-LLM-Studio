@@ -8316,3 +8316,10 @@
 "Gemini Interactions API 地址说明" = "基础地址例如 https://generativelanguage.googleapis.com/v1；请求使用 /interactions。";
 "Gemini Interactions 配置说明" = "选择 Gemini Interactions，填写 Gemini API Key 和以 /v1 结尾的基础地址。网关要求特定 API 版本时保留对应版本路径。获取模型列表或手动添加受支持的模型，启用相应能力后保存。原有 Gemini 配置继续使用 generateContent。\n\n默认以 store=false 从本机发送聊天历史。文本、图片、音频、文档、视频和本地函数工具均使用 Interactions 步骤格式。启用推理会在 generation_config 下添加 thinking_level 和 thinking_summaries 控制。当前 API schema 不接受全局 temperature、top_p、top_k，因此不会发送这些参数。\n\n自定义 JSON 需使用 Interactions 字段，不能原样复制 generateContent 参数。此适配器用于前台模型请求，不接入托管代理、后台任务或 previous_interaction_id 会话串联。图片模型使用 Interactions；嵌入模型继续使用 Gemini 嵌入端点。";
 "Gemini Interactions 未返回完整的有效响应。" = "Gemini Interactions 未返回完整的有效响应。";
+
+/* 单个提供商设备传输 */
+"provider.transfer.title" = "发送单个提供商";
+"provider.transfer.summary" = "将单个提供商及其 API Key 和模型发送到配对设备。";
+"provider.transfer.help" = "在 iPhone 的“提供商管理”中长按远程提供商，选择“发送到 Apple Watch”。在 Apple Watch 上打开提供商，选择“发送到 iPhone”。\n\n发送内容包含已保存的 API Key、密钥备注、模型、自定义请求头和独立代理设置。编辑后请先保存。不包含聊天记录、其他提供商、全局设置或本地模型文件。\n\n双方都需要在“同步与备份”中开启设备同步，但无需启动全量同步。对端离线时会等待连接。“已发送”只代表传输完成，请在接收设备上查看提供商。\n\n接收端沿用现有提供商合并规则：匹配的提供商会合并密钥和模型，冲突设置可能保留接收端的值，不会覆盖整个配置数据库。\n\n此功能仅用于配对的 iPhone 与 Apple Watch，Mac 不支持这条传输通道。本地模型提供商不能发送。页面向导可以解释操作，但不能发送凭据或启动传输。";
+"provider.transfer.sent" = "已发送，请在对端查看提供商。";
+"provider.transfer.unavailable" = "未找到可发送的已保存远程提供商。";

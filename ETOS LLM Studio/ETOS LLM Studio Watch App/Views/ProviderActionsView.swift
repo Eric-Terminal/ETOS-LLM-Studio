@@ -14,9 +14,11 @@ import ETOSCore
 
 struct ProviderActionsView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @ObservedObject private var syncManager = WatchSyncManager.shared
     
     @State private var provider: Provider
     @State private var providerRevision = 0
+    @State private var showsTransferStatus = false
     private var isLocalProvider: Bool {
         LocalModelProviderBridge.isLocalProvider(provider)
     }
@@ -57,6 +59,25 @@ struct ProviderActionsView: View {
                     Label(NSLocalizedString("提供商配置", comment: ""), systemImage: "slider.horizontal.3")
                 }
             }
+            if !isLocalProvider {
+                Section {
+                    Button {
+                        showsTransferStatus = true
+                        syncManager.sendProviderToCompanion(providerID: provider.id)
+                    } label: {
+                        Label(NSLocalizedString("发送到 iPhone", comment: ""), systemImage: "iphone")
+                    }
+                    .disabled(isSyncing)
+
+                    if showsTransferStatus {
+                        ProviderCompanionTransferStatusView()
+                    }
+                } footer: {
+                    Text(ProviderCompanionTransferHelp.summary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .navigationTitle(provider.name)
         .guidePageContext(
@@ -81,11 +102,36 @@ struct ProviderActionsView: View {
                         label: NSLocalizedString("API 格式", comment: "手表提供商入口向导快照字段"),
                         value: .string(provider.apiFormat),
                         access: .readOnly
+                    ),
+                    "can_send_to_companion": GuideSnapshotField(
+                        label: ProviderCompanionTransferHelp.title,
+                        value: .bool(!isLocalProvider),
+                        access: .readOnly
+                    ),
+                    "single_provider_transfer": GuideSnapshotField(
+                        label: ProviderCompanionTransferHelp.title,
+                        value: .string(ProviderCompanionTransferHelp.details),
+                        access: .readOnly
+                    ),
+                    "device_sync_enabled": GuideSnapshotField(
+                        label: NSLocalizedString("设备同步", comment: ""),
+                        value: .bool(AppConfigStore.shared.syncAutoSyncEnabled),
+                        access: .readOnly
+                    ),
+                    "transfer_in_progress": GuideSnapshotField(
+                        label: ProviderCompanionTransferHelp.title,
+                        value: .bool(isSyncing),
+                        access: .readOnly
                     )
                 ])
             }
         )
         .watchGuideEntry()
+    }
+
+    private var isSyncing: Bool {
+        if case .syncing = syncManager.state { return true }
+        return false
     }
 
     private func updateProvider(_ updatedProvider: Provider) {

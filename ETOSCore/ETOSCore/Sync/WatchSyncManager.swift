@@ -4,7 +4,7 @@
 // 利用 WatchConnectivity 在 iPhone 与 Apple Watch 之间同步应用数据
 // - 默认通过库级覆盖解决分叉数据；旧双向合并仅作为用户确认后的风险选项
 // - 小载荷优先使用 sendMessage，较大载荷继续使用文件传输
-// - 支持单个会话发送，方便用户在覆盖前手动保留重要对话
+// - 支持单个会话和远程提供商发送，无需覆盖整库
 // ============================================================================
 
 import Foundation
@@ -145,6 +145,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         let expectsResponse: Bool
         let isSilent: Bool
         let marksSuccessWhenFinished: Bool
+        var inlineData: Data? = nil
     }
 
     private var pendingTransfers: [ObjectIdentifier: PendingTransferContext] = [:]
@@ -414,6 +415,54 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         }
     }
     
+    /// 发送已保存的单个远程提供商，包含凭据和模型，接收端沿用提供商合并规则。
+    public func sendProviderToCompanion(providerID: UUID) {
+        guard validateSessionBeforeTransfer(options: [.providers], silent: false) != nil else { return }
+        guard let provider = ChatService.shared.providersSubject.value.first(where: { $0.id == providerID }),
+              !LocalModelProviderBridge.isLocalProvider(provider) else {
+            state = .failed(ProviderCompanionTransfer.TransferError.unavailableProvider.localizedDescription)
+            return
+        }
+        guard let operationID = beginSyncOperation(
+            silent: false,
+            allowReuseExisting: false,
+            stateMessage: String(format: NSLocalizedString("正在发送“%@”…", comment: ""), provider.name)
+        ) else { return }
+
+        Task.detached(priority: .userInitiated) { [weak self] in
+            var stagedURL: URL?
+            do {
+                let envelope = try ProviderCompanionTransfer.makeEnvelope(provider: provider)
+                let data = try JSONEncoder().encode(envelope)
+                let fileURL = try SyncTemporaryFileCleaner.makeFileURL(prefix: "sync", fileExtension: "json")
+                stagedURL = fileURL
+                try data.write(to: fileURL, options: [.atomic])
+                let payload = SyncExchangePayload(
+                    fileURL: fileURL,
+                    optionsRawValue: SyncOptions.providers.rawValue,
+                    isResponse: false,
+                    requestID: operationID.uuidString,
+                    expectsResponse: false,
+                    isSilent: false,
+                    marksSuccessWhenFinished: true,
+                    inlineData: data
+                )
+                await MainActor.run { [weak self] in
+                    self?.sendExchange(payload: payload)
+                }
+            } catch {
+                if let stagedURL { try? FileManager.default.removeItem(at: stagedURL) }
+                await MainActor.run { [weak self] in
+                    self?.failSyncOperation(
+                        operationID: operationID,
+                        fallbackSilent: false,
+                        message: String(format: NSLocalizedString("发送失败：%@", comment: ""), error.localizedDescription)
+                    )
+                }
+            }
+        }
+    }
+
     /// 旧版启动静默全量合并已停用，避免在无确认时复活对端已删除的数据。
     public func performAutoSyncIfEnabled() {
         activateSessionIfNeeded()
@@ -725,7 +774,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         )
 
         if session.isReachable,
-           let data = try? Data(contentsOf: payload.fileURL),
+           let data = payload.inlineData ?? (try? Data(contentsOf: payload.fileURL)),
            data.count <= Self.inlineExchangePayloadLimit {
             sendInlineExchange(data: data, metadata: metadata, context: context)
             return
@@ -1027,9 +1076,10 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         guard cloud.beginLocalDataRestore() else { return }
         defer { cloud.endLocalDataRestore(didRestore: false) }
         do {
-            let data = try Data(contentsOf: url)
-            let decoder = JSONDecoder()
-            let packet = try decoder.decode(SyncExchangePacket.self, from: data)
+            let packet = try await Task.detached(priority: .userInitiated) {
+                let data = try Data(contentsOf: url)
+                return try JSONDecoder().decode(SyncExchangePacket.self, from: data)
+            }.value
 
             var summary = SyncMergeSummary.empty
             if let delta = packet.delta {

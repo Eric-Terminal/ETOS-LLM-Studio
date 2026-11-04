@@ -8497,3 +8497,10 @@
 "chat.quickActions.moveDown" = "下移";
 "chat.quickActions.macOrderFooter" = "使用箭头调整顺序。至少保留一项，修改立即保存。";
 "chat.quickActions.macIntroduction" = "每项功能（包括选择模型）都可设为优先显示在工具栏、放入更多或隐藏。使用箭头调整已启用项顺序；窗口过窄时，快捷功能统一收进菜单。修改立即保存，并与 iPhone 同步。iPhone Duo 由系统调整工具栏方向，空间不足时将项目移入更多。向导可提议修改配置，不能触发快捷功能。";
+
+/* 单个提供商设备传输 */
+"provider.transfer.title" = "发送单个提供商";
+"provider.transfer.summary" = "将单个提供商及其 API Key 和模型发送到配对设备。";
+"provider.transfer.help" = "在 iPhone 的“提供商管理”中长按远程提供商，选择“发送到 Apple Watch”。在 Apple Watch 上打开提供商，选择“发送到 iPhone”。\n\n发送内容包含已保存的 API Key、密钥备注、模型、自定义请求头和独立代理设置。编辑后请先保存。不包含聊天记录、其他提供商、全局设置或本地模型文件。\n\n双方都需要在“同步与备份”中开启设备同步，但无需启动全量同步。对端离线时会等待连接。“已发送”只代表传输完成，请在接收设备上查看提供商。\n\n接收端沿用现有提供商合并规则：匹配的提供商会合并密钥和模型，冲突设置可能保留接收端的值，不会覆盖整个配置数据库。\n\n此功能仅用于配对的 iPhone 与 Apple Watch，Mac 不支持这条传输通道。本地模型提供商不能发送。页面向导可以解释操作，但不能发送凭据或启动传输。";
+"provider.transfer.sent" = "已发送，请在对端查看提供商。";
+"provider.transfer.unavailable" = "未找到可发送的已保存远程提供商。";

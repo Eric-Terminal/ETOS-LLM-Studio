@@ -8511,3 +8511,10 @@
 "chat.quickActions.moveDown" = "Move Down";
 "chat.quickActions.macOrderFooter" = "Use the arrows to reorder. Keep at least one action enabled. Changes save immediately.";
 "chat.quickActions.macIntroduction" = "Choose Prefer Toolbar, More Menu, or Hidden for each action, including Choose Model. Use the arrows to reorder enabled actions. Narrow windows collect actions in a menu. Changes save immediately and sync with iPhone. On iPhone Duo, the system adapts toolbar orientation and moves items into More when space is limited. The guide can propose configuration changes but cannot launch actions.";
+
+/* 单个提供商设备传输 */
+"provider.transfer.title" = "Send a Provider";
+"provider.transfer.summary" = "Send one provider with its API keys and models to your paired device.";
+"provider.transfer.help" = "On iPhone, open Provider Management, touch and hold a remote provider, then choose Send to Apple Watch. On Apple Watch, open the provider and choose Send to iPhone.\n\nThe saved provider is sent with its API keys, key notes, models, custom headers and independent proxy settings. Save any edits first. Conversations, other providers, global settings and local model files are not included.\n\nBoth devices must have device sync enabled in Sync & Backup. You do not need to start a full sync. If the other device is offline, delivery waits for a connection. Sent means the transfer finished; check the provider on the receiving device.\n\nThe receiving device uses the existing provider merge rules: matching providers merge keys and models, and conflicting settings may retain the receiving device's values. This does not replace its entire configuration database.\n\nThis transfer is available only between a paired iPhone and Apple Watch, not on Mac. Local model providers cannot be sent. The page guide can explain these steps but cannot send credentials or start a transfer.";
+"provider.transfer.sent" = "Sent. Check the provider on the other device.";
+"provider.transfer.unavailable" = "No saved remote provider is available to send.";

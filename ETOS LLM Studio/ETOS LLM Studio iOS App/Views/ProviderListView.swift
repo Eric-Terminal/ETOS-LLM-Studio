@@ -77,7 +77,7 @@ struct ProviderListView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            ProviderManagementContentView()
+            ProviderManagementContentView(isGuideContextActive: selectedTab == .provider)
                 .environmentObject(viewModel)
                 .tabItem {
                     Label(ProviderManagementTab.provider.title, systemImage: ProviderManagementTab.provider.iconName)
@@ -167,12 +167,23 @@ struct ProviderListView: View {
 }
 
 private struct ProviderManagementContentView: View {
+    let isGuideContextActive: Bool
     @EnvironmentObject private var viewModel: ChatViewModel
+    @ObservedObject private var syncManager = WatchSyncManager.shared
     @State private var providerToDelete: Provider?
     @State private var showDeleteAlert = false
+    @State private var showsTransferStatus = false
 
     var body: some View {
         List {
+            Section {
+                settingsIntroCard
+            }
+            if showsTransferStatus {
+                Section {
+                    ProviderCompanionTransferStatusView()
+                }
+            }
             Section {
                 ForEach(providersBinding, id: \.id, editActions: .move) { $provider in
                     NavigationLink {
@@ -186,6 +197,17 @@ private struct ProviderManagementContentView: View {
                             subtitleUIFont: .preferredFont(forTextStyle: .caption1)
                         )
                     }
+                    .contextMenu {
+                        if !LocalModelProviderBridge.isLocalProvider(provider) {
+                            Button {
+                                showsTransferStatus = true
+                                syncManager.sendProviderToCompanion(providerID: provider.id)
+                            } label: {
+                                Label(NSLocalizedString("发送到 Apple Watch", comment: ""), systemImage: "applewatch")
+                            }
+                            .disabled(isSyncing)
+                        }
+                    }
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
                             providerToDelete = provider
@@ -197,6 +219,26 @@ private struct ProviderManagementContentView: View {
                 }
             }
         }
+        .guideSettingsPageContext(
+            id: "provider-list",
+            title: NSLocalizedString("提供商管理", comment: ""),
+            documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
+            isActive: isGuideContextActive,
+            settings: ProviderCompanionTransferHelp.guideSettings + [
+                .readOnly("providers", label: NSLocalizedString("已配置提供商", comment: ""), value: {
+                    .array(viewModel.providers.map { provider in
+                        .dictionary([
+                            "id": .string(provider.id.uuidString.lowercased()),
+                            "name": .string(provider.name),
+                            "base_url": .string(provider.baseURL),
+                            "api_format": .string(provider.apiFormat),
+                            "active_model_count": .int(provider.models.count(where: \.isActivated)),
+                            "can_send_to_companion": .bool(!LocalModelProviderBridge.isLocalProvider(provider))
+                        ])
+                    })
+                })
+            ]
+        )
         .alert(NSLocalizedString("确认删除提供商", comment: ""), isPresented: $showDeleteAlert) {
             Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                 if let target = providerToDelete {
@@ -216,6 +258,37 @@ private struct ProviderManagementContentView: View {
                 }
             } else {
                 Text(NSLocalizedString("此操作无法撤销。", comment: ""))
+            }
+        }
+    }
+
+    private var isSyncing: Bool {
+        if case .syncing = syncManager.state { return true }
+        return false
+    }
+
+    private var settingsIntroCard: some View {
+        NavigationLink {
+            ScrollView {
+                Text(ProviderCompanionTransferHelp.details)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+            .navigationTitle(ProviderCompanionTransferHelp.title)
+            .guideSettingsPageContext(
+                id: "provider-transfer-introduction",
+                title: ProviderCompanionTransferHelp.title,
+                documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
+                settings: ProviderCompanionTransferHelp.guideSettings
+            )
+        } label: {
+            VStack(alignment: .leading) {
+                Text(ProviderCompanionTransferHelp.title)
+                Text(ProviderCompanionTransferHelp.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }

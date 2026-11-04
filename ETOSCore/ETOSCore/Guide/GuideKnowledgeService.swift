@@ -182,11 +182,13 @@ public enum GuideDocumentCatalog {
         GuideDocument(
             id: "provider-model-basics",
             title: "提供商、API 凭据与聊天模型",
-            keywords: ["提供商", "模型", "API", "Key", "激活", "选择", "Base URL", "模型测试", "连通性", "并发", "connectivity", "Gemini", "Interactions"],
+            keywords: ["提供商", "模型", "API", "Key", "激活", "选择", "Base URL", "模型测试", "连通性", "并发", "connectivity", "Gemini", "Interactions", "发送提供商", "单个提供商同步", "Apple Watch", "iPhone"],
             content: """
             可聊天状态需要同时满足：存在提供商；需要凭据的远程提供商已经填写 API Key；提供商下存在聊天模型；模型已经激活；最后有一个可运行聊天模型被选中。
 
             提供商负责 Base URL、API 格式、请求路径、凭据和独立代理；模型负责模型名、显示名、能力、激活状态及请求体覆盖。只有模型明确启用了“工具调用”能力时，才可被选作用户自有向导模型。
+
+            单个提供商可以在配对的 iPhone 与 Apple Watch 之间发送：iPhone 在“提供商管理”长按远程提供商，选择“发送到 Apple Watch”；手表打开该提供商的操作页，选择“发送到 iPhone”。发送已保存的 API Key、密钥备注、多 Key 设置、全部模型、自定义请求头和独立代理配置；编辑草稿须先保存。不包含其他提供商、聊天记录、全局设置或本地模型文件，不需要启动全量同步。双方仍须在“同步与备份”开启设备同步；离线时等待系统传输，发送完成只代表传输结束，应在对端确认配置。接收端沿用现有合并规则，合并同一提供商的密钥和模型，冲突配置可能保留接收端值，不覆盖整库。本地模型不提供此入口；macOS 不支持这条配对设备通道。列表、手表操作页和介绍页均提供各自的向导上下文，发送能力与设备同步状态只读；向导不能发送凭据或代替用户启动传输。
 
             Gemini Interactions 是独立 API 格式 gemini-interactions，三端均可在提供商或模型覆盖中选择；原有 gemini 仍使用 generateContent，不自动迁移。基础地址建议 https://generativelanguage.googleapis.com/v1，请求拼接 /interactions，明确填写的版本与网关路径会保留。模型列表沿用 Gemini Models API，列表并不保证每个模型都支持当前 Interactions 版本；应按上游支持情况选择模型。使用同一 Gemini API Key，支持自定义请求头、独立代理和多 Key 重试，视频换 Key 时会重新上传并替换 URI。
 

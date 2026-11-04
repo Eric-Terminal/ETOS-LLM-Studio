@@ -79,6 +79,9 @@ private struct WatchProviderManagementContentView: View {
 
     var body: some View {
         List {
+            Section {
+                settingsIntroCard
+            }
             ForEach(providersBinding, id: \.id, editActions: .move) { $provider in
                 NavigationLink {
                     ProviderActionsView(provider: provider)
@@ -125,7 +128,7 @@ private struct WatchProviderManagementContentView: View {
     }
 
     private var providerListGuideSettings: [GuidePageSetting] {
-        [
+        ProviderCompanionTransferHelp.guideSettings + [
             .json(
                 "provider_order",
                 label: NSLocalizedString("提供商顺序", comment: "手表提供商管理向导字段"),
@@ -161,12 +164,40 @@ private struct WatchProviderManagementContentView: View {
                             "id": .string(provider.id.uuidString.lowercased()),
                             "name": .string(provider.name),
                             "base_url": .string(provider.baseURL),
-                            "api_format": .string(provider.apiFormat)
+                            "api_format": .string(provider.apiFormat),
+                            "can_send_to_companion": .bool(!LocalModelProviderBridge.isLocalProvider(provider))
                         ])
                     })
                 }
             )
         ]
+    }
+
+    private var settingsIntroCard: some View {
+        NavigationLink {
+            ScrollView {
+                Text(ProviderCompanionTransferHelp.details)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+            .navigationTitle(ProviderCompanionTransferHelp.title)
+            .guideSettingsPageContext(
+                id: "watch-provider-transfer-introduction",
+                title: ProviderCompanionTransferHelp.title,
+                documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
+                settings: ProviderCompanionTransferHelp.guideSettings
+            )
+            .watchGuideEntry()
+        } label: {
+            VStack(alignment: .leading) {
+                Text(ProviderCompanionTransferHelp.title)
+                Text(ProviderCompanionTransferHelp.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     private func deleteProvider(_ provider: Provider) {

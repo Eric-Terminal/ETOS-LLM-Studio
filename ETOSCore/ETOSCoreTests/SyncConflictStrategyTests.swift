@@ -320,6 +320,38 @@ struct SyncConflictStrategyTests {
         #expect(mergedMessages.map(\.content) == ["先说一点", "收到", "远端追加"])
     }
 
+    @Test("单个提供商重复接收会合并密钥和模型并保留其他提供商")
+    func testSingleProviderTransferMergesWithoutReplacingOtherProviders() async throws {
+        let previousPersistenceOverride = enableRelationalPersistence()
+        defer { restorePersistenceOverride(previousPersistenceOverride) }
+        let originalProviders = ConfigLoader.loadProviders()
+        defer { resetProviders(to: originalProviders) }
+        resetProviders(to: [])
+
+        let local = Provider(name: "目标提供商", baseURL: "https://target.example/v1", apiKeys: ["local-key"], apiFormat: "openai-compatible", models: [Model(modelName: "local-model", isActivated: true)])
+        let unrelated = Provider(name: "其他提供商", baseURL: "https://other.example/v1", apiKeys: ["other-key"], apiFormat: "anthropic")
+        ConfigLoader.saveProvider(local)
+        ConfigLoader.saveProvider(unrelated)
+        var incoming = local
+        incoming.apiKeys = ["incoming-key"]
+        incoming.models = [Model(modelName: "incoming-model", isActivated: true)]
+        let envelope = try ProviderCompanionTransfer.makeEnvelope(provider: incoming)
+        let package = try JSONDecoder().decode(SyncEnvelopeV2.self, from: JSONEncoder().encode(envelope)).delta.package
+        let service = ChatService()
+
+        let first = await SyncEngine.apply(package: package, chatService: service)
+        let second = await SyncEngine.apply(package: package, chatService: service)
+        let stored = ConfigLoader.loadProviders()
+        let merged = try #require(stored.first { $0.id == local.id })
+        #expect(first.importedProviders == 1)
+        #expect(second.importedProviders == 0)
+        #expect(second.skippedProviders == 1)
+        #expect(stored.count == 2)
+        #expect(stored.first { $0.id == unrelated.id } == unrelated)
+        #expect(Set(merged.apiKeys) == Set(["local-key", "incoming-key"]))
+        #expect(Set(merged.models.map(\.modelName)) == Set(["local-model", "incoming-model"]))
+    }
+
     @Test("提供商新增嵌套键值时会深度合并")
     func testProvidersDeepMergeWhenIncomingAddsNestedValues() async throws {
         let previousPersistenceOverride = enableRelationalPersistence()
