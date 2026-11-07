@@ -323,7 +323,7 @@ public enum FeedbackStore {
     private static func shouldReplace(existing: FeedbackTicket, with incoming: FeedbackTicket) -> Bool {
         let incomingCheck = incoming.lastCheckedAt ?? incoming.createdAt
         let existingCheck = existing.lastCheckedAt ?? existing.createdAt
-        return incomingCheck >= existingCheck
+        return incomingCheck.timeIntervalSinceReferenceDate >= existingCheck.timeIntervalSinceReferenceDate
     }
 
     private static func sortTickets(_ tickets: [FeedbackTicket]) -> [FeedbackTicket] {

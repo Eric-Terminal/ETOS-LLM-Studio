@@ -134,7 +134,8 @@ extension DailyPulseManager {
     ) -> Bool {
         guard trigger != .manual else { return true }
         guard let attempt else { return true }
-        return referenceDate >= attempt.retryAfter
+        // 避开在部分 watchOS 27.2 构建上解析为空的 Date 比较符号，保留冷却截止时刻可重试的语义。
+        return referenceDate.timeIntervalSinceReferenceDate >= attempt.retryAfter.timeIntervalSinceReferenceDate
     }
 
     internal nonisolated static func shouldGenerateOnCurrentDevice(
@@ -161,7 +162,9 @@ extension DailyPulseManager {
             var remaining: [DailyPulseSessionExcerpt] = []
 
             for excerpt in unusedExcerpts {
-                let isAvailableAtDelivery = excerpt.lastActivityAt.map { $0 <= scheduledAt } ?? true
+                let isAvailableAtDelivery = excerpt.lastActivityAt.map {
+                    $0.timeIntervalSinceReferenceDate <= scheduledAt.timeIntervalSinceReferenceDate
+                } ?? true
                 if batch.count < max(1, count), isAvailableAtDelivery {
                     batch.append(excerpt)
                 } else {
@@ -270,8 +273,9 @@ extension DailyPulseManager {
     }
 
     internal nonisolated static func mergeRun(local: DailyPulseRun, incoming: DailyPulseRun) -> DailyPulseRun {
-        let base = incoming.generatedAt >= local.generatedAt ? incoming : local
-        let secondary = incoming.generatedAt >= local.generatedAt ? local : incoming
+        let useIncoming = incoming.generatedAt.timeIntervalSinceReferenceDate >= local.generatedAt.timeIntervalSinceReferenceDate
+        let base = useIncoming ? incoming : local
+        let secondary = useIncoming ? local : incoming
 
         let mergedCards = base.cards.map { baseCard in
             guard let matchingSecondary = secondary.cards.first(where: {
@@ -682,7 +686,7 @@ extension DailyPulseManager {
             $0.source == signal.source
                 && areTopicsSimilar($0.title, signal.title)
         }) {
-            if signal.capturedAt >= updated[existingIndex].capturedAt {
+            if signal.capturedAt.timeIntervalSinceReferenceDate >= updated[existingIndex].capturedAt.timeIntervalSinceReferenceDate {
                 updated[existingIndex] = signal
             }
         } else {
@@ -693,8 +697,9 @@ extension DailyPulseManager {
     }
 
     internal nonisolated static func mergeTask(local: DailyPulseTask, incoming: DailyPulseTask) -> DailyPulseTask {
-        let base = incoming.updatedAt >= local.updatedAt ? incoming : local
-        let secondary = incoming.updatedAt >= local.updatedAt ? local : incoming
+        let useIncoming = incoming.updatedAt.timeIntervalSinceReferenceDate >= local.updatedAt.timeIntervalSinceReferenceDate
+        let base = useIncoming ? incoming : local
+        let secondary = useIncoming ? local : incoming
 
         var merged = base
         if merged.completedAt == nil {
@@ -710,7 +715,7 @@ extension DailyPulseManager {
     }
 
     internal nonisolated static func mergeExternalSignal(local: DailyPulseExternalSignal, incoming: DailyPulseExternalSignal) -> DailyPulseExternalSignal {
-        incoming.capturedAt >= local.capturedAt ? incoming : local
+        incoming.capturedAt.timeIntervalSinceReferenceDate >= local.capturedAt.timeIntervalSinceReferenceDate ? incoming : local
     }
 
     internal nonisolated static func activeCurationText(

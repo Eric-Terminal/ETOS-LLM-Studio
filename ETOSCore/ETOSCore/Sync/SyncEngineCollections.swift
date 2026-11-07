@@ -199,7 +199,7 @@ extension SyncEngine {
         let localContent = local.content.trimmingCharacters(in: .whitespacesAndNewlines)
         let incomingContent = incoming.content.trimmingCharacters(in: .whitespacesAndNewlines)
         let latestUpdatedAt = max(local.updatedAt, incoming.updatedAt)
-        let sourceSessionID = incoming.updatedAt >= local.updatedAt
+        let sourceSessionID = incoming.updatedAt.timeIntervalSinceReferenceDate >= local.updatedAt.timeIntervalSinceReferenceDate
             ? incoming.sourceSessionID ?? local.sourceSessionID
             : local.sourceSessionID ?? incoming.sourceSessionID
         let mergedFacts = mergedConversationProfileFacts(local.facts, incoming.facts)
@@ -246,7 +246,8 @@ extension SyncEngine {
                 merged[key] = ConversationProfileFact(
                     id: existing.id,
                     category: fact.category,
-                    statement: fact.lastObservedAt >= existing.lastObservedAt ? fact.statement : existing.statement,
+                    statement: fact.lastObservedAt.timeIntervalSinceReferenceDate >= existing.lastObservedAt.timeIntervalSinceReferenceDate
+                        ? fact.statement : existing.statement,
                     confidence: max(existing.confidence, fact.confidence),
                     evidenceCount: max(existing.evidenceCount, fact.evidenceCount),
                     firstObservedAt: min(existing.firstObservedAt, fact.firstObservedAt),

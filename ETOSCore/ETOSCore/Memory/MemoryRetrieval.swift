@@ -39,7 +39,7 @@ enum MemoryHybridRetriever {
             guard !memory.isArchived else { return false }
             switch temporalIntent {
             case .historical:
-                return memory.validFrom == nil || memory.validFrom! <= now
+                return memory.validFrom == nil || memory.validFrom!.timeIntervalSinceReferenceDate <= now.timeIntervalSinceReferenceDate
             case .future:
                 return memory.validUntil == nil || memory.validUntil! > now
             case .current, .neutral:

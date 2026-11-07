@@ -220,7 +220,8 @@ extension MCPStreamableHTTPTransport {
     func resumeSSEProbeIfNeeded(force: Bool, reason: String) -> Bool {
         guard !isSSEEnabled else { return true }
         let now = Date()
-        if force || sseSuspendedUntil == nil || now >= (sseSuspendedUntil ?? .distantPast) {
+        if force || sseSuspendedUntil == nil
+            || now.timeIntervalSinceReferenceDate >= (sseSuspendedUntil ?? .distantPast).timeIntervalSinceReferenceDate {
             isSSEEnabled = true
             sseSuspendedUntil = nil
             sseReconnectAttempt = 0

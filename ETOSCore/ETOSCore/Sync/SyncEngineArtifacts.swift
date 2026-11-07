@@ -90,7 +90,7 @@ extension SyncEngine {
                 skipped += 1
             } else if let incomingCuration {
                 let shouldReplace = localCuration == nil
-                    || incomingCuration.createdAt >= (localCuration?.createdAt ?? .distantPast)
+                    || incomingCuration.createdAt.timeIntervalSinceReferenceDate >= (localCuration?.createdAt ?? .distantPast).timeIntervalSinceReferenceDate
                 if shouldReplace {
                     Persistence.saveDailyPulsePendingCuration(incomingCuration)
                     imported += 1

@@ -358,11 +358,12 @@ extension ChatService {
         var anchorTime: Date?
 
         for (index, message) in chatHistory.enumerated() {
-            guard let timestamp = messageTimelineTimestamp(for: message), timestamp <= cutoff else {
+            guard let timestamp = messageTimelineTimestamp(for: message),
+                  timestamp.timeIntervalSinceReferenceDate <= cutoff.timeIntervalSinceReferenceDate else {
                 continue
             }
             if let bestTime = anchorTime {
-                if timestamp >= bestTime {
+                if timestamp.timeIntervalSinceReferenceDate >= bestTime.timeIntervalSinceReferenceDate {
                     anchorTime = timestamp
                     anchorIndex = index
                 }

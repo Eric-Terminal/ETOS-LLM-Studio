@@ -149,14 +149,16 @@ public enum SyncDeltaEngine {
         }
 
         let staleThreshold = now.addingTimeInterval(-tombstoneRetention)
-        checkpoint.tombstones = checkpoint.tombstones.filter { $0.value >= staleThreshold }
+        checkpoint.tombstones = checkpoint.tombstones.filter {
+            $0.value.timeIntervalSinceReferenceDate >= staleThreshold.timeIntervalSinceReferenceDate
+        }
 
         var deletions: [SyncDeleteRecord] = []
         for (key, deletedAt) in checkpoint.tombstones {
             guard let descriptor = descriptorFromKey(key),
                   enabledRecordTypes.contains(descriptor.type) else { continue }
             if let remoteDescriptor = remoteMap[key] {
-                if remoteDescriptor.updatedAt <= deletedAt {
+                if remoteDescriptor.updatedAt.timeIntervalSinceReferenceDate <= deletedAt.timeIntervalSinceReferenceDate {
                     deletions.append(
                         SyncDeleteRecord(
                             type: descriptor.type,
@@ -218,7 +220,8 @@ public enum SyncDeltaEngine {
         var tombstoneDatesByKey = deletionCheckpoint.tombstones
         for deletion in delta.deletions {
             let key = SyncRecordDescriptor.key(type: deletion.type, recordID: deletion.recordID)
-            if let existingDate = tombstoneDatesByKey[key], existingDate >= deletion.deletedAt {
+            if let existingDate = tombstoneDatesByKey[key],
+               existingDate.timeIntervalSinceReferenceDate >= deletion.deletedAt.timeIntervalSinceReferenceDate {
                 continue
             }
             tombstoneDatesByKey[key] = deletion.deletedAt

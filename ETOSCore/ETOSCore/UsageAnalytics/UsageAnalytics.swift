@@ -270,7 +270,7 @@ public enum UsageAnalyticsRuntimeContext {
         var cursor = calendar.startOfDay(for: interval.start)
         let endDay = calendar.startOfDay(for: interval.end.addingTimeInterval(-1))
 
-        while cursor <= endDay {
+        while cursor.timeIntervalSinceReferenceDate <= endDay.timeIntervalSinceReferenceDate {
             keys.append(dayKey(for: cursor, calendar: calendar))
             guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
             cursor = next

@@ -509,7 +509,7 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         ) else {
             return false
         }
-        return referenceDate >= reminderDate
+        return referenceDate.timeIntervalSinceReferenceDate >= reminderDate.timeIntervalSinceReferenceDate
     }
 
     internal nonisolated static func deliveryDate(
@@ -583,7 +583,7 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         let reminderDate: Date
         if forceNextDay {
             reminderDate = calendar.date(byAdding: .day, value: 1, to: todayReminderDate) ?? todayReminderDate
-        } else if referenceDate <= todayReminderDate {
+        } else if referenceDate.timeIntervalSinceReferenceDate <= todayReminderDate.timeIntervalSinceReferenceDate {
             reminderDate = todayReminderDate
         } else {
             return referenceDate.addingTimeInterval(60)

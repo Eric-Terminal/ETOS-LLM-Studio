@@ -194,7 +194,7 @@ public struct MemoryItem: Codable, Identifiable, Hashable, Sendable {
     public func isValid(at date: Date) -> Bool {
         guard !isArchived else { return false }
         if let validFrom, date < validFrom { return false }
-        if let validUntil, date >= validUntil { return false }
+        if let validUntil, date.timeIntervalSinceReferenceDate >= validUntil.timeIntervalSinceReferenceDate { return false }
         return true
     }
 

@@ -640,7 +640,7 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         for (sessionID, session) in sessions where !session.isUserControlling {
             for tabID in session.order where tabID != session.selectedTabID {
                 guard let tab = session.tabs[tabID], !tab.webView.isLoading, let url = tab.webView.url else { continue }
-                if let cutoff, tab.lastActivityAt >= cutoff { continue }
+                if let cutoff, tab.lastActivityAt.timeIntervalSinceReferenceDate >= cutoff.timeIntervalSinceReferenceDate { continue }
                 let oldWebView = tab.webView
                 tab.recoverableURL = url
                 tab.recoverableTitle = oldWebView.title
@@ -681,7 +681,7 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         while tab.webView.isLoading {
             try Task.checkCancellation()
             guard !isSuspended, tab.navigationRevision == revision else { throw CancellationError() }
-            if Date() >= deadline {
+            if Date().timeIntervalSinceReferenceDate >= deadline.timeIntervalSinceReferenceDate {
                 tab.webView.stopLoading()
                 throw BrowserAgentError.navigationFailed(
                     NSLocalizedString("等待网页加载超时。", comment: "Browser Agent navigation timeout")
@@ -707,7 +707,8 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         let domain = cookie.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
         guard host == domain || host.hasSuffix("." + domain) else { return false }
         if cookie.isSecure, url.scheme?.lowercased() != "https" { return false }
-        if let expiresDate = cookie.expiresDate, expiresDate <= Date() { return false }
+        if let expiresDate = cookie.expiresDate,
+           expiresDate.timeIntervalSinceReferenceDate <= Date().timeIntervalSinceReferenceDate { return false }
         let requestPath = url.path.isEmpty ? "/" : url.path
         let cookiePath = cookie.path.isEmpty ? "/" : cookie.path
         guard requestPath.hasPrefix(cookiePath) else { return false }
@@ -1271,7 +1272,7 @@ public final class BrowserSessionManager: ObservableObject {
         let deadline = Date().addingTimeInterval(60)
         while webView.value(forKey: "loading") as? Bool == true {
             try Task.checkCancellation()
-            if Date() >= deadline {
+            if Date().timeIntervalSinceReferenceDate >= deadline.timeIntervalSinceReferenceDate {
                 throw BrowserAgentError.navigationFailed(
                     NSLocalizedString("等待网页加载超时。", comment: "Browser Agent navigation timeout")
                 )

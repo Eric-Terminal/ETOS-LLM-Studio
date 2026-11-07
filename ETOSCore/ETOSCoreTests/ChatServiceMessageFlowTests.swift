@@ -322,8 +322,8 @@ extension ChatServiceTests {
             Issue.record("用户消息缺少 requestedAt 字段。")
             return
         }
-        #expect(requestedAt >= startedAt.addingTimeInterval(-1))
-        #expect(requestedAt <= finishedAt.addingTimeInterval(1))
+        #expect(requestedAt.timeIntervalSinceReferenceDate >= startedAt.addingTimeInterval(-1).timeIntervalSinceReferenceDate)
+        #expect(requestedAt.timeIntervalSinceReferenceDate <= finishedAt.addingTimeInterval(1).timeIntervalSinceReferenceDate)
     }
 
     @Test("每个文件附件会独立转换为文本消息并保留正文消息")

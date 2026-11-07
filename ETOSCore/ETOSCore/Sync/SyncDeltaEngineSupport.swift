@@ -24,7 +24,7 @@ extension SyncDeltaEngine {
         let filteredDeletions = delta.deletions.filter { deletion in
             let key = SyncRecordDescriptor.key(type: deletion.type, recordID: deletion.recordID)
             if let tombstoneDate = tombstonesByKey[key] {
-                return deletion.deletedAt >= tombstoneDate
+                return deletion.deletedAt.timeIntervalSinceReferenceDate >= tombstoneDate.timeIntervalSinceReferenceDate
             }
             return true
         }
@@ -170,7 +170,7 @@ extension SyncDeltaEngine {
         let key = SyncRecordDescriptor.key(type: type, recordID: recordID)
         guard let tombstoneDate = tombstonesByKey[key] else { return false }
         let incomingUpdatedAt = remoteRecordDatesByKey[key] ?? incomingGeneratedAt
-        return incomingUpdatedAt <= tombstoneDate
+        return incomingUpdatedAt.timeIntervalSinceReferenceDate <= tombstoneDate.timeIntervalSinceReferenceDate
     }
 
     static func makeSeedDescriptors(from package: SyncPackage) -> [SyncRecordDescriptor] {

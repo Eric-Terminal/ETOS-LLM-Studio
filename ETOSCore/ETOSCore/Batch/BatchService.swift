@@ -183,7 +183,8 @@ public actor BatchService {
         guard let jobs = try? jobs() else { return }
         for job in jobs where job.needsRefresh {
             guard !Task.isCancelled else { return }
-            guard !inFlight.contains(job.id), force || (nextRefresh[job.id] ?? .distantPast) <= Date() else { continue }
+            guard !inFlight.contains(job.id),
+                  force || (nextRefresh[job.id] ?? .distantPast).timeIntervalSinceReferenceDate <= Date().timeIntervalSinceReferenceDate else { continue }
             try? await refresh(id: job.id)
         }
     }
