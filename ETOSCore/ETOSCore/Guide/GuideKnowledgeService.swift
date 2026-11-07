@@ -190,6 +190,8 @@ public enum GuideDocumentCatalog {
 
             单个提供商可以在配对的 iPhone 与 Apple Watch 之间发送：iPhone 在“提供商管理”长按远程提供商，选择“发送到 Apple Watch”；手表打开该提供商的操作页，选择“发送到 iPhone”。发送已保存的 API Key、密钥备注、多 Key 设置、全部模型、自定义请求头和独立代理配置；编辑草稿须先保存。不包含其他提供商、聊天记录、全局设置或本地模型文件，不需要启动全量同步。双方仍须在“同步与备份”开启设备同步；离线时等待系统传输，发送完成只代表传输结束，应在对端确认配置。接收端沿用现有合并规则，合并同一提供商的密钥和模型，冲突配置可能保留接收端值，不覆盖整库。本地模型不提供此入口；macOS 不支持这条配对设备通道。列表、手表操作页和介绍页均提供各自的向导上下文，发送能力与设备同步状态只读；向导不能发送凭据或代替用户启动传输。
 
+            iPhone 点击发送后会打开独立的传输状态面板，列表滚动位置不会遮住发送进度或失败原因；关闭状态面板不会取消已经提交的传输。该面板拥有独立的只读向导上下文。提供商拖动排序位于“模型顺序”分页，提供商管理列表的长按用于操作菜单。
+
             Gemini Interactions 是独立 API 格式 gemini-interactions，三端均可在提供商或模型覆盖中选择；原有 gemini 仍使用 generateContent，不自动迁移。基础地址建议 https://generativelanguage.googleapis.com/v1，请求拼接 /interactions，明确填写的版本与网关路径会保留。模型列表沿用 Gemini Models API，列表并不保证每个模型都支持当前 Interactions 版本；应按上游支持情况选择模型。使用同一 Gemini API Key，支持自定义请求头、独立代理和多 Key 重试，视频换 Key 时会重新上传并替换 URI。
 
             Interactions 以前台模型请求为范围，默认 store=false，每轮发送本地整理的历史，按原生步骤回传未编辑消息的思考签名和工具调用；不使用 previous_interaction_id、不启动后台任务，也不调用托管 agent。若自定义 JSON 显式设置 store=true，上游会保存请求，但应用仍不使用服务端会话串联。文本、图片、音频、文档和视频输入，以及本地函数工具均使用新协议。启用推理会添加 generation_config.thinking_level（minimal/low/medium/high）和 thinking_summaries=auto；minimal 不代表完全关闭思考。当前官方 schema 不接受 temperature/top_p/top_k，全局这些参数不会发送；自定义 JSON 必须使用 Interactions 字段，不能直接复制旧 Gemini generationConfig。图片模型走 Interactions，嵌入模型仍走 Gemini embedding 端点。官方协议依据：https://ai.google.dev/api/interactions-api-v1 。

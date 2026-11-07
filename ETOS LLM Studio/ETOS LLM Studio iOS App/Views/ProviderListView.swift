@@ -179,13 +179,9 @@ private struct ProviderManagementContentView: View {
             Section {
                 settingsIntroCard
             }
-            if showsTransferStatus {
-                Section {
-                    ProviderCompanionTransferStatusView()
-                }
-            }
             Section {
-                ForEach(providersBinding, id: \.id, editActions: .move) { $provider in
+                // 排序保留在“模型顺序”分页，避免移动手势与此处的长按菜单争抢触摸。
+                ForEach(viewModel.providers) { provider in
                     NavigationLink {
                         ProviderConfigurationTabsView(provider: provider)
                             .environmentObject(viewModel)
@@ -197,6 +193,7 @@ private struct ProviderManagementContentView: View {
                             subtitleUIFont: .preferredFont(forTextStyle: .caption1)
                         )
                     }
+                    .accessibilityIdentifier("provider.row.\(provider.id.uuidString.lowercased())")
                     .contextMenu {
                         if !LocalModelProviderBridge.isLocalProvider(provider) {
                             Button {
@@ -206,6 +203,7 @@ private struct ProviderManagementContentView: View {
                                 Label(NSLocalizedString("发送到 Apple Watch", comment: ""), systemImage: "applewatch")
                             }
                             .disabled(isSyncing)
+                            .accessibilityIdentifier("provider.send-to-watch")
                         }
                     }
                     .swipeActions(edge: .trailing) {
@@ -218,6 +216,10 @@ private struct ProviderManagementContentView: View {
                     }
                 }
             }
+        }
+        // 状态由稳定的列表页面呈现；滚到列表底部发送时也能立即看到结果或失败原因。
+        .sheet(isPresented: $showsTransferStatus) {
+            ProviderTransferStatusView()
         }
         .guideSettingsPageContext(
             id: "provider-list",
@@ -293,13 +295,6 @@ private struct ProviderManagementContentView: View {
         }
     }
 
-    private var providersBinding: Binding<[Provider]> {
-        Binding {
-            viewModel.providers
-        } set: { orderedProviders in
-            ChatService.shared.setProviderOrder(orderedProviders.map(\.id))
-        }
-    }
 }
 
 private struct ProviderConfigurationTabsView: View {
