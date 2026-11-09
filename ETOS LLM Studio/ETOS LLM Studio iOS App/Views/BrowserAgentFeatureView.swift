@@ -208,9 +208,10 @@ struct BrowserAgentFeatureView: View {
     private var browserContent: some View {
         ZStack(alignment: .bottom) {
             Group {
-                if let webView = selectedWebView, let selectedTabID {
+                if let webView = selectedWebView {
                     BrowserAgentWebView(webView: webView)
-                        .id(selectedTabID)
+                        // 后台回收可能替换同一标签的实例，界面必须与 Agent 持有同一个 WebView。
+                        .id(ObjectIdentifier(webView))
                         .allowsHitTesting(canInteract)
                 } else if isWorking {
                     ProgressView()

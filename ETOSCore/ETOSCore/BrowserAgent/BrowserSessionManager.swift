@@ -28,6 +28,8 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         var recoverableTitle: String?
         var needsReload = false
         var navigationRevision = UUID()
+        // 用户接管过的页面不能靠重建 WebView 回收：共享数据仓无法恢复 sessionStorage 和页面内存。
+        var hasBeenUserControlled = false
 
         init(id: UUID = UUID(), webView: WKWebView) {
             self.id = id
@@ -204,6 +206,7 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         )
         webView.allowsBackForwardNavigationGestures = true
         let tab = Tab(webView: webView)
+        tab.hasBeenUserControlled = session.isUserControlling
         webView.navigationDelegate = self
         session.tabs[tab.id] = tab
         session.order.append(tab.id)
@@ -511,6 +514,7 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         guard let session = sessions[sessionID],
               let selectedTabID = session.selectedTabID else { return nil }
         guard let tab = session.tabs[selectedTabID] else { return nil }
+        if session.isUserControlling { tab.hasBeenUserControlled = true }
         startReloadIfNeeded(tab)
         return tab.webView
     }
@@ -586,6 +590,7 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         let resolvedID = try resolvedTabID(tabID, session: session)
         guard let tab = session.tabs[resolvedID] else { throw BrowserAgentError.tabNotFound }
         session.selectedTabID = resolvedID
+        if session.isUserControlling { tab.hasBeenUserControlled = true }
         tab.lastActivityAt = Date()
         return tab
     }
@@ -636,10 +641,11 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         objectWillChange.send()
     }
 
-    private func reclaimBackgroundTabs(olderThan cutoff: Date?) {
+    func reclaimBackgroundTabs(olderThan cutoff: Date?) {
         for (sessionID, session) in sessions where !session.isUserControlling {
             for tabID in session.order where tabID != session.selectedTabID {
-                guard let tab = session.tabs[tabID], !tab.webView.isLoading, let url = tab.webView.url else { continue }
+                guard let tab = session.tabs[tabID], !tab.hasBeenUserControlled,
+                      !tab.webView.isLoading, let url = tab.webView.url else { continue }
                 if let cutoff, tab.lastActivityAt.timeIntervalSinceReferenceDate >= cutoff.timeIntervalSinceReferenceDate { continue }
                 let oldWebView = tab.webView
                 tab.recoverableURL = url

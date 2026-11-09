@@ -10,6 +10,16 @@ import Testing
 
 @Suite("Browser Agent 高级能力测试")
 struct BrowserAgentAdvancedTests {
+    @Test("浏览器向导说明接管交接保留页面，并区分标签级存储与持久登录")
+    func guideExplainsTakeoverStateLifetime() async throws {
+        let service = GuideKnowledgeService()
+        let document = try #require(await service.document(id: "browser-agent"))
+        #expect(document.content.contains("无需为本次会话的接管交接开启持久共享登录态"))
+        #expect(document.content.contains("sessionStorage 仍属于各自标签"))
+        #expect(document.content.contains("Agent 应继续操作用户登录的原标签"))
+        #expect(document.content.contains("系统终止 WebKit 进程"))
+    }
+
     @Test("能力模型可解码旧版伴侣响应")
     func capabilitiesDecodeWithoutSupportedActions() throws {
         let data = Data(

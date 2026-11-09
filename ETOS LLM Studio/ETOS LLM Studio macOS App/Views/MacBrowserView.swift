@@ -65,9 +65,9 @@ struct MacBrowserView: View {
                     if let viewport = model.viewport {
                         ScrollView([.horizontal, .vertical]) {
                             MacBrowserWebView(webView: webView).frame(width: viewport.width, height: viewport.height)
-                        }.id(model.selectedTabID).allowsHitTesting(model.control.controller == .user)
+                        }.id(ObjectIdentifier(webView)).allowsHitTesting(model.control.controller == .user)
                     } else {
-                        MacBrowserWebView(webView: webView).id(model.selectedTabID)
+                        MacBrowserWebView(webView: webView).id(ObjectIdentifier(webView))
                             .allowsHitTesting(model.control.controller == .user)
                     }
                 } else if !model.isLoaded {
