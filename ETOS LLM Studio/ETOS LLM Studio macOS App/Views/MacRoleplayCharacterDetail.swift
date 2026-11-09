@@ -12,6 +12,9 @@ struct MacRoleplayCharacterDetail: View {
         Form {
             if let row = model.snapshot.charactersByID[characterID] {
                 Section(NSLocalizedString("角色资料", comment: "")) {
+                    NavigationLink(NSLocalizedString("avatar.set", value: "Set Avatar", comment: "")) {
+                        ChatAvatarEditorView(target: .character(characterID))
+                    }
                     LabeledContent(NSLocalizedString("名称", comment: ""), value: row.character.name)
                     LabeledContent(NSLocalizedString("作者", comment: ""), value: row.character.creator)
                     LabeledContent(NSLocalizedString("版本", comment: ""), value: row.character.characterVersion)
@@ -57,6 +60,7 @@ struct MacRoleplayCharacterDetail: View {
             id: GuidePageID(rawValue: "mac-roleplay-character-\(characterID)"), title: NSLocalizedString("角色资料", comment: ""),
             documents: [GuideDocumentReference(id: "roleplay", title: "Roleplay")], settings: [
                 .readOnly("character", label: NSLocalizedString("角色卡", comment: ""), value: { model.snapshot.charactersByID[characterID]?.guideValue ?? .null }),
+                .readOnly("has_avatar", label: NSLocalizedString("头像", comment: ""), value: { .bool(model.snapshot.charactersByID[characterID]?.character.avatarFileName != nil) }),
                 .readOnly("regex_requires_navigation", label: NSLocalizedString("角色正则", comment: ""), value: { .bool(true) }),
                 .readOnly("scripts_require_navigation", label: NSLocalizedString("助手脚本", comment: ""), value: { .bool(true) })
             ]

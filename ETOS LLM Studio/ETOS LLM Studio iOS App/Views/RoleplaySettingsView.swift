@@ -288,6 +288,9 @@ private struct RoleplayCharacterDetailView: View {
     var body: some View {
         List {
             Section(NSLocalizedString("角色资料", comment: "Roleplay character details section")) {
+                NavigationLink(NSLocalizedString("avatar.set", value: "Set Avatar", comment: "")) {
+                    ChatAvatarEditorView(target: .character(character.id))
+                }
                 detail(NSLocalizedString("名称", comment: "Name"), character.name)
                 detail(NSLocalizedString("作者", comment: "Creator"), character.creator)
                 detail(NSLocalizedString("版本", comment: "Version"), character.characterVersion)
@@ -380,6 +383,7 @@ private struct RoleplayCharacterDetailView: View {
             documents: [GuideDocumentReference(id: "roleplay", title: "Roleplay")],
             settings: [
                 .readOnly("id", label: NSLocalizedString("角色卡 ID", comment: "角色卡详情向导字段"), value: { .string(character.id.uuidString) }),
+                .readOnly("has_avatar", label: NSLocalizedString("头像", comment: ""), value: { .bool(character.avatarFileName != nil) }),
                 .readOnly("name", label: NSLocalizedString("名称", comment: "角色卡详情向导字段"), value: { .string(character.name) }),
                 .readOnly("creator", label: NSLocalizedString("作者", comment: "角色卡详情向导字段"), value: { .string(character.creator) }),
                 .readOnly("format", label: NSLocalizedString("格式", comment: "角色卡详情向导字段"), value: { .string([character.sourceSpec, character.sourceSpecVersion].compactMap { $0 }.joined(separator: " ")) }),

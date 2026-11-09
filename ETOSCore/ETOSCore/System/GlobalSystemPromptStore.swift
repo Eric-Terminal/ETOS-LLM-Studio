@@ -137,6 +137,9 @@ public enum GlobalSystemPromptStore {
         var entries = current.entries
         entries.insert(copy, at: index + 1)
         let snapshot = save(entries: entries, selectedEntryID: current.selectedEntryID, userDefaults: userDefaults)
+        if userDefaults === UserDefaults.standard {
+            ChatAvatarStore.shared.copyPromptAvatar(from: source.id, to: copy.id)
+        }
         return (snapshot, copy)
     }
 

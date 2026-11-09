@@ -8599,3 +8599,16 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 /* 压缩模型路由与失效提示 */
 "context_compression.model_routing" = "La sélection automatique utilise le modèle préféré de cette conversation, puis le modèle principal ou le premier modèle de chat disponible. Un modèle choisi manuellement ne sera pas remplacé s’il devient indisponible. La reconnaissance des pièces jointes peut utiliser d’autres modèles.";
 "context_compression.selected_model_unavailable" = "Le modèle de compression sélectionné n’est plus disponible. Choisissez un modèle de chat activé et réessayez. Aucun autre modèle n’a été utilisé.";
+
+/* 聊天头像：通用、提示词与酒馆优先级 */
+"avatar.show_ai" = "Afficher l’avatar de l’IA";
+"avatar.show_user" = "Afficher votre avatar";
+"avatar.visibility_help" = "Les deux avatars peuvent être affichés séparément. Les changements s’appliquent à toutes les conversations.";
+"avatar.default_ai" = "Avatar de l’IA par défaut";
+"avatar.default_user" = "Votre avatar";
+"avatar.help_title" = "Choix des avatars";
+"avatar.settings" = "Avatars du chat";
+"avatar.clear" = "Effacer l’avatar";
+"avatar.editor_help" = "Les changements sont enregistrés immédiatement. Effacer l’image utilise la source suivante ou une icône système.";
+"avatar.set" = "Définir l’avatar";
+"avatar.help" = "Activez séparément les avatars de l’IA et de l’utilisateur, affichés à gauche et à droite des messages. Sans image, une icône système apparaît.\n\nDéfinissez ici les images par défaut. Dans la liste des prompts globaux, « Définir l’avatar » associe une image d’IA à chaque prompt. Changer de prompt change aussi l’avatar.\n\nEn jeu de rôle, la première fiche de personnage valide et l’identité utilisateur liée sont prioritaires. Modifiez les images dans les détails du personnage et les identités utilisateur ; sur Watch, sélectionnez une identité existante. Les images manquantes utilisent le prompt ou l’image par défaut, sans dépendre du HTML de la fiche.\n\nLes changements sont immédiats et concernent aussi les anciens messages. iPhone et Mac acceptent les photos et fichiers image ; Apple Watch accepte les URL HTTP/HTTPS. Effacer une image utilise la source suivante. Les avatars servent uniquement à l’affichage et ne sont pas envoyés au modèle.";

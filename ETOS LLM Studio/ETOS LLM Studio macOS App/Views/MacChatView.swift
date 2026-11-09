@@ -476,6 +476,18 @@ private struct MacMessageRow: View {
     private var textColor: Color { textPalette.body ?? (row.message.role == .error ? .red : (outgoing ? .white : .primary)) }
 
     var body: some View {
+        HStack(alignment: .bottom) {
+            if !outgoing {
+                ChatMessageAvatar(role: row.message.role, sessionID: workspace.currentSession?.id)
+            }
+            bubble
+            if outgoing {
+                ChatMessageAvatar(role: row.message.role, sessionID: workspace.currentSession?.id)
+            }
+        }
+    }
+
+    private var bubble: some View {
         VStack(alignment: .leading) {
             HStack {
                 Text(row.roleTitle).font(.caption).foregroundStyle(.secondary)

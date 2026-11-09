@@ -155,6 +155,7 @@ struct ModelAdvancedSettingsView: View {
 
     private var promptGuideSettings: [GuidePageSetting] {
         var settings: [GuidePageSetting] = [
+            .readOnly("avatars_require_navigation", label: NSLocalizedString("avatar.settings", value: "Chat Avatars", comment: ""), value: { .bool(true) }),
             .bool("model_picker_prompt_shortcut", label: NSLocalizedString("在模型选择器中显示提示词", comment: "向导设置字段"), get: { appConfig.modelPickerPromptShortcutEnabled }, set: { appConfig.modelPickerPromptShortcutEnabled = $0 }),
             .readOnly("global_prompt_count", label: NSLocalizedString("全局提示词数量", comment: "向导设置字段"), value: { .int(globalSystemPromptEntries.count) }),
             .readOnly("selected_global_prompt_id", label: NSLocalizedString("当前全局提示词 ID", comment: "向导设置字段"), value: { .string(selectedGlobalSystemPromptEntryID?.uuidString ?? "") }),
@@ -319,6 +320,12 @@ struct ModelAdvancedSettingsView: View {
             }
 
             PromptMacroHelpSection()
+
+            Section {
+                NavigationLink(NSLocalizedString("avatar.settings", value: "Chat Avatars", comment: "")) {
+                    ChatAvatarSettingsView()
+                }
+            }
 
             Section {
                 Toggle(
@@ -1157,6 +1164,7 @@ struct GlobalSystemPromptPickerView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var editingEntry: GlobalSystemPromptEntry?
     @State private var duplicatingEntryID: UUID?
+    @State private var avatarEntry: GlobalSystemPromptEntry?
 
     var body: some View {
         List {
@@ -1186,6 +1194,11 @@ struct GlobalSystemPromptPickerView: View {
                     }
                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
                         Button {
+                            avatarEntry = entry
+                        } label: {
+                            Label(NSLocalizedString("avatar.set", value: "Set Avatar", comment: ""), systemImage: "person.crop.circle")
+                        }
+                        Button {
                             editingEntry = entry
                         } label: {
                             Label(NSLocalizedString("更多", comment: ""), systemImage: "ellipsis.circle")
@@ -1199,6 +1212,11 @@ struct GlobalSystemPromptPickerView: View {
                         .tint(.orange)
                     }
                     .contextMenu {
+                        Button {
+                            avatarEntry = entry
+                        } label: {
+                            Label(NSLocalizedString("avatar.set", value: "Set Avatar", comment: ""), systemImage: "person.crop.circle")
+                        }
                         Button {
                             editingEntry = entry
                         } label: {
@@ -1225,6 +1243,16 @@ struct GlobalSystemPromptPickerView: View {
             }
         }
         .navigationTitle(NSLocalizedString("全局提示词", comment: ""))
+        .sheet(item: $avatarEntry) { entry in
+            NavigationStack {
+                ChatAvatarEditorView(target: .prompt(entry.id))
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button(NSLocalizedString("完成", value: "Done", comment: "")) { avatarEntry = nil }
+                        }
+                    }
+            }
+        }
         .disabled(duplicatingEntryID != nil)
         .task(id: duplicatingEntryID) {
             guard let id = duplicatingEntryID else { return }
@@ -1253,6 +1281,7 @@ struct GlobalSystemPromptPickerView: View {
                 label: NSLocalizedString("global_prompt.duplicate", value: "Duplicate", comment: "创建全局提示词副本"),
                 value: { .bool(true) }
             ),
+            .readOnly("avatar_requires_navigation", label: NSLocalizedString("avatar.set", value: "Set Avatar", comment: ""), value: { .bool(true) }),
             .readOnly(
                 "entries",
                 label: NSLocalizedString("全局系统提示词列表", comment: "全局提示词向导字段"),

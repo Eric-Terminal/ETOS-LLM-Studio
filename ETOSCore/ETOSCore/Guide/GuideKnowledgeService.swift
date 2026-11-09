@@ -79,6 +79,7 @@ public enum GuideDocumentCatalog {
         GuideContextCompressionKnowledge.document(),
         GuideChatQuickActionsKnowledge.document(),
         GuideAdaptiveLayoutKnowledge.document(),
+        GuideChatAvatarKnowledge.document(),
         GuideDataImportKnowledge.document(),
         GuideRemoteAccessKnowledge.document(),
         GuideDocument(

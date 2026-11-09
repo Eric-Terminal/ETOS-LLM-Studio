@@ -74,6 +74,7 @@ struct ChatBubble: View {
     @ObservedObject var mcpManager = MCPManager.shared
     @ObservedObject private var appearanceProfileManager = ChatAppearanceProfileManager.shared
     @ObservedObject var appConfig = AppConfigStore.shared
+    @ObservedObject var avatarModel = ChatAvatarModel.shared
     @Environment(\.displayScale) var displayScale
     @Environment(\.colorScheme) var colorScheme
 
@@ -236,7 +237,10 @@ struct ChatBubble: View {
     var body: some View {
         VStack(alignment: isOutgoing ? .trailing : .leading) {
             sourceConversationLabel
-            HStack {
+            HStack(alignment: .bottom) {
+            if !isOutgoing {
+                ChatMessageAvatar(role: message.role, sessionID: roleplaySessionID)
+            }
             // 重构: 使用 MessageRole 枚举进行判断
             switch message.role {
             case .user:
@@ -270,6 +274,9 @@ struct ChatBubble: View {
             @unknown default:
                 // 为未来可能增加的 role 类型提供一个默认的回退，防止编译错误
                 Spacer()
+            }
+            if isOutgoing {
+                ChatMessageAvatar(role: message.role, sessionID: roleplaySessionID)
             }
             }
         }

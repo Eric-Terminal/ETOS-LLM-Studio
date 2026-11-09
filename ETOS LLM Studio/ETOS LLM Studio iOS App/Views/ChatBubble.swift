@@ -75,6 +75,7 @@ struct ChatBubble: View {
     @ObservedObject var mcpManager = MCPManager.shared
     @ObservedObject var appearanceProfileManager = ChatAppearanceProfileManager.shared
     @ObservedObject var appConfig = AppConfigStore.shared
+    @ObservedObject var avatarModel = ChatAvatarModel.shared
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.displayScale) var displayScale
 
@@ -202,6 +203,10 @@ struct ChatBubble: View {
             if isOutgoing || usesNoBubbleStyle {
                 Spacer(minLength: rowSideSpacerMinLength)
             }
+            if !isOutgoing, avatarModel.isVisible(role: message.role) {
+                ChatMessageAvatar(role: message.role, sessionID: roleplaySessionID)
+                    .padding(.trailing)
+            }
             
             VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
                 sourceConversationLabel
@@ -271,6 +276,10 @@ struct ChatBubble: View {
             }
             
             // AI 普通气泡靠左；关闭助手气泡后的助手消息保留对称右侧 Spacer。
+            if isOutgoing, avatarModel.isVisible(role: message.role) {
+                ChatMessageAvatar(role: message.role, sessionID: roleplaySessionID)
+                    .padding(.leading)
+            }
             if !isOutgoing || usesNoBubbleStyle {
                 Spacer(minLength: rowSideSpacerMinLength)
             }

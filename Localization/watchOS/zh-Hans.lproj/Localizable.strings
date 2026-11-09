@@ -8327,3 +8327,16 @@
 /* 压缩模型路由与失效提示 */
 "context_compression.model_routing" = "自动选择依次使用本会话首选模型、主聊天模型或第一个可用聊天模型。手动选择的模型失效时不会替换为其他模型。附件识别可能使用其他模型。";
 "context_compression.selected_model_unavailable" = "所选压缩模型已不可用，请重新选择已启用的聊天模型后重试。本次未改用其他模型。";
+
+/* 聊天头像：通用、提示词与酒馆优先级 */
+"avatar.show_ai" = "显示 AI 头像";
+"avatar.show_user" = "显示用户头像";
+"avatar.visibility_help" = "两个头像可独立显示，修改对所有会话生效。";
+"avatar.default_ai" = "通用 AI 头像";
+"avatar.default_user" = "用户头像";
+"avatar.help_title" = "头像选择规则";
+"avatar.settings" = "聊天头像";
+"avatar.clear" = "清除头像";
+"avatar.editor_help" = "修改后立即保存。清除图片后，将使用下一优先级的头像或系统图标。";
+"avatar.set" = "设置头像";
+"avatar.help" = "AI 和用户头像可分别开启，显示在消息左侧和右侧；未设置图片时显示系统图标。\n\n在聊天头像中设置通用图片。全局提示词列表提供“设置头像”，可为每条提示词指定 AI 头像，切换提示词时自动切换头像。\n\n酒馆会话优先使用首个有效角色卡及绑定用户身份的头像。角色卡详情中可修改角色头像，在“用户身份”中设置酒馆用户头像；手表点击已有身份即可更换。缺少图片时回退到提示词或通用头像，不依赖角色卡 HTML。\n\n头像修改立即保存，也会影响历史消息。iPhone 和 Mac 支持照片和图片文件，Apple Watch 支持 HTTP/HTTPS 图片链接。清除后使用下一优先级的头像。头像仅用于显示，不发送给模型。";

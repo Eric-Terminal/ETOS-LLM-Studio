@@ -45,6 +45,7 @@ extension SyncEngine {
         var legacyGlobalSystemPrompt: String?
         var referencedAudioFileNames = Set<String>()
         var referencedImageFileNames = Set<String>()
+        referencedImageFileNames.formUnion(ChatAvatarStore.shared.load().files.values)
         let roleplayCharacters = RoleplayStore.shared.loadCharacters()
         referencedImageFileNames.formUnion(roleplayCharacters.compactMap(\.avatarFileName))
         referencedImageFileNames.formUnion(roleplayCharacters.flatMap { $0.assets ?? [] }.compactMap(\.localFileName))

@@ -8418,3 +8418,16 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 /* 压缩模型路由与失效提示 */
 "context_compression.model_routing" = "La selección automática usa el modelo preferido de esta conversación, después el principal o el primer modelo de chat disponible. Un modelo elegido manualmente no se sustituye si deja de estar disponible. El reconocimiento de adjuntos puede usar otros modelos.";
 "context_compression.selected_model_unavailable" = "El modelo de compresión seleccionado ya no está disponible. Elige un modelo de chat activado e inténtalo de nuevo. No se ha usado ningún otro modelo.";
+
+/* 聊天头像：通用、提示词与酒馆优先级 */
+"avatar.show_ai" = "Mostrar avatar de IA";
+"avatar.show_user" = "Mostrar avatar del usuario";
+"avatar.visibility_help" = "Ambos avatares se pueden mostrar por separado. Los cambios se aplican a todas las conversaciones.";
+"avatar.default_ai" = "Avatar de IA predeterminado";
+"avatar.default_user" = "Avatar del usuario";
+"avatar.help_title" = "Cómo se eligen los avatares";
+"avatar.settings" = "Avatares del chat";
+"avatar.clear" = "Borrar avatar";
+"avatar.editor_help" = "Los cambios se guardan al instante. Al borrar la imagen se usa la siguiente fuente disponible o un icono del sistema.";
+"avatar.set" = "Establecer avatar";
+"avatar.help" = "Activa por separado los avatares de IA y del usuario, que aparecen a la izquierda y a la derecha de los mensajes. Sin imagen, se muestra un icono del sistema.\n\nDefine aquí las imágenes predeterminadas. En la lista de prompts globales, « Establecer avatar » asigna una imagen de IA a cada prompt. Al cambiar de prompt también cambia el avatar.\n\nEn el juego de rol, tienen prioridad la primera ficha de personaje válida y la identidad de usuario vinculada. Cambia las imágenes en los detalles del personaje y en las identidades de usuario; en Watch, selecciona una identidad existente. Si faltan imágenes, se usa el prompt o la imagen predeterminada, sin depender del HTML de la ficha.\n\nLos cambios se guardan al instante y afectan a los mensajes anteriores. iPhone y Mac admiten fotos y archivos de imagen; Apple Watch admite URL HTTP/HTTPS. Borrar una imagen usa la siguiente fuente disponible. Los avatares solo se muestran y no se envían al modelo.";

@@ -498,7 +498,9 @@ private struct WatchPersonaLibraryView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(personas) { persona in
-                        Text(persona.name)
+                        NavigationLink(persona.name) {
+                            ChatAvatarEditorView(target: .persona(persona.id)).watchGuideEntry()
+                        }
                     }
                     .onDelete { offsets in
                         for index in offsets {
@@ -510,6 +512,11 @@ private struct WatchPersonaLibraryView: View {
             }
         }
         .navigationTitle(NSLocalizedString("用户身份", comment: "Roleplay personas title"))
+        .guideSettingsPageContext(id: "watch-roleplay-personas", title: NSLocalizedString("用户身份", comment: ""),
+            documents: [GuideDocumentReference(id: "chat-avatars", title: "Chat Avatars")], settings: [
+                .readOnly("persona_count", label: NSLocalizedString("用户身份", comment: ""), value: { .int(personas.count) })
+            ])
+        .watchGuideEntry()
         .sheet(isPresented: $isAddingPersona) {
             WatchPersonaEditorView { persona, avatarData in
                 Task {
@@ -549,6 +556,9 @@ private struct WatchRoleplayCharacterDetailView: View {
             Section {
                 Text(character.name)
                     .etFont(.headline)
+                NavigationLink(NSLocalizedString("avatar.set", value: "Set Avatar", comment: "")) {
+                    ChatAvatarEditorView(target: .character(character.id)).watchGuideEntry()
+                }
                 if !character.creator.isEmpty {
                     Text(character.creator)
                         .etFont(.caption)
@@ -614,6 +624,12 @@ private struct WatchRoleplayCharacterDetailView: View {
             }
         }
         .navigationTitle(character.name)
+        .guideSettingsPageContext(id: GuidePageID(rawValue: "watch-roleplay-character-\(character.id)"),
+            title: character.name, documents: [GuideDocumentReference(id: "chat-avatars", title: "Chat Avatars"), GuideDocumentReference(id: "roleplay", title: "Roleplay")], settings: [
+                .readOnly("name", label: NSLocalizedString("名称", comment: ""), value: { .string(character.name) }),
+                .readOnly("has_avatar", label: NSLocalizedString("头像", comment: ""), value: { .bool(character.avatarFileName != nil) })
+            ])
+        .watchGuideEntry()
         .onReceive(NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)) { _ in
             reload()
         }

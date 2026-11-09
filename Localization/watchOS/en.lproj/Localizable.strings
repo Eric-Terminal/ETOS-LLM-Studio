@@ -8341,3 +8341,16 @@
 /* 压缩模型路由与失效提示 */
 "context_compression.model_routing" = "Automatic selection uses this conversation's preferred model, then the main chat model or the first available chat model. A manually selected model will not be replaced if it becomes unavailable. Attachment recognition may use other models.";
 "context_compression.selected_model_unavailable" = "The selected compression model is no longer available. Choose an enabled chat model and try again. No other model was used.";
+
+/* 聊天头像：通用、提示词与酒馆优先级 */
+"avatar.show_ai" = "Show AI Avatar";
+"avatar.show_user" = "Show User Avatar";
+"avatar.visibility_help" = "The two avatars can be shown independently. Changes apply to all conversations.";
+"avatar.default_ai" = "Default AI Avatar";
+"avatar.default_user" = "User Avatar";
+"avatar.help_title" = "How Avatars Are Chosen";
+"avatar.settings" = "Chat Avatars";
+"avatar.clear" = "Clear Avatar";
+"avatar.editor_help" = "Changes save immediately. Clearing this image uses the next available avatar or a system symbol.";
+"avatar.set" = "Set Avatar";
+"avatar.help" = "Enable AI and user avatars separately. AI avatars appear to the left of messages; your avatar appears to the right. Without an image, a system symbol is shown.\n\nChoose default images in Chat Avatars. In the global prompt list, use Set Avatar to give a prompt its own AI image. Selecting that prompt also selects its avatar.\n\nFor roleplay conversations, the first active character card and the bound user persona take priority. Change the character image in the card details and the user image in User Personas. Missing images fall back to the prompt or default image. Native avatars do not depend on HTML support in the card.\n\nImage changes save immediately and affect existing messages as well. Choose a photo or image file on iPhone and Mac; on Apple Watch, load an image from an HTTP or HTTPS URL. Clear an image to use the next available source. Avatars are only for display and are not sent to the model.";

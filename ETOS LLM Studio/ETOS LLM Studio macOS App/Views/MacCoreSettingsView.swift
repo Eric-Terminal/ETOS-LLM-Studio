@@ -40,6 +40,14 @@ struct MacCoreSettingsView: View {
                     Toggle(NSLocalizedString("主动检索记忆", comment: ""), isOn: $configuration.enableMemoryActiveRetrieval)
                 }
             case .prompts:
+                Section {
+                    NavigationLink(NSLocalizedString("avatar.settings", value: "Chat Avatars", comment: "")) {
+                        ChatAvatarSettingsView(isActive: isActive)
+                    }
+                    NavigationLink(NSLocalizedString("全局提示词", value: "Global Prompts", comment: "")) {
+                        MacGlobalSystemPromptsView(isActive: isActive)
+                    }
+                }
                 Section(NSLocalizedString("系统提示词", comment: "")) {
                     TextField(NSLocalizedString("系统提示词", comment: ""), text: $configuration.systemPrompt, axis: .vertical)
                         .lineLimit(5...16)
@@ -93,6 +101,8 @@ struct MacCoreSettingsView: View {
             .readOnly("compression_requires_navigation", label: NSLocalizedString("上下文压缩", comment: ""), value: { .bool(true) })
         ]
         case .prompts: [
+            .readOnly("avatars_require_navigation", label: NSLocalizedString("avatar.settings", value: "Chat Avatars", comment: ""), value: { .bool(true) }),
+            .readOnly("prompt_list_requires_navigation", label: NSLocalizedString("全局提示词", value: "Global Prompts", comment: ""), value: { .bool(true) }),
             .string("system_prompt", label: NSLocalizedString("系统提示词", comment: ""), get: { configuration.systemPrompt }, set: { configuration.systemPrompt = $0 }),
             .bool("system_time", label: NSLocalizedString("在提示词中包含系统时间", comment: ""), get: { configuration.includeSystemTimeInPrompt }, set: { configuration.includeSystemTimeInPrompt = $0 }),
             .readOnly("tool_descriptions_require_navigation", label: NSLocalizedString("工具描述", comment: ""), value: { .bool(true) }),
