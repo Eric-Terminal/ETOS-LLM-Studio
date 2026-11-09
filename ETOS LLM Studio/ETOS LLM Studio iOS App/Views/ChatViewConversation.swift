@@ -842,9 +842,9 @@ extension ChatView {
             .toolbar(usesSystemChatToolbar ? .visible : .hidden, for: .navigationBar)
             .navigationTitle(viewModel.currentSession?.name ?? NSLocalizedString("新的对话", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
-            .modifier(ChatNavigationSubtitle(modelName: modelSubtitle))
+            .modifier(ChatNavigationSubtitle(modelName: modelSubtitle, isEnabled: usesSystemChatToolbar))
             .toolbar {
-                if #available(iOS 27.1, *) {
+                if #available(iOS 27.1, *), usesSystemChatToolbar {
                     adaptiveChatToolbar
                 }
             }

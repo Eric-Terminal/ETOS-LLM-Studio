@@ -8583,7 +8583,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "chat.quickActions.placement.menu" = "Menú Más";
 "chat.quickActions.placement.hidden" = "Oculto";
 "chat.quickActions.orderFooter" = "Usa Editar para cambiar el orden. Mantén al menos una acción activa. Los cambios se guardan al instante.";
-"chat.quickActions.introduction" = "Para cada acción, incluida la selección de modelo, elige priorizar la barra de herramientas, el menú Más u ocultarla. Usa Editar para ordenar las acciones activas. Si falta espacio, el sistema puede mover acciones de la barra a Más. iPhone Duo cambia automáticamente entre barras horizontales y verticales. El acceso a las conversaciones sigue disponible. Los cambios se guardan al instante y se sincronizan con el Mac. En versiones anteriores de iOS, las acciones activas mantienen su orden en el menú de accesos existente.";
+"chat.quickActions.introduction" = "Para cada acción, incluida la selección de modelo, elige priorizar la barra de herramientas, el menú Más u ocultarla. Usa Editar para ordenar las acciones activas. En iPhone Duo y iPad con iOS 27.1 o posterior, el sistema puede mover acciones de la barra a Más si falta espacio. Duo cambia automáticamente entre barras horizontales y verticales. Los demás iPhone y las versiones anteriores de iOS conservan la navegación superior y el menú de accesos originales, con las acciones activas en su orden. El acceso a las conversaciones sigue disponible. Los cambios se guardan al instante y se sincronizan con el Mac.";
 "chat.quickActions.moveUp" = "Subir";
 "chat.quickActions.moveDown" = "Bajar";
 "chat.quickActions.macOrderFooter" = "Usa las flechas para cambiar el orden. Mantén al menos una acción activa. Los cambios se guardan al instante.";

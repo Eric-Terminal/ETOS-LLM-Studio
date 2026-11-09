@@ -183,8 +183,7 @@ struct ChatView: View {
         isChatLayoutWide
     }
     var usesSystemChatToolbar: Bool {
-        if #available(iOS 27.1, *) { return true }
-        return false
+        ChatToolbarDevicePolicy.currentUsesSystemToolbar
     }
     var isModelPickerPresented: Bool {
         activeChatPickerSheet == .model

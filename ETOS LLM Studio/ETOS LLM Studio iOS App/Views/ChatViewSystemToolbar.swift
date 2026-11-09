@@ -69,10 +69,11 @@ extension ChatView {
 
 struct ChatNavigationSubtitle: ViewModifier {
     let modelName: String
+    let isEnabled: Bool
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        if #available(iOS 27.1, *) {
+        if #available(iOS 27.1, *), isEnabled {
             content.navigationSubtitle(modelName)
         } else {
             content

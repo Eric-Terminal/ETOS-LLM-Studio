@@ -8498,7 +8498,7 @@
 "chat.quickActions.placement.menu" = "放入更多";
 "chat.quickActions.placement.hidden" = "隱藏";
 "chat.quickActions.orderFooter" = "點按「編輯」調整順序。至少保留一項，修改會即時儲存。";
-"chat.quickActions.introduction" = "每項功能（包括選擇模型）都可設為優先顯示於工具列、放入更多或隱藏。點按「編輯」拖動已啟用項目排序。空間不足時，系統仍可能將工具列項目移入更多。iPhone Duo 會自動切換橫向及直向工具列，對話列表入口會獨立保留。修改會即時儲存，並與 Mac 同步。舊版 iOS 在原有快捷選單中保留啟用項目及順序。";
+"chat.quickActions.introduction" = "每項功能（包括選擇模型）都可設為優先顯示於工具列、放入更多或隱藏。點按「編輯」拖動已啟用項目排序。iPhone Duo 和 iPad 在 iOS 27.1 及以後使用原生工具列，空間不足時，系統可能將工具列項目移入更多。Duo 會自動切換橫向及直向工具列。一般 iPhone 和舊版 iOS 保留原來的頂部導覽與快捷選單，使用已啟用項目及其順序。對話列表入口會獨立保留。修改會即時儲存，並與 Mac 同步。";
 "chat.quickActions.moveUp" = "上移";
 "chat.quickActions.moveDown" = "下移";
 "chat.quickActions.macOrderFooter" = "使用箭頭調整順序。至少保留一項，修改會即時儲存。";

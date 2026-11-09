@@ -8499,7 +8499,7 @@
 "chat.quickActions.placement.menu" = "その他のメニュー";
 "chat.quickActions.placement.hidden" = "非表示";
 "chat.quickActions.orderFooter" = "「編集」で並べ替えます。最低1項目を有効にしてください。変更はすぐに保存されます。";
-"chat.quickActions.introduction" = "モデル選択を含む各機能を、ツールバー優先、その他のメニュー、非表示から選べます。「編集」で有効な項目を並べ替えます。スペースが足りない場合、ツールバーの項目も「その他」に移動することがあります。iPhone Duo は横向きと縦向きのバーを自動で切り替えます。会話一覧の入口は常に別に表示されます。変更はすぐに保存され、Mac と同期します。以前の iOS では、既存のショートカットメニューに有効な項目と順序が反映されます。";
+"chat.quickActions.introduction" = "モデル選択を含む各機能を、ツールバー優先、その他のメニュー、非表示から選べます。「編集」で有効な項目を並べ替えます。iOS 27.1 以降の iPhone Duo と iPad では、スペースが足りない場合、ツールバーの項目が「その他」に移動することがあります。Duo は横向きと縦向きのバーを自動で切り替えます。通常の iPhone と以前の iOS では、従来の上部ナビゲーションとショートカットメニューを使用し、有効な項目と順序が反映されます。会話一覧の入口は常に別に表示されます。変更はすぐに保存され、Mac と同期します。";
 "chat.quickActions.moveUp" = "上へ";
 "chat.quickActions.moveDown" = "下へ";
 "chat.quickActions.macOrderFooter" = "矢印で並べ替えます。最低1項目を有効にしてください。変更はすぐに保存されます。";

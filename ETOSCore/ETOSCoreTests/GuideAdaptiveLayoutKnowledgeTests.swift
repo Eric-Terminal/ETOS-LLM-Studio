@@ -14,4 +14,27 @@ struct GuideAdaptiveLayoutKnowledgeTests {
         #expect(fallback.content.contains("no new preference or database setting"))
         #expect(fallback.content.contains("not guide-configurable pages"))
     }
+
+    @Test("布局与快捷功能文档说明普通 iPhone 不随系统升级切换导航")
+    func documentsDeviceSpecificToolbarBehavior() {
+        let chinese = Locale(identifier: "zh-Hans")
+        let english = Locale(identifier: "en")
+        let chineseDocuments = [
+            GuideAdaptiveLayoutKnowledge.document(locale: chinese),
+            GuideChatQuickActionsKnowledge.document(locale: chinese)
+        ]
+        let englishDocuments = [
+            GuideAdaptiveLayoutKnowledge.document(locale: english),
+            GuideChatQuickActionsKnowledge.document(locale: english)
+        ]
+        for document in chineseDocuments {
+            #expect(document.content.contains("普通 iPhone 无论系统版本都保留原来的顶部导航和快捷菜单"))
+            #expect(document.content.contains("iPhone Duo"))
+            #expect(document.content.contains("内外屏"))
+        }
+        for document in englishDocuments {
+            #expect(document.content.contains("Other iPhones keep the original top navigation and shortcut menu regardless of iOS version"))
+            #expect(document.content.contains("both displays"))
+        }
+    }
 }

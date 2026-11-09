@@ -139,7 +139,7 @@ struct ChatQuickActionSettingsView: View {
 
     private var settingsIntroCard: some View {
         DisclosureGroup {
-            Text(NSLocalizedString("chat.quickActions.introduction", value: "Choose Prefer Toolbar, More Menu, or Hidden for each action, including Choose Model. Reorder enabled actions with Edit. When space is limited, the system may move toolbar actions into More. iPhone Duo automatically switches between horizontal and vertical bars. The session list remains available. Changes save immediately and sync with Mac. On older iOS versions, enabled actions keep their order in the existing shortcut menu.", comment: "聊天快捷功能介绍"))
+            Text(NSLocalizedString("chat.quickActions.introduction", value: "Choose Prefer Toolbar, More Menu, or Hidden for each action, including Choose Model. Reorder enabled actions with Edit. On iPhone Duo and iPad running iOS 27.1 or later, the system may move toolbar actions into More when space is limited. Duo automatically switches between horizontal and vertical bars. Other iPhones and earlier iOS versions keep the original top navigation and shortcut menu, using enabled actions and their order. The session list remains available. Changes save immediately and sync with Mac.", comment: "聊天快捷功能介绍"))
                 .font(.footnote).foregroundStyle(.secondary)
         } label: {
             Label(NSLocalizedString("使用说明", comment: ""), systemImage: "info.circle")

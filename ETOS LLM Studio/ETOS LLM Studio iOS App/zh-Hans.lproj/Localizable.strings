@@ -8492,7 +8492,7 @@
 "chat.quickActions.placement.menu" = "放入更多";
 "chat.quickActions.placement.hidden" = "隐藏";
 "chat.quickActions.orderFooter" = "点“编辑”调整顺序。至少保留一项，修改立即保存。";
-"chat.quickActions.introduction" = "每项功能（包括选择模型）都可设为优先显示在工具栏、放入更多或隐藏。点“编辑”拖动已启用项排序。空间不足时，系统仍可能将工具栏项目移入更多。iPhone Duo 会自动切换横向和竖向工具栏，会话列表入口独立保留。修改立即保存，并与 Mac 同步。旧版 iOS 在原有快捷菜单中保留启用项及顺序。";
+"chat.quickActions.introduction" = "每项功能（包括选择模型）都可设为优先显示在工具栏、放入更多或隐藏。点“编辑”拖动已启用项排序。iPhone Duo 和 iPad 在 iOS 27.1 及以后使用原生工具栏，空间不足时，系统可能将工具栏项目移入更多。Duo 会自动切换横向和竖向工具栏。普通 iPhone 和旧版 iOS 保留原来的顶部导航与快捷菜单，使用已启用项及其顺序。会话列表入口独立保留。修改立即保存，并与 Mac 同步。";
 "chat.quickActions.moveUp" = "上移";
 "chat.quickActions.moveDown" = "下移";
 "chat.quickActions.macOrderFooter" = "使用箭头调整顺序。至少保留一项，修改立即保存。";
