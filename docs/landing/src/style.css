@@ -165,7 +165,7 @@ img {
 .lm-white.is-next { y: calc(50% - 220px); }
 .lm-blue.is-next { y: calc(50% - 340px); }
 .lm-feeder.is-next { x: calc(50% + 20px); y: 50%; width: 200px; fill: #3477d3; }
-/* 补位：新的浅色条原地淡入，终态与 next.svg 一致 */
+/* 补位：新的浅色条在底部原地淡入，填补上一条上移后留下的位置 */
 .lm-feeder-in {
   x: calc(50% - 260px);
   y: calc(50% + 160px);
