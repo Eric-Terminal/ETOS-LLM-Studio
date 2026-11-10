@@ -67,6 +67,54 @@ struct ChatAvatarTests {
         #expect(english.content.contains("watchOS"))
         #expect(english.content.contains("off by default"))
         #expect(english.content.contains("first valid character"))
+        for field in ["avatar_position", "avatar_edge_inset", "avatar_message_spacing", "avatar_header_timestamp"] {
+            #expect(chinese.content.contains(field))
+            #expect(english.content.contains(field))
+        }
+    }
+
+    @Test("旧头像配置升级保留双方开关和图片，新增布局使用紧凑侧边默认值")
+    func legacyConfiguration() throws {
+        let data = Data(#"{"showAssistant":true,"showUser":false,"files":{"assistant":"kept.png","user":"me.png","prompt-test":"prompt.png"}}"#.utf8)
+        let restored = try JSONDecoder().decode(ChatAvatarConfiguration.self, from: data)
+        #expect(restored.showAssistant && !restored.showUser)
+        #expect(restored.files == ["assistant": "kept.png", "user": "me.png", "prompt-test": "prompt.png"])
+        #expect(restored.layout == ChatAvatarLayout())
+        #expect(restored.layout.position == .side)
+        #expect(!restored.layout.showsTimestamp)
+    }
+
+    @Test("上方布局不扣除侧边宽度，布局与间距完整持久化")
+    func layoutRoundTrip() throws {
+        var configuration = ChatAvatarConfiguration()
+        configuration.showAssistant = true
+        configuration.files["assistant"] = "kept.png"
+        for position in ChatAvatarPosition.allCases {
+            for spacing in [0.0, 6.0, 24.0] {
+                configuration.layout.position = position
+                configuration.layout.edgeInset = 24 - spacing
+                configuration.layout.messageSpacing = spacing
+                configuration.layout.showsTimestamp = true
+                let restored = try JSONDecoder().decode(ChatAvatarConfiguration.self, from: JSONEncoder().encode(configuration))
+                #expect(restored == configuration)
+                for diameter in [24.0, 32.0] {
+                    #expect(restored.layout.sideWidth(avatarDiameter: diameter) == (position == .side ? diameter + spacing : 0))
+                }
+            }
+        }
+    }
+
+    @Test("名称随当前身份切换，角色未设置头像也不会回退成提示词名称")
+    func headerNames() {
+        let first = GlobalSystemPromptEntry(title: "第一条提示词", content: "")
+        let second = GlobalSystemPromptEntry(title: "第二条提示词", content: "")
+        #expect(ChatAvatarNames.resolve(prompt: first, character: nil, persona: nil).assistant == first.title)
+        #expect(ChatAvatarNames.resolve(prompt: second, character: nil, persona: nil).assistant == second.title)
+        let character = RoleplayCharacter(name: "酒馆角色")
+        let persona = PersonaProfile(name: "用户身份")
+        let names = ChatAvatarNames.resolve(prompt: first, character: character, persona: persona)
+        #expect(names == ChatAvatarNames(assistant: character.name, user: persona.name))
+        #expect(ChatAvatarNames.resolve(prompt: nil, character: nil, persona: nil) == ChatAvatarNames())
     }
 }
 

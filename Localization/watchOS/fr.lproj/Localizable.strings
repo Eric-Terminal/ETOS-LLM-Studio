@@ -8430,4 +8430,17 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "avatar.clear" = "Effacer l’avatar";
 "avatar.editor_help" = "Les changements sont enregistrés immédiatement. Effacer l’image utilise la source suivante ou une icône système.";
 "avatar.set" = "Définir l’avatar";
-"avatar.help" = "Activez séparément les avatars de l’IA et de l’utilisateur, affichés à gauche et à droite des messages. Sans image, une icône système apparaît.\n\nDéfinissez ici les images par défaut. Dans la liste des prompts globaux, « Définir l’avatar » associe une image d’IA à chaque prompt. Changer de prompt change aussi l’avatar.\n\nEn jeu de rôle, la première fiche de personnage valide et l’identité utilisateur liée sont prioritaires. Modifiez les images dans les détails du personnage et les identités utilisateur ; sur Watch, sélectionnez une identité existante. Les images manquantes utilisent le prompt ou l’image par défaut, sans dépendre du HTML de la fiche.\n\nLes changements sont immédiats et concernent aussi les anciens messages. iPhone et Mac acceptent les photos et fichiers image ; Apple Watch accepte les URL HTTP/HTTPS. Effacer une image utilise la source suivante. Les avatars servent uniquement à l’affichage et ne sont pas envoyés au modèle.";
+"avatar.help" = "Activez séparément les avatars de l’IA et de l’utilisateur, affichés à gauche et à droite des messages dans la disposition latérale. Sans image, une icône système apparaît.\n\nDéfinissez ici les images par défaut. Dans la liste des prompts globaux, « Définir l’avatar » associe une image d’IA à chaque prompt. Changer de prompt change aussi l’avatar.\n\nEn jeu de rôle, la première fiche de personnage valide et l’identité utilisateur liée sont prioritaires. Modifiez les images dans les détails du personnage et les identités utilisateur ; sur Watch, sélectionnez une identité existante. Les images manquantes utilisent le prompt ou l’image par défaut, sans dépendre du HTML de la fiche.\n\nLes changements sont immédiats et concernent aussi les anciens messages. iPhone et Mac acceptent les photos et fichiers image ; Apple Watch accepte les URL HTTP/HTTPS. Effacer une image utilise la source suivante. Les avatars servent uniquement à l’affichage et ne sont pas envoyés au modèle.";
+
+// 聊天头像布局
+"avatar.position" = "Position de l’avatar";
+"avatar.side" = "À côté de la bulle";
+"avatar.above" = "Au-dessus de la bulle";
+"avatar.edge_inset" = "Marges latérales";
+"avatar.message_spacing" = "Écart avatar–message";
+"avatar.show_time" = "Afficher l’heure sous le nom";
+"avatar.spacing_value" = "%@ : %.0f pt";
+"avatar.layout_help" = "Les marges concernent les messages avec avatar. L’écart est horizontal à côté de la bulle et vertical au-dessus. L’en-tête affiche le nom du prompt ou du personnage, avec une heure facultative.";
+"avatar.layout_details" = "À côté de la bulle, les avatars sont alignés en haut du message. Au-dessus, l’avatar et le nom forment un en-tête hors de la bulle. Les marges et l’écart se règlent de 0 à 24 points, avec 6 par défaut. Sur Mac, les marges sont relatives à la zone de messages centrée. La disposition au-dessus libère de la largeur pour le texte.\n\nLe nom de l’IA suit le prompt global sélectionné ou le premier personnage actif en jeu de rôle. Votre nom est « Moi » en conversation ordinaire et celui de l’identité liée en jeu de rôle. Activez l’heure sous le nom pour afficher la date et l’heure du message. Sans date enregistrée, rien n’est ajouté. Ce réglage ne modifie pas l’heure de la barre d’actions.";
+"avatar.me" = "Moi";
+"avatar.ai" = "IA";

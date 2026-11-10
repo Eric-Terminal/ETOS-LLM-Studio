@@ -238,53 +238,45 @@ struct ChatBubble: View {
         VStack(alignment: isOutgoing ? .trailing : .leading) {
             sourceConversationLabel
             // 头像与消息顶部对齐，底部操作栏不参与头像定位。
-            HStack(alignment: .top) {
-            if !isOutgoing {
-                ChatMessageAvatar(role: message.role, sessionID: roleplaySessionID)
-            }
-            // 重构: 使用 MessageRole 枚举进行判断
-            switch message.role {
-            case .user:
-                if isOutgoing {
-                    Spacer()
-                    userBubble
-                } else {
-                    if usesNoBubbleStyle {
-                        Spacer(minLength: 0)
+            HStack(alignment: .top, spacing: 0) {
+                if isOutgoing || (usesNoBubbleStyle && !avatarModel.isVisible(role: message.role)) {
+                    Spacer(minLength: usesNoBubbleStyle ? 0 : rowSpacerReserveWidth)
+                }
+                if !isOutgoing, avatarModel.showsSideAvatar(role: message.role) {
+                    ChatMessageAvatar(role: message.role, sessionID: roleplaySessionID)
+                        .padding(.trailing, CGFloat(avatarModel.layout.messageSpacing))
+                }
+                VStack(alignment: isOutgoing ? .trailing : .leading, spacing: CGFloat(avatarModel.layout.messageSpacing)) {
+                    if avatarModel.showsHeader(role: message.role) {
+                        ChatAvatarHeader(role: message.role, sessionID: roleplaySessionID,
+                                         date: message.responseMetrics?.requestStartedAt ?? message.requestedAt, outgoing: isOutgoing)
                     }
-                    assistantBubble
-                    if usesNoBubbleStyle {
-                        Spacer(minLength: 0)
-                    } else {
-                        Spacer()
+                    switch message.role {
+                    case .user:
+                        if isOutgoing { userBubble } else { assistantBubble }
+                    case .error:
+                        errorBubble
+                    case .assistant, .system, .tool:
+                        assistantBubble
+                    @unknown default:
+                        EmptyView()
                     }
                 }
-            case .error:
-                errorBubble
-                Spacer()
-            case .assistant, .system, .tool: // system 和 tool 也使用 assistant 样式
-                if usesNoBubbleStyle {
-                    Spacer(minLength: 0)
+                .frame(maxWidth: bubbleMaxWidth, alignment: isOutgoing ? .trailing : .leading)
+                if isOutgoing, avatarModel.showsSideAvatar(role: message.role) {
+                    ChatMessageAvatar(role: message.role, sessionID: roleplaySessionID)
+                        .padding(.leading, CGFloat(avatarModel.layout.messageSpacing))
                 }
-                assistantBubble
-                if usesNoBubbleStyle {
-                    Spacer(minLength: 0)
-                } else {
-                    Spacer()
+                if !isOutgoing || (usesNoBubbleStyle && !avatarModel.isVisible(role: message.role)) {
+                    Spacer(minLength: usesNoBubbleStyle ? 0 : rowSpacerReserveWidth)
                 }
-            @unknown default:
-                // 为未来可能增加的 role 类型提供一个默认的回退，防止编译错误
-                Spacer()
-            }
-            if isOutgoing {
-                ChatMessageAvatar(role: message.role, sessionID: roleplaySessionID)
-            }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .environment(\.thinkingSweepUsesRainbow, messageState.message.usesRainbowThinkingSweep)
         .environment(\.etTextFontSnapshot, messageState.textFontSnapshot)
-        .padding(.horizontal, usesNoBubbleStyle ? noBubbleRowHorizontalPadding : nil)
+        .padding(.horizontal, avatarModel.isVisible(role: message.role)
+                 ? CGFloat(avatarModel.layout.edgeInset) : (usesNoBubbleStyle ? noBubbleRowHorizontalPadding : nil))
         .padding(.top, mergeWithPrevious ? 0 : rowVerticalPadding)
         .padding(.bottom, mergeWithNext ? 0 : rowVerticalPadding)
         .overlay {

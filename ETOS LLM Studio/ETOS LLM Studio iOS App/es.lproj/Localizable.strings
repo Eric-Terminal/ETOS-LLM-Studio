@@ -8611,4 +8611,17 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "avatar.clear" = "Borrar avatar";
 "avatar.editor_help" = "Los cambios se guardan al instante. Al borrar la imagen se usa la siguiente fuente disponible o un icono del sistema.";
 "avatar.set" = "Establecer avatar";
-"avatar.help" = "Activa por separado los avatares de IA y del usuario, que aparecen a la izquierda y a la derecha de los mensajes. Sin imagen, se muestra un icono del sistema.\n\nDefine aquí las imágenes predeterminadas. En la lista de prompts globales, « Establecer avatar » asigna una imagen de IA a cada prompt. Al cambiar de prompt también cambia el avatar.\n\nEn el juego de rol, tienen prioridad la primera ficha de personaje válida y la identidad de usuario vinculada. Cambia las imágenes en los detalles del personaje y en las identidades de usuario; en Watch, selecciona una identidad existente. Si faltan imágenes, se usa el prompt o la imagen predeterminada, sin depender del HTML de la ficha.\n\nLos cambios se guardan al instante y afectan a los mensajes anteriores. iPhone y Mac admiten fotos y archivos de imagen; Apple Watch admite URL HTTP/HTTPS. Borrar una imagen usa la siguiente fuente disponible. Los avatares solo se muestran y no se envían al modelo.";
+"avatar.help" = "Activa por separado los avatares de IA y del usuario, que aparecen a la izquierda y a la derecha de los mensajes en la disposición lateral. Sin imagen, se muestra un icono del sistema.\n\nDefine aquí las imágenes predeterminadas. En la lista de prompts globales, « Establecer avatar » asigna una imagen de IA a cada prompt. Al cambiar de prompt también cambia el avatar.\n\nEn el juego de rol, tienen prioridad la primera ficha de personaje válida y la identidad de usuario vinculada. Cambia las imágenes en los detalles del personaje y en las identidades de usuario; en Watch, selecciona una identidad existente. Si faltan imágenes, se usa el prompt o la imagen predeterminada, sin depender del HTML de la ficha.\n\nLos cambios se guardan al instante y afectan a los mensajes anteriores. iPhone y Mac admiten fotos y archivos de imagen; Apple Watch admite URL HTTP/HTTPS. Borrar una imagen usa la siguiente fuente disponible. Los avatares solo se muestran y no se envían al modelo.";
+
+// 聊天头像布局
+"avatar.position" = "Posición del avatar";
+"avatar.side" = "Junto a la burbuja";
+"avatar.above" = "Encima de la burbuja";
+"avatar.edge_inset" = "Márgenes laterales";
+"avatar.message_spacing" = "Espacio avatar–mensaje";
+"avatar.show_time" = "Mostrar hora bajo el nombre";
+"avatar.spacing_value" = "%@: %.0f pt";
+"avatar.layout_help" = "Los márgenes se aplican a mensajes con avatar. El espacio es horizontal junto a la burbuja y vertical encima. La cabecera muestra el nombre del prompt o del personaje y, opcionalmente, la hora.";
+"avatar.layout_details" = "Junto a la burbuja, los avatares se alinean con la parte superior del mensaje. Encima de la burbuja, el avatar y el nombre forman una cabecera exterior. Los márgenes y el espacio se ajustan de 0 a 24 puntos; ambos valen 6 de forma predeterminada. En Mac, los márgenes son relativos al área de mensajes centrada. La disposición superior libera anchura para el texto.\n\nEl nombre de la IA sigue el prompt global seleccionado o el primer personaje activo del juego de rol. Tu nombre es «Yo» en chats normales y el de la identidad vinculada en juegos de rol. Activa la hora bajo el nombre para añadir la fecha y la hora del mensaje; si no están registradas, se omiten. Este ajuste no cambia la hora de la barra de acciones.";
+"avatar.me" = "Yo";
+"avatar.ai" = "IA";

@@ -8534,4 +8534,17 @@
 "avatar.clear" = "Clear Avatar";
 "avatar.editor_help" = "Changes save immediately. Clearing this image uses the next available avatar or a system symbol.";
 "avatar.set" = "Set Avatar";
-"avatar.help" = "Enable AI and user avatars separately. AI avatars appear to the left of messages; your avatar appears to the right. Without an image, a system symbol is shown.\n\nChoose default images in Chat Avatars. In the global prompt list, use Set Avatar to give a prompt its own AI image. Selecting that prompt also selects its avatar.\n\nFor roleplay conversations, the first active character card and the bound user persona take priority. Change the character image in the card details and the user image in User Personas. Missing images fall back to the prompt or default image. Native avatars do not depend on HTML support in the card.\n\nImage changes save immediately and affect existing messages as well. Choose a photo or image file on iPhone and Mac; on Apple Watch, load an image from an HTTP or HTTPS URL. Clear an image to use the next available source. Avatars are only for display and are not sent to the model.";
+"avatar.help" = "Enable AI and user avatars separately. In the side layout, AI avatars appear to the left of messages; your avatar appears to the right. Without an image, a system symbol is shown.\n\nChoose default images in Chat Avatars. In the global prompt list, use Set Avatar to give a prompt its own AI image. Selecting that prompt also selects its avatar.\n\nFor roleplay conversations, the first active character card and the bound user persona take priority. Change the character image in the card details and the user image in User Personas. Missing images fall back to the prompt or default image. Native avatars do not depend on HTML support in the card.\n\nImage changes save immediately and affect existing messages as well. Choose a photo or image file on iPhone and Mac; on Apple Watch, load an image from an HTTP or HTTPS URL. Clear an image to use the next available source. Avatars are only for display and are not sent to the model.";
+
+// 聊天头像布局
+"avatar.position" = "Avatar Position";
+"avatar.side" = "Beside Bubble";
+"avatar.above" = "Above Bubble";
+"avatar.edge_inset" = "Side Margins";
+"avatar.message_spacing" = "Avatar–Message Gap";
+"avatar.show_time" = "Show Time Below Name";
+"avatar.spacing_value" = "%@: %.0f pt";
+"avatar.layout_help" = "Margins apply to messages with avatars. The gap is horizontal beside the bubble and vertical above it. Above-bubble headers show the prompt or roleplay name, with an optional time.";
+"avatar.layout_details" = "Choose Beside Bubble for top-aligned avatars, or Above Bubble for an avatar and name header. Side margins and the avatar–message gap can each be set from 0 to 24 points; both default to 6. On Mac, margins are relative to the centered message area. The above-bubble layout frees the avatar's former width for message content.\n\nAI names follow the selected global prompt, or the first active roleplay character. Your name is Me in ordinary chats and the bound persona name in roleplay. Enable Show Time Below Name to add the message date and time; messages without a recorded time omit it. This switch does not change the time shown in the message action bar.";
+"avatar.me" = "Me";
+"avatar.ai" = "AI";

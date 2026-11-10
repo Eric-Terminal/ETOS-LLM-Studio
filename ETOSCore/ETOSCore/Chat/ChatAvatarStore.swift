@@ -20,6 +20,22 @@ struct ChatAvatarConfiguration: Codable, Equatable, Sendable {
     var showAssistant = false
     var showUser = false
     var files: [String: String] = [:]
+    var layout = ChatAvatarLayout()
+
+    init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case showAssistant, showUser, files, layout
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        showAssistant = try values.decodeIfPresent(Bool.self, forKey: .showAssistant) ?? false
+        showUser = try values.decodeIfPresent(Bool.self, forKey: .showUser) ?? false
+        files = try values.decodeIfPresent([String: String].self, forKey: .files) ?? [:]
+        // 旧配置没有布局字段，升级时保留原有显示开关与图片引用。
+        layout = try values.decodeIfPresent(ChatAvatarLayout.self, forKey: .layout) ?? .init()
+    }
 
     func isVisible(role: MessageRole) -> Bool {
         switch role {
@@ -75,6 +91,17 @@ public final class ChatAvatarStore: @unchecked Sendable {
         case .persona(let id): RoleplayStore.shared.persona(id: id)?.avatarFileName
         default: load().files[target.key]
         }
+    }
+
+    func setLayout(_ layout: ChatAvatarLayout) throws {
+        try queue.sync {
+            var configuration = loadUnlocked()
+            configuration.layout = layout
+            guard Persistence.saveAuxiliaryBlob(configuration, forKey: Self.storageKey) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+        }
+        notifyChange()
     }
 
     public func setImage(_ data: Data?, for target: ChatAvatarTarget) throws {

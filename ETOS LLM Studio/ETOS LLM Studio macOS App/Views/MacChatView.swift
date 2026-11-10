@@ -38,7 +38,7 @@ struct MacChatView: View {
             MacChatTimeline(isActive: isVisible && workspace.canManageLocalModels, hasMessages: !workspace.messages.isEmpty, sendRevision: sendRevision,
                 onUserInteraction: { sendMotion.cancel() }, viewportHeight: $viewportHeight, viewportBounds: $viewportBounds) {
                     LazyVStack(alignment: .leading, spacing: 24) {
-                        MacContinuationHeader(model: workspace.contextCompression)
+                        MacContinuationHeader(model: workspace.contextCompression).padding(.horizontal)
                         if workspace.messages.isEmpty && workspace.contextCompression.presentation?.context == nil {
                             ContentUnavailableView {
                                 Label(NSLocalizedString("新的对话", comment: ""), systemImage: "bubble.left.and.bubble.right")
@@ -47,6 +47,7 @@ struct MacChatView: View {
                             }
                             // 消息列表左对齐，空白提示需要占满宽度才能以聊天区为中心。
                             .frame(maxWidth: .infinity, minHeight: max(180, viewportHeight * 0.65))
+                            .padding(.horizontal)
                         }
                         ForEach(workspace.messages) { row in
                             MacMessageRow(row: row, viewportHeight: viewportHeight)
@@ -102,10 +103,10 @@ struct MacChatView: View {
                                     Button(NSLocalizedString("删除", comment: ""), role: .destructive) { prepareDeletion(row.message, kind: .message) }
                                         .disabled(!workspace.canModifyCurrentHistory)
                                 }
-                            MacContinuationMessageLinks(model: workspace.contextCompression, messageID: row.id)
+                            MacContinuationMessageLinks(model: workspace.contextCompression, messageID: row.id).padding(.horizontal)
                         }
                     }
-                    .padding()
+                    .padding(.vertical)
                     .frame(maxWidth: 820)
                     .frame(maxWidth: .infinity)
             }
@@ -465,6 +466,7 @@ private struct MacLinuxJobsTarget: Identifiable {
 private struct MacMessageRow: View {
     @EnvironmentObject private var workspace: MacWorkspaceModel
     @ObservedObject private var configuration = AppConfigStore.shared
+    @ObservedObject private var avatarModel = ChatAvatarModel.shared
     let row: MacMessagePresentation
     let viewportHeight: CGFloat
     @State private var showsFullContent = false
@@ -477,23 +479,36 @@ private struct MacMessageRow: View {
 
     var body: some View {
         // 长消息与底部操作栏不应把头像推离气泡顶部。
-        HStack(alignment: .top) {
-            if !outgoing {
+        HStack(alignment: .top, spacing: 0) {
+            if !outgoing, avatarModel.showsSideAvatar(role: row.message.role) {
                 ChatMessageAvatar(role: row.message.role, sessionID: workspace.currentSession?.id)
+                    .padding(.trailing, CGFloat(avatarModel.layout.messageSpacing))
             }
-            bubble
-            if outgoing {
+            VStack(alignment: outgoing ? .trailing : .leading, spacing: CGFloat(avatarModel.layout.messageSpacing)) {
+                if avatarModel.showsHeader(role: row.message.role) {
+                    ChatAvatarHeader(role: row.message.role, sessionID: workspace.currentSession?.id,
+                                     date: row.message.responseMetrics?.requestStartedAt ?? row.message.requestedAt, outgoing: outgoing)
+                }
+                bubble
+            }
+            if outgoing, avatarModel.showsSideAvatar(role: row.message.role) {
                 ChatMessageAvatar(role: row.message.role, sessionID: workspace.currentSession?.id)
+                    .padding(.leading, CGFloat(avatarModel.layout.messageSpacing))
             }
         }
+        .padding(.horizontal, avatarModel.isVisible(role: row.message.role) ? CGFloat(avatarModel.layout.edgeInset) : nil)
     }
 
     private var bubble: some View {
         VStack(alignment: .leading) {
-            HStack {
-                Text(row.roleTitle).font(.caption).foregroundStyle(.secondary)
-                if row.activity.isActive { ProgressView().controlSize(.mini) }
-                Spacer()
+            if !avatarModel.showsHeader(role: row.message.role) || row.activity.isActive {
+                HStack {
+                    if !avatarModel.showsHeader(role: row.message.role) {
+                        Text(row.roleTitle).font(.caption).foregroundStyle(.secondary)
+                    }
+                    if row.activity.isActive { ProgressView().controlSize(.mini) }
+                    Spacer()
+                }
             }
             if row.activity.hasReasoning, let reasoning = row.reasoning {
                 MacMessageReasoningView(activity: row.activity, reasoning: reasoning, viewportHeight: viewportHeight)

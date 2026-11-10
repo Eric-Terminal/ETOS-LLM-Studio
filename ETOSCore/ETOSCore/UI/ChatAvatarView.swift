@@ -7,9 +7,12 @@ public final class ChatAvatarModel: ObservableObject {
     @Published var configuration = ChatAvatarConfiguration()
     @Published private var ordinary = ChatAvatarPair()
     @Published private var sessions: [UUID: ChatAvatarPair] = [:]
+    @Published private var ordinaryNames = ChatAvatarNames()
+    @Published private var sessionNames: [UUID: ChatAvatarNames] = [:]
     @Published var errorMessage: String?
     private var pendingWrite: Task<Void, Never>?
     private var pendingVisibility: [Bool: (id: UUID, visible: Bool)] = [:]
+    private var pendingLayout: (id: UUID, value: ChatAvatarLayout)?
     private var observations = Set<AnyCancellable>()
     private var revision = UUID()
 
@@ -34,28 +37,37 @@ public final class ChatAvatarModel: ObservableObject {
         Task { [weak self] in
             let result = await Task.detached {
                 let configuration = ChatAvatarStore.shared.load()
-                let promptID = GlobalSystemPromptStore.load().selectedEntryID
+                let prompts = GlobalSystemPromptStore.load()
+                let promptID = prompts.selectedEntryID
+                let prompt = prompts.entries.first { $0.id == promptID }
                 let store = RoleplayStore.shared
                 let library = store.queue.sync { store.loadLibraryUnlocked() }
                 let characters = Dictionary(uniqueKeysWithValues: library.characters.map { ($0.id, $0) })
                 let personas = Dictionary(uniqueKeysWithValues: library.personas.map { ($0.id, $0) })
                 let ordinary = ChatAvatarPair.resolve(configuration: configuration, promptID: promptID, character: nil, persona: nil)
                 var sessions: [UUID: ChatAvatarPair] = [:]
+                var names: [UUID: ChatAvatarNames] = [:]
                 for binding in library.bindings {
                     // 与酒馆运行时一致：至少一个有效角色才启用酒馆身份。
                     guard let character = binding.characterIDs.compactMap({ characters[$0] }).first else { continue }
                     sessions[binding.sessionID] = .resolve(configuration: configuration, promptID: promptID,
                         character: character, persona: binding.personaID.flatMap { personas[$0] })
+                    names[binding.sessionID] = .resolve(prompt: prompt, character: character,
+                        persona: binding.personaID.flatMap { personas[$0] })
                 }
-                return (configuration, ordinary, sessions)
+                return (configuration, ordinary, sessions,
+                        ChatAvatarNames.resolve(prompt: prompt, character: nil, persona: nil), names)
             }.value
             guard let self, self.revision == token else { return }
             var configuration = result.0
             if let pending = self.pendingVisibility[true] { configuration.showAssistant = pending.visible }
             if let pending = self.pendingVisibility[false] { configuration.showUser = pending.visible }
+            if let pending = self.pendingLayout { configuration.layout = pending.value }
             self.configuration = configuration
             self.ordinary = result.1
             self.sessions = result.2
+            self.ordinaryNames = result.3
+            self.sessionNames = result.4
         }
     }
 
@@ -80,6 +92,42 @@ public final class ChatAvatarModel: ObservableObject {
 
     public func isVisible(role: MessageRole) -> Bool {
         configuration.isVisible(role: role)
+    }
+
+    public var layout: ChatAvatarLayout { configuration.layout }
+
+    public func showsSideAvatar(role: MessageRole) -> Bool {
+        isVisible(role: role) && layout.position == .side
+    }
+
+    public func showsHeader(role: MessageRole) -> Bool {
+        isVisible(role: role) && layout.position == .above
+    }
+
+    func setLayout(_ layout: ChatAvatarLayout) {
+        let id = UUID()
+        pendingLayout = (id, layout)
+        configuration.layout = layout
+        let previous = pendingWrite
+        pendingWrite = Task { [weak self] in
+            // 与开关写入共用队列；快速调节间距时，旧通知不能覆盖尚未保存的最新值。
+            await previous?.value
+            do {
+                try await Task.detached { try ChatAvatarStore.shared.setLayout(layout) }.value
+            } catch {
+                self?.errorMessage = error.localizedDescription
+            }
+            if self?.pendingLayout?.id == id { self?.pendingLayout = nil }
+            self?.reload()
+        }
+    }
+
+    func displayName(role: MessageRole, sessionID: UUID?) -> String {
+        let names = sessionID.flatMap { sessionNames[$0] } ?? ordinaryNames
+        if role == .user {
+            return names.user ?? NSLocalizedString("avatar.me", value: "Me", comment: "")
+        }
+        return names.assistant ?? NSLocalizedString("avatar.ai", value: "AI", comment: "")
     }
 
     func fileName(role: MessageRole, sessionID: UUID?) -> String? {

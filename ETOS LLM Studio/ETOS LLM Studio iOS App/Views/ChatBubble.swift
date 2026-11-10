@@ -200,37 +200,54 @@ struct ChatBubble: View {
     var body: some View {
         // 头像锚定消息顶部，不能随长正文或底部操作栏下沉。
         HStack(alignment: .top, spacing: 0) {
-            // 用户消息靠右；关闭助手气泡后的助手消息用左右 Spacer 居中阅读列。
-            if isOutgoing || usesNoBubbleStyle {
+            // 无头像的无气泡模式仍居中；显示头像后让整组消息贴近对应侧边。
+            if isOutgoing || (usesNoBubbleStyle && !avatarModel.isVisible(role: message.role)) {
                 Spacer(minLength: rowSideSpacerMinLength)
             }
-            if !isOutgoing, avatarModel.isVisible(role: message.role) {
+            if !isOutgoing, avatarModel.showsSideAvatar(role: message.role) {
                 ChatMessageAvatar(role: message.role, sessionID: roleplaySessionID)
-                    .padding(.trailing)
+                    .padding(.trailing, CGFloat(avatarModel.layout.messageSpacing))
             }
             
-            VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
-                sourceConversationLabel
-                    .opacity(sendFlightContentOpacity)
-
-                // 图片附件 - 作为气泡显示
-                if !shouldPlaceImagesAfterText,
-                   let imageFileNames = message.imageFileNames,
-                   !imageFileNames.isEmpty {
-                    imageAttachmentsView(fileNames: imageFileNames)
+            VStack(alignment: isOutgoing ? .trailing : .leading, spacing: CGFloat(avatarModel.layout.messageSpacing)) {
+                if avatarModel.showsHeader(role: message.role) {
+                    ChatAvatarHeader(role: message.role, sessionID: roleplaySessionID,
+                                     date: message.responseMetrics?.requestStartedAt ?? message.requestedAt, outgoing: isOutgoing)
+                        .opacity(sendFlightContentOpacity)
                 }
+                VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
+                    sourceConversationLabel
+                        .opacity(sendFlightContentOpacity)
 
-                // 文件附件 - 作为气泡显示
-                if let fileFileNames = message.fileFileNames, !fileFileNames.isEmpty {
-                    fileAttachmentsView(fileNames: fileFileNames)
-                }
-                
-                // 气泡内容（仅当有非图片内容时显示）
-                if shouldShowTextBubble {
-                    if shouldRenderToolCallsAsSeparateBubbles {
-                        separatedToolCallBubbleStack
-                            .id(bubbleContentLayoutIdentity)
-                            .opacity(sendFlightContentOpacity)
+                    // 图片附件 - 作为气泡显示
+                    if !shouldPlaceImagesAfterText,
+                       let imageFileNames = message.imageFileNames,
+                       !imageFileNames.isEmpty {
+                        imageAttachmentsView(fileNames: imageFileNames)
+                    }
+
+                    // 文件附件 - 作为气泡显示
+                    if let fileFileNames = message.fileFileNames, !fileFileNames.isEmpty {
+                        fileAttachmentsView(fileNames: fileFileNames)
+                    }
+
+                    // 气泡内容（仅当有非图片内容时显示）
+                    if shouldShowTextBubble {
+                        if shouldRenderToolCallsAsSeparateBubbles {
+                            separatedToolCallBubbleStack
+                                .id(bubbleContentLayoutIdentity)
+                                .opacity(sendFlightContentOpacity)
+                                .modifier(
+                                    ChatBubbleOpenMoreGestureModifier(
+                                        isSelectionMode: false,
+                                        onToggleSelection: {},
+                                        onOpenMore: isSelectionMode ? nil : openMoreAction
+                                    )
+                                )
+                        } else {
+                            bubbleContainer {
+                                textContentStack(includeToolCalls: true)
+                            }
                             .modifier(
                                 ChatBubbleOpenMoreGestureModifier(
                                     isSelectionMode: false,
@@ -238,34 +255,24 @@ struct ChatBubble: View {
                                     onOpenMore: isSelectionMode ? nil : openMoreAction
                                 )
                             )
-                    } else {
-                        bubbleContainer {
-                            textContentStack(includeToolCalls: true)
+                            .modifier(ChatSendFlightContentModifier(
+                                layoutIdentity: bubbleContentLayoutIdentity,
+                                opacity: sendFlightContentOpacity,
+                                target: sendFlightTarget
+                            ))
                         }
-                        .modifier(
-                            ChatBubbleOpenMoreGestureModifier(
-                                isSelectionMode: false,
-                                onToggleSelection: {},
-                                onOpenMore: isSelectionMode ? nil : openMoreAction
-                            )
-                        )
-                        .modifier(ChatSendFlightContentModifier(
-                            layoutIdentity: bubbleContentLayoutIdentity,
-                            opacity: sendFlightContentOpacity,
-                            target: sendFlightTarget
-                        ))
                     }
-                }
 
-                if shouldPlaceImagesAfterText,
-                   let imageFileNames = message.imageFileNames,
-                   !imageFileNames.isEmpty {
-                    imageAttachmentsView(fileNames: imageFileNames)
-                }
+                    if shouldPlaceImagesAfterText,
+                       let imageFileNames = message.imageFileNames,
+                       !imageFileNames.isEmpty {
+                        imageAttachmentsView(fileNames: imageFileNames)
+                    }
 
-                if shouldShowMessageActionBar {
-                    messageActionBarRow
-                        .opacity(sendFlightContentOpacity)
+                    if shouldShowMessageActionBar {
+                        messageActionBarRow
+                            .opacity(sendFlightContentOpacity)
+                    }
                 }
             }
             .frame(width: usesNoBubbleStyle ? bubbleMaxWidth : nil, alignment: .leading)
@@ -276,12 +283,12 @@ struct ChatBubble: View {
                 }
             }
             
-            // AI 普通气泡靠左；关闭助手气泡后的助手消息保留对称右侧 Spacer。
-            if isOutgoing, avatarModel.isVisible(role: message.role) {
+            // 用户头像跟在消息之后，保证左右两侧都使用相同的可调间距。
+            if isOutgoing, avatarModel.showsSideAvatar(role: message.role) {
                 ChatMessageAvatar(role: message.role, sessionID: roleplaySessionID)
-                    .padding(.leading)
+                    .padding(.leading, CGFloat(avatarModel.layout.messageSpacing))
             }
-            if !isOutgoing || usesNoBubbleStyle {
+            if !isOutgoing || (usesNoBubbleStyle && !avatarModel.isVisible(role: message.role)) {
                 Spacer(minLength: rowSideSpacerMinLength)
             }
         }
