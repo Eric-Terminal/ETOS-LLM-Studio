@@ -237,7 +237,8 @@ struct ChatBubble: View {
     var body: some View {
         VStack(alignment: isOutgoing ? .trailing : .leading) {
             sourceConversationLabel
-            HStack(alignment: .bottom) {
+            // 头像与消息顶部对齐，底部操作栏不参与头像定位。
+            HStack(alignment: .top) {
             if !isOutgoing {
                 ChatMessageAvatar(role: message.role, sessionID: roleplaySessionID)
             }

@@ -476,7 +476,8 @@ private struct MacMessageRow: View {
     private var textColor: Color { textPalette.body ?? (row.message.role == .error ? .red : (outgoing ? .white : .primary)) }
 
     var body: some View {
-        HStack(alignment: .bottom) {
+        // 长消息与底部操作栏不应把头像推离气泡顶部。
+        HStack(alignment: .top) {
             if !outgoing {
                 ChatMessageAvatar(role: row.message.role, sessionID: workspace.currentSession?.id)
             }

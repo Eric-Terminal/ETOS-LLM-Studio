@@ -198,7 +198,8 @@ struct ChatBubble: View {
     }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 0) {
+        // 头像锚定消息顶部，不能随长正文或底部操作栏下沉。
+        HStack(alignment: .top, spacing: 0) {
             // 用户消息靠右；关闭助手气泡后的助手消息用左右 Spacer 居中阅读列。
             if isOutgoing || usesNoBubbleStyle {
                 Spacer(minLength: rowSideSpacerMinLength)
