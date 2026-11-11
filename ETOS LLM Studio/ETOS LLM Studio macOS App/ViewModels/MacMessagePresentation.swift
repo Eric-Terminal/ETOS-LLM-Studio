@@ -36,6 +36,7 @@ struct MacMessagePresentation: Identifiable {
     let activity: MacMessageActivity
     let actionBar: MacMessageActionBarPresentation
     let roleplayDocuments: [RoleplayPreparedDocument]
+    var avatarPresentation: ChatAvatarTurnPresentation
     var id: UUID { message.id }
 
     static func prepare(_ message: ChatMessage, markdown: Bool, versionInfo: ChatResponseAttemptVersionInfo? = nil,
@@ -93,7 +94,8 @@ struct MacMessagePresentation: Identifiable {
             activity: activity,
             actionBar: MacMessageActionBarPresentation(message: message, configuration: actionBar,
                                                        providers: providers, hasVersions: count > 1),
-            roleplayDocuments: roleplayDocuments
+            roleplayDocuments: roleplayDocuments,
+            avatarPresentation: ChatAvatarTurnPresentation(role: message.role, mergesWithPrevious: false, mergesWithNext: false)
         )
     }
 }
@@ -148,9 +150,10 @@ actor MacMessagePresentationStore {
         var updated: [UUID: MacMessagePresentation] = [:]
         var result: [MacMessagePresentation] = []
         var textIDs = Set<UUID>()
-        for message in ChatResponseAttemptSupport.visibleMessages(from: messages) {
+        let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: messages)
+        for (index, message) in visibleMessages.enumerated() {
             try Task.checkCancellation()
-            let row: MacMessagePresentation
+            var row: MacMessagePresentation
             if let previous = cache[message.id], previous.message == message, previous.versionInfo == versions[message.id],
                previous.activity.isCurrentResponse == (message.id == activeResponseID) {
                 row = previous
@@ -190,6 +193,12 @@ actor MacMessagePresentationStore {
                                                      preparedText: text, preparedReasoning: reasoning, preparedPreview: preview, palette: palette,
                                                      actionBar: actionBar, providers: providers)
             }
+            // 分组取决于相邻消息；正文缓存命中时也必须更新，覆盖续写追加、删除及版本切换。
+            row.avatarPresentation = ChatAvatarTurnPresentation(
+                role: message.role,
+                mergesWithPrevious: index > 0 && ChatResponseAttemptSupport.shouldMergeAdjacentAssistantTurnMessages(visibleMessages[index - 1], message),
+                mergesWithNext: index + 1 < visibleMessages.count && ChatResponseAttemptSupport.shouldMergeAdjacentAssistantTurnMessages(message, visibleMessages[index + 1])
+            )
             guard preparationID == revision, FontLibrary.adapterCacheToken() == fontRevision else { throw CancellationError() }
             updated[message.id] = row
             result.append(row)

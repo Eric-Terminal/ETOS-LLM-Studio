@@ -234,21 +234,25 @@ struct ChatBubble: View {
 
     // MARK: - 视图主体
 
+    var avatarPresentation: ChatAvatarTurnPresentation {
+        ChatAvatarTurnPresentation(role: message.role, mergesWithPrevious: mergeWithPrevious, mergesWithNext: mergeWithNext)
+    }
+
     var body: some View {
         VStack(alignment: isOutgoing ? .trailing : .leading) {
             sourceConversationLabel
             // 头像与消息顶部对齐，底部操作栏不参与头像定位。
             HStack(alignment: .top, spacing: 0) {
-                if isOutgoing || (usesNoBubbleStyle && !avatarModel.isVisible(role: message.role)) {
+                if isOutgoing || (usesNoBubbleStyle && !avatarModel.isVisible(role: avatarPresentation.role)) {
                     Spacer(minLength: usesNoBubbleStyle ? 0 : rowSpacerReserveWidth)
                 }
-                if !isOutgoing, avatarModel.showsSideAvatar(role: message.role) {
-                    ChatMessageAvatar(role: message.role, sessionID: roleplaySessionID)
+                if !isOutgoing, avatarModel.showsSideAvatar(role: avatarPresentation.role) {
+                    ChatMessageAvatar(role: avatarPresentation.role, sessionID: roleplaySessionID, showsImage: avatarPresentation.showsAvatar)
                         .padding(.trailing, CGFloat(avatarModel.layout.messageSpacing))
                 }
                 VStack(alignment: isOutgoing ? .trailing : .leading, spacing: CGFloat(avatarModel.layout.messageSpacing)) {
-                    if avatarModel.showsHeader(role: message.role) {
-                        ChatAvatarHeader(role: message.role, sessionID: roleplaySessionID,
+                    if avatarPresentation.showsAvatar, avatarModel.showsHeader(role: avatarPresentation.role) {
+                        ChatAvatarHeader(role: avatarPresentation.role, sessionID: roleplaySessionID,
                                          date: message.responseMetrics?.requestStartedAt ?? message.requestedAt, outgoing: isOutgoing)
                     }
                     switch message.role {
@@ -263,11 +267,11 @@ struct ChatBubble: View {
                     }
                 }
                 .frame(maxWidth: bubbleMaxWidth, alignment: isOutgoing ? .trailing : .leading)
-                if isOutgoing, avatarModel.showsSideAvatar(role: message.role) {
-                    ChatMessageAvatar(role: message.role, sessionID: roleplaySessionID)
+                if isOutgoing, avatarModel.showsSideAvatar(role: avatarPresentation.role) {
+                    ChatMessageAvatar(role: avatarPresentation.role, sessionID: roleplaySessionID, showsImage: avatarPresentation.showsAvatar)
                         .padding(.leading, CGFloat(avatarModel.layout.messageSpacing))
                 }
-                if !isOutgoing || (usesNoBubbleStyle && !avatarModel.isVisible(role: message.role)) {
+                if !isOutgoing || (usesNoBubbleStyle && !avatarModel.isVisible(role: avatarPresentation.role)) {
                     Spacer(minLength: usesNoBubbleStyle ? 0 : rowSpacerReserveWidth)
                 }
             }
@@ -275,7 +279,7 @@ struct ChatBubble: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .environment(\.thinkingSweepUsesRainbow, messageState.message.usesRainbowThinkingSweep)
         .environment(\.etTextFontSnapshot, messageState.textFontSnapshot)
-        .padding(.horizontal, avatarModel.isVisible(role: message.role)
+        .padding(.horizontal, avatarModel.isVisible(role: avatarPresentation.role)
                  ? CGFloat(avatarModel.layout.edgeInset) : (usesNoBubbleStyle ? noBubbleRowHorizontalPadding : nil))
         .padding(.top, mergeWithPrevious ? 0 : rowVerticalPadding)
         .padding(.bottom, mergeWithNext ? 0 : rowVerticalPadding)

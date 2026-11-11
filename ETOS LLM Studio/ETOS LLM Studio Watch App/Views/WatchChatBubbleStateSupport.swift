@@ -498,7 +498,7 @@ extension ChatBubble {
     }
 
     var bubbleMaxWidth: CGFloat {
-        let hasAvatar = avatarModel.isVisible(role: message.role)
+        let hasAvatar = avatarModel.isVisible(role: avatarPresentation.role)
         let avatarWidth = hasAvatar ? CGFloat(avatarModel.layout.sideWidth(avatarDiameter: Double(ChatAvatarImage.diameter))) : 0
         let margins = hasAvatar ? CGFloat(avatarModel.layout.edgeInset) * 2 : 0
         let rowWidth = max(WKInterfaceDevice.current().screenBounds.width - avatarWidth - margins, 1)

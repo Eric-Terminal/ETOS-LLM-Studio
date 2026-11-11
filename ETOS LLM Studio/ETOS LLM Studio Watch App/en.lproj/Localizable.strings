@@ -8367,3 +8367,5 @@
 "avatar.layout_details" = "Choose Beside Bubble for top-aligned avatars, or Above Bubble for an avatar and name header. Side margins and the avatar–message gap can each be set from 0 to 24 points; both default to 6. On Mac, margins are relative to the centered message area. The above-bubble layout frees the avatar's former width for message content.\n\nAI names follow the selected global prompt, or the first active roleplay character. Your name is Me in ordinary chats and the bound persona name in roleplay. Enable Show Time Below Name to add the message date and time; messages without a recorded time omit it. This switch does not change the time shown in the message action bar.";
 "avatar.me" = "Me";
 "avatar.ai" = "AI";
+
+"avatar.turn_help" = "A reply with multiple tool calls shares one avatar. Beside the bubble, the avatar stays at the top of the turn and all following messages keep the same inset. Above the bubble, the avatar, name and optional time appear once at the start of the turn. A new user message starts a new turn; retry versions are grouped separately.";

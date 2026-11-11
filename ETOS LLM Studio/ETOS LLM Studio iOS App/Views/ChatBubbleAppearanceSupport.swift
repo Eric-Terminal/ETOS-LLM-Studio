@@ -447,7 +447,7 @@ extension ChatBubble {
     }
 
     var bubbleMaxWidth: CGFloat {
-        let avatarWidth = avatarModel.isVisible(role: message.role)
+        let avatarWidth = avatarModel.isVisible(role: avatarPresentation.role)
             ? CGFloat(avatarModel.layout.sideWidth(avatarDiameter: Double(ChatAvatarImage.diameter))) : 0
         let baseWidth = max(1, bubbleLayoutBaseWidth - avatarWidth)
         let rowChromeWidth = rowHorizontalPadding * 2 + (usesNoBubbleStyle ? 0 : rowSideSpacerMinLength)
@@ -507,7 +507,7 @@ extension ChatBubble {
     }
 
     var rowHorizontalPadding: CGFloat {
-        avatarModel.isVisible(role: message.role) ? CGFloat(avatarModel.layout.edgeInset) : 8
+        avatarModel.isVisible(role: avatarPresentation.role) ? CGFloat(avatarModel.layout.edgeInset) : 8
     }
 
     var rowVerticalPadding: CGFloat {

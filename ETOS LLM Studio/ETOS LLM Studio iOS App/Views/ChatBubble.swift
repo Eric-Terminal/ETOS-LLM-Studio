@@ -197,21 +197,25 @@ struct ChatBubble: View {
             || renderState.isAwaitingStaticHandoff(channel: .reasoning)
     }
 
+    var avatarPresentation: ChatAvatarTurnPresentation {
+        ChatAvatarTurnPresentation(role: message.role, mergesWithPrevious: mergeWithPrevious, mergesWithNext: mergeWithNext)
+    }
+
     var body: some View {
         // 头像锚定消息顶部，不能随长正文或底部操作栏下沉。
         HStack(alignment: .top, spacing: 0) {
             // 无头像的无气泡模式仍居中；显示头像后让整组消息贴近对应侧边。
-            if isOutgoing || (usesNoBubbleStyle && !avatarModel.isVisible(role: message.role)) {
+            if isOutgoing || (usesNoBubbleStyle && !avatarModel.isVisible(role: avatarPresentation.role)) {
                 Spacer(minLength: rowSideSpacerMinLength)
             }
-            if !isOutgoing, avatarModel.showsSideAvatar(role: message.role) {
-                ChatMessageAvatar(role: message.role, sessionID: roleplaySessionID)
+            if !isOutgoing, avatarModel.showsSideAvatar(role: avatarPresentation.role) {
+                ChatMessageAvatar(role: avatarPresentation.role, sessionID: roleplaySessionID, showsImage: avatarPresentation.showsAvatar)
                     .padding(.trailing, CGFloat(avatarModel.layout.messageSpacing))
             }
             
             VStack(alignment: isOutgoing ? .trailing : .leading, spacing: CGFloat(avatarModel.layout.messageSpacing)) {
-                if avatarModel.showsHeader(role: message.role) {
-                    ChatAvatarHeader(role: message.role, sessionID: roleplaySessionID,
+                if avatarPresentation.showsAvatar, avatarModel.showsHeader(role: avatarPresentation.role) {
+                    ChatAvatarHeader(role: avatarPresentation.role, sessionID: roleplaySessionID,
                                      date: message.responseMetrics?.requestStartedAt ?? message.requestedAt, outgoing: isOutgoing)
                         .opacity(sendFlightContentOpacity)
                 }
@@ -284,11 +288,11 @@ struct ChatBubble: View {
             }
             
             // 用户头像跟在消息之后，保证左右两侧都使用相同的可调间距。
-            if isOutgoing, avatarModel.showsSideAvatar(role: message.role) {
-                ChatMessageAvatar(role: message.role, sessionID: roleplaySessionID)
+            if isOutgoing, avatarModel.showsSideAvatar(role: avatarPresentation.role) {
+                ChatMessageAvatar(role: avatarPresentation.role, sessionID: roleplaySessionID, showsImage: avatarPresentation.showsAvatar)
                     .padding(.leading, CGFloat(avatarModel.layout.messageSpacing))
             }
-            if !isOutgoing || (usesNoBubbleStyle && !avatarModel.isVisible(role: message.role)) {
+            if !isOutgoing || (usesNoBubbleStyle && !avatarModel.isVisible(role: avatarPresentation.role)) {
                 Spacer(minLength: rowSideSpacerMinLength)
             }
         }

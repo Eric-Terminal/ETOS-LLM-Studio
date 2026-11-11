@@ -141,16 +141,24 @@ public struct ChatMessageAvatar: View {
     @ObservedObject private var model = ChatAvatarModel.shared
     let role: MessageRole
     let sessionID: UUID?
+    let showsImage: Bool
 
-    public init(role: MessageRole, sessionID: UUID?) {
+    public init(role: MessageRole, sessionID: UUID?, showsImage: Bool = true) {
         self.role = role
         self.sessionID = sessionID
+        self.showsImage = showsImage
     }
 
     public var body: some View {
         if model.isVisible(role: role) {
-            ChatAvatarImage(fileName: model.fileName(role: role, sessionID: sessionID), isUser: role == .user)
-                .accessibilityHidden(true)
+            if showsImage {
+                ChatAvatarImage(fileName: model.fileName(role: role, sessionID: sessionID), isUser: role == .user)
+                    .accessibilityHidden(true)
+            } else {
+                // 续写只保留横向占位，不加载图片，也不抬高短工具消息的高度。
+                Color.clear.frame(width: ChatAvatarImage.diameter, height: 0)
+                    .accessibilityHidden(true)
+            }
         }
     }
 }

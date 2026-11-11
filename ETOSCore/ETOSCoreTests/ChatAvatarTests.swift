@@ -63,10 +63,12 @@ struct ChatAvatarTests {
         #expect(chinese.content.contains("原生确认"))
         #expect(chinese.content.contains("不公开图片、路径或下载链接"))
         #expect(chinese.content.contains("HTML"))
+        #expect(chinese.content.contains("多轮工具调用按整轮回复显示一个头像"))
         let english = GuideChatAvatarKnowledge.document(locale: Locale(identifier: "fr"))
         #expect(english.content.contains("watchOS"))
         #expect(english.content.contains("off by default"))
         #expect(english.content.contains("first valid character"))
+        #expect(english.content.contains("Multiple tool calls within one reply share one avatar"))
         for field in ["avatar_position", "avatar_edge_inset", "avatar_message_spacing", "avatar_header_timestamp"] {
             #expect(chinese.content.contains(field))
             #expect(english.content.contains(field))

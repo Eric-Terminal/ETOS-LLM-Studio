@@ -480,23 +480,25 @@ private struct MacMessageRow: View {
     var body: some View {
         // 长消息与底部操作栏不应把头像推离气泡顶部。
         HStack(alignment: .top, spacing: 0) {
-            if !outgoing, avatarModel.showsSideAvatar(role: row.message.role) {
-                ChatMessageAvatar(role: row.message.role, sessionID: workspace.currentSession?.id)
+            if !outgoing, avatarModel.showsSideAvatar(role: row.avatarPresentation.role) {
+                ChatMessageAvatar(role: row.avatarPresentation.role, sessionID: workspace.currentSession?.id,
+                                  showsImage: row.avatarPresentation.showsAvatar)
                     .padding(.trailing, CGFloat(avatarModel.layout.messageSpacing))
             }
             VStack(alignment: outgoing ? .trailing : .leading, spacing: CGFloat(avatarModel.layout.messageSpacing)) {
-                if avatarModel.showsHeader(role: row.message.role) {
-                    ChatAvatarHeader(role: row.message.role, sessionID: workspace.currentSession?.id,
+                if row.avatarPresentation.showsAvatar, avatarModel.showsHeader(role: row.avatarPresentation.role) {
+                    ChatAvatarHeader(role: row.avatarPresentation.role, sessionID: workspace.currentSession?.id,
                                      date: row.message.responseMetrics?.requestStartedAt ?? row.message.requestedAt, outgoing: outgoing)
                 }
                 bubble
             }
-            if outgoing, avatarModel.showsSideAvatar(role: row.message.role) {
-                ChatMessageAvatar(role: row.message.role, sessionID: workspace.currentSession?.id)
+            if outgoing, avatarModel.showsSideAvatar(role: row.avatarPresentation.role) {
+                ChatMessageAvatar(role: row.avatarPresentation.role, sessionID: workspace.currentSession?.id,
+                                  showsImage: row.avatarPresentation.showsAvatar)
                     .padding(.leading, CGFloat(avatarModel.layout.messageSpacing))
             }
         }
-        .padding(.horizontal, avatarModel.isVisible(role: row.message.role) ? CGFloat(avatarModel.layout.edgeInset) : nil)
+        .padding(.horizontal, avatarModel.isVisible(role: row.avatarPresentation.role) ? CGFloat(avatarModel.layout.edgeInset) : nil)
     }
 
     private var bubble: some View {
