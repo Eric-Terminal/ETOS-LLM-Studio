@@ -8446,3 +8446,14 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "avatar.ai" = "IA";
 
 "avatar.turn_help" = "Une réponse comportant plusieurs appels d’outils partage un seul avatar. À côté de la bulle, il reste en haut du tour et les messages suivants conservent le même retrait. Au-dessus, l’avatar, le nom et l’heure facultative apparaissent une seule fois au début du tour. Un nouveau message utilisateur ouvre un nouveau tour ; les versions issues des nouvelles tentatives sont regroupées séparément.";
+
+// 本地 HTML 浏览与资源读取
+"浏览器支持 http、https 和 etos 本地网页地址。" = "Le navigateur accepte les URL http, https et les pages locales etos.";
+"当前会话还没有工作区文件。" = "Cette conversation ne contient pas encore de fichiers dans son espace de travail.";
+"此文件类型不支持作为本地网页资源。" = "Ce type de fichier ne peut pas servir de ressource de page locale.";
+"本地网页地址必须位于 workspace 或 sandbox 中，且不能包含越界路径。" = "Les URL locales doivent utiliser workspace ou sandbox sans sortir du dossier.";
+"单个本地网页资源不能超过 16 MB。" = "Chaque ressource de page locale est limitée à 16 Mo.";
+"无法读取本地网页资源，请检查文件是否存在且不含符号链接。" = "Impossible de lire la ressource locale. Vérifiez que le fichier existe et que le chemin ne contient aucun lien symbolique.";
+"浏览器工具本地 URL 说明" = "open_tab et navigate acceptent http/https, etos://workspace/chemin-relatif (espace de travail de la conversation) et etos://sandbox/chemin-relatif (le dossier de fichiers de l’app (Documents sur mobile, Application Support sur Mac)). Le fichier moments/index.html créé par les outils de fichiers s’ouvre avec etos://sandbox/moments/index.html. Une URL locale de dossier terminée par / ouvre index.html. fetch et download acceptent uniquement http/https.";
+"本地网页" = "Pages locales";
+"本地网页使用说明" = "Ouvrez les fichiers HTML dans la barre d’adresse. Utilisez etos://workspace/moments/index.html pour l’espace de travail de la conversation, ou etos://sandbox/moments/index.html pour moments/index.html dans le dossier de fichiers de l’app (Documents sur mobile, Application Support sur Mac) (app://moments/index.html dans les outils de fichiers). Le fichier doit déjà exister.\n\nEnregistrez CSS, JavaScript, images et polices avec la page et utilisez des chemins relatifs. Les URL de dossier terminées par / ouvrent index.html. Rechargez après modification. Chaque ressource est limitée à 16 Mo ; les liens symboliques et les chemins hors du dossier sont refusés. Cette fonction ne fournit pas d’API d’écriture de fichiers aux pages.\n\nLes mêmes adresses fonctionnent sur iPhone, Apple Watch et Mac. La Watch utilise sa passerelle WebKit expérimentale. Les opérations du modèle déléguées à l’iPhone lisent les fichiers de l’iPhone ; ceux de la Watch ne sont pas copiés automatiquement.";

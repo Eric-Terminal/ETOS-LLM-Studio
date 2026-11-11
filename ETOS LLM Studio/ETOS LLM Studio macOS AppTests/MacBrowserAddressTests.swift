@@ -8,6 +8,8 @@ struct MacBrowserAddressTests {
     func explicitAndImplicitURLs() throws {
         #expect(try MacBrowserAddress.resolve(" example.com/path?q=one%20two ").absoluteString == "https://example.com/path?q=one%20two")
         #expect(try MacBrowserAddress.resolve("http://localhost:8080/test").scheme == "http")
+        #expect(try MacBrowserAddress.resolve("etos://workspace/moments/index.html").absoluteString == "etos://workspace/moments/index.html")
+        #expect(try MacBrowserAddress.resolve(" etos://sandbox/moments/index.html?mode=dark#note ").fragment == "note")
     }
 
     @Test("搜索词通过查询项编码，不拼接新的 URL 参数")

@@ -21,9 +21,23 @@ struct BrowserAgentWatchFeatureView: View {
     @State private var unavailableCapabilities: [BrowserAgentCapability] = []
     @State private var tabs: [BrowserAgentTabSummary] = []
     @State private var errorMessage: String?
+    @State private var isShowingLocalPageIntro = false
 
     var body: some View {
         List {
+            Section {
+                Button {
+                    isShowingLocalPageIntro.toggle()
+                } label: {
+                    Label(NSLocalizedString("本地网页", comment: "本地网页介绍卡"), systemImage: isShowingLocalPageIntro ? "chevron.up" : "chevron.down")
+                }
+                .buttonStyle(.plain)
+                if isShowingLocalPageIntro {
+                    Text(NSLocalizedString("本地网页使用说明", comment: "本地网页介绍卡详情"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
             Section {
                 Toggle(
                     NSLocalizedString("模型操作委托给 iPhone", comment: "Watch Browser Agent delegate toggle"),

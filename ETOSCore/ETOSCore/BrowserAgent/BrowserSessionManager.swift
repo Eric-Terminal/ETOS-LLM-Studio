@@ -199,6 +199,7 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
             ? .default()
             : session.isolatedDataStore
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+        configuration.setURLSchemeHandler(BrowserLocalSchemeHandler(sessionID: sessionID), forURLScheme: BrowserLocalResource.scheme)
 
         let webView = WKWebView(
             frame: CGRect(origin: .zero, size: BrowserWebPlatform.defaultViewport),
@@ -250,11 +251,7 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         url: URL,
         allowedAgentNavigationHosts: Set<String>? = nil
     ) async throws -> BrowserAgentTabSummary {
-        guard let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) else {
-            throw BrowserAgentError.invalidArguments(
-                NSLocalizedString("浏览器仅接受 http 或 https URL。", comment: "Browser Agent invalid URL scheme")
-            )
-        }
+        _ = try BrowserLocalResource.validatedNavigationURL(url)
         let tab = try resolvedTab(sessionID: sessionID, tabID: tabID)
         tab.needsReload = false
         tab.recoverableURL = nil
@@ -262,7 +259,9 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         let revision = beginAgentNavigationGuard(tab, allowedHosts: allowedAgentNavigationHosts)
         defer { if tab.navigationRevision == revision { tab.allowedAgentNavigationHosts = nil } }
         tab.lastNavigationError = nil
-        tab.webView.load(URLRequest(url: url))
+        var request = URLRequest(url: url)
+        request.mainDocumentURL = url
+        tab.webView.load(request)
         try await waitForNavigation(tab)
         objectWillChange.send()
         return summary(for: tab)
@@ -788,16 +787,15 @@ extension BrowserSessionManager: WKNavigationDelegate {
             return
         }
         guard let targetURL = navigationAction.request.url,
-              let scheme = targetURL.scheme?.lowercased(),
-              ["http", "https"].contains(scheme),
-              let targetHost = targetURL.host?.lowercased() else {
+              (try? BrowserLocalResource.validatedNavigationURL(targetURL)) != nil,
+              let targetHost = BrowserLocalResource.navigationHost(targetURL) else {
             tab.lastNavigationError = BrowserAgentError.invalidArguments(
-                NSLocalizedString("Agent 浏览器跳转只允许 http 或 https 地址。", comment: "Browser Agent blocked navigation scheme")
+                NSLocalizedString("浏览器支持 http、https 和 etos 本地网页地址。", comment: "浏览器地址协议限制")
             )
             decisionHandler(.cancel)
             return
         }
-        let sourceHost = webView.url?.host?.lowercased()
+        let sourceHost = BrowserLocalResource.navigationHost(webView.url)
         guard sourceHost == targetHost || allowedHosts.contains(targetHost) else {
             tab.lastNavigationError = BrowserAgentError.crossDomainApprovalRequired(
                 sourceHost: sourceHost,
@@ -965,7 +963,7 @@ public final class BrowserSessionManager: ObservableObject {
         allowedAgentNavigationHosts: Set<String>? = nil
     ) async throws -> BrowserAgentTabSummary {
         let session = session(for: sessionID)
-        let webView = try Self.makeWebView()
+        let webView = try Self.makeWebView(sessionID: sessionID)
         let tab = Tab(webView: webView)
         session.tabs[tab.id] = tab
         session.order.append(tab.id)
@@ -1003,18 +1001,24 @@ public final class BrowserSessionManager: ObservableObject {
         url: URL,
         allowedAgentNavigationHosts: Set<String>? = nil
     ) async throws -> BrowserAgentTabSummary {
-        guard let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) else {
-            throw BrowserAgentError.invalidArguments(
-                NSLocalizedString("浏览器仅接受 http 或 https URL。", comment: "Browser Agent invalid URL scheme")
-            )
-        }
+        _ = try BrowserLocalResource.validatedNavigationURL(url)
         let tab = try resolvedTab(sessionID: sessionID, tabID: tabID)
         let selector = NSSelectorFromString("loadRequest:")
         guard tab.webView.responds(to: selector) else {
             throw BrowserAgentError.unsupported("loadRequest:")
         }
-        let sourceHost = (tab.webView.value(forKey: "URL") as? URL)?.host?.lowercased()
-        tab.webView.perform(selector, with: URLRequest(url: url) as NSURLRequest)
+        if BrowserLocalResource.isLocalURL(url) {
+            let handlerSelector = NSSelectorFromString("urlSchemeHandlerForURLScheme:")
+            guard let configuration = tab.webView.value(forKey: "configuration") as? NSObject,
+                  configuration.responds(to: handlerSelector),
+                  configuration.perform(handlerSelector, with: BrowserLocalResource.scheme as NSString)?.takeUnretainedValue() != nil else {
+                throw BrowserAgentError.unsupported("WKURLSchemeHandler")
+            }
+        }
+        let sourceHost = BrowserLocalResource.navigationHost(tab.webView.value(forKey: "URL") as? URL)
+        var request = URLRequest(url: url)
+        request.mainDocumentURL = url
+        tab.webView.perform(selector, with: request as NSURLRequest)
         try await waitForNavigation(tab.webView)
         try validateFinalNavigation(
             tab.webView,
@@ -1051,7 +1055,7 @@ public final class BrowserSessionManager: ObservableObject {
         allowedAgentNavigationHosts: Set<String>? = nil
     ) async throws {
         let tab = try resolvedTab(sessionID: sessionID, tabID: tabID)
-        let sourceHost = (tab.webView.value(forKey: "URL") as? URL)?.host?.lowercased()
+        let sourceHost = BrowserLocalResource.navigationHost(tab.webView.value(forKey: "URL") as? URL)
         let value = try await evaluate(
             try BrowserDOMAutomation.click(
                 elementID: elementID,
@@ -1080,7 +1084,7 @@ public final class BrowserSessionManager: ObservableObject {
         allowedAgentNavigationHosts: Set<String>? = nil
     ) async throws {
         let tab = try resolvedTab(sessionID: sessionID, tabID: tabID)
-        let sourceHost = (tab.webView.value(forKey: "URL") as? URL)?.host?.lowercased()
+        let sourceHost = BrowserLocalResource.navigationHost(tab.webView.value(forKey: "URL") as? URL)
         let value = try await evaluate(
             try BrowserDOMAutomation.type(
                 elementID: elementID,
@@ -1122,7 +1126,7 @@ public final class BrowserSessionManager: ObservableObject {
         allowedAgentNavigationHosts: Set<String>? = nil
     ) async throws -> JSONValue {
         let tab = try resolvedTab(sessionID: sessionID, tabID: tabID)
-        let sourceHost = (tab.webView.value(forKey: "URL") as? URL)?.host?.lowercased()
+        let sourceHost = BrowserLocalResource.navigationHost(tab.webView.value(forKey: "URL") as? URL)
         let value = try await evaluate(script, in: tab.webView)
         try await waitForTriggeredNavigation(tab.webView)
         try validateFinalNavigation(
@@ -1197,7 +1201,7 @@ public final class BrowserSessionManager: ObservableObject {
         allowedAgentNavigationHosts: Set<String>?
     ) async throws {
         let tab = try resolvedTab(sessionID: sessionID, tabID: tabID)
-        let sourceHost = (tab.webView.value(forKey: "URL") as? URL)?.host?.lowercased()
+        let sourceHost = BrowserLocalResource.navigationHost(tab.webView.value(forKey: "URL") as? URL)
         let value = try await evaluate(script, in: tab.webView)
         try BrowserDOMResultParser.interactionError(value)
         try await waitForTriggeredNavigation(tab.webView)
@@ -1303,15 +1307,13 @@ public final class BrowserSessionManager: ObservableObject {
         guard let url = webView.value(forKey: "URL") as? URL else {
             if sourceHost == nil { return }
             throw BrowserAgentError.invalidArguments(
-                NSLocalizedString("Agent 浏览器跳转只允许 http 或 https 地址。", comment: "Browser Agent blocked navigation scheme")
+                NSLocalizedString("浏览器支持 http、https 和 etos 本地网页地址。", comment: "浏览器地址协议限制")
             )
         }
-        guard
-              let scheme = url.scheme?.lowercased(),
-              ["http", "https"].contains(scheme),
-              let targetHost = url.host?.lowercased() else {
+        guard (try? BrowserLocalResource.validatedNavigationURL(url)) != nil,
+              let targetHost = BrowserLocalResource.navigationHost(url) else {
             throw BrowserAgentError.invalidArguments(
-                NSLocalizedString("Agent 浏览器跳转只允许 http 或 https 地址。", comment: "Browser Agent blocked navigation scheme")
+                NSLocalizedString("浏览器支持 http、https 和 etos 本地网页地址。", comment: "浏览器地址协议限制")
             )
         }
         let normalizedAllowedHosts = Set(allowedHosts.map { $0.lowercased() })
@@ -1358,12 +1360,12 @@ public final class BrowserSessionManager: ObservableObject {
         )
     }
 
-    private static func makeWebView() throws -> NSObject {
+    private static func makeWebView(sessionID: UUID) throws -> NSObject {
         loadWebKit()
         guard let webViewClass = NSClassFromString("WKWebView") as? NSObject.Type else {
             throw BrowserAgentError.unsupported("WKWebView")
         }
-        let webView = webViewClass.init()
+        let webView = BrowserLocalSchemeHandler.makeRuntimeWebView(webViewClass: webViewClass, sessionID: sessionID)
         if let scrollView = webView.value(forKey: "scrollView") as? NSObject {
             scrollView.setValue(true, forKey: "scrollEnabled")
             scrollView.setValue(true, forKey: "showsVerticalScrollIndicator")

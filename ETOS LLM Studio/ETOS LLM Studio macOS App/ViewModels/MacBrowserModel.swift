@@ -194,10 +194,10 @@ enum MacBrowserAddress {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw BrowserAgentError.invalidArguments(NSLocalizedString("网页地址无效。", comment: "")) }
         if text.contains("://") {
-            guard let url = URL(string: text), ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host?.isEmpty == false else {
-                throw BrowserAgentError.invalidArguments(NSLocalizedString("浏览器仅接受 http 或 https URL。", comment: ""))
+            guard let url = URL(string: text) else {
+                throw BrowserAgentError.invalidArguments(NSLocalizedString("网页地址无效。", comment: ""))
             }
-            return url
+            return try BrowserLocalResource.validatedNavigationURL(url)
         }
         if !text.contains(where: \.isWhitespace), text.contains("."), let url = URL(string: "https://\(text)"), url.host != nil { return url }
         var components = URLComponents(string: "https://www.google.com/search")!

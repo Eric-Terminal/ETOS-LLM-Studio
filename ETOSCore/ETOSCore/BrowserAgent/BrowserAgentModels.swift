@@ -434,7 +434,7 @@ enum BrowserAgentToolDefinitions {
                 "properties": .dictionary([
                     "action": enumProperty(BrowserAgentAction.allCases.map(\.rawValue), NSLocalizedString("要执行的浏览器操作。", comment: "Browser Agent action")),
                     "tab_id": stringProperty(NSLocalizedString("目标标签页 UUID；部分操作省略时使用当前标签页。", comment: "Browser Agent tab ID")),
-                    "url": stringProperty(NSLocalizedString("open_tab、navigate、fetch 或 download 的 URL。", comment: "Browser Agent URL")),
+                    "url": stringProperty(NSLocalizedString("浏览器工具本地 URL 说明", comment: "浏览器工具地址及本地文件映射")),
                     "element_index": integerProperty(NSLocalizedString("snapshot 返回的可交互元素编号。", comment: "Browser Agent element index")),
                     "element_id": stringProperty(NSLocalizedString("find_elements 或 snapshot 返回的稳定元素 ID。", comment: "Browser Agent element ID")),
                     "dom_revision": integerProperty(NSLocalizedString("元素结果对应的 DOM revision；页面变化后必须重新定位。", comment: "Browser Agent DOM revision")),

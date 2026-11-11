@@ -8355,3 +8355,14 @@
 "avatar.ai" = "AI";
 
 "avatar.turn_help" = "包含多轮工具调用的回复共用一个头像。侧边布局中，头像位于整轮顶部，后续消息保持相同缩进；上方布局中，头像、名称和可选时间只在轮首显示一次。新的用户消息开始新一轮，重试版本分别分组。";
+
+// 本地 HTML 浏览与资源读取
+"浏览器支持 http、https 和 etos 本地网页地址。" = "浏览器支持 http、https 和 etos 本地网页地址。";
+"当前会话还没有工作区文件。" = "当前会话还没有工作区文件。";
+"此文件类型不支持作为本地网页资源。" = "此文件类型不支持作为本地网页资源。";
+"本地网页地址必须位于 workspace 或 sandbox 中，且不能包含越界路径。" = "本地网页地址必须位于 workspace 或 sandbox 中，且不能包含越界路径。";
+"单个本地网页资源不能超过 16 MB。" = "单个本地网页资源不能超过 16 MB。";
+"无法读取本地网页资源，请检查文件是否存在且不含符号链接。" = "无法读取本地网页资源，请检查文件是否存在且不含符号链接。";
+"浏览器工具本地 URL 说明" = "open_tab 和 navigate 支持 http/https、etos://workspace/相对路径（当前会话工作区）和 etos://sandbox/相对路径（App 文件目录（移动端 Documents，Mac 为 Application Support））。例如文件工具写入的 moments/index.html 对应 etos://sandbox/moments/index.html。本地目录地址以 / 结尾时打开 index.html。fetch 和 download 仅支持 http/https。";
+"本地网页" = "本地网页";
+"本地网页使用说明" = "在地址栏直接打开 HTML 文件。当前聊天工作区使用 etos://workspace/moments/index.html；App 文件目录（移动端 Documents，Mac 为 Application Support） 下的 moments/index.html 使用 etos://sandbox/moments/index.html，对应文件工具的 app://moments/index.html。文件需要事先存在。\n\n将 CSS、JavaScript、图片和字体与页面一同保存，用相对路径引用；目录地址以 / 结尾时打开 index.html。修改文件后重载即可。单个资源不超过 16 MB，不支持符号链接或越界路径。此功能不提供网页写文件接口。\n\niPhone、Apple Watch 和 Mac 使用相同地址规则。手表浏览器沿用实验性 WebKit 桥接；模型操作委托给 iPhone 时，读取的是 iPhone 上的文件，不会自动复制手表文件。";

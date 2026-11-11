@@ -488,11 +488,15 @@ public enum GuideDocumentCatalog {
         GuideDocument(
             id: "browser-agent",
             title: "Browser Agent 设置",
-            keywords: ["Browser Agent", "浏览器", "网页", "会话", "调试", "代理", "Mac", "WebKit", "接管", "登录", "标签页", "Cookie"],
+            keywords: ["Browser Agent", "浏览器", "网页", "会话", "调试", "代理", "Mac", "WebKit", "接管", "登录", "标签页", "Cookie", "HTML", "etos", "workspace", "sandbox", "本地文件"],
             content: """
             Browser Agent 为当前会话提供受控网页浏览能力。功能页承载当前会话的标签页和控制状态，设置页管理新标签页使用的临时或持久网站数据。它与普通网络搜索、全局代理和用户添加的 MCP 浏览器服务器不是同一项功能。
 
             向导可以修改页面声明的浏览设置，但不会替用户启动浏览任务、提交网页表单或确认网站上的外部操作。
+
+            本地 HTML 可以直接在地址栏或 browser_control 的 open_tab、navigate 中打开：etos://workspace/moments/index.html 指向当前聊天的工作区；etos://sandbox/moments/index.html 指向 App Documents 下的 moments/index.html，与文件工具的 app://moments/index.html 对应。不要把 app://、linux:// 或设备的 file:// 绝对路径直接交给浏览器。workspace 不会创建工作区或启动 Linux，文件必须已存在；Mac 使用本机工作区。目录地址以 / 结尾时读取 index.html，中文和空格可使用 URL 编码，查询参数和锚点正常保留。HTML 可以用相对地址加载 CSS、JavaScript、JSON、图片和字体，更新文件后重载即可。单个资源限制 16 MB，拒绝路径穿越、符号链接和非普通文件；远程网页不能跨源读取本地资源。此能力不提供网页写文件接口，fetch/download 工具仍只接受 http/https。
+
+            iOS、macOS 和 watchOS 使用相同的本地地址规则。sandbox 对应文件工具的 App 文件根目录：移动端为 Documents，macOS 实际存储于 Application Support。手表本机使用运行时 WebKit 桥接；模型操作委托给 iPhone 时读取 iPhone 上对应会话的文件，不会自动复制手表文件。向导能说明地址映射，但不能代替用户导航或读取本地网页。
 
             iOS 和 Mac 在退出用户接管后继续使用原标签页；用户接管过的页面不参与 App 的后台标签重建，保留该页面的 sessionStorage 和内存状态，直到关闭标签、清除运行期会话或进程结束。临时网站数据不等于退出接管即清空，也无需为本次会话的接管交接开启持久共享登录态。同一会话的临时标签共享 Cookie 和 localStorage，sessionStorage 仍属于各自标签，Agent 应继续操作用户登录的原标签。watchOS 本机接管复用原页面，委托给 iPhone 时沿用 iPhone 的会话和标签。系统终止 WebKit 进程或网站主动退出登录仍可能使页面状态失效；仅凭 document.cookie 为空不能判断 HttpOnly 登录 Cookie 已丢失。
 

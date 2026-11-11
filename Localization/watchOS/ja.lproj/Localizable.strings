@@ -8362,3 +8362,14 @@
 "avatar.ai" = "AI";
 
 "avatar.turn_help" = "複数回のツール呼び出しを含む返信は、1 つのアバターを共有します。横配置では返信全体の先頭にアバターを表示し、後続のメッセージも同じ字下げを保ちます。上配置ではアバター、名前、任意の時刻を先頭に一度だけ表示します。新しいユーザーメッセージで次のターンが始まり、再試行の各バージョンは別々にまとめられます。";
+
+// 本地 HTML 浏览与资源读取
+"浏览器支持 http、https 和 etos 本地网页地址。" = "ブラウザは http、https、および etos のローカルページ URL に対応しています。";
+"当前会话还没有工作区文件。" = "この会話にはまだワークスペースのファイルがありません。";
+"此文件类型不支持作为本地网页资源。" = "このファイル形式はローカルページのリソースとして使用できません。";
+"本地网页地址必须位于 workspace 或 sandbox 中，且不能包含越界路径。" = "ローカルページの URL には workspace または sandbox を使用し、ディレクトリ外のパスを指定しないでください。";
+"单个本地网页资源不能超过 16 MB。" = "ローカルページの各リソースは 16 MB 以下にしてください。";
+"无法读取本地网页资源，请检查文件是否存在且不含符号链接。" = "ローカルページのリソースを読み取れません。ファイルが存在し、パスにシンボリックリンクがないことを確認してください。";
+"浏览器工具本地 URL 说明" = "open_tab と navigate は http/https、etos://workspace/相対パス（現在の会話のワークスペース）、etos://sandbox/相対パス（アプリのファイルディレクトリ（モバイルでは Documents、Mac では Application Support））に対応します。ファイルツールで作成した moments/index.html は etos://sandbox/moments/index.html で開けます。末尾が / のローカルディレクトリ URL は index.html を開きます。fetch と download は http/https のみ対応します。";
+"本地网页" = "ローカルページ";
+"本地网页使用说明" = "アドレスバーで HTML ファイルを直接開けます。現在の会話のワークスペースには etos://workspace/moments/index.html、アプリのファイルディレクトリ（モバイルでは Documents、Mac では Application Support） 内の moments/index.html には etos://sandbox/moments/index.html を使用します。後者はファイルツールの app://moments/index.html に対応します。ファイルは事前に作成してください。\n\nCSS、JavaScript、画像、フォントをページと一緒に保存し、相対パスで参照してください。末尾が / のディレクトリ URL は index.html を開きます。編集後は再読み込みしてください。各リソースは 16 MB までで、シンボリックリンクやディレクトリ外のパスは使用できません。この機能にファイル書き込み API はありません。\n\niPhone、Apple Watch、Mac で同じ URL を使用できます。Watch は実験的な WebKit ブリッジを使用します。モデルの操作を iPhone に委任すると、iPhone 上のファイルを読み取ります。Watch のファイルは自動コピーされません。";

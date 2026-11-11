@@ -545,6 +545,13 @@ private struct BrowserAgentSettingsView: View {
     var body: some View {
         Form {
             Section {
+                DisclosureGroup(NSLocalizedString("本地网页", comment: "本地网页介绍卡")) {
+                    Text(NSLocalizedString("本地网页使用说明", comment: "本地网页介绍卡详情"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Section {
                 Toggle(
                     NSLocalizedString("保留网站登录状态", comment: "Browser Agent persistent profile toggle"),
                     isOn: $persistentProfileEnabled

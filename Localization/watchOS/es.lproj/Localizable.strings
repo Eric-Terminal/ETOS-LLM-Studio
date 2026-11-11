@@ -8446,3 +8446,14 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "avatar.ai" = "IA";
 
 "avatar.turn_help" = "Una respuesta con varias llamadas a herramientas comparte un solo avatar. Junto a la burbuja, el avatar permanece al inicio del turno y los mensajes siguientes mantienen la misma sangría. Encima, el avatar, el nombre y la hora opcional aparecen una sola vez al inicio. Un nuevo mensaje del usuario inicia otro turno; las versiones de reintentos se agrupan por separado.";
+
+// 本地 HTML 浏览与资源读取
+"浏览器支持 http、https 和 etos 本地网页地址。" = "El navegador admite URL http, https y páginas locales etos.";
+"当前会话还没有工作区文件。" = "Esta conversación aún no tiene archivos en su espacio de trabajo.";
+"此文件类型不支持作为本地网页资源。" = "Este tipo de archivo no se admite como recurso de una página local.";
+"本地网页地址必须位于 workspace 或 sandbox 中，且不能包含越界路径。" = "Las URL locales deben usar workspace o sandbox sin salir de la carpeta.";
+"单个本地网页资源不能超过 16 MB。" = "Cada recurso de una página local está limitado a 16 MB.";
+"无法读取本地网页资源，请检查文件是否存在且不含符号链接。" = "No se puede leer el recurso local. Comprueba que el archivo exista y que la ruta no contenga enlaces simbólicos.";
+"浏览器工具本地 URL 说明" = "open_tab y navigate admiten http/https, etos://workspace/ruta-relativa (espacio de trabajo de la conversación) y etos://sandbox/ruta-relativa (el directorio de archivos de la app (Documents en móviles, Application Support en Mac)). El archivo moments/index.html creado con las herramientas de archivos se abre en etos://sandbox/moments/index.html. Las URL locales de carpetas terminadas en / abren index.html. fetch y download solo admiten http/https.";
+"本地网页" = "Páginas locales";
+"本地网页使用说明" = "Abre archivos HTML desde la barra de direcciones. Usa etos://workspace/moments/index.html para el espacio de trabajo de la conversación o etos://sandbox/moments/index.html para moments/index.html en el directorio de archivos de la app (Documents en móviles, Application Support en Mac) (app://moments/index.html en las herramientas de archivos). El archivo debe existir.\n\nGuarda CSS, JavaScript, imágenes y fuentes junto a la página y usa rutas relativas. Las URL de carpetas terminadas en / abren index.html. Recarga tras editar los archivos. Cada recurso tiene un límite de 16 MB; se rechazan enlaces simbólicos y rutas fuera de la carpeta. Esta función no permite que las páginas escriban archivos.\n\nLas direcciones funcionan en iPhone, Apple Watch y Mac. El Watch usa su puente experimental de WebKit. Las operaciones del modelo delegadas al iPhone leen los archivos del iPhone; los archivos del Watch no se copian automáticamente.";

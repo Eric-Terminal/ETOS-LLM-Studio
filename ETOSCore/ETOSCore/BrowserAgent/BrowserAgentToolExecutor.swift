@@ -744,19 +744,16 @@ public actor BrowserAgentToolExecutor {
 
     private func validatedURL(_ rawValue: String) throws -> URL {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed),
-              let scheme = url.scheme?.lowercased(),
-              ["http", "https"].contains(scheme),
-              url.host != nil else {
+        guard let url = URL(string: trimmed) else {
             throw BrowserAgentError.invalidArguments(
-                NSLocalizedString("url 必须是完整的 http 或 https 地址。", comment: "Browser Agent malformed URL")
+                NSLocalizedString("浏览器支持 http、https 和 etos 本地网页地址。", comment: "浏览器地址协议限制")
             )
         }
-        return url
+        return try BrowserLocalResource.validatedNavigationURL(url)
     }
 
     private func host(of url: URL?) -> String? {
-        url?.host?.lowercased()
+        BrowserLocalResource.navigationHost(url)
     }
 
     private func encodeTabs(_ tabs: [BrowserAgentTabSummary]) -> String {

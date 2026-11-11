@@ -8369,3 +8369,14 @@
 "avatar.ai" = "AI";
 
 "avatar.turn_help" = "A reply with multiple tool calls shares one avatar. Beside the bubble, the avatar stays at the top of the turn and all following messages keep the same inset. Above the bubble, the avatar, name and optional time appear once at the start of the turn. A new user message starts a new turn; retry versions are grouped separately.";
+
+// 本地 HTML 浏览与资源读取
+"浏览器支持 http、https 和 etos 本地网页地址。" = "The browser supports http, https, and etos local page URLs.";
+"当前会话还没有工作区文件。" = "This conversation does not have workspace files yet.";
+"此文件类型不支持作为本地网页资源。" = "This file type is not supported as a local page resource.";
+"本地网页地址必须位于 workspace 或 sandbox 中，且不能包含越界路径。" = "Local page URLs must use workspace or sandbox and must not escape the directory.";
+"单个本地网页资源不能超过 16 MB。" = "Each local page resource must be no larger than 16 MB.";
+"无法读取本地网页资源，请检查文件是否存在且不含符号链接。" = "Unable to read the local page resource. Check that the file exists and the path contains no symbolic links.";
+"浏览器工具本地 URL 说明" = "open_tab and navigate accept http/https, etos://workspace/relative-path (the current conversation workspace), and etos://sandbox/relative-path (the app file directory (Documents on mobile, Application Support on Mac)). For example, moments/index.html written by the file tool opens at etos://sandbox/moments/index.html. Local directory URLs ending in / open index.html. fetch and download accept http/https only.";
+"本地网页" = "Local pages";
+"本地网页使用说明" = "Open HTML files directly in the address bar. Use etos://workspace/moments/index.html for the current conversation workspace, or etos://sandbox/moments/index.html for moments/index.html in the app file directory (Documents on mobile, Application Support on Mac) (app://moments/index.html in file tools). The file must already exist.\n\nKeep CSS, JavaScript, images, and fonts with the page and reference them using relative paths. Directory URLs ending in / open index.html. Reload after editing files. Each resource is limited to 16 MB; symbolic links and paths outside the directory are rejected. Pages cannot write files through this feature.\n\nThese addresses work on iPhone, Apple Watch, and Mac. Watch browsing uses its experimental WebKit bridge. When model operations are delegated to iPhone, they read files on the iPhone; Watch files are not copied automatically.";
