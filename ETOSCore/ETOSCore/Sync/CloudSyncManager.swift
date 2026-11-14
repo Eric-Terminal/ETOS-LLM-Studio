@@ -558,8 +558,14 @@ public final class CloudSyncManager: ObservableObject {
 
         for record in normalizedRemoteRecords {
             let key = record.storageKey
+            let previousPublishedRecord = publishedState.recordsByKey[key]
             publishedState.recordsByKey[key] = CloudSyncPublishedRecordState(change: record)
 
+            // Zone 变化也包含本机刚上传的版本。先与已确认的云端基线比较，
+            // 避免把旧工具状态重新合并到继续生成中的会话；请求时间不代表修改时间。
+            if previousPublishedRecord?.checksum == record.payload.checksum {
+                continue
+            }
             if localPending.deletions.contains(key) {
                 continue
             }
