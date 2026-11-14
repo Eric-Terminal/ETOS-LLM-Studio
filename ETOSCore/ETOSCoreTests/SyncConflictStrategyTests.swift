@@ -60,6 +60,55 @@ struct SyncConflictStrategyTests {
         #expect(mergedMessages[2].content == "继续")
     }
 
+    @Test("工具结果逐条同步和旧进度回流不会创建同名会话或启动请求")
+    func testToolProgressDoesNotDuplicateSession() async {
+        let originalSessions = Persistence.loadChatSessions()
+        let originalSnapshots = originalSessions.map { session in
+            SyncedSession(session: session, messages: Persistence.loadMessages(for: session.id))
+        }
+        defer { resetSessions(to: originalSnapshots) }
+        resetSessions(to: [])
+        let chatService = ChatService()
+        let session = ChatSession(id: UUID(), name: "搜索工具会话", isTemporary: false)
+        let userMessage = ChatMessage(role: .user, content: "查询模型资料")
+        let calls = [
+            InternalToolCall(id: "search-1", toolName: "search", arguments: "{}"),
+            InternalToolCall(id: "search-2", toolName: "search", arguments: "{}")
+        ]
+        let pending = ChatMessage(role: .assistant, content: "开始查询", toolCalls: calls)
+        var firstResultAvailable = pending
+        firstResultAvailable.toolCalls?[0].result = "第一项结果"
+        var firstCompleted = firstResultAvailable
+        firstCompleted.toolCalls?[0].resultDisposition = .completed
+        var allCompleted = firstCompleted
+        allCompleted.toolCalls?[1].result = "第二项结果"
+        allCompleted.toolCalls?[1].resultDisposition = .completed
+
+        Persistence.saveChatSessions([session])
+        Persistence.saveMessages([userMessage, pending], for: session.id)
+        chatService.chatSessionsSubject.send([session])
+        chatService.currentSessionSubject.send(session)
+
+        for incoming in [firstResultAvailable, firstCompleted, allCompleted, pending, firstCompleted, allCompleted] {
+            let package = SyncPackage(
+                options: [.sessions],
+                sourcePlatform: "iOS",
+                sessions: [SyncedSession(session: session, messages: [userMessage, incoming])]
+            )
+            _ = await SyncEngine.apply(package: package, chatService: chatService)
+            #expect(chatService.chatSessionsSubject.value.map(\.id) == [session.id])
+            #expect(!chatService.hasActiveRequestContext(for: session.id))
+            let storedCalls = Persistence.loadMessages(for: session.id).last?.toolCalls ?? []
+            for call in incoming.toolCalls ?? [] where call.resultDisposition != nil {
+                #expect(storedCalls.first(where: { $0.id == call.id })?.resultDisposition == call.resultDisposition)
+            }
+        }
+
+        let storedMessages = Persistence.loadMessages(for: session.id)
+        #expect(storedMessages.map(\.id) == [userMessage.id, pending.id])
+        #expect(storedMessages.last?.toolCalls == allCompleted.toolCalls)
+    }
+
     @Test("同消息双端重试历史会按索引并集合并")
     func testSameMessageRetryVersionsMergeByIndex() async {
         let originalSessions = Persistence.loadChatSessions()

@@ -391,6 +391,7 @@ extension SyncEngine {
             hasher.combine(toolCall.toolName)
             hasher.combine(toolCall.arguments)
             hasher.combine(toolCall.result ?? "")
+            hasher.combine(toolCall.resultDisposition?.rawValue ?? "")
             for (key, value) in (toolCall.providerSpecificFields ?? [:]).sorted(by: { $0.key < $1.key }) {
                 hasher.combine(key)
                 hasher.combine(value.prettyPrintedCompact())
@@ -674,10 +675,10 @@ extension SyncEngine {
         }
     }
 
-    static func mergeOptionalArrayField<Element: Equatable>(
-        _ local: [Element]?,
-        _ incoming: [Element]?
-    ) -> (value: [Element]?, changed: Bool)? {
+    static func mergeToolCalls(
+        _ local: [InternalToolCall]?,
+        _ incoming: [InternalToolCall]?
+    ) -> (value: [InternalToolCall]?, changed: Bool)? {
         switch (local, incoming) {
         case (nil, nil):
             return (nil, false)
@@ -686,7 +687,43 @@ extension SyncEngine {
         case let (nil, rhs?):
             return (rhs, true)
         case let (lhs?, rhs?):
-            return lhs == rhs ? (lhs, false) : nil
+            // 调用参数、结果和终态会分次落库；同一调用的进度变化不代表会话分叉。
+            // 只合并共同前缀中的同一调用，真正不同的调用或执行结果仍保留冲突。
+            var merged = lhs
+            for index in 0..<min(lhs.count, rhs.count) {
+                let localCall = lhs[index]
+                let incomingCall = rhs[index]
+                guard localCall.id == incomingCall.id,
+                      localCall.toolName == incomingCall.toolName,
+                      stringsAreCompatible(localCall.arguments, incomingCall.arguments),
+                      let result = mergeOptionalScalarField(localCall.result, incomingCall.result),
+                      let disposition = mergeOptionalScalarField(
+                          localCall.resultDisposition,
+                          incomingCall.resultDisposition
+                      ) else {
+                    return nil
+                }
+
+                var providerFields = localCall.providerSpecificFields ?? [:]
+                for (key, value) in incomingCall.providerSpecificFields ?? [:] {
+                    if let existing = providerFields[key], existing != value {
+                        return nil
+                    }
+                    providerFields[key] = value
+                }
+                merged[index] = InternalToolCall(
+                    id: localCall.id,
+                    toolName: localCall.toolName,
+                    arguments: preferLongerString(localCall.arguments, incomingCall.arguments),
+                    result: result.value,
+                    resultDisposition: disposition.value,
+                    providerSpecificFields: providerFields.isEmpty ? nil : providerFields
+                )
+            }
+            if rhs.count > lhs.count {
+                merged.append(contentsOf: rhs.dropFirst(lhs.count))
+            }
+            return (merged, merged != lhs)
         }
     }
 

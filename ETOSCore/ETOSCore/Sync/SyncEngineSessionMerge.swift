@@ -197,7 +197,7 @@ extension SyncEngine {
         ) else {
             return nil
         }
-        guard let toolCallsMerge = mergeOptionalArrayField(local.toolCalls, incoming.toolCalls) else {
+        guard let toolCallsMerge = mergeToolCalls(local.toolCalls, incoming.toolCalls) else {
             return nil
         }
         guard let toolCallsPlacement = mergeOptionalScalarField(
