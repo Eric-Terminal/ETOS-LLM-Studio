@@ -87,13 +87,20 @@ extension OpenAIAdapter {
                     case content
                     case tool_calls
                     case reasoning_content
+                    case reasoning
                 }
 
                 init(from decoder: Decoder) throws {
                     let container = try decoder.container(keyedBy: CodingKeys.self)
                     role = try container.decodeIfPresent(String.self, forKey: .role)
                     tool_calls = try container.decodeIfPresent([OpenAIToolCall].self, forKey: .tool_calls)
-                    reasoning_content = try container.decodeIfPresent(String.self, forKey: .reasoning_content)
+                    let reasoningContent = try container.decodeIfPresent(String.self, forKey: .reasoning_content)
+                    // Radeon Cloud 等服务使用 reasoning；两个字段同时返回时只取一份，避免重复思考内容。
+                    if let reasoningContent, !reasoningContent.isEmpty {
+                        reasoning_content = reasoningContent
+                    } else {
+                        reasoning_content = try container.decodeIfPresent(String.self, forKey: .reasoning) ?? reasoningContent
+                    }
 
                     if let stringContent = try? container.decodeIfPresent(String.self, forKey: .content) {
                         content = stringContent
