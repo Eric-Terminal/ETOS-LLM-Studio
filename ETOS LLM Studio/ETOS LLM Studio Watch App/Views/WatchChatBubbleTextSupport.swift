@@ -14,6 +14,19 @@ struct CappedScrollableText: View {
     let maxHeight: CGFloat
     let font: ETFont
     let foreground: Color
+
+    var body: some View {
+        ETPagedTextContent(text: text) { page in
+            CappedTextPage(text: page, maxHeight: maxHeight, font: font, foreground: foreground)
+        }
+    }
+}
+
+private struct CappedTextPage: View {
+    let text: String
+    let maxHeight: CGFloat
+    let font: ETFont
+    let foreground: Color
     @State private var measuredHeight: CGFloat = 0
 
     var body: some View {

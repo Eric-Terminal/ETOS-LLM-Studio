@@ -9,8 +9,81 @@
 import Foundation
 import SwiftUI
 import MarkdownUI
+import ETOSCore
 
-private enum ETCodeLanguage: Hashable {
+struct ETCodeBlockHighlighting: ViewModifier {
+    let highlighter: ETCodeSyntaxHighlighter
+    @Environment(\.etFontExportPreparation) private var exportPreparation
+
+    func body(content: Content) -> some View {
+        // MarkdownUI 在调用块样式前就构造整块 label。交互界面只在分页后高亮，
+        // 否则即使没有显示 label，也会在主线程先扫描整段代码。
+        content.markdownCodeSyntaxHighlighter(ETCodeSyntaxHighlighter(
+            baseColor: highlighter.baseColor, isOutgoing: highlighter.isOutgoing,
+            prefersDarkPalette: highlighter.prefersDarkPalette,
+            syntaxHighlightingEnabled: exportPreparation != nil && highlighter.syntaxHighlightingEnabled,
+            maxHighlightedLength: highlighter.maxHighlightedLength
+        ))
+    }
+}
+
+/// 页面文本已经过后台分页；高亮也只处理当前页，首帧最多布局这一页的纯文本。
+struct ETHighlightedCodePage: View {
+    let content: String
+    let language: String?
+    let color: Color
+    let isOutgoing: Bool
+    let prefersDarkPalette: Bool
+    let highlights: Bool
+    let highlightLimit: Int
+    @State private var prepared: Prepared?
+
+    private nonisolated struct Request: Equatable, Sendable {
+        let content: String
+        let language: String?
+        let color: Color
+        let isOutgoing: Bool
+        let dark: Bool
+        let highlights: Bool
+        let limit: Int
+    }
+
+    private nonisolated struct Prepared: @unchecked Sendable {
+        let request: Request
+        let text: Text
+    }
+
+    private var request: Request {
+        .init(content: content, language: language, color: color, isOutgoing: isOutgoing,
+              dark: prefersDarkPalette, highlights: highlights, limit: highlightLimit)
+    }
+
+    var body: some View {
+        Group {
+            if let prepared, prepared.request == request { prepared.text }
+            else { Text(content).foregroundColor(color) }
+        }
+        .task(id: request) {
+            let request = request
+            let worker = Task.detached(priority: .userInitiated) {
+                Prepared(request: request, text: ETCodeSyntaxHighlighter(
+                    baseColor: request.color, isOutgoing: request.isOutgoing,
+                    prefersDarkPalette: request.dark, syntaxHighlightingEnabled: request.highlights,
+                    maxHighlightedLength: request.limit
+                ).highlightCode(request.content, language: request.language))
+            }
+            let result = await withTaskCancellationHandler {
+                await worker.value
+            } onCancel: {
+                worker.cancel()
+            }
+            guard !Task.isCancelled else { return }
+            prepared = result
+        }
+    }
+}
+
+private nonisolated enum ETCodeLanguage: Hashable {
     case swift
     case javascript
     case typescript
@@ -140,7 +213,7 @@ private enum ETCodeLanguage: Hashable {
     ]
 }
 
-private enum ETCodeTheme {
+private nonisolated enum ETCodeTheme {
     case outgoing
     case atomOneDark
     case atomOneLight
@@ -151,7 +224,7 @@ private enum ETCodeTheme {
     }
 }
 
-private struct ETCodeHighlightPalette {
+private nonisolated struct ETCodeHighlightPalette {
     let plain: Color
     let comment: Color
     let string: Color
@@ -215,8 +288,8 @@ private struct ETCodeHighlightPalette {
     }
 }
 
-struct ETCodeSyntaxHighlighter: CodeSyntaxHighlighter {
-    private enum TokenKind {
+nonisolated struct ETCodeSyntaxHighlighter: CodeSyntaxHighlighter {
+    private nonisolated enum TokenKind {
         case plain
         case comment
         case string

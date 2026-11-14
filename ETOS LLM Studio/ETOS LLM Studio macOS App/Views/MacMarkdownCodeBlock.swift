@@ -1,30 +1,15 @@
 import AppKit
+import ETOSCore
 import SwiftUI
 
 struct MacMarkdownCodeBlock<LabelContent: View>: View {
-    let sourceID: UUID
     let content: String
     let language: String?
     let label: LabelContent
     let color: Color
     let highlights: Bool
     @Environment(\.colorScheme) private var colorScheme
-    @State private var prepared: Prepared?
     @State private var expanded = true
-
-    private struct Request: Hashable, Sendable {
-        let sourceID: UUID
-        let color: Color
-        let dark: Bool
-        let highlights: Bool
-    }
-    private struct Prepared: @unchecked Sendable {
-        let request: Request
-        let text: Text
-    }
-    private var request: Request {
-        .init(sourceID: sourceID, color: color, dark: colorScheme == .dark, highlights: highlights)
-    }
 
     var body: some View {
         GroupBox {
@@ -43,26 +28,23 @@ struct MacMarkdownCodeBlock<LabelContent: View>: View {
                 }
                 .buttonStyle(.borderless)
                 if expanded {
-                    ScrollView(.horizontal) {
-                        Group {
-                            if let prepared, prepared.request == request { prepared.text }
-                            else { label.foregroundStyle(color) }
+                    ETPagedTextContent(text: content) { page in
+                        ScrollView(.horizontal) {
+                            ETHighlightedCodePage(
+                                content: page, language: language, color: color, isOutgoing: false,
+                                prefersDarkPalette: colorScheme == .dark,
+                                highlights: highlights, highlightLimit: 12_000
+                            )
+                            .fixedSize(horizontal: true, vertical: true)
                         }
-                        .fixedSize(horizontal: true, vertical: true)
+                    } exportContent: {
+                        ScrollView(.horizontal) {
+                            label.foregroundStyle(color)
+                                .fixedSize(horizontal: true, vertical: true)
+                        }
                     }
                 }
             }
-        }
-        .task(id: request) {
-            let request = request, content = content, language = language
-            // 与 iOS 共用词法及配色实现，但正则只在后台运行，视图接收完成的 Text。
-            let result = await Task.detached(priority: .userInitiated) {
-                Prepared(request: request, text: ETCodeSyntaxHighlighter(baseColor: request.color, isOutgoing: false,
-                    prefersDarkPalette: request.dark, syntaxHighlightingEnabled: request.highlights,
-                    maxHighlightedLength: 12_000).highlightCode(content, language: language))
-            }.value
-            guard !Task.isCancelled else { return }
-            prepared = result
         }
     }
 }

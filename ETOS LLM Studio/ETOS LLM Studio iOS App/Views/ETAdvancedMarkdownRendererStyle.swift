@@ -62,15 +62,15 @@ extension View {
 
         return self
             .markdownSoftBreakMode(.lineBreak)
-            .markdownCodeSyntaxHighlighter(
-                ETCodeSyntaxHighlighter(
+            .modifier(ETCodeBlockHighlighting(
+                highlighter: ETCodeSyntaxHighlighter(
                     baseColor: codeTextColor,
                     isOutgoing: isOutgoing,
                     prefersDarkPalette: prefersDarkPalette,
                     syntaxHighlightingEnabled: !usesCustomCodeTextColor,
                     maxHighlightedLength: codeHighlightLimit
                 )
-            )
+            ))
             .etFont(.body, sampleText: sampleText)
             .markdownTextStyle {
                 if let bodyFontName,
@@ -153,21 +153,35 @@ extension View {
                         }
                     }
                 } bodyContent: {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        configuration.label
+                    ETPagedTextContent(text: configuration.content) { page in
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            ETHighlightedCodePage(
+                                content: page, language: configuration.language, color: codeTextColor,
+                                isOutgoing: isOutgoing, prefersDarkPalette: prefersDarkPalette,
+                                highlights: !usesCustomCodeTextColor, highlightLimit: codeHighlightLimit
+                            )
+                            .font(codeFontName.map { .custom($0, size: bodyFontSize * 0.9) }
+                                  ?? .system(size: bodyFontSize * 0.9, design: .monospaced))
                             .fixedSize(horizontal: true, vertical: true)
-                            .markdownTextStyle {
-                                if let codeFontName,
-                                   !codeFontName.isEmpty {
-                                    FontFamily(.custom(codeFontName))
-                                } else {
-                                    FontFamily(.system(.monospaced))
-                                }
-                                FontSize(.em(0.9))
-                                ForegroundColor(codeTextColor)
-                            }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 10)
+                        }
+                    } exportContent: {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            configuration.label
+                                .fixedSize(horizontal: true, vertical: true)
+                                .markdownTextStyle {
+                                    if let codeFontName, !codeFontName.isEmpty {
+                                        FontFamily(.custom(codeFontName))
+                                    } else {
+                                        FontFamily(.system(.monospaced))
+                                    }
+                                    FontSize(.em(0.9))
+                                    ForegroundColor(codeTextColor)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                        }
                     }
                 }
                 .markdownMargin(top: .em(0.2), bottom: .em(0.75))

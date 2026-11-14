@@ -520,7 +520,15 @@ private struct MacMessageRow: View {
                 MacToolWidgetView(widget: widget, messageID: row.id)
             } else {
                 Group {
-                    if let preview = row.userPreview, !showsFullContent {
+                    if row.message.role == .tool {
+                        ETPagedTextContent(attributedText: (colorScheme == .dark
+                            ? row.content.darkRules : row.content.lightRules) ?? row.content.plain) { page in
+                            Text(page)
+                                .font(row.content.typography.body)
+                                .lineSpacing(CGFloat(row.content.typography.lineSpacing))
+                                .textSelection(.enabled)
+                        }
+                    } else if let preview = row.userPreview, !showsFullContent {
                         MacMessageTextView(text: preview, fallback: textColor)
                     } else { MacMessageTextView(text: row.content, fallback: textColor) }
                 }
@@ -535,7 +543,9 @@ private struct MacMessageRow: View {
             }
             ForEach(row.toolCalls, id: \.id) { tool in
                 DisclosureGroup(tool.toolName) {
-                    Text(tool.arguments).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                    ETPagedTextContent(text: tool.arguments) { page in
+                        Text(page).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                    }
                 }
             }
             ForEach(row.attachments) { attachment in

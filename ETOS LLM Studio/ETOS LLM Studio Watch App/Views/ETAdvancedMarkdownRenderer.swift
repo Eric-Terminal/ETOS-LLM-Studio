@@ -285,15 +285,15 @@ extension View {
 
         return self
             .markdownSoftBreakMode(.lineBreak)
-            .markdownCodeSyntaxHighlighter(
-                ETCodeSyntaxHighlighter(
+            .modifier(ETCodeBlockHighlighting(
+                highlighter: ETCodeSyntaxHighlighter(
                     baseColor: codeTextColor,
                     isOutgoing: isOutgoing,
                     prefersDarkPalette: prefersDarkPalette,
                     syntaxHighlightingEnabled: !usesCustomCodeTextColor,
                     maxHighlightedLength: codeHighlightLimit
                 )
-            )
+            ))
             .etFont(.body, sampleText: sampleText)
             .markdownTextStyle {
                 if let bodyFontName,
@@ -356,18 +356,19 @@ extension View {
                     .markdownMargin(top: .em(0.3), bottom: .em(0.75))
             }
             .markdownBlockStyle(\.codeBlock) { configuration in
-                let codeBlockContent = configuration.content.trimmingCharacters(in: .newlines)
-                let canAppendCodeBlock = !codeBlockContent
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .isEmpty
-                    && onCodeBlockHeaderTap != nil
                 ETWatchCollapsibleCodeBlockView(
                     language: configuration.language,
                     headerTextColor: codeHeaderTextColor,
                     headerBackground: codeHeaderBackground,
                     blockBackground: codeBlockBackground,
                     borderColor: codeBorderColor,
-                    onHeaderTap: canAppendCodeBlock ? { onCodeBlockHeaderTap?(codeBlockContent) } : nil
+                    onHeaderTap: onCodeBlockHeaderTap.map { action in
+                        {
+                            let code = configuration.content.trimmingCharacters(in: .newlines)
+                            guard !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                            action(code)
+                        }
+                    }
                 ) { isCollapsed in
                     if !isCollapsed, ETCodeClipboard.supportsCopy {
                         ETCodeCopyButton(
@@ -377,21 +378,35 @@ extension View {
                         )
                     }
                 } bodyContent: {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        configuration.label
+                    ETPagedTextContent(text: configuration.content) { page in
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            ETHighlightedCodePage(
+                                content: page, language: configuration.language, color: codeTextColor,
+                                isOutgoing: isOutgoing, prefersDarkPalette: prefersDarkPalette,
+                                highlights: !usesCustomCodeTextColor, highlightLimit: codeHighlightLimit
+                            )
+                            .font(codeFontName.map { .custom($0, size: bodyFontSize * 0.88) }
+                                  ?? .system(size: bodyFontSize * 0.88, design: .monospaced))
                             .fixedSize(horizontal: true, vertical: true)
-                            .markdownTextStyle {
-                                if let codeFontName,
-                                   !codeFontName.isEmpty {
-                                    FontFamily(.custom(codeFontName))
-                                } else {
-                                    FontFamily(.system(.monospaced))
-                                }
-                                FontSize(.em(0.88))
-                                ForegroundColor(codeTextColor)
-                            }
                             .padding(.horizontal, 10)
                             .padding(.vertical, 8)
+                        }
+                    } exportContent: {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            configuration.label
+                                .fixedSize(horizontal: true, vertical: true)
+                                .markdownTextStyle {
+                                    if let codeFontName, !codeFontName.isEmpty {
+                                        FontFamily(.custom(codeFontName))
+                                    } else {
+                                        FontFamily(.system(.monospaced))
+                                    }
+                                    FontSize(.em(0.88))
+                                    ForegroundColor(codeTextColor)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                        }
                     }
                 }
                 .markdownMargin(top: .em(0.2), bottom: .em(0.7))

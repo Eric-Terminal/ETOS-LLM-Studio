@@ -58,7 +58,7 @@ struct MacMessageTextView: View {
                         if let color = palette.code { ForegroundColor(color) }
                     }
                     .markdownBlockStyle(\.codeBlock) { block in
-                        MacMarkdownCodeBlock(sourceID: text.id, content: block.content, language: block.language, label: block.label,
+                        MacMarkdownCodeBlock(content: block.content, language: block.language, label: block.label,
                             color: palette.code ?? palette.body ?? fallback, highlights: palette.code == nil)
                             .font(typography.codeName.map { Font.custom($0, size: CGFloat(typography.pointSize)) }
                                   ?? Font.system(size: CGFloat(typography.pointSize), design: .monospaced))
