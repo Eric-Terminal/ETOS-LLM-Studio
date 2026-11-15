@@ -16,6 +16,155 @@ import UIKit
 struct ChatLongConversationRuntimeTests {
 
     @MainActor
+    @Test("二十万字符会话从中段发送后解除导航占用，新回复自然进入真实视口", arguments: [false, true], [0.0, 0.05])
+    func testSendFromEarlierWindowRevealsNewReply(automaticHistoryLoading: Bool, sendDelay: Double) async throws {
+        let paragraph = String(repeating: "历史正文", count: 425)
+        let seed = (0..<120).map {
+            ChatMessage(role: $0.isMultiple(of: 2) ? .user : .assistant, content: "第 \($0) 条：\(paragraph)")
+        }
+        #expect(seed.reduce(0) { $0 + $1.content.count } > 200_000)
+        let fixture = try await makeFixture(
+            automaticHistoryLoading: automaticHistoryLoading,
+            timelineNavigationEnabled: true,
+            markdownEnabled: true,
+            lazyLoadMessageCount: 4,
+            initialMessages: seed,
+            usesOfflineService: true
+        )
+        let config = AppConfigStore.shared
+        let previousDraft = config.chatComposerDraft
+        let previousDelay = config.chatSendDelaySeconds
+        defer {
+            config.chatComposerDraft = previousDraft
+            config.chatSendDelaySeconds = previousDelay
+            fixture.dispose()
+        }
+        config.chatSendDelaySeconds = sendDelay
+        let scrollView = try #require(fixture.chatScrollView)
+        let sessionID = try #require(fixture.viewModel.currentSession?.id)
+
+        // 保留真实宿主，只断开 Core 订阅以明确注入快照；真实发送因不存在目标会话而早退。
+        fixture.viewModel.cancellables.removeAll()
+        fixture.chatService.currentSessionSubject.send(nil)
+        fixture.chatService.chatSessionsSubject.send([])
+        try fixture.beginUserPan()
+        fixture.coordinator.updateInteractionState(false)
+        try #require(fixture.viewModel.centerHistoryWindow(on: seed[40].id))
+        fixture.coordinator.messageNavigationCursorID = seed[40].id
+        await settleMainQueue(duration: 0.1)
+        try #require(!fixture.viewModel.isLaterHistoryFullyLoaded)
+        try #require(fixture.coordinator.hasRetainedTimelineNavigationTarget)
+        try #require(fixture.coordinator.pendingScrollTargetTask == nil)
+
+        // 直接调用真实 VM，视口准备必须由已挂载 ChatView 的提交事件订阅完成。
+        fixture.viewModel.userInput = "从旧历史继续提问"
+        let consumedDraft = fixture.viewModel.sendMessage()
+        try #require(consumedDraft)
+        let delayedTask = fixture.viewModel.pendingSendDelayTask
+        if sendDelay > 0 {
+            try #require(delayedTask != nil)
+            #expect(fixture.coordinator.messageNavigationCursorID == seed[40].id)
+            #expect(!fixture.viewModel.isLaterHistoryFullyLoaded)
+            // 捕获草稿后重新导航，实际提交仍须清除这次新取得的视口所有权。
+            try #require(fixture.viewModel.centerHistoryWindow(on: seed[20].id))
+            fixture.coordinator.messageNavigationCursorID = seed[20].id
+            await delayedTask?.value
+        }
+        try #require(fixture.viewModel.isLaterHistoryFullyLoaded)
+        #expect(!fixture.coordinator.hasRetainedTimelineNavigationTarget)
+        #expect(fixture.coordinator.shouldKeepBottomPinned)
+        let submissionFinished = await waitForRuntimeCondition {
+            !fixture.viewModel.isSendSubmissionPending
+        }
+        try #require(submissionFinished)
+
+        let user = ChatMessage(role: .user, content: "新问题可见尾标")
+        var reply = ChatMessage(role: .assistant, content: "新回复流式可见尾标")
+        reply.isReceivingStream = true
+        let streamingMessages = seed + [user, reply]
+        let previous = fixture.viewModel.preparedMessageSnapshot
+        let streaming = await Task.detached {
+            ChatMessageListSnapshot(messages: streamingMessages, sessionID: sessionID, previous: previous)
+        }.value
+        fixture.viewModel.runningSessionIDs = [sessionID]
+        fixture.viewModel.refreshCurrentSessionSendingState()
+        fixture.viewModel.applyMessagesUpdate(streaming)
+        let streamReachedBottom = await waitForRuntimeCondition {
+            fixture.viewModel.displayMessageIDs.last == reply.id
+                && fixture.viewModel.streamingMarkdownPrepareTasks.isEmpty
+                && fixture.viewModel.messageStateByID[reply.id]?.streamingMarkdownState.contentSnapshot?.sourceText == reply.content
+                && !fixture.coordinator.chatScrollPositionController.hasActiveCommand
+                && !fixture.coordinator.hasRetainedTimelineNavigationTarget
+                && abs(scrollView.contentOffset.y - maximumContentOffsetY(of: scrollView)) < 4
+        }
+        try #require(streamReachedBottom, "流式新回复必须自然到达真实滚动区域底部")
+
+        reply.content += "，静态完成尾标"
+        reply.isReceivingStream = false
+        let finalMessages = seed + [user, reply]
+        let final = await Task.detached {
+            ChatMessageListSnapshot(messages: finalMessages, sessionID: sessionID, previous: streaming)
+        }.value
+        fixture.viewModel.applyMessagesUpdate(final)
+        fixture.viewModel.runningSessionIDs = []
+        fixture.viewModel.refreshCurrentSessionSendingState()
+        let settled = await waitForRuntimeCondition {
+            !fixture.viewModel.isSendingMessage
+                && fixture.viewModel.preparedMarkdownByMessageID[reply.id]?.sourceText == reply.content
+                && !fixture.coordinator.isStreamingViewportFollowing
+                && !fixture.coordinator.isChatLayoutSettling
+                && !fixture.coordinator.chatScrollPositionController.hasActiveCommand
+                && abs(scrollView.contentOffset.y - maximumContentOffsetY(of: scrollView)) < 4
+                && renderedMessageFrame(reply.id, in: fixture.coordinator.chatLayoutIntegrityMonitor).map {
+                    $0.height > 0 && $0.minY >= -1
+                        && $0.maxY <= fixture.coordinator.chatScrollViewportHeight + 1
+                } == true
+        }
+        let replyState = fixture.viewModel.messageStateByID[reply.id]
+        let monitor = fixture.coordinator.chatLayoutIntegrityMonitor
+        let auditContext = Mirror(reflecting: monitor).children.first { $0.label == "context" }?.value
+            as? ChatLayoutAuditContext
+        let settledDetails = "自动历史=\(automaticHistoryLoading) 发送延迟=\(sendDelay) settled=\(settled) "
+            + "sending=\(fixture.viewModel.isSendingMessage) "
+            + "prepared=\(String(describing: fixture.viewModel.preparedMarkdownByMessageID[reply.id]?.sourceText)) "
+            + "expected=\(reply.content) "
+            + "following=\(fixture.coordinator.isStreamingViewportFollowing) settling=\(fixture.coordinator.isChatLayoutSettling) "
+            + "activeCommand=\(String(describing: fixture.coordinator.chatScrollPositionController.activeCommandTarget)) "
+            + "frame=\(String(describing: renderedMessageFrame(reply.id, in: monitor))) "
+            + "displayContent=\(String(describing: fixture.viewModel.displayMessages.last?.message.content)) "
+            + "visualContent=\(String(describing: replyState?.visualMessage.content)) "
+            + "awaitingContent=\(String(describing: replyState?.streamingMarkdownState.isAwaitingStaticHandoff(channel: .content))) "
+            + "awaitingReasoning=\(String(describing: replyState?.streamingMarkdownState.isAwaitingStaticHandoff(channel: .reasoning))) "
+            + "streamFinal=\(String(describing: replyState?.streamingMarkdownState.contentSnapshot?.isFinal)) "
+            + "markdownTask=\(fixture.viewModel.markdownPrepareTasks[reply.id] != nil) "
+            + "streamTasks=\(fixture.viewModel.streamingMarkdownPrepareTasks.count) "
+            + "pin=\(fixture.coordinator.shouldKeepBottomPinned) "
+            + "auditContext=\(String(describing: auditContext)) "
+            + "offset=\(scrollView.contentOffset) maximumOffset=\(maximumContentOffsetY(of: scrollView)) "
+            + "size=\(scrollView.contentSize) inset=\(scrollView.adjustedContentInset)"
+        Attachment.record(Data(settledDetails.utf8), named: "中段发送后静态交接诊断.txt")
+        if !settled {
+            recordVisibilityEvidence(
+                stage: "中段发送失败", fixture: fixture, scrollView: scrollView,
+                userFrames: [], replyFrames: []
+            )
+        }
+        try #require(settled, "静态渲染交接必须完成并上报新回复的实际布局。\(settledDetails)")
+        let frame = try #require(renderedMessageFrame(reply.id, in: fixture.coordinator.chatLayoutIntegrityMonitor))
+        let visibleHeight = fixture.coordinator.chatScrollViewportHeight
+        let details = "自动历史=\(automaticHistoryLoading) 发送延迟=\(sendDelay) replyFrame=\(frame) viewportHeight=\(visibleHeight) "
+            + "offset=\(scrollView.contentOffset) size=\(scrollView.contentSize) inset=\(scrollView.adjustedContentInset)"
+        Attachment.record(Data(details.utf8), named: "中段发送后新回复几何.txt")
+        #expect(fixture.chatScrollView === scrollView)
+        #expect(fixture.viewModel.displayMessageIDs.contains(user.id))
+        #expect(fixture.viewModel.displayMessageIDs.last == reply.id)
+        #expect(fixture.viewModel.displayMessages.last?.message.content == reply.content)
+        #expect(abs(scrollView.contentOffset.y - maximumContentOffsetY(of: scrollView)) < 4)
+        #expect(frame.height > 0 && frame.minY >= -1 && frame.maxY <= visibleHeight + 1,
+                "新回复整行应位于真实视口内，不能只验证原生偏移或显示数组")
+    }
+
+    @MainActor
     @Test("四条窗口在长草稿收缩和长消息追加后，流式期间及静态末行都真实可见")
     func testLongSendKeepsRealizedRowsVisibleBeforeStreamingEnds() async throws {
         // 仅测试宿主启用已有代码预览用例使用的 AX 桥；SwiftUI 环境值不会生成自动化节点。
@@ -412,6 +561,7 @@ struct ChatLongConversationRuntimeTests {
         messageCount: Int = 60,
         paragraphCount: Int = 8,
         initialMessages: [ChatMessage]? = nil,
+        usesOfflineService: Bool = false,
         windowSize: CGSize = CGSize(width: 390, height: 844)
     ) async throws -> HostedChatFixture {
         let windowScene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
@@ -431,7 +581,7 @@ struct ChatLongConversationRuntimeTests {
         appConfig.automaticHistoryLoadingEnabled = automaticHistoryLoading
         appConfig.lazyLoadMessageCount = lazyLoadMessageCount
 
-        let chatService = ChatService()
+        let chatService = usesOfflineService ? ChatService(adapters: [:]) : ChatService()
         await chatService.waitForInitialPersistenceStateIfNeeded()
         let viewModel = ChatViewModel(chatService: chatService)
         let session = ChatSession(
@@ -585,6 +735,16 @@ struct ChatLongConversationRuntimeTests {
         return frames.filter { _, frame in
             frame.width > 0 && frame.height > 0
         }
+    }
+
+    @MainActor
+    private func renderedMessageFrame(_ messageID: UUID, in monitor: ChatLayoutIntegrityMonitor) -> CGRect? {
+        let snapshot = Mirror(reflecting: monitor).children.first { $0.label == "snapshot" }?.value
+            as? ChatMessageLayoutFrameSnapshot
+        guard let sample = snapshot?.samples[messageID] else { return nil }
+        return ChatMessageLayoutAudit.effectiveFrames(
+            samples: [messageID: sample], contentFrames: snapshot?.contentFrames ?? [:]
+        )[messageID]
     }
 
     @MainActor

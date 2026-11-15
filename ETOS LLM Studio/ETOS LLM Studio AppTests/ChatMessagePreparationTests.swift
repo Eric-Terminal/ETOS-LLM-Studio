@@ -105,6 +105,172 @@ struct ChatMessagePreparationTests {
         await viewModel.visualMessagePrepareTasks[userID]?.value
     }
 
+    @Test("二十万字符历史中浏览旧窗口后发送，立即和延迟提交都恢复新回复所在尾窗", arguments: [false, true], [0.0, 0.01])
+    func sendingFromEarlierHistoryRestoresLatestReplies(automaticHistoryLoading: Bool, sendDelay: Double) async throws {
+        let config = AppConfigStore.shared
+        await config.waitForPersistentStoreLoaded()
+        let previousAutomatic = config.automaticHistoryLoadingEnabled
+        let previousLimit = config.lazyLoadMessageCount
+        let previousDelay = config.chatSendDelaySeconds
+        let previousDraft = config.chatComposerDraft
+        defer {
+            config.automaticHistoryLoadingEnabled = previousAutomatic
+            config.lazyLoadMessageCount = previousLimit
+            config.chatSendDelaySeconds = previousDelay
+            config.chatComposerDraft = previousDraft
+        }
+        let viewModel = ChatViewModel(chatService: ChatService(adapters: [:]))
+        viewModel.cancellables.removeAll()
+        // 不存在的会话让真实提交在模型和网络准备前结束；消息快照由本用例明确提供。
+        let sessionID = UUID()
+        viewModel.currentSession = ChatSession(id: sessionID, name: "长历史发送回归")
+        viewModel.runningSessionIDs = []
+        viewModel.automaticHistoryLoadingEnabled = automaticHistoryLoading
+        viewModel.lazyLoadMessageCount = 4
+        config.chatSendDelaySeconds = sendDelay
+
+        var messages = longHistoryMessages()
+        #expect(messages.reduce(0) { $0 + $1.content.count } > 200_000)
+        let seed = messages
+        let initial = await Task.detached {
+            ChatMessageListSnapshot(messages: seed, sessionID: sessionID)
+        }.value
+        viewModel.applyMessagesUpdate(initial)
+        try #require(viewModel.centerHistoryWindow(on: messages[40].id))
+        try #require(!viewModel.isLaterHistoryFullyLoaded)
+        let readingWindow = viewModel.historyWindow
+        let readingIDs = viewModel.displayMessageIDs
+
+        // 仅收到后台新输出时仍保留阅读窗口，不能因本次修复抢回底部。
+        let backgroundReply = ChatMessage(role: .assistant, content: "后台新回复")
+        messages.append(backgroundReply)
+        let backgroundMessages = messages
+        let background = await Task.detached {
+            ChatMessageListSnapshot(messages: backgroundMessages, sessionID: sessionID, previous: initial)
+        }.value
+        viewModel.applyMessagesUpdate(background)
+        #expect(viewModel.historyWindow == readingWindow)
+        #expect(viewModel.displayMessageIDs == readingIDs)
+        #expect(!viewModel.displayMessageIDs.contains(backgroundReply.id))
+
+        var submittedSessionIDs: [UUID?] = []
+        let submissionSubscription = viewModel.messageSendWillSubmit.sink {
+            submittedSessionIDs.append($0)
+        }
+        defer { submissionSubscription.cancel() }
+        let outgoingText = "从历史窗口继续提问"
+        viewModel.userInput = outgoingText
+        let consumedDraft = viewModel.sendMessage()
+        try #require(consumedDraft)
+        let delayedTask = viewModel.pendingSendDelayTask
+        if sendDelay > 0 {
+            #expect(delayedTask != nil)
+            #expect(viewModel.historyWindow == readingWindow)
+            #expect(submittedSessionIDs.isEmpty)
+            await delayedTask?.value
+        }
+        #expect(submittedSessionIDs == [sessionID])
+        #expect(viewModel.isLaterHistoryFullyLoaded)
+        #expect(viewModel.displayMessageIDs.last == backgroundReply.id)
+
+        // 等待无效会话的真实 Core 提交释放，避免把异步任务留给其他用例。
+        let deadline = ContinuousClock.now + .seconds(5)
+        while viewModel.isSendSubmissionPending, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(!viewModel.isSendSubmissionPending)
+
+        let user = ChatMessage(role: .user, content: outgoingText)
+        var reply = ChatMessage(role: .assistant, content: "新回复首段")
+        reply.isReceivingStream = true
+        messages.append(contentsOf: [user, reply])
+        let appendedMessages = messages
+        let appended = await Task.detached {
+            ChatMessageListSnapshot(messages: appendedMessages, sessionID: sessionID, previous: background)
+        }.value
+        viewModel.isSendingMessage = true
+        viewModel.applyMessagesUpdate(appended)
+        #expect(viewModel.displayMessageIDs.contains(user.id))
+        #expect(viewModel.displayMessageIDs.last == reply.id)
+        #expect(viewModel.isLaterHistoryFullyLoaded)
+        let tailIDs = viewModel.displayMessageIDs
+
+        reply.content += "，持续流式更新后的末行"
+        messages[messages.count - 1] = reply
+        let streamedMessages = messages
+        let streamed = await Task.detached {
+            ChatMessageListSnapshot(messages: streamedMessages, sessionID: sessionID, previous: appended)
+        }.value
+        viewModel.applyMessagesUpdate(streamed)
+        #expect(viewModel.displayMessageIDs == tailIDs)
+        #expect(viewModel.displayMessages.last?.message.content == reply.content)
+        #expect(viewModel.isLaterHistoryFullyLoaded)
+        viewModel.isSendingMessage = false
+    }
+
+    @Test("撤销延迟发送保留正在阅读的旧历史窗口", arguments: [false, true])
+    func cancelledDelayedSendPreservesEarlierHistory(automaticHistoryLoading: Bool) async throws {
+        let config = AppConfigStore.shared
+        await config.waitForPersistentStoreLoaded()
+        let previousAutomatic = config.automaticHistoryLoadingEnabled
+        let previousLimit = config.lazyLoadMessageCount
+        let previousDelay = config.chatSendDelaySeconds
+        let previousDraft = config.chatComposerDraft
+        defer {
+            config.automaticHistoryLoadingEnabled = previousAutomatic
+            config.lazyLoadMessageCount = previousLimit
+            config.chatSendDelaySeconds = previousDelay
+            config.chatComposerDraft = previousDraft
+        }
+        let viewModel = ChatViewModel(chatService: ChatService(adapters: [:]))
+        viewModel.cancellables.removeAll()
+        let sessionID = UUID()
+        viewModel.currentSession = ChatSession(id: sessionID, name: "撤销历史发送回归")
+        viewModel.runningSessionIDs = []
+        viewModel.isSendingMessage = false
+        viewModel.automaticHistoryLoadingEnabled = automaticHistoryLoading
+        viewModel.lazyLoadMessageCount = 4
+        config.chatSendDelaySeconds = 10
+        let messages = longHistoryMessages()
+        let initial = await Task.detached {
+            ChatMessageListSnapshot(messages: messages, sessionID: sessionID)
+        }.value
+        viewModel.applyMessagesUpdate(initial)
+        try #require(viewModel.centerHistoryWindow(on: messages[40].id))
+        let readingWindow = viewModel.historyWindow
+        let readingIDs = viewModel.displayMessageIDs
+        viewModel.userInput = "撤销后恢复的草稿"
+        var submittedSessionIDs: [UUID?] = []
+        let submissionSubscription = viewModel.messageSendWillSubmit.sink {
+            submittedSessionIDs.append($0)
+        }
+        defer { submissionSubscription.cancel() }
+
+        let consumedDraft = viewModel.sendMessage()
+        try #require(consumedDraft)
+        let delayedTask = viewModel.pendingSendDelayTask
+        #expect(delayedTask != nil)
+        #expect(viewModel.historyWindow == readingWindow)
+        #expect(submittedSessionIDs.isEmpty)
+        viewModel.cancelSending()
+        await delayedTask?.value
+
+        #expect(!viewModel.isSendDelayPending)
+        #expect(!viewModel.isSendSubmissionPending)
+        #expect(submittedSessionIDs.isEmpty)
+        #expect(viewModel.userInput == "撤销后恢复的草稿")
+        #expect(viewModel.historyWindow == readingWindow)
+        #expect(viewModel.displayMessageIDs == readingIDs)
+        #expect(!viewModel.isLaterHistoryFullyLoaded)
+    }
+
+    private func longHistoryMessages() -> [ChatMessage] {
+        let paragraph = String(repeating: "历史正文", count: 425)
+        return (0..<120).map {
+            ChatMessage(role: $0.isMultiple(of: 2) ? .user : .assistant, content: "第 \($0) 条：\(paragraph)")
+        }
+    }
+
     @Test("跳过一个后台快照后仍应用完整结果，重试按钮读取已准备状态")
     func skippedSnapshotDoesNotDropMessageChanges() async {
         let viewModel = ChatViewModel(chatService: ChatService(adapters: [:]))

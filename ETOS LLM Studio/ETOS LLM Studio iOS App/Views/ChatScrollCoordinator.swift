@@ -34,6 +34,7 @@ final class ChatScrollCoordinator: ObservableObject {
     @Published var isChatScrollUserInteracting = false
     @Published private(set) var layoutTransitionRevision: UInt = 0
     @Published var isStreamingViewportFollowing = false
+    @Published private(set) var messageStackRevision: UInt = 0
 
     var scrollNavigationHideTask: Task<Void, Never>?
     var scrollTargetGeneration: UInt = 0
@@ -198,6 +199,25 @@ final class ChatScrollCoordinator: ObservableObject {
     func prepareForExclusiveViewportNavigation() {
         cancelAutomaticHistoryNavigation()
         chatLayoutIntegrityMonitor.cancelViewportRecovery()
+    }
+
+    /// 发送接管当前轮次，解除历史导航和恢复任务对视口的占用。
+    func prepareForMessageSend(rebuildsMessageStack: Bool = false) {
+        pendingHistoryResetWorkItem?.cancel()
+        pendingHistoryResetWorkItem = nil
+        pendingBottomSnapTask?.cancel()
+        pendingBottomSnapTask = nil
+        prepareForExclusiveViewportNavigation()
+        if rebuildsMessageStack {
+            messageStackRevision &+= 1
+        }
+        messageNavigationCursorID = nil
+        previousMessageNavigationTargetID = nil
+        nextMessageNavigationTargetID = nil
+        awaitsFreshBottomNavigationSnapshot = false
+        suppressAutoScrollOnce = false
+        shouldKeepBottomPinned = true
+        showScrollToBottom = false
     }
 
     @discardableResult
