@@ -1,6 +1,14 @@
 name: PR 编译检查
 
 on:
+  push:
+    branches:
+      - main
+      - dev
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE*'
   pull_request:
     types:
       - opened
@@ -24,34 +32,112 @@ jobs:
   build:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: iOS / watchOS 编译验证
-    runs-on: macos-latest
+    # macos-latest 仍可能使用 Xcode 26；工程引用的 iOS 27.1 API 必须由对应 SDK 编译。
+    runs-on: xcode-27
     timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-      - name: 显示 Xcode 版本
-        run: xcodebuild -version
+      - name: 检查 Xcode 与模拟器 SDK
+        run: |
+          set -euo pipefail
+          mkdir -p ci-logs
+          if [[ ! -d "$DEVELOPER_DIR" ]]; then
+            echo "::error::运行器缺少工程要求的 Xcode 27.1：$DEVELOPER_DIR"
+            exit 1
+          fi
+          {
+            xcodebuild -version
+            xcodebuild -showsdks
+            xcrun --sdk iphonesimulator --show-sdk-version
+            xcrun --sdk watchsimulator --show-sdk-version
+          } 2>&1 | tee ci-logs/toolchain.log
+
+      - name: 计算原生依赖缓存标识
+        id: native-inputs
+        run: |
+          set -euo pipefail
+          toolchain_hash=$(shasum -a 256 ci-logs/toolchain.log | awk '{print $1}')
+          revisions_hash=$(git ls-tree HEAD -- Dependencies/llama.cpp Dependencies/ish-multiarch | shasum -a 256 | awk '{print $1}')
+          printf 'toolchain=%s\n' "$toolchain_hash" >> "$GITHUB_OUTPUT"
+          printf 'revisions=%s\n' "$revisions_hash" >> "$GITHUB_OUTPUT"
+
+      - name: 恢复原生静态库缓存
+        id: native-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            Dependencies/llama-build/products
+            Dependencies/ish-build/products
+            Dependencies/ish-build/iSHApple.xcframework
+            Dependencies/ish-build/iSHApple.stamp
+          key: native-sim-Debug-arm64-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.native-inputs.outputs.toolchain }}-${{ steps.native-inputs.outputs.revisions }}-${{ hashFiles('scripts/build-native-static-libraries.sh', 'scripts/build-llama-static-library.sh', 'scripts/build-ish-static-library.sh', 'ci_scripts/ci_post_clone.sh') }}
+
+      - name: 准备原生构建工具
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          {
+            if ! command -v cmake >/dev/null 2>&1; then
+              HOMEBREW_NO_AUTO_UPDATE=1 brew install cmake
+            fi
+            sh ci_scripts/ci_post_clone.sh
+          } 2>&1 | tee ci-logs/native-tools.log
+
+      - name: 准备 iOS / watchOS 模拟器原生依赖
+        run: |
+          set -euo pipefail
+          # 与下方 Xcode 编译使用相同的配置、SDK 和架构，避免链接到其他平台的产物。
+          for sdk in iphonesimulator watchsimulator; do
+            env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
+              SDK_NAME="$sdk" PLATFORM_NAME="$sdk" CONFIGURATION=Debug \
+              ARCHS=arm64 ETOS_LLAMA_ARCHS=arm64 \
+              scripts/build-native-static-libraries.sh --parallel \
+              2>&1 | tee "ci-logs/native-$sdk.log"
+          done
+
+      # 原生库成功后立即保存；后续 Swift 编译失败也不应丢失可复用的依赖产物。
+      - name: 保存原生静态库缓存
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            Dependencies/llama-build/products
+            Dependencies/ish-build/products
+            Dependencies/ish-build/iSHApple.xcframework
+            Dependencies/ish-build/iSHApple.stamp
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
 
       - name: 解析依赖
         run: |
+          set -euo pipefail
           env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
             xcodebuild -resolvePackageDependencies \
             -workspace 'ETOS LLM Studio.xcworkspace' \
-            -scheme 'ETOS LLM Studio App'
+            -scheme 'ETOS LLM Studio App' \
+            2>&1 | tee ci-logs/package-resolution.log
 
       - name: 编译 iOS App（含嵌入 watch App）
         run: |
           set -euo pipefail
-          mkdir -p ci-logs
           env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
             xcodebuild \
             -workspace 'ETOS LLM Studio.xcworkspace' \
             -scheme 'ETOS LLM Studio App' \
+            -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
+            ARCHS=arm64 \
             CODE_SIGNING_ALLOWED=NO \
-            build | tee ci-logs/ios-build.log
+            build 2>&1 | tee ci-logs/ios-build.log
 
       - name: 编译 watchOS App
         run: |
@@ -60,9 +146,11 @@ jobs:
             xcodebuild \
             -workspace 'ETOS LLM Studio.xcworkspace' \
             -scheme 'ETOS LLM Studio Watch App' \
+            -configuration Debug \
             -destination 'generic/platform=watchOS Simulator' \
+            ARCHS=arm64 \
             CODE_SIGNING_ALLOWED=NO \
-            build | tee ci-logs/watch-build.log
+            build 2>&1 | tee ci-logs/watch-build.log
 
       - name: 上传编译日志
         if: always()
