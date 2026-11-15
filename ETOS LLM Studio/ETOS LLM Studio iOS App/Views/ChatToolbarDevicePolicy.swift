@@ -5,6 +5,7 @@ import UIKit
 enum ChatToolbarDevicePolicy {
     @MainActor
     static let currentUsesSystemToolbar: Bool = {
+        #if canImport(SwiftUI, _version: 8.0)
         guard #available(iOS 27.1, *) else { return false }
 
         let modelIdentifier: String
@@ -23,6 +24,10 @@ enum ChatToolbarDevicePolicy {
             idiom: UIDevice.current.userInterfaceIdiom,
             modelIdentifier: modelIdentifier
         )
+        #else
+        // 旧 SDK 不编译系统工具栏内容时，必须继续保留自定义导航。
+        return false
+        #endif
     }()
 
     static func usesSystemToolbar(idiom: UIUserInterfaceIdiom, modelIdentifier: String) -> Bool {

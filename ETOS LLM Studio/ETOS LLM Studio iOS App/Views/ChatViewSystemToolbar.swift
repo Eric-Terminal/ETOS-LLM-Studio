@@ -2,6 +2,7 @@ import SwiftUI
 import ETOSCore
 
 extension ChatView {
+    #if canImport(SwiftUI, _version: 8.0)
     /// 系统容器决定工具栏方向与溢出位置；聊天输入仍属于会话内容和键盘。
     @available(iOS 27.1, *)
     @ToolbarContentBuilder
@@ -53,6 +54,7 @@ extension ChatView {
             }
         }
     }
+    #endif
 
     private func systemQuickActionButton(_ action: ChatQuickAction) -> some View {
         Button {

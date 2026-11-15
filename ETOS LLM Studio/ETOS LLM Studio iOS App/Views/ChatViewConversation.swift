@@ -636,9 +636,11 @@ extension ChatView {
             .navigationBarTitleDisplayMode(.inline)
             .modifier(ChatNavigationSubtitle(modelName: modelSubtitle, isEnabled: usesSystemChatToolbar))
             .toolbar {
+                #if canImport(SwiftUI, _version: 8.0)
                 if #available(iOS 27.1, *), usesSystemChatToolbar {
                     adaptiveChatToolbar
                 }
+                #endif
             }
             .toolbar(.hidden, for: .tabBar)
             .animation(.easeInOut(duration: 0.2), value: viewModel.memoryRetryStoppedNoticeMessage)
