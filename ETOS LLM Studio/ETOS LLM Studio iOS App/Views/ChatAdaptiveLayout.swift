@@ -75,6 +75,8 @@ struct ChatAdaptiveLayout: Equatable {
 
 extension ChatView {
     func chatDivision(in proxy: GeometryProxy) -> CGRect? {
+        // 旧 SDK 没有此符号，运行时可用性判断不能替代 SDK 编译保护。
+        #if canImport(SwiftUI, _version: 8.1)
         if #available(iOS 27.1, *), let region = proxy.reservedRegions(kind: .division).first {
             // 使用逻辑方向坐标，与 HStack 的 leading/trailing 一致，也适用于阿拉伯语。
             return CGRect(
@@ -84,6 +86,7 @@ extension ChatView {
                 height: region.frame.height + region.margins.top + region.margins.bottom
             )
         }
+        #endif
         return nil
     }
 }

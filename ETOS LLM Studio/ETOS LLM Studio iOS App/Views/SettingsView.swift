@@ -109,9 +109,11 @@ struct SettingsView: View {
     }
 
     private func hasVerticalDivision(in proxy: GeometryProxy) -> Bool {
+        #if canImport(SwiftUI, _version: 8.1)
         if #available(iOS 27.1, *), let division = proxy.reservedRegions(kind: .division).first {
             return division.frame.height > division.frame.width
         }
+        #endif
         return false
     }
 

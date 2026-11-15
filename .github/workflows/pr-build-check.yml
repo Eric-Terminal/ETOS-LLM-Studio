@@ -47,7 +47,7 @@ jobs:
 
       - name: 缓存原生静态库
         id: native-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: |
             Dependencies/llama-build/products
@@ -77,6 +77,17 @@ jobs:
               2>&1 | tee "ci-logs/native-$sdk.log"
           done
 
+      - name: 保存已验证的原生静态库
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            Dependencies/llama-build/products
+            Dependencies/ish-build/products
+            Dependencies/ish-build/iSHApple.xcframework
+            Dependencies/ish-build/iSHApple.stamp
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
+
       - name: 解析依赖
         run: |
           env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
@@ -95,7 +106,7 @@ jobs:
             -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
-            build | tee ci-logs/ios-build.log
+            build 2>&1 | tee ci-logs/ios-build.log
 
       - name: 编译 watchOS App
         run: |
@@ -107,7 +118,7 @@ jobs:
             -configuration Debug \
             -destination 'generic/platform=watchOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
-            build | tee ci-logs/watch-build.log
+            build 2>&1 | tee ci-logs/watch-build.log
 
       - name: 上传编译日志
         if: always()
