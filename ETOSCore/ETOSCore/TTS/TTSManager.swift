@@ -33,6 +33,7 @@ public final class TTSManager: NSObject, ObservableObject {
     var activeNetworkItemTexts: [UUID: String] = [:]
     var activeNetworkClips: [UUID: AudioClip] = [:]
     var lastNetworkChunkTexts: [String] = []
+    // 只缓存已经平滑的 PCM，供重播和导出复用，避免二次处理改变听感。
     var lastNetworkAudioClips: [AudioClip] = []
     var pendingReplayChunkTexts: [String] = []
     var pendingReplayAudioClips: [AudioClip] = []

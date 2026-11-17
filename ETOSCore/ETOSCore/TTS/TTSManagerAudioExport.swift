@@ -59,110 +59,29 @@ extension TTSManager {
 
 enum TTSAudioExportBuilder {
     static func make(from clips: [TTSManager.AudioClip]) -> TTSAudioExport? {
-        guard !clips.isEmpty else { return nil }
-        let normalizedFormats = clips.map { normalizedExportFormat($0.format) }
-        guard let format = normalizedFormats.first,
-              normalizedFormats.allSatisfy({ $0 == format }) else { return nil }
-
-        switch format {
-        case "pcm":
-            guard let first = clips.first,
-                  clips.allSatisfy({
-                      ($0.sampleRate ?? 24_000) == (first.sampleRate ?? 24_000) &&
-                          $0.channels == first.channels
-                  }) else { return nil }
-            let pcm = clips.reduce(into: Data()) { $0.append($1.data) }
-            return TTSAudioExport(
-                data: makeWAV(
-                    pcm: pcm,
-                    sampleRate: first.sampleRate ?? 24_000,
-                    channels: first.channels
-                ),
-                fileExtension: "wav"
-            )
-        case "wav":
-            guard let wav = mergeWAVClips(clips) else { return nil }
-            return TTSAudioExport(data: wav, fileExtension: "wav")
-        case "mp3":
-            return TTSAudioExport(
-                data: clips.reduce(into: Data()) { $0.append($1.data) },
-                fileExtension: "mp3"
-            )
-        case "flac":
-            guard clips.count == 1 else { return nil }
-            return TTSAudioExport(data: clips[0].data, fileExtension: "flac")
-        case "opus", "ogg":
-            guard clips.count == 1 else { return nil }
-            return TTSAudioExport(data: clips[0].data, fileExtension: "ogg")
-        default:
-            guard clips.count == 1 else { return nil }
-            return TTSAudioExport(data: clips[0].data, fileExtension: format)
-        }
-    }
-
-    private static func normalizedExportFormat(_ format: String) -> String {
-        let lowercased = format.lowercased()
-        if lowercased.hasPrefix("mp3_") { return "mp3" }
-        if lowercased.hasPrefix("pcm_") { return "pcm" }
-        if lowercased.hasPrefix("opus_") { return "opus" }
-        return lowercased
-    }
-
-    private static func mergeWAVClips(_ clips: [TTSManager.AudioClip]) -> Data? {
+        // 分段已在预取时解码和平滑；这里只封装 WAV，不再拼接压缩文件或重复施加淡化。
         guard let first = clips.first,
-              let firstPayload = wavPayload(first.data),
-              let format = wavFormat(first.data) else { return nil }
-        var pcm = firstPayload
-        for clip in clips.dropFirst() {
-            guard let clipFormat = wavFormat(clip.data),
-                  clipFormat.sampleRate == format.sampleRate,
-                  clipFormat.channels == format.channels,
-                  clipFormat.bitsPerSample == format.bitsPerSample,
-                  let payload = wavPayload(clip.data) else { return nil }
-            pcm.append(payload)
-        }
-        return makeWAV(
-            pcm: pcm,
-            sampleRate: format.sampleRate,
-            channels: format.channels,
-            bitsPerSample: format.bitsPerSample
+              first.channels > 0, first.channels <= Int(UInt16.max) / 2 else { return nil }
+        let sampleRate = first.sampleRate ?? 24_000
+        guard sampleRate > 0, sampleRate <= Int(UInt32.max) / (first.channels * 2),
+              clips.allSatisfy({
+                  $0.format == "pcm" && ($0.sampleRate ?? 24_000) == sampleRate &&
+                      $0.channels == first.channels && !$0.data.isEmpty &&
+                      $0.data.count.isMultiple(of: first.channels * 2)
+              }) else { return nil }
+        let pcm = clips.reduce(into: Data()) { $0.append($1.data) }
+        return TTSAudioExport(
+            data: makeWAV(pcm: pcm, sampleRate: sampleRate, channels: first.channels),
+            fileExtension: "wav"
         )
-    }
-
-    private static func wavFormat(_ data: Data) -> (sampleRate: Int, channels: Int, bitsPerSample: Int)? {
-        guard data.count >= 36,
-              String(data: data[0..<4], encoding: .ascii) == "RIFF",
-              String(data: data[8..<12], encoding: .ascii) == "WAVE" else { return nil }
-        let channels = Int(readLittleEndianUInt16(data, at: 22))
-        let sampleRate = Int(readLittleEndianUInt32(data, at: 24))
-        let bitsPerSample = Int(readLittleEndianUInt16(data, at: 34))
-        guard channels > 0, sampleRate > 0, bitsPerSample > 0 else { return nil }
-        return (sampleRate, channels, bitsPerSample)
-    }
-
-    private static func wavPayload(_ data: Data) -> Data? {
-        guard data.count >= 12 else { return nil }
-        var offset = 12
-        while offset + 8 <= data.count {
-            let identifier = String(data: data[offset..<(offset + 4)], encoding: .ascii)
-            let size = Int(readLittleEndianUInt32(data, at: offset + 4))
-            let payloadStart = offset + 8
-            let payloadEnd = payloadStart + size
-            guard payloadEnd <= data.count else { return nil }
-            if identifier == "data" {
-                return data[payloadStart..<payloadEnd]
-            }
-            offset = payloadEnd + (size.isMultiple(of: 2) ? 0 : 1)
-        }
-        return nil
     }
 
     private static func makeWAV(
         pcm: Data,
         sampleRate: Int,
-        channels: Int,
-        bitsPerSample: Int = 16
+        channels: Int
     ) -> Data {
+        let bitsPerSample = 16
         let byteRate = sampleRate * channels * bitsPerSample / 8
         let blockAlign = channels * bitsPerSample / 8
         var wav = Data()
@@ -181,17 +100,6 @@ enum TTSAudioExportBuilder {
         wav.append(UInt32(pcm.count).ttsLittleEndianData)
         wav.append(pcm)
         return wav
-    }
-
-    private static func readLittleEndianUInt16(_ data: Data, at offset: Int) -> UInt16 {
-        UInt16(data[offset]) | (UInt16(data[offset + 1]) << 8)
-    }
-
-    private static func readLittleEndianUInt32(_ data: Data, at offset: Int) -> UInt32 {
-        UInt32(data[offset]) |
-            (UInt32(data[offset + 1]) << 8) |
-            (UInt32(data[offset + 2]) << 16) |
-            (UInt32(data[offset + 3]) << 24)
     }
 }
 

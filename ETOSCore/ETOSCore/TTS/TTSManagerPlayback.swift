@@ -111,8 +111,9 @@ extension TTSManager {
         try await playAudio(clip: clip, speed: settings.playbackSpeed)
     }
 
-    private func resolveCloudClip(for item: QueueItem, settings: TTSSettingsSnapshot) async throws -> AudioClip {
+    func resolveCloudClip(for item: QueueItem, settings: TTSSettingsSnapshot) async throws -> AudioClip {
         if let cachedClip = item.cachedClip {
+            // 重播缓存已完成解码和平滑，不能再次淡化首尾。
             return cachedClip
         }
         if let task = prefetchTasks[item.id] {
@@ -123,10 +124,11 @@ extension TTSManager {
         }
 
         let service = try resolveCloudService(item.serviceOverride)
-        return try await synthesizeCloudAudio(text: item.text, settings: settings, service: service)
+        let clip = try await synthesizeCloudAudio(text: item.text, settings: settings, service: service)
+        return try await TTSCloudAudioPreparation.prepare(clip)
     }
 
-    private func scheduleCloudPrefetch(for candidates: [QueueItem], settings: TTSSettingsSnapshot) {
+    func scheduleCloudPrefetch(for candidates: [QueueItem], settings: TTSSettingsSnapshot) {
         guard !candidates.isEmpty else { return }
 
         for item in candidates {
@@ -142,7 +144,8 @@ extension TTSManager {
             prefetchTasks[item.id] = Task.detached { [weak self] in
                 try Task.checkCancellation()
                 guard let self else { throw CancellationError() }
-                return try await self.synthesizeCloudAudio(text: text, settings: effectiveSettings, service: service.get())
+                let clip = try await self.synthesizeCloudAudio(text: text, settings: effectiveSettings, service: service.get())
+                return try await TTSCloudAudioPreparation.prepare(clip)
             }
         }
     }

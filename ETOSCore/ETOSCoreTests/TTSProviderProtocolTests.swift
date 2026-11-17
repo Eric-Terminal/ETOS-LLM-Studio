@@ -167,6 +167,36 @@ struct TTSProviderProtocolTests {
         #expect(clip.data == pcm)
     }
 
+    @Test("网络音频直接合成和预取均先平滑，再用于缓存与导出", arguments: [false, true])
+    func cloudPreparationFeedsCacheAndExport(prefetch: Bool) async throws {
+        // 24kHz 单声道的恒定非零采样让接缝突变可明确断言，不启动真实音频设备。
+        let source = TTSManager.AudioClip(data: Data(Array(repeating: [UInt8(0x5C), 0x5D], count: 1_000).flatMap { $0 }),
+                                          format: "pcm", sampleRate: 24_000)
+        let wav = try #require(TTSAudioExportBuilder.make(from: [source]))
+        TTSProtocolURLProtocol.configureResponse(wav.data)
+        let manager = makeManager(resetResponse: false)
+        var service = configuredService(.openAICompatible)
+        service.responseFormat = "wav"
+        let item = TTSManager.QueueItem(messageID: nil, text: "验证分段接缝", playbackModeOverride: .cloud,
+                                        serviceOverride: service, settingsOverride: nil, cachedClip: nil)
+        if prefetch { manager.scheduleCloudPrefetch(for: [item], settings: .defaultValue) }
+        let clip = try await manager.resolveCloudClip(for: item, settings: .defaultValue)
+        #expect(TTSProtocolURLProtocol.capturedRequest() != nil)
+        #expect(clip.format == "pcm" && clip.data.count == source.data.count)
+        #expect(Array(clip.data.prefix(2)) == [0, 0])
+        #expect(Array(clip.data.suffix(2)) == [0, 0])
+        #expect(clip.data[480..<1_520] == source.data[480..<1_520])
+        manager.activeNetworkItemIDs = [item.id]
+        manager.activeNetworkItemTexts = [item.id: item.text]
+        manager.recordNetworkAudioClip(clip, for: item.id)
+        await manager.audioExportTask?.value
+        #expect(manager.lastNetworkAudioClips.first?.data == clip.data)
+        let exported = try #require(manager.lastNetworkAudioExport())
+        #expect(exported.fileExtension == "wav")
+        #expect(Data(exported.data.dropFirst(44)) == clip.data)
+        await manager.stopAndWait(clearHistory: true)
+    }
+
     private func makeManager(resetResponse: Bool = true) -> TTSManager {
         TTSProtocolURLProtocol.reset(resetResponse: resetResponse)
         let configuration = URLSessionConfiguration.ephemeral

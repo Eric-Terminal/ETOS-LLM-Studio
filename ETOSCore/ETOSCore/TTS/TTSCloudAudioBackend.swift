@@ -23,8 +23,7 @@ actor TTSCloudAudioBackend: TTSCloudAudioPlayback {
 
     func prepare(clip: TTSManager.AudioClip, speed: Float, onFinish: @escaping @MainActor @Sendable (Bool) -> Void) throws -> TimeInterval {
         try Task.checkCancellation()
-        let data = clip.format.lowercased() == "pcm" ? TTSAudioExportBuilder.make(from: [clip])?.data : clip.data
-        guard let data else { throw TTSCloudAudioError.decode }
+        guard let data = TTSAudioExportBuilder.make(from: [clip])?.data else { throw TTSCloudAudioError.decode }
         let player = try AVAudioPlayer(data: data)
         guard player.duration.isFinite, player.duration > 0, player.prepareToPlay() else { throw TTSCloudAudioError.decode }
         try Task.checkCancellation()
