@@ -287,10 +287,12 @@ extension ChatService {
     public func deleteSessionsAsync(_ sessionsToDelete: [ChatSession]) async {
         guard !sessionsToDelete.isEmpty else { return }
         await withCheckedContinuation { continuation in
-            sessionDeletionQueue.async {
+            // 同步服务通过固定串行队列桥接；工作项执行完后释放服务引用。
+            let deletion = DispatchWorkItem {
                 self.deleteSessions(sessionsToDelete)
                 continuation.resume()
             }
+            sessionDeletionQueue.async(execute: deletion)
         }
     }
 
