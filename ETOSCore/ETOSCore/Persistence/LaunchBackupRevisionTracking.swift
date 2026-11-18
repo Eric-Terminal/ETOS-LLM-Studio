@@ -89,6 +89,7 @@ enum LaunchBackupRevisionTracking {
             let name: String = row["name"]
             return (row["schema"] as String) == "main" && (row["type"] as String) == "table"
                 && !name.hasPrefix("sqlite_") && name != tableName
+                && name != "messages_fts_rows"
         }
         let triggers = try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'trigger'")
         for trigger in triggers where trigger.hasPrefix("_etos_launch_backup_") {

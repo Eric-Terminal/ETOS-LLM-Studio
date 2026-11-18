@@ -554,7 +554,7 @@ final class MacWorkspaceModel: ObservableObject {
         isMutatingHistory = true
         Task {
             defer { isMutatingHistory = false; flushToolSupplements() }
-            await Task.detached(priority: .userInitiated) { service.deleteSessions([session]) }.value
+            await service.deleteSessionsAsync([session])
         }
     }
 

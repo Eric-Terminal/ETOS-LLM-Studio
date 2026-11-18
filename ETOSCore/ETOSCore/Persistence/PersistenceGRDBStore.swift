@@ -624,6 +624,10 @@ final class PersistenceGRDBStore {
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_usage_request_events_session_requested ON usage_request_events(session_id, requested_at, event_id)")
         }
 
+        migrator.registerMigration("v20_messages_fts_row_lookup") { db in
+            try Self.ensureMessagesFTSObjects(db)
+        }
+
         try migrator.migrate(dbPool)
         try repairCoreSchemaIfNeeded()
     }
@@ -760,7 +764,7 @@ final class PersistenceGRDBStore {
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_request_logs_session_id ON request_logs(session_id, requested_at DESC)")
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_request_logs_provider_model ON request_logs(provider_name, model_id, requested_at DESC)")
             try Self.createSessionTagTables(db)
-            try ensureMessagesFTSObjects(db)
+            try Self.ensureMessagesFTSObjects(db)
         }
     }
 
@@ -896,32 +900,6 @@ final class PersistenceGRDBStore {
         """)
         try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_session_tag_assignments_tag ON session_tag_assignments(tag_id, sort_index ASC)")
         try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_session_tag_assignments_session ON session_tag_assignments(session_id, sort_index ASC)")
-    }
-
-    private func ensureMessagesFTSObjects(_ db: Database) throws {
-        try db.execute(sql: """
-            CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts
-            USING fts5(
-                message_id UNINDEXED,
-                session_id UNINDEXED,
-                content,
-                tokenize = 'unicode61'
-            )
-        """)
-        try db.execute(sql: """
-            CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages
-            BEGIN
-                INSERT INTO messages_fts(message_id, session_id, content)
-                VALUES (new.id, new.session_id, new.content);
-            END
-        """)
-        try db.execute(sql: """
-            CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages
-            BEGIN
-                DELETE FROM messages_fts WHERE message_id = old.id;
-            END
-        """)
-        try Self.createMessagesFTSUpdateTrigger(db)
     }
 
     private static func replaceMessagesFTSUpdateTrigger(_ db: Database) throws {

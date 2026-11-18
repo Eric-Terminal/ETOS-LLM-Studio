@@ -154,11 +154,14 @@ extension ChatViewModel {
 
     func deleteSession(at offsets: IndexSet) {
         let sessionsToDelete = offsets.map { chatSessions[$0] }
-        chatService.deleteSessions(sessionsToDelete)
+        deleteSessions(sessionsToDelete)
     }
 
     func deleteSessions(_ sessions: [ChatSession]) {
-        chatService.deleteSessions(sessions)
+        let service = chatService
+        Task {
+            await service.deleteSessionsAsync(sessions)
+        }
     }
 
     @discardableResult

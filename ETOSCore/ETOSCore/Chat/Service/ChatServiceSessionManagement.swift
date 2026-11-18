@@ -282,6 +282,19 @@ extension ChatService {
         return newSession
     }
 
+    /// 界面入口等待后台完成；连续删除串行执行，避免多份旧会话列表互相覆盖。
+    /// ViewModel 沿用主队列上的 Subject 订阅更新界面。
+    public func deleteSessionsAsync(_ sessionsToDelete: [ChatSession]) async {
+        guard !sessionsToDelete.isEmpty else { return }
+        await withCheckedContinuation { continuation in
+            sessionDeletionQueue.async {
+                self.deleteSessions(sessionsToDelete)
+                continuation.resume()
+            }
+        }
+    }
+
+    /// 同步入口供已在后台执行的管理操作使用；界面必须使用 deleteSessionsAsync。
     public func deleteSessions(_ sessionsToDelete: [ChatSession]) {
         var currentSessions = chatSessionsSubject.value
         let currentModeBeforeDeletion = currentSessionSubject.value.map {
@@ -323,7 +336,9 @@ extension ChatService {
             for: deletedSessionMessages,
             excludingSessionIDs: deletingSessionIDs
         )
-        currentSessions.removeAll { session in sessionsToDelete.contains { $0.id == session.id } }
+        // 磁盘操作期间可能新建、重命名或重排会话，不能重新发布删除开始时的快照。
+        currentSessions = chatSessionsSubject.value
+        currentSessions.removeAll { session in deletingSessionIDs.contains(session.id) }
         var newCurrentSession = currentSessionSubject.value
         if let current = newCurrentSession, sessionsToDelete.contains(where: { $0.id == current.id }) {
             if let firstSession = currentSessions.first {

@@ -146,6 +146,7 @@ struct LaunchBackupRevisionTrackingTests {
         try source.write { db in
             try db.execute(sql: "CREATE TABLE records (value TEXT); INSERT INTO records VALUES ('原文')")
             try db.execute(sql: "CREATE VIRTUAL TABLE search_index USING fts5(value)")
+            try db.execute(sql: "CREATE TABLE messages_fts_rows (fts_rowid INTEGER PRIMARY KEY, message_id TEXT NOT NULL UNIQUE)")
             try LaunchBackupRevisionTracking.install(in: db)
         }
         let initial = try #require(source.read { try LaunchBackupRevisionTracking.read(in: $0) })
@@ -159,6 +160,7 @@ struct LaunchBackupRevisionTrackingTests {
         try source.write { db in
             try db.execute(sql: "UPDATE records SET extra = '新字段'; INSERT INTO new_records VALUES ('新表')")
             try db.execute(sql: "INSERT INTO search_index VALUES ('可重建索引')")
+            try db.execute(sql: "INSERT INTO messages_fts_rows(message_id) VALUES ('可重建映射')")
         }
         #expect(try source.read { try LaunchBackupRevisionTracking.read(in: $0)?.changes } == migrated.changes + 2)
         try source.write { db in

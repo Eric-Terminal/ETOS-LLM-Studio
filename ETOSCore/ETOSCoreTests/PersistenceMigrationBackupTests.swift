@@ -149,6 +149,7 @@ extension PersistenceTests {
 
         #expect(FileManager.default.fileExists(atPath: chatStoreBackupSQLiteURL.path))
         #expect(!sqliteExists(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'messages_fts'"))
+        #expect(!sqliteExists(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'messages_fts_rows'"))
         #expect(!sqliteExists(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'messages_ai'"))
         #expect(!sqliteExists(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'messages_ad'"))
         #expect(!sqliteExists(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'messages_au'"))
@@ -156,6 +157,7 @@ extension PersistenceTests {
         #expect(sqliteCount(chatStoreBackupSQLiteURL, sql: "PRAGMA freelist_count") > 0)
         // 原库索引不受恢复副本裁剪影响。
         #expect(sqliteExists(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'messages_fts'"))
+        #expect(sqliteExists(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'messages_fts_rows'"))
     }
 
     @Test("离线快照会打包三处分库并排除 FTS 与向量库")
@@ -203,6 +205,7 @@ extension PersistenceTests {
         #expect(sqliteCount(exportedChatURL, sql: "SELECT COUNT(*) FROM messages") == messages.count)
         #expect(sqliteCount(exportedChatURL, sql: "PRAGMA freelist_count") == 0)
         #expect(!sqliteExists(exportedChatURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE name = 'messages_fts'"))
+        #expect(!sqliteExists(exportedChatURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE name = 'messages_fts_rows'"))
         // 瘦身只能发生在快照副本上，原库搜索能力必须保留。
         #expect(sqliteExists(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE name = 'messages_fts'"))
     }

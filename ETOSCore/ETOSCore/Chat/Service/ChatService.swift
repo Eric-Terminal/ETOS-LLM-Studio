@@ -20,6 +20,7 @@ public class ChatService {
     static let modelOrderStorageKey = "modelOrder.runnableModels"
     static let selectedRunnableModelStorageKey = "selectedRunnableModelID"
     static let lastActiveSessionIDStorageKey = "launch.lastActiveSessionID"
+    let sessionDeletionQueue = DispatchQueue(label: "com.etos.chat.sessions.delete", qos: .userInitiated)
     struct RetryAchievementSignature: Equatable {
         let sessionID: UUID
         let content: String
