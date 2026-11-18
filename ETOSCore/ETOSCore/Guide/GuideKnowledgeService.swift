@@ -83,6 +83,17 @@ public enum GuideDocumentCatalog {
         GuideDataImportKnowledge.document(),
         GuideRemoteAccessKnowledge.document(),
         GuideDocument(
+            id: "announcement-translation", title: "公告翻译",
+            keywords: ["公告", "通知", "公告翻译", "AI 翻译", "原文", "announcement translation"],
+            content: """
+            打开系统公告。公告语言与阅读语言不同时，点“AI 翻译”可用当前选中的聊天模型翻译标题和正文。手动设置 App 语言时译成该语言；跟随系统时译成系统首选语言，包括 App 没有提供界面翻译的语言。没有语言标签的公告会在设备上识别，无法确定时也可手动翻译。简体与繁体中文分别判断。
+
+            翻译完成后可在原文和译文之间切换，无需再次请求模型。若翻译失败，原文仍可阅读，选择聊天模型或恢复连接后可重试。向导仅能查看此页是否提供翻译和当前是否显示译文。
+
+            Open an announcement and choose Translate with AI to translate its title and body using the selected chat model. The target is the chosen app language or, when following the system, the first preferred language. Matching announcements need no translation. Switch between the original and translation on the same page.
+            """
+        ),
+        GuideDocument(
             id: "mac-app-information", title: "Mac 应用信息、更新与日志",
             keywords: ["Mac", "关于", "公告", "更新", "Commit", "官方数据", "日志", "同步"],
             content: """

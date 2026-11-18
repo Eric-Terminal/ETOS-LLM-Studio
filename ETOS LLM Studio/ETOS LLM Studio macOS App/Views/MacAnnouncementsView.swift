@@ -11,7 +11,7 @@ struct MacAnnouncementsView: View {
                 Text(NSLocalizedString("暂无公告", value: "No announcements", comment: ""))
                     .font(.footnote).foregroundStyle(.secondary)
             }
-            ForEach(manager.currentAnnouncements) { announcement in
+            ForEach(manager.currentAnnouncements, id: \.uniqueKey) { announcement in
                 NavigationLink {
                     MacAnnouncementDetailView(isActive: isActive, announcement: announcement)
                 } label: { Text(announcement.title) }
@@ -23,7 +23,7 @@ struct MacAnnouncementsView: View {
             Button(NSLocalizedString("刷新", comment: "")) { Task { await manager.checkAnnouncement() } }.disabled(manager.isLoading)
         }
         .guideSettingsPageContext(id: "mac-announcements", title: NSLocalizedString("系统公告", comment: ""),
-            documents: [GuideDocumentReference(id: "mac-app-information", title: NSLocalizedString("系统公告", comment: ""))],
+            documents: [GuideDocumentReference(id: "announcement-translation", title: NSLocalizedString("系统公告", comment: ""))],
             isActive: isActive, settings: [.readOnly("count", label: NSLocalizedString("系统公告", comment: ""), value: { .int(manager.currentAnnouncements.count) })])
     }
 }
@@ -32,10 +32,15 @@ private struct MacAnnouncementDetailView: View {
     let isActive: Bool
     let announcement: Announcement
     @Environment(\.dismiss) private var dismiss
-    @State private var text: MacPreparedMessageText?
+    @StateObject private var translation = AnnouncementTranslationModel()
+
     var body: some View {
         Form {
-            Section { if let text { MacMessageTextView(text: text) } }
+            Section {
+                AnnouncementTranslationButton(translation)
+                MacAnnouncementBody(source: translation.displayedTranslation?.body ?? announcement.body)
+                    .id(translation.displayedTranslation != nil)
+            }
             Section {
                 Button(NSLocalizedString("不再显示", comment: "")) {
                     guard isActive else { return }
@@ -43,15 +48,27 @@ private struct MacAnnouncementDetailView: View {
                 }
             }
         }
-        .formStyle(.grouped).navigationTitle(announcement.title).disabled(!isActive)
-        .task {
-            let body = announcement.body
-            let prepared = await Task.detached(priority: .utility) { MacPreparedMessageText(body, markdown: true) }.value
-            if !Task.isCancelled { text = prepared }
+        .formStyle(.grouped).navigationTitle(translation.displayedTranslation?.title ?? announcement.title).disabled(!isActive)
+        .announcementTranslation(for: announcement, model: translation, isActive: isActive)
+        .announcementDetailGuide(id: GuidePageID(rawValue: "mac-announcement-\(announcement.id)"),
+                                 announcement: announcement, model: translation, isActive: isActive)
+    }
+}
+
+private struct MacAnnouncementBody: View {
+    let source: String
+    @State private var prepared: MacPreparedMessageText?
+
+    var body: some View {
+        Group {
+            if let prepared { MacMessageTextView(text: prepared) }
+            else { Text(verbatim: source) }
         }
-        .guideSettingsPageContext(id: GuidePageID(rawValue: "mac-announcement-\(announcement.id)"),
-            title: NSLocalizedString("系统公告", comment: ""),
-            documents: [GuideDocumentReference(id: "mac-app-information", title: NSLocalizedString("系统公告", comment: ""))],
-            isActive: isActive, settings: [.readOnly("id", label: NSLocalizedString("系统公告", comment: ""), value: { .int(announcement.id) })])
+        .task {
+            let text = await Task.detached(priority: .utility) { [source] in
+                MacPreparedMessageText(source, markdown: true)
+            }.value
+            if !Task.isCancelled { prepared = text }
+        }
     }
 }

@@ -19,6 +19,7 @@ struct AnnouncementDetailView: View {
     let announcement: Announcement
     
     @ObservedObject var announcementManager: AnnouncementManager
+    @StateObject private var translation = AnnouncementTranslationModel()
     
     @Environment(\.dismiss) private var dismiss
     
@@ -28,7 +29,8 @@ struct AnnouncementDetailView: View {
         List {
             // MARK: - 公告内容部分
             Section {
-                Text(announcement.body)
+                AnnouncementTranslationButton(translation)
+                Text(translation.displayedTranslation?.body ?? announcement.body)
                     .etFont(.body)
                     .foregroundColor(.primary)
             } header: {
@@ -52,8 +54,10 @@ struct AnnouncementDetailView: View {
                     .foregroundColor(.secondary)
             }
         }
-        .navigationTitle(announcement.title)
+        .navigationTitle(translation.displayedTranslation?.title ?? announcement.title)
         .navigationBarTitleDisplayMode(.inline)
+        .announcementTranslation(for: announcement, model: translation)
+        .announcementDetailGuide(id: GuidePageID(rawValue: "announcement-\(announcement.id)"), announcement: announcement, model: translation)
     }
     
     // MARK: - 子视图
@@ -92,6 +96,7 @@ struct AnnouncementAlertView: View {
     
     let announcement: Announcement
     let onDismiss: () -> Void
+    @StateObject private var translation = AnnouncementTranslationModel()
     
     var body: some View {
         NavigationStack {
@@ -103,18 +108,20 @@ struct AnnouncementAlertView: View {
                         .padding(.top, 32)
                     
                     // 标题
-                    Text(announcement.title)
+                    Text(translation.displayedTranslation?.title ?? announcement.title)
                         .etFont(.title2)
                         .fontWeight(.bold)
                         .multilineTextAlignment(.center)
                     
+                    AnnouncementTranslationButton(translation)
+
                     // 内容
-                    Text(announcement.body)
+                    Text(translation.displayedTranslation?.body ?? announcement.body)
                         .etFont(.body)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
-                    
+
                     Spacer(minLength: 32)
                     
                     // 确认按钮
@@ -131,6 +138,7 @@ struct AnnouncementAlertView: View {
                 }
             }
             .interactiveDismissDisabled(announcement.type == .blocking)
+            .announcementTranslation(for: announcement, model: translation)
             .toolbar {
                 if announcement.type != .blocking {
                     ToolbarItem(placement: .cancellationAction) {

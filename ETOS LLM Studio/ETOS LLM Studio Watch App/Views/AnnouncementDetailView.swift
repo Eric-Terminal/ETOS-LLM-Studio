@@ -19,6 +19,7 @@ struct AnnouncementDetailView: View {
     let announcement: Announcement
     
     @ObservedObject var announcementManager: AnnouncementManager
+    @StateObject private var translation = AnnouncementTranslationModel()
     
     @Environment(\.dismiss) private var dismiss
     
@@ -28,7 +29,8 @@ struct AnnouncementDetailView: View {
         List {
             // MARK: - 公告内容部分
             Section {
-                Text(announcement.body)
+                AnnouncementTranslationButton(translation)
+                Text(translation.displayedTranslation?.body ?? announcement.body)
                     .etFont(.body)
                     .foregroundColor(.primary)
             } header: {
@@ -52,7 +54,10 @@ struct AnnouncementDetailView: View {
                     .foregroundColor(.secondary)
             }
         }
-        .navigationTitle(announcement.title)
+        .navigationTitle(translation.displayedTranslation?.title ?? announcement.title)
+        .announcementTranslation(for: announcement, model: translation)
+        .announcementDetailGuide(id: GuidePageID(rawValue: "announcement-\(announcement.id)"), announcement: announcement, model: translation)
+        .watchGuideEntry()
     }
     
     // MARK: - 子视图
@@ -91,6 +96,7 @@ struct AnnouncementAlertView: View {
     
     let announcement: Announcement
     let onDismiss: () -> Void
+    @StateObject private var translation = AnnouncementTranslationModel()
     
     var body: some View {
         ScrollView {
@@ -101,17 +107,19 @@ struct AnnouncementAlertView: View {
                     .padding(.top, 8)
                 
                 // 标题
-                Text(announcement.title)
+                Text(translation.displayedTranslation?.title ?? announcement.title)
                     .etFont(.headline)
                     .multilineTextAlignment(.center)
                 
+                AnnouncementTranslationButton(translation)
+
                 // 内容
-                Text(announcement.body)
+                Text(translation.displayedTranslation?.body ?? announcement.body)
                     .etFont(.body)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
-                
+
                 Spacer(minLength: 16)
                 
                 // 确认按钮
@@ -127,6 +135,7 @@ struct AnnouncementAlertView: View {
             }
         }
         .navigationBarBackButtonHidden(announcement.type == .blocking)
+        .announcementTranslation(for: announcement, model: translation)
     }
     
     // MARK: - 辅助属性

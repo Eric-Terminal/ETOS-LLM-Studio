@@ -20,7 +20,7 @@ private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "Announc
 // MARK: - 数据模型
 
 /// 公告类型
-public enum AnnouncementType: String, Codable {
+public enum AnnouncementType: String, Codable, Sendable {
     case info = "info"           // 静默显示在设置里
     case warning = "warning"     // 首次显式通知
     case blocking = "blocking"   // 每次启动都显式通知
@@ -84,7 +84,7 @@ public enum AnnouncementLanguage: String, CaseIterable {
 }
 
 /// 公告数据模型
-public struct Announcement: Codable, Identifiable {
+public struct Announcement: Codable, Identifiable, Sendable {
     public let id: Int                  // 唯一标识，用日期+序号
     public let type: AnnouncementType   // 通知类型
     public let minBuild: String?        // 最低版本要求
@@ -100,9 +100,8 @@ public struct Announcement: Codable, Identifiable {
         return "\(id)|\(type.rawValue)|\(lang)|\(plat)|\(title)|\(body)"
     }
 
-    public var uniqueKey: String {
-        Announcement.hashKey(rawKey)
-    }
+    /// 同一 ID 可对应多份文案。列表与翻译任务复用内容指纹，避免每次刷新视图都重新散列正文。
+    public private(set) var uniqueKey: String = ""
 
     public static func hashKey(_ raw: String) -> String {
         let digest = SHA256.hash(data: Data(raw.utf8))
@@ -138,19 +137,22 @@ public struct Announcement: Codable, Identifiable {
         self.platform = platform
         self.title = title
         self.body = body
+        uniqueKey = Self.hashKey(rawKey)
     }
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         
-        id = try container.decode(Int.self, forKey: .id)
-        type = try container.decode(AnnouncementType.self, forKey: .type)
-        minBuild = try container.decodeIfPresent(String.self, forKey: .minBuild)
-        maxBuild = try container.decodeIfPresent(String.self, forKey: .maxBuild)
-        language = try container.decodeIfPresent(String.self, forKey: .language)
-        platform = try container.decodeIfPresent(String.self, forKey: .platform)
-        title = try container.decode(String.self, forKey: .title)
-        body = try container.decode(String.self, forKey: .body)
+        try self.init(
+            id: container.decode(Int.self, forKey: .id),
+            type: container.decode(AnnouncementType.self, forKey: .type),
+            minBuild: container.decodeIfPresent(String.self, forKey: .minBuild),
+            maxBuild: container.decodeIfPresent(String.self, forKey: .maxBuild),
+            language: container.decodeIfPresent(String.self, forKey: .language),
+            platform: container.decodeIfPresent(String.self, forKey: .platform),
+            title: container.decode(String.self, forKey: .title),
+            body: container.decode(String.self, forKey: .body)
+        )
     }
 }
 
@@ -282,25 +284,19 @@ public class AnnouncementManager: ObservableObject {
             throw AnnouncementError.invalidResponse
         }
         
-        let decoder = JSONDecoder()
-        
-        // 尝试解析为数组
-        if let announcements = try? decoder.decode([Announcement].self, from: data) {
-            logger.info("获取到 \(announcements.count) 个公告条目")
-            return selectAnnouncements(from: announcements)
-        }
-        
-        // 后向兼容：尝试解析为单个对象
-        if let announcement = try? decoder.decode(Announcement.self, from: data) {
-            logger.info("成功获取单个公告: ID=\(announcement.id), Type=\(announcement.type.rawValue)")
-            // 检查是否兼容
-            if isVersionCompatible(announcement) && isPlatformCompatible(announcement) {
+        // 解码时同时生成内容指纹；旧服务返回的单个对象也走同一条选取路径。
+        let announcements = try await Task.detached(priority: .utility) {
+            let decoder = JSONDecoder()
+            if let items = try? decoder.decode([Announcement].self, from: data) {
+                return items
+            }
+            if let announcement = try? decoder.decode(Announcement.self, from: data) {
                 return [announcement]
             }
-            return []
-        }
-        
-        throw AnnouncementError.decodingFailed
+            throw AnnouncementError.decodingFailed
+        }.value
+        logger.info("获取到 \(announcements.count) 个公告条目")
+        return selectAnnouncements(from: announcements)
     }
     
     /// 从多个公告中选择要显示的公告
@@ -334,10 +330,9 @@ public class AnnouncementManager: ObservableObject {
     private func selectBestFromGroup(_ group: [Announcement]) -> [Announcement] {
         guard !group.isEmpty else { return [] }
         
-        let appLanguage = AppLanguagePreference.storedPreference
-        let effectiveLocale = appLanguage == .system ? Locale.current : Locale(identifier: appLanguage.localeIdentifier)
-        let deviceLanguage = effectiveLocale.language.languageCode?.identifier ?? "en"
-        let deviceFullLanguage = appLanguage.localizationIdentifier ?? effectiveLocale.identifier // e.g., "zh-Hans_CN"
+        let preference = AppLanguagePreference.resolved(rawValue: AppConfigStore.shared.appLanguage)
+        let deviceFullLanguage = AnnouncementTranslation.targetLanguage(for: preference)
+        let deviceLanguage = Locale.Language(identifier: deviceFullLanguage).languageCode?.identifier ?? "en"
         let restricted = group.filter { announcement in
             if let lang = announcement.language, !lang.isEmpty {
                 return true

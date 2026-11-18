@@ -16,7 +16,7 @@ struct MacAboutView: View {
         Form {
             Section {
                 MacSettingsIntroCard(id: "about", title: NSLocalizedString("使用说明", comment: ""),
-                    details: NSLocalizedString("Mac 应用信息使用说明", value: "Check the update timeline, read announcements, and browse local logs here. Official data synchronization first shows a preview; review it and confirm before applying changes. Existing credentials and local model activation choices are preserved. The page guide cannot start synchronization or read log and feedback contents.", comment: ""),
+                    details: NSLocalizedString("Mac 应用信息使用说明", value: "Check the update timeline, read announcements, and browse local logs here. Official data synchronization first shows a preview; review it and confirm before applying changes. Existing credentials and local model activation choices are preserved. The page guide cannot start synchronization or read log and feedback contents.\n\nOpen an announcement in another language and choose Translate with AI to read it with your selected chat model.", comment: ""),
                     documentID: "mac-app-information", isActive: available)
             }
             Section(NSLocalizedString("应用信息", comment: "")) {

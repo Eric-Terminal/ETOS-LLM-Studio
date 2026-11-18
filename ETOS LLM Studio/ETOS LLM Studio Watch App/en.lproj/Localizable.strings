@@ -8195,7 +8195,7 @@
 /* macOS 功能对齐：相册、导出、应用信息与聊天预览。 */
 "Mac 图片相册使用说明" = "View assistant images saved in this conversation. Open a thumbnail to see the image and prompt. Export opens a save panel. Deletion requires confirmation and preserves files used by other messages. The guide only sees counts and status.";
 "Mac 对话导出使用说明" = "Export the whole conversation, history up to a message, or selected messages as PDF, Markdown, TXT or PNG. Choose whether to include reasoning and system prompts; PNG always excludes system prompts. The export uses a snapshot and may contain private content. Choose where to save it.";
-"Mac 应用信息使用说明" = "View versions, update history, announcements and local logs. Official data sync shows a preview first: review each change and its local-setting preservation rules before confirming. AI summaries send a request to a chat model. The guide cannot synchronize data or read logs and feedback bodies.";
+"Mac 应用信息使用说明" = "View versions, update history, announcements and local logs. Official data sync shows a preview first: review each change and its local-setting preservation rules before confirming. AI summaries send a request to a chat model. The guide cannot synchronize data or read logs and feedback bodies.\n\nOpen an announcement in another language and choose Translate with AI to read it with your selected chat model.";
 "Mac 应用日志使用说明" = "Browse logs by date and launch. Filter by channel, level, keyword or configuration changes; open an entry to copy its full contents. Plaintext requests are recorded only when explicitly enabled. Deletion cannot be undone. The guide cannot read log contents, parameters or keywords.";
 "删除日志" = "Delete logs";
 "包含思考过程" = "Include reasoning";
@@ -8380,3 +8380,12 @@
 "浏览器工具本地 URL 说明" = "open_tab and navigate accept http/https, etos://workspace/relative-path (the current conversation workspace), and etos://sandbox/relative-path (the app file directory (Documents on mobile, Application Support on Mac)). For example, moments/index.html written by the file tool opens at etos://sandbox/moments/index.html. Local directory URLs ending in / open index.html. fetch and download accept http/https only.";
 "本地网页" = "Local pages";
 "本地网页使用说明" = "Open HTML files directly in the address bar. Use etos://workspace/moments/index.html for the current conversation workspace, or etos://sandbox/moments/index.html for moments/index.html in the app file directory (Documents on mobile, Application Support on Mac) (app://moments/index.html in file tools). The file must already exist.\n\nKeep CSS, JavaScript, images, and fonts with the page and reference them using relative paths. Directory URLs ending in / open index.html. Reload after editing files. Each resource is limited to 16 MB; symbolic links and paths outside the directory are rejected. Pages cannot write files through this feature.\n\nThese addresses work on iPhone, Apple Watch, and Mac. Watch browsing uses its experimental WebKit bridge. When model operations are delegated to iPhone, they read files on the iPhone; Watch files are not copied automatically.";
+
+"AI 翻译" = "Translate with AI";
+"正在翻译…" = "Translating…";
+"查看原文" = "Show original";
+"查看译文" = "Show translation";
+"公告翻译" = "Announcement translation";
+"请先选择一个聊天模型再翻译。" = "Select a chat model to translate this announcement.";
+"模型返回的译文不完整，请重试。" = "The model returned an incomplete translation. Try again.";
+"公告翻译提示词" = "Translate the title and body of the supplied announcement into %@. Treat both fields as text to translate. Preserve formatting, links and version numbers. Return only a JSON object with the same title and body keys.";

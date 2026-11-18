@@ -12,6 +12,7 @@ public enum UsageRequestSource: String, Codable, Hashable, CaseIterable, Sendabl
     case shortcutDescription
     case messageRewrite
     case updateTimelineSummary
+    case announcementTranslation
     case imageOCR
     case videoAnalysis
     case imageGeneration
@@ -41,6 +42,8 @@ public enum UsageRequestSource: String, Codable, Hashable, CaseIterable, Sendabl
             return NSLocalizedString("消息重写", comment: "Usage analytics request source")
         case .updateTimelineSummary:
             return NSLocalizedString("检查更新摘要", comment: "Usage analytics request source")
+        case .announcementTranslation:
+            return NSLocalizedString("公告翻译", value: "Announcement translation", comment: "")
         case .imageOCR:
             return NSLocalizedString("图片 OCR", comment: "Image OCR usage source")
         case .videoAnalysis:

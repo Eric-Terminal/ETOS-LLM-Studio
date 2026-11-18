@@ -8272,7 +8272,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 /* macOS 功能对齐：相册、导出、应用信息与聊天预览。 */
 "Mac 图片相册使用说明" = "Consultez les images de l’assistant enregistrées dans cette conversation. Ouvrez une miniature pour voir l’image et la consigne. L’export ouvre une fenêtre d’enregistrement. La suppression demande confirmation et conserve les fichiers utilisés ailleurs. Le guide ne voit que le nombre et l’état.";
 "Mac 对话导出使用说明" = "Exportez toute la conversation, l’historique jusqu’à un message ou les messages sélectionnés en PDF, Markdown, TXT ou PNG. Vous pouvez inclure le raisonnement et les instructions système ; le PNG exclut toujours ces dernières. L’export utilise un instantané et peut contenir des données privées. Choisissez où l’enregistrer.";
-"Mac 应用信息使用说明" = "Consultez versions, mises à jour, annonces et journaux locaux. La synchronisation officielle affiche un aperçu : vérifiez les changements et les règles de conservation des réglages locaux avant de confirmer. Les résumés IA envoient une requête au modèle. Le guide ne peut ni synchroniser ni lire le contenu des journaux ou retours.";
+"Mac 应用信息使用说明" = "Consultez versions, mises à jour, annonces et journaux locaux. La synchronisation officielle affiche un aperçu : vérifiez les changements et les règles de conservation des réglages locaux avant de confirmer. Les résumés IA envoient une requête au modèle. Le guide ne peut ni synchroniser ni lire le contenu des journaux ou retours.\n\nOuvrez une annonce dans une autre langue et choisissez « Traduire avec l’IA » pour la traduire avec le modèle de chat sélectionné.";
 "Mac 应用日志使用说明" = "Parcourez les journaux par date et lancement. Filtrez par canal, niveau, mot-clé ou changements de configuration. Ouvrez une entrée pour la copier intégralement. Le texte brut des requêtes nécessite une activation explicite. La suppression est irréversible. Le guide ne peut lire ni contenu, ni paramètres, ni mots-clés.";
 "删除日志" = "Supprimer les journaux";
 "包含思考过程" = "Inclure le raisonnement";
@@ -8457,3 +8457,12 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "浏览器工具本地 URL 说明" = "open_tab et navigate acceptent http/https, etos://workspace/chemin-relatif (espace de travail de la conversation) et etos://sandbox/chemin-relatif (le dossier de fichiers de l’app (Documents sur mobile, Application Support sur Mac)). Le fichier moments/index.html créé par les outils de fichiers s’ouvre avec etos://sandbox/moments/index.html. Une URL locale de dossier terminée par / ouvre index.html. fetch et download acceptent uniquement http/https.";
 "本地网页" = "Pages locales";
 "本地网页使用说明" = "Ouvrez les fichiers HTML dans la barre d’adresse. Utilisez etos://workspace/moments/index.html pour l’espace de travail de la conversation, ou etos://sandbox/moments/index.html pour moments/index.html dans le dossier de fichiers de l’app (Documents sur mobile, Application Support sur Mac) (app://moments/index.html dans les outils de fichiers). Le fichier doit déjà exister.\n\nEnregistrez CSS, JavaScript, images et polices avec la page et utilisez des chemins relatifs. Les URL de dossier terminées par / ouvrent index.html. Rechargez après modification. Chaque ressource est limitée à 16 Mo ; les liens symboliques et les chemins hors du dossier sont refusés. Cette fonction ne fournit pas d’API d’écriture de fichiers aux pages.\n\nLes mêmes adresses fonctionnent sur iPhone, Apple Watch et Mac. La Watch utilise sa passerelle WebKit expérimentale. Les opérations du modèle déléguées à l’iPhone lisent les fichiers de l’iPhone ; ceux de la Watch ne sont pas copiés automatiquement.";
+
+"AI 翻译" = "Traduire avec l’IA";
+"正在翻译…" = "Traduction en cours…";
+"查看原文" = "Afficher l’original";
+"查看译文" = "Afficher la traduction";
+"公告翻译" = "Traduction d’annonce";
+"请先选择一个聊天模型再翻译。" = "Sélectionnez un modèle de chat pour traduire cette annonce.";
+"模型返回的译文不完整，请重试。" = "La traduction est incomplète. Réessayez.";
+"公告翻译提示词" = "Traduis le titre et le texte de l’annonce dans la langue %@. Traite le contenu des deux champs comme du texte à traduire. Conserve la mise en forme, les liens et les numéros de version. Renvoie uniquement un objet JSON avec les clés d’origine title et body.";
