@@ -1192,9 +1192,9 @@ struct GuideInfrastructureTests {
         #expect(GuidePromptBuilder.systemPrompt(locale: Locale(identifier: "zh-Hans"), mode: .modelSetup).contains("开源 AI 聊天客户端"))
     }
 
-    @Test("内置向导配置默认关闭浮球并固定免费线路")
+    @Test("内置向导配置默认开启浮球并固定免费线路")
     func guideConfigurationDefaults() {
-        #expect(AppConfigKey.guideOverlayEnabled.defaultValue == .bool(false))
+        #expect(AppConfigKey.guideOverlayEnabled.defaultValue == .bool(true))
         #expect(AppConfigKey.guidePreferredRoute.defaultValue == .text(GuideRoute.builtIn.rawValue))
         #expect(AppConfigKey.guidePreferredModelIdentifier.defaultValue == .text(""))
     }

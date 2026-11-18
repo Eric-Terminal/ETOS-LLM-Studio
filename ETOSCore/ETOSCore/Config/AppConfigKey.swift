@@ -553,7 +553,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .feedbackAPIBaseURL:
             return .text("")
         case .guideOverlayEnabled:
-            return .bool(false)
+            return .bool(true)
         case .guidePreferredRoute:
             return .text("builtIn")
         case .guidePreferredModelIdentifier:
