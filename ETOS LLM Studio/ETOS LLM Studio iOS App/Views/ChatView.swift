@@ -327,6 +327,10 @@ struct ChatView: View {
                     exitMessageSelection()
                 }
             }
+            .onReceive(viewModel.messageSendWillSubmit) { sessionID in
+                guard isChatVisible, viewModel.currentSession?.id == sessionID else { return }
+                prepareChatViewportForSend()
+            }
             .onReceive(NotificationCenter.default.publisher(for: .temporaryChatStateDidChange)) { _ in
                 refreshTemporaryChatState()
             }

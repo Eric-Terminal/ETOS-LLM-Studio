@@ -117,6 +117,58 @@ jobs:
             Dependencies/ish-build/iSHApple.stamp
           key: ${{ steps.native-cache.outputs.cache-primary-key }}
 
+      - name: 计算原生依赖缓存标识
+        id: native-inputs
+        run: |
+          set -euo pipefail
+          toolchain_hash=$({ xcodebuild -version; xcodebuild -showsdks; } | shasum -a 256 | awk '{print $1}')
+          revisions_hash=$(git ls-tree HEAD -- Dependencies/llama.cpp Dependencies/ish-multiarch | shasum -a 256 | awk '{print $1}')
+          printf 'toolchain=%s\n' "$toolchain_hash" >> "$GITHUB_OUTPUT"
+          printf 'revisions=%s\n' "$revisions_hash" >> "$GITHUB_OUTPUT"
+
+      - name: 缓存原生静态库
+        id: native-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            Dependencies/llama-build/products
+            Dependencies/ish-build/products
+            Dependencies/ish-build/iSHApple.xcframework
+            Dependencies/ish-build/iSHApple.stamp
+          key: native-sim-Debug-arm64-x86_64-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.native-inputs.outputs.toolchain }}-${{ steps.native-inputs.outputs.revisions }}-${{ hashFiles('scripts/build-native-static-libraries.sh', 'scripts/build-llama-static-library.sh', 'scripts/build-ish-static-library.sh', 'ci_scripts/ci_post_clone.sh') }}
+
+      - name: 准备原生构建工具
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          if ! command -v cmake >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install cmake
+          fi
+          sh ci_scripts/ci_post_clone.sh
+
+      - name: 准备 iOS / watchOS 模拟器原生依赖
+        run: |
+          set -euo pipefail
+          mkdir -p ci-logs
+          for sdk in iphonesimulator watchsimulator; do
+            env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
+              SDK_NAME="$sdk" PLATFORM_NAME="$sdk" CONFIGURATION=Debug \
+              ARCHS='arm64 x86_64' ETOS_LLAMA_ARCHS='arm64 x86_64' \
+              scripts/build-native-static-libraries.sh --parallel \
+              2>&1 | tee "ci-logs/native-$sdk.log"
+          done
+
+      - name: 保存已验证的原生静态库
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            Dependencies/llama-build/products
+            Dependencies/ish-build/products
+            Dependencies/ish-build/iSHApple.xcframework
+            Dependencies/ish-build/iSHApple.stamp
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
+
       - name: 解析依赖
         run: |
           set -euo pipefail

@@ -76,6 +76,7 @@ final class ChatViewModel: ObservableObject {
     var preparedMessageSnapshot: ChatMessageListSnapshot?
     @Published var latestMessageAllowsQuickRetry = false
     let messageRenderingRefreshSubject = PassthroughSubject<Void, Never>()
+    let messageSendWillSubmit = PassthroughSubject<UUID?, Never>()
     var messageRenderConfiguration = ChatMessageRenderConfiguration()
     var responseAttemptIndexPublishedRevision = -1
     @Published var isHistoryFullyLoaded: Bool = false
@@ -549,6 +550,16 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func sendCapturedMessage(_ payload: PendingChatSendPayload) {
+        // 同步通知可见会话释放导航，覆盖输入栏、延迟提交及脚本发送。
+        messageSendWillSubmit.send(payload.sessionID)
+        // 中段窗口会在快照 rebase 时保留旧首尾，提交前回尾才能显示新消息。
+        // 延迟发送只在真正提交时执行，撤销等待不改变阅读位置。
+        if currentSession?.id == payload.sessionID,
+           historyWindowSessionID == payload.sessionID,
+           let historyWindow,
+           historyWindow.upperBound < visibleMessagesCache.count {
+            resetLazyLoadState()
+        }
         let submissionToken: UUID?
         if let sessionID = payload.sessionID,
            !runningSessionIDs.contains(sessionID) {

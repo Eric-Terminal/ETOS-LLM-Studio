@@ -14,6 +14,46 @@ import ETOSCore
 @MainActor
 struct ChatScrollCoordinatorTests {
 
+    @Test("发送解除历史导航与恢复任务，允许新回复接续吸底")
+    func testSendReleasesHistoricalViewportOwnership() throws {
+        let coordinator = ChatScrollCoordinator()
+        let anchorID = UUID()
+        coordinator.chatHistoryViewportAnchorController.updateFrames(
+            [anchorID: CGRect(x: 0, y: 100, width: 300, height: 80)],
+            displayedMessageIDs: [anchorID]
+        )
+        try #require(coordinator.beginManualHistoryMutation(
+            anchorMessageID: anchorID,
+            displayedMessageIDs: [anchorID]
+        ))
+        coordinator.messageNavigationCursorID = anchorID
+        coordinator.previousMessageNavigationTargetID = UUID()
+        coordinator.nextMessageNavigationTargetID = UUID()
+        coordinator.awaitsFreshBottomNavigationSnapshot = true
+        coordinator.suppressAutoScrollOnce = true
+        coordinator.shouldKeepBottomPinned = false
+        coordinator.showScrollToBottom = true
+        let resetWork = DispatchWorkItem {}
+        let snapTask = Task<Void, Never> { try? await Task.sleep(for: .seconds(10)) }
+        defer { snapTask.cancel() }
+        coordinator.pendingHistoryResetWorkItem = resetWork
+        coordinator.pendingBottomSnapTask = snapTask
+
+        coordinator.prepareForMessageSend()
+
+        #expect(resetWork.isCancelled && snapTask.isCancelled)
+        #expect(coordinator.pendingHistoryResetWorkItem == nil)
+        #expect(coordinator.pendingBottomSnapTask == nil)
+        #expect(!coordinator.hasRetainedTimelineNavigationTarget)
+        #expect(coordinator.previousMessageNavigationTargetID == nil)
+        #expect(coordinator.nextMessageNavigationTargetID == nil)
+        #expect(!coordinator.chatHistoryViewportAnchorController.isRestoringAnchor)
+        #expect(!coordinator.isHistoryLoadInFlight)
+        #expect(!coordinator.awaitsFreshBottomNavigationSnapshot)
+        #expect(!coordinator.suppressAutoScrollOnce)
+        #expect(coordinator.shouldKeepBottomPinned && !coordinator.showScrollToBottom)
+    }
+
     @Test("弹性滚动不会拉开同轮相连气泡")
     func testChatScrollTransitionKeepsConnectedBubblesTogether() {
         let standaloneOffset = ChatView.chatScrollTransitionOffset(

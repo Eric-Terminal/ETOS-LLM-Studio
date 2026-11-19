@@ -74,8 +74,6 @@ extension ChatView {
                 ),
                 sendAction: {
                     guard viewModel.canSendMessage else { return false }
-                    scrollCoordinator.shouldKeepBottomPinned = true
-                    scrollCoordinator.showScrollToBottom = false
                     let outgoingText = draftText
                     if AppConfigStore.shared.chatSendAnimationEnabled,
                        AppConfigStore.shared.chatSendDelaySeconds <= 0 {
@@ -98,6 +96,15 @@ extension ChatView {
                 availableHeight: availableSize.height
             )
         }
+    }
+
+    /// 新一轮发送结束历史浏览，不能让旧跳转或阅读锚点继续独占视口。
+    func prepareChatViewportForSend() {
+        cancelPendingScrollTargetCommand()
+        // 不相交的历史窗口不能沿用懒栈的旧高度缓存，否则原生到底仍可能没有新气泡。
+        scrollCoordinator.prepareForMessageSend(
+            rebuildsMessageStack: !viewModel.isLaterHistoryFullyLoaded
+        )
     }
 
     /// 收起键盘和输入栏临时面板；外部点击只改变输入状态，不触发消息内容。
