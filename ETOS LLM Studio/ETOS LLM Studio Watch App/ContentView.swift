@@ -29,6 +29,9 @@ struct ContentView: View {
     @State var isAtBottom = true
     @State var showScrollToBottomButton = false
     @State var fullErrorContent: String?
+    @ObservedObject var setupPresentation = GuideSetupPresentation.shared
+    @State var pendingGuideTarget: GuideNavigationDestination?
+    @State var settingsStackID = UUID()
     @State var isSettingsPresented = false
     @State var settingsDestination: WatchSettingsNavigationDestination?
     @State var isSessionListPresented = false
@@ -116,6 +119,10 @@ struct ContentView: View {
                 legacyChatRootView
             }
             .environmentObject(guideController)
+            .onReceive(GuideNavigationCoordinator.shared.navigationRequests) { target in
+                guideController.discardPendingProposalForNavigation()
+                WatchGuideSheetNavigation.shared.dismissThen { routeFromGuide(to: target) }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
                 openDailyPulse()
             }

@@ -7,6 +7,8 @@ import UniformTypeIdentifiers
 struct MacChatView: View {
     let showSessions: () -> Void
     let showsSessionAnalytics: Bool
+    let startGuide: () -> Void
+    @ObservedObject private var setup = GuideSetupPresentation.shared
     @State private var viewportHeight: CGFloat = 0
     @State private var viewportBounds = CGRect.zero
     @State private var composerBounds = CGRect.zero
@@ -33,6 +35,28 @@ struct MacChatView: View {
     @State private var speechSource: MacSpeechInputSource?
     @State private var transcriptExport: MacTranscriptExportTarget?
 
+    @ViewBuilder
+    private var emptyChat: some View {
+        if let state = setup.state, state != .ready {
+            ContentUnavailableView {
+                Label(NSLocalizedString("开始使用 ETOS LLM Studio", value: "Get Started with ETOS LLM Studio", comment: "起步卡标题"), systemImage: "sparkles")
+            } description: {
+                Text(GuideSetupPresentation.hint(for: state)).font(.footnote).foregroundStyle(.secondary)
+            } actions: {
+                Button(NSLocalizedString("让免费助手带我配好", value: "Set Up with the Free Guide", comment: "助手配置入口"), action: startGuide)
+                    .buttonStyle(.borderedProminent)
+                Button(NSLocalizedString("前往模型管理", value: "Open Model Management", comment: "手动配置入口")) { GuideNavigationCoordinator.shared.request(.providerManagement) }
+                Button(NSLocalizedString("导入配置或角色卡", value: "Import a Configuration or Character Card", comment: "配置导入入口")) { GuideNavigationCoordinator.shared.request(.dataImport) }
+            }
+        } else {
+            ContentUnavailableView {
+                Label(NSLocalizedString("新的对话", value: "New Chat", comment: "聊天空状态"), systemImage: "bubble.left.and.bubble.right")
+            } description: {
+                Text(NSLocalizedString("选择模型后发送消息。", value: "Select a model and send a message.", comment: "聊天空状态说明"))
+            }
+        }
+    }
+
     private var conversationContent: some View {
         VStack(spacing: 0) {
             MacChatTimeline(isActive: isVisible && workspace.canManageLocalModels, hasMessages: !workspace.messages.isEmpty, sendRevision: sendRevision,
@@ -40,11 +64,7 @@ struct MacChatView: View {
                     LazyVStack(alignment: .leading, spacing: 24) {
                         MacContinuationHeader(model: workspace.contextCompression).padding(.horizontal)
                         if workspace.messages.isEmpty && workspace.contextCompression.presentation?.context == nil {
-                            ContentUnavailableView {
-                                Label(NSLocalizedString("新的对话", comment: ""), systemImage: "bubble.left.and.bubble.right")
-                            } description: {
-                                Text(NSLocalizedString("选择模型后发送消息。", comment: ""))
-                            }
+                            emptyChat
                             // 消息列表左对齐，空白提示需要占满宽度才能以聊天区为中心。
                             .frame(maxWidth: .infinity, minHeight: max(180, viewportHeight * 0.65))
                             .padding(.horizontal)
@@ -172,7 +192,9 @@ struct MacChatView: View {
         .guideSettingsPageContext(
             id: GuidePageID(rawValue: "mac-chat-\(workspace.currentSession?.id.uuidString ?? "none")"),
             title: NSLocalizedString("对话", comment: ""),
-            documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace"),
+            documents: [GuideDocumentReference(id: "getting-started-guide", title: "Getting Started"),
+                        GuideDocumentReference(id: "app-features-tour", title: "App Features"),
+                        GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace"),
                         GuideDocumentReference(id: "local-models", title: "Local Models"), GuideDocumentReference(id: "tts", title: "Text to Speech"),
                         GuideDocumentReference(id: "slash-commands", title: "Quick Commands")],
             isActive: chatGuideActive,

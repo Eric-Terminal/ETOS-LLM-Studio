@@ -224,11 +224,7 @@ struct ProviderDetailView: View {
                 value: .string(provider.name),
                 access: .readOnly
             ),
-            "base_url": GuideSnapshotField(
-                label: NSLocalizedString("API 地址", comment: "提供商模型页向导快照字段"),
-                value: .string(provider.baseURL),
-                access: .readOnly
-            ),
+            "base_url": GuideProviderAddressDisclosure.field(provider.baseURL, access: .readOnly),
             "api_format": GuideSnapshotField(
                 label: NSLocalizedString("API 格式", comment: "提供商模型页向导快照字段"),
                 value: .string(provider.apiFormat),

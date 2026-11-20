@@ -162,7 +162,7 @@ struct SpecializedModelSelectorView: View {
         return [
             .string(
                 "guide_route",
-                label: NSLocalizedString("页面向导回答线路", comment: "专用模型向导字段"),
+                label: NSLocalizedString("使用助手回答线路", value: "App Guide Model Source", comment: "专用模型向导字段"),
                 allowedValues: GuideRoute.allCases.map(\.rawValue),
                 allowsEmpty: false,
                 get: { guideRouter.route.rawValue },
@@ -176,7 +176,7 @@ struct SpecializedModelSelectorView: View {
             ),
             .string(
                 "guide_model_id",
-                label: NSLocalizedString("页面向导模型", comment: "专用模型向导字段"),
+                label: NSLocalizedString("使用助手模型", value: "App Guide Model", comment: "专用模型向导字段"),
                 allowedValues: [""] + guideModels.map(\.id),
                 get: { guideRouter.selectedUserModel?.id ?? "" },
                 set: { modelID in
@@ -199,7 +199,7 @@ struct SpecializedModelSelectorView: View {
             ),
             .readOnly(
                 "available_guide_models",
-                label: NSLocalizedString("可用页面向导模型", comment: "专用模型向导字段"),
+                label: NSLocalizedString("可用的使用助手模型", value: "Available App Guide Models", comment: "专用模型向导字段"),
                 value: { runnableModelsValue(guideModels) }
             )
         ]
@@ -241,7 +241,7 @@ struct SpecializedModelSelectorView: View {
                 WatchGuideModelRouteSelectionView(router: guideRouter)
             } label: {
                 HStack {
-                    Text(NSLocalizedString("页面向导模型", comment: "页面向导专用模型标题"))
+                    Text(NSLocalizedString("使用助手模型", value: "App Guide Model", comment: "页面向导专用模型标题"))
                     Spacer()
                     MarqueeText(
                         content: selectedGuideModelLabel,
@@ -253,7 +253,7 @@ struct SpecializedModelSelectorView: View {
                 }
             }
         } footer: {
-            Text(NSLocalizedString("用于页面向导回答。内置免费向导始终可选；用户模型需要已启用并支持工具调用。", comment: "页面向导专用模型说明"))
+            Text(NSLocalizedString("选择使用助手回答问题时用的模型。你可以随时使用免费助手，也可以选择已启用且支持工具调用的模型。", value: "Choose the model that answers your questions. Use the free guide anytime, or choose an enabled model that supports tools.", comment: "页面向导专用模型说明"))
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -394,7 +394,7 @@ struct WatchGuideModelRouteSelectionView: View {
             modelList
                 .guideSettingsPageContext(
                     id: "settings-guide-model-route",
-                    title: NSLocalizedString("页面向导模型", comment: "页面向导模型向导上下文标题"),
+                    title: NSLocalizedString("使用助手模型", value: "App Guide Model", comment: "页面向导模型向导上下文标题"),
                     documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")],
                     settings: guideSettings
                 )
@@ -453,7 +453,7 @@ struct WatchGuideModelRouteSelectionView: View {
                 }
             }
         }
-        .navigationTitle(NSLocalizedString("页面向导模型", comment: "页面向导模型选择标题"))
+        .navigationTitle(NSLocalizedString("使用助手模型", value: "App Guide Model", comment: "页面向导模型选择标题"))
         .onReceive(router.$modelOptions) { options in
             syncSelectedProvider(options)
         }
@@ -463,7 +463,7 @@ struct WatchGuideModelRouteSelectionView: View {
         [
             .string(
                 "route",
-                label: NSLocalizedString("页面向导回答线路", comment: "专用模型向导字段"),
+                label: NSLocalizedString("使用助手回答线路", value: "App Guide Model Source", comment: "专用模型向导字段"),
                 allowedValues: GuideRoute.allCases.map(\.rawValue),
                 allowsEmpty: false,
                 get: { router.route.rawValue },
@@ -477,7 +477,7 @@ struct WatchGuideModelRouteSelectionView: View {
             ),
             .string(
                 "model_id",
-                label: NSLocalizedString("页面向导模型", comment: "专用模型向导字段"),
+                label: NSLocalizedString("使用助手模型", value: "App Guide Model", comment: "专用模型向导字段"),
                 allowedValues: router.modelOptions.modelIDsAllowingNone,
                 get: { router.selectedUserModel?.id ?? "" },
                 set: { modelID in

@@ -79,6 +79,8 @@ struct ProviderEditView: View {
         self.savedProviderProxyConfiguration = providerProxyConfiguration
     }
     
+    @State private var addressReport: GuideURLDiagnostics?
+
     var body: some View {
         let preview = headerOverridesPreview
 
@@ -92,6 +94,9 @@ struct ProviderEditView: View {
                     .keyboardType(.URL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                if !isLocalProvider {
+                    GuideProviderAddressRows(baseURL: $provider.baseURL, report: addressReport)
+                }
                 if showsChatEndpointPathField {
                     TextField(NSLocalizedString("聊天端点后缀", comment: "Provider chat endpoint path field"), text: $provider.chatEndpointPath)
                         .keyboardType(.URL)
@@ -210,6 +215,9 @@ struct ProviderEditView: View {
 
         }
         .navigationTitle(navigationTitle)
+        .onChange(of: isLocalProvider ? "" : provider.baseURL, initial: true) { _, address in
+            addressReport = address.isEmpty ? nil : GuideURLDiagnostics.diagnose(address)
+        }
         .sheet(isPresented: $showKeyManagement) {
             NavigationStack {
                 ProviderAPIKeyManagementForm(editor: keyEditor, providerID: provider.id)
@@ -325,10 +333,7 @@ struct ProviderEditView: View {
                 label: NSLocalizedString("提供商名称", comment: "提供商向导快照字段"),
                 value: .string(provider.name)
             ),
-            "base_url": GuideSnapshotField(
-                label: NSLocalizedString("API 地址", comment: "提供商向导快照字段"),
-                value: .string(provider.baseURL)
-            ),
+            "base_url": GuideProviderAddressDisclosure.field(provider.baseURL, access: .readWrite),
             "chat_endpoint_path": GuideSnapshotField(
                 label: NSLocalizedString("聊天端点后缀", comment: "提供商向导快照字段"),
                 value: .string(provider.chatEndpointPath)
@@ -384,7 +389,7 @@ struct ProviderEditView: View {
         try ProviderAPIKeyGuideSupport.validate(arguments)
         let mutations = labels.compactMap { key, label -> GuideSettingMutation? in
             guard let newValue = arguments[key] else { return nil }
-            let sensitive = key == "api_key"
+            let sensitive = snapshot.fields[key]?.access == .writeOnly
             let oldValue = snapshot.fields[key]?.value
             guard sensitive || oldValue != newValue else { return nil }
             return GuideSettingMutation(
@@ -439,7 +444,7 @@ struct ProviderEditView: View {
             arguments: GuideToolArguments.encodedResult(.dictionary(oldArguments))
         )
         // 凭据替换不生成撤销提案，避免为了撤销复制旧密钥与关联备注。
-        let undoProposal = proposal.arguments["api_key"] == nil
+        let undoProposal = oldArguments.count == proposal.arguments.count
             ? try buildProviderGuideProposal(call: undoCall, snapshot: undoSnapshot) : nil
         guard persistProviderEdits() else {
             provider = originalProvider
@@ -457,10 +462,9 @@ struct ProviderEditView: View {
         for key in keys {
             switch key {
             case "name": values[key] = .string(provider.name)
-            case "base_url": values[key] = .string(provider.baseURL)
+            case "base_url": values[key] = GuideProviderAddressDisclosure.readable(provider.baseURL).map(JSONValue.string)
             case "chat_endpoint_path": values[key] = .string(provider.chatEndpointPath)
             case "api_format": values[key] = .string(provider.apiFormat)
-            case "api_key": values[key] = .string(keyEditor.apiKeysText)
             case "multi_key_enabled": values[key] = .bool(keyEditor.draft.multiKeyEnabled)
             case "maximum_key_retries": values[key] = .int(Int(keyEditor.draft.maximumRetriesText) ?? 3)
             default: break

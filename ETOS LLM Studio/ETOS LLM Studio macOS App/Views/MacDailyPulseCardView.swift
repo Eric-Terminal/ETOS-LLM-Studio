@@ -5,7 +5,6 @@ import SwiftUI
 struct MacDailyPulseCardView: View {
     @ObservedObject var model: MacDailyPulseModel
     @Environment(\.dismiss) private var dismiss
-    @State private var showsGuide = false
     @State private var visible = false
     private var card: MacDailyPulsePresentation.Card? {
         guard let id = model.selectedCardID else { return nil }
@@ -48,10 +47,9 @@ struct MacDailyPulseCardView: View {
             .navigationTitle(NSLocalizedString("每日脉冲", comment: ""))
             .toolbar {
                 if model.isWorking { ProgressView().controlSize(.small) }
-                Button { showsGuide.toggle() } label: { Label(NSLocalizedString("页面向导", comment: ""), systemImage: "sparkles") }
                 Button(NSLocalizedString("完成", comment: "")) { dismiss() }
             }
-            .inspector(isPresented: $showsGuide) { MacGuideView().inspectorColumnWidth(min: 300, ideal: 360, max: 500) }
+            .modifier(MacGuideInspector())
             .guideSettingsPageContext(id: GuidePageID(rawValue: "mac-pulse-card-\(model.selectedCardID?.uuidString ?? "none")-\(model.revision)"),
                 title: NSLocalizedString("每日脉冲", comment: ""),
                 documents: [GuideDocumentReference(id: "daily-pulse", title: "Daily Pulse")],

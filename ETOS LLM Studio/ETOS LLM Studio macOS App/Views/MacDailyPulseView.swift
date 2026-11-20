@@ -30,11 +30,18 @@ struct MacDailyPulseView: View {
     @ObservedObject private var appLock = AppLockManager.shared
     @State private var tab = Tab.cards
     @State private var visible = false
-    @State private var showsGuide = false
     @State private var deletion: MacDailyPulseModel.Deletion?
     private var available: Bool { visible && workspace.canManageLocalModels && appLock.state != .locked }
 
     var body: some View {
+        if isEmbeddedInSettings {
+            pulseContent
+        } else {
+            pulseContent.modifier(MacGuideInspector())
+        }
+    }
+
+    private var pulseContent: some View {
         NavigationStack {
             Group {
                 if available, let snapshot = model.presentation, let manager = model.manager, let delivery = model.delivery {
@@ -60,12 +67,10 @@ struct MacDailyPulseView: View {
                     Button(NSLocalizedString("立即生成", comment: "")) { model.generate(.manual) }
                         .disabled(!available || !model.canEdit || model.manager?.isDailyPulseEnabled != true)
                 }
-                Button { showsGuide.toggle() } label: { Label(NSLocalizedString("页面向导", comment: ""), systemImage: "sparkles") }
                 if !isEmbeddedInSettings {
                     Button(NSLocalizedString("完成", comment: "")) { model.showsWindow = false }
                 }
             }
-            .inspector(isPresented: $showsGuide) { MacGuideView().inspectorColumnWidth(min: 300, ideal: 360, max: 500) }
             .confirmationDialog(NSLocalizedString("确认删除", comment: ""), isPresented: Binding(
                 get: { deletion != nil }, set: { if !$0 { deletion = nil } }), titleVisibility: .visible) {
                     Button(NSLocalizedString("删除", comment: ""), role: .destructive) {

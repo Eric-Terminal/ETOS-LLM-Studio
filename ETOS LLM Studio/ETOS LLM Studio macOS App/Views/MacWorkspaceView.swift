@@ -12,6 +12,8 @@ struct MacWorkspaceView: View {
     @State private var sessionToBind: ChatSession?
     @State private var sessionToRoleplay: ChatSession?
     @State private var sessionToAnalyze: ChatSession?
+    @Environment(\.openSettings) private var openSettings
+    @State private var showsGuide = false
     @State private var columnVisibility = NavigationSplitViewVisibility.all
 
     private var navigationContent: some View {
@@ -20,7 +22,15 @@ struct MacWorkspaceView: View {
         } detail: {
             MacChatView(showSessions: {
                 workspace.sessionLibrary.scope = .all; workspace.sessionLibrary.query = ""; columnVisibility = .all
-            }, showsSessionAnalytics: sessionToAnalyze != nil)
+            }, showsSessionAnalytics: sessionToAnalyze != nil, startGuide: {
+                let controller = MacGuideSession.shared.controller
+                controller.router.useBuiltIn()
+                showsGuide = true
+                Task {
+                    await controller.restoreHistory()
+                    if controller.messages.isEmpty { controller.send(GuideSetupPresentation.setupPrompt) }
+                }
+            })
                 .navigationTitle(workspace.currentSession?.name ?? NSLocalizedString("新的对话", comment: ""))
                 .toolbar {
                     ToolbarItem(placement: .principal) {
@@ -54,7 +64,7 @@ struct MacWorkspaceView: View {
                 }
         }
         .navigationSplitViewStyle(.balanced)
-        .modifier(MacGuideInspector())
+        .modifier(MacGuideInspector(presentation: $showsGuide))
     }
 
     private var presentedContent: some View {
@@ -107,6 +117,7 @@ struct MacWorkspaceView: View {
         .onChange(of: workspace.currentSession?.id) { _, _ in sessionToAnalyze = nil }
         .onDisappear { sessionToAnalyze = nil }
         .onAppear {
+            MacGuideSession.shared.attach(openSettings)
             permissions.setAutoPresentationBlocked(appLock.state == .locked, reason: "mac-app-lock")
         }
         .onChange(of: configuration.appLanguage) { _, language in

@@ -28,6 +28,29 @@ struct WatchChatTransientNotice {
 }
 
 extension ContentView {
+    func routeFromGuide(to target: GuideNavigationDestination) {
+        if isSettingsPresented || viewModel.activeSheet == .settings {
+            // 设置窗口已打开，替换内部导航栈即可一并退出来源页和它的编辑弹窗。
+            settingsDestination = .guide(target)
+            settingsStackID = UUID()
+            return
+        }
+        pendingGuideTarget = target
+        if viewModel.activeSheet != nil { viewModel.activeSheet = nil }
+        else if watchInputQuickActionDestination != nil { watchInputQuickActionDestination = nil }
+        else if isSessionListPresented { isSessionListPresented = false }
+        else if isContextCompressionPresented { isContextCompressionPresented = false }
+        else if contextCompressionReminderSourceSession != nil { contextCompressionReminderSourceSession = nil }
+        else { finishGuideNavigation() }
+    }
+
+    func finishGuideNavigation() {
+        guard let target = pendingGuideTarget else { return }
+        pendingGuideTarget = nil
+        settingsDestination = .guide(target)
+        isSettingsPresented = true
+    }
+
     var legacyChatRootView: some View {
         watchChatPageContainer
         .navigationTitle(watchChatNavigationTitle)
@@ -44,17 +67,18 @@ extension ContentView {
                 watchChatPage = .chat
             }
         }
-        .sheet(isPresented: $isSettingsPresented) {
+        .sheet(isPresented: $isSettingsPresented, onDismiss: finishGuideNavigation) {
             SettingsView(viewModel: viewModel, requestedDestination: $settingsDestination)
+                .id(settingsStackID)
                 .appLockOverlayLayer()
         }
-        .sheet(isPresented: $isSessionListPresented) {
+        .sheet(isPresented: $isSessionListPresented, onDismiss: finishGuideNavigation) {
             NavigationStack {
                 sessionListView
             }
             .appLockOverlayLayer()
         }
-        .sheet(isPresented: $isContextCompressionPresented) {
+        .sheet(isPresented: $isContextCompressionPresented, onDismiss: finishGuideNavigation) {
             if let session = viewModel.currentSession {
                 NavigationStack {
                     WatchContextCompressionOptionsView(
@@ -73,13 +97,13 @@ extension ContentView {
                 .appLockOverlayLayer()
             }
         }
-        .sheet(item: $watchInputQuickActionDestination) { action in
+        .sheet(item: $watchInputQuickActionDestination, onDismiss: finishGuideNavigation) { action in
             NavigationStack {
                 watchInputQuickActionDestinationView(for: action)
             }
             .appLockOverlayLayer()
         }
-        .sheet(item: $contextCompressionReminderSourceSession) { session in
+        .sheet(item: $contextCompressionReminderSourceSession, onDismiss: finishGuideNavigation) { session in
             NavigationStack {
                 WatchContextCompressionOneTapView(
                     session: session,
@@ -96,7 +120,7 @@ extension ContentView {
             }
             .appLockOverlayLayer()
         }
-        .sheet(item: $viewModel.activeSheet) { item in
+        .sheet(item: $viewModel.activeSheet, onDismiss: finishGuideNavigation) { item in
             sheetView(for: item)
                 .appLockOverlayLayer()
         }
@@ -649,7 +673,8 @@ extension ContentView {
                 })
             }
         case .settings:
-            SettingsView(viewModel: viewModel)
+            SettingsView(viewModel: viewModel, requestedDestination: $settingsDestination)
+                .id(settingsStackID)
         @unknown default:
             Text(NSLocalizedString("未知视图", comment: ""))
         }

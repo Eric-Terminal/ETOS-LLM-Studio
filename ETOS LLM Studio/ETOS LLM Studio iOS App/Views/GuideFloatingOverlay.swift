@@ -18,7 +18,7 @@ struct GuideFloatingOverlay: View {
     @ObservedObject private var coordinator = GuideContextCoordinator.shared
 
     @State private var isPanelPresented = false
-    @State private var isFullConversationPresented = false
+    @Binding var isFullConversationPresented: Bool
     @State private var offset = CGSize.zero
     @State private var dragStartOffset: CGSize?
     @State private var isDragging = false
@@ -42,12 +42,6 @@ struct GuideFloatingOverlay: View {
             .frame(width: displayedSize.width, height: displayedSize.height)
             .position(x: center.x + resolvedOffset.width, y: center.y + resolvedOffset.height)
             .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.86), value: isPanelPresented)
-        }
-        .sheet(isPresented: $isFullConversationPresented) {
-            NavigationStack {
-                GuideFullConversationView(controller: controller)
-            }
-            .environmentObject(viewModel)
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestGuideModelManagement)) { _ in
             isFullConversationPresented = false
@@ -75,7 +69,7 @@ struct GuideFloatingOverlay: View {
             container: container,
             snapsToHorizontalEdge: true
         ))
-        .accessibilityLabel(NSLocalizedString("打开页面向导", comment: "向导浮球辅助标签"))
+        .accessibilityLabel(NSLocalizedString("打开使用助手", value: "Open App Guide", comment: "向导浮球辅助标签"))
         .accessibilityHint(currentPageAccessibilityHint)
     }
 
@@ -85,9 +79,9 @@ struct GuideFloatingOverlay: View {
                 Image(systemName: "questionmark.bubble.fill")
                     .foregroundStyle(.blue)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(NSLocalizedString("页面向导", comment: "向导面板标题"))
+                    Text(NSLocalizedString("使用助手", value: "App Guide", comment: "向导面板标题"))
                         .font(.headline)
-                    Text(coordinator.activePage?.title ?? NSLocalizedString("当前页面", comment: "向导未知页面标题"))
+                    Text(coordinator.activePage?.title ?? NSLocalizedString("当前页面", value: "Current Page", comment: "向导未知页面标题"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -98,20 +92,20 @@ struct GuideFloatingOverlay: View {
                 } label: {
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
                 }
-                .accessibilityLabel(NSLocalizedString("展开向导", comment: "展开向导按钮"))
+                .accessibilityLabel(NSLocalizedString("展开向导", value: "Expand Guide", comment: "展开向导按钮"))
                 Button {
                     controller.clear()
                 } label: {
                     Image(systemName: "trash")
                 }
                 .disabled(controller.messages.isEmpty && controller.pendingProposal == nil)
-                .accessibilityLabel(NSLocalizedString("清空向导上下文", comment: "清空向导按钮"))
+                .accessibilityLabel(NSLocalizedString("清空向导上下文", value: "Clear Guide Context", comment: "清空向导按钮"))
                 Button {
                     isPanelPresented = false
                 } label: {
                     Image(systemName: "xmark")
                 }
-                .accessibilityLabel(NSLocalizedString("收起向导", comment: "收起向导按钮"))
+                .accessibilityLabel(NSLocalizedString("收起向导", value: "Collapse Guide", comment: "收起向导按钮"))
             }
             .padding(.horizontal)
             .frame(height: 48)
@@ -235,7 +229,7 @@ struct GuideFloatingOverlay: View {
     private var currentPageAccessibilityHint: String {
         guard let title = coordinator.activePage?.title else { return "" }
         return String(
-            format: NSLocalizedString("询问“%@”页面的配置方法", comment: "向导浮球当前页面辅助说明"),
+            format: NSLocalizedString("询问“%@”页面的配置方法", value: "Ask how to configure the “%@” page", comment: "向导浮球当前页面辅助说明"),
             title
         )
     }

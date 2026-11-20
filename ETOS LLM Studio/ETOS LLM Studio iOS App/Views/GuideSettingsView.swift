@@ -21,39 +21,31 @@ struct GuideSettingsView: View {
 
             Section {
                 Toggle(
-                    NSLocalizedString("在设置页面显示向导", comment: "向导浮动入口开关"),
+                    NSLocalizedString("在设置页面显示使用助手", value: "Show App Guide in Settings", comment: "向导浮动入口开关"),
                     isOn: $appConfig.guideOverlayEnabled
                 )
             } footer: {
-                Text(NSLocalizedString("开启后，进入设置及已接入的配置页面时会显示可拖动的向导入口。", comment: "向导浮动入口说明"))
+                Text(NSLocalizedString("开启后，进入设置及已接入的配置页面时会显示可拖动的向导入口。", value: "When enabled, a draggable guide button appears on Settings and supported configuration pages.", comment: "向导浮动入口说明"))
             }
         }
-        .navigationTitle(NSLocalizedString("页面向导", comment: "向导设置标题"))
-        .guidePageContext(
-            descriptor: GuidePageDescriptor(
-                id: "guide-settings",
-                title: NSLocalizedString("页面向导设置", comment: "向导设置页面上下文标题"),
-                documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")]
-            ),
-            snapshot: {
-                GuidePageSnapshot(fields: [
-                    "overlay_enabled": GuideSnapshotField(
-                        label: NSLocalizedString("显示向导", comment: "向导快照字段"),
-                        value: .bool(appConfig.guideOverlayEnabled)
-                    )
-                ])
-            }
+        .navigationTitle(NSLocalizedString("使用助手", value: "App Guide", comment: "向导设置标题"))
+        .guideSettingsPageContext(
+            id: "guide-settings",
+            title: NSLocalizedString("使用助手设置", value: "App Guide Settings", comment: "助手设置页标题"),
+            documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")],
+            settings: [.bool("overlay_enabled", label: NSLocalizedString("在设置页面显示使用助手", value: "Show App Guide in Settings", comment: "设置助手入口开关"),
+                             get: { appConfig.guideOverlayEnabled }, set: { appConfig.guideOverlayEnabled = $0 })]
         )
     }
 
     private var introductionCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label(NSLocalizedString("向导会看到什么", comment: "向导介绍卡标题"), systemImage: "eye")
+        VStack(alignment: .leading) {
+            Label(NSLocalizedString("使用助手能帮我做什么", value: "How App Guide Helps", comment: "向导介绍卡标题"), systemImage: "sparkles")
                 .font(.headline)
-            Text(NSLocalizedString("当前页面会明确提供页面名称、相关文档和经过筛选的配置快照。密钥、密码与令牌只显示为已隐藏。", comment: "向导介绍卡摘要"))
-                .font(.subheadline)
+            Text(NSLocalizedString("guide.help.summary", value: "Ask where to find a feature or what an option on this page does. The guide can change settings after you confirm. Your saved passwords and API keys stay hidden.", comment: "向导介绍卡摘要"))
+                .font(.footnote)
                 .foregroundStyle(.secondary)
-            Button(NSLocalizedString("进一步了解…", comment: "向导介绍卡详情按钮")) {
+            Button(NSLocalizedString("进一步了解…", value: "How to use", comment: "向导介绍卡详情按钮")) {
                 isShowingDetails = true
             }
             .buttonStyle(.plain)
@@ -70,8 +62,10 @@ struct GuideSettingsView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
                 }
-                .navigationTitle(NSLocalizedString("页面向导与隐私", comment: "向导介绍详情标题"))
+                .navigationTitle(NSLocalizedString("使用助手与隐私", value: "App Guide and Privacy", comment: "向导介绍详情标题"))
                 .navigationBarTitleDisplayMode(.inline)
+                .guidePageContext(descriptor: GuidePageDescriptor(id: "guide-privacy", title: NSLocalizedString("使用助手与隐私", value: "App Guide and Privacy", comment: "助手隐私说明"),
+                    documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")]), snapshot: { .empty })
             }
         }
     }

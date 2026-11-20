@@ -11,6 +11,7 @@ import Foundation
 import ETOSCore
 
 enum SettingsNavigationDestination: Hashable, Identifiable {
+    case guide(GuideNavigationDestination)
     case modelManagement
     case dailyPulse
     case dailyPulseCard(runID: UUID, cardID: UUID)
@@ -21,6 +22,7 @@ enum SettingsNavigationDestination: Hashable, Identifiable {
 
     var id: String {
         switch self {
+        case .guide(let target): return "guide-\(target.rawValue)"
         case .modelManagement:
             return "modelManagement"
         case .dailyPulse:
@@ -90,15 +92,23 @@ struct SettingsView: View {
     @ObservedObject private var pulseManager = DailyPulseManager.shared
     @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
     @ObservedObject private var appConfig = AppConfigStore.shared
-    @Binding private var requestedDestination: SettingsNavigationDestination?
+    let requestedDestination: SettingsNavigationDestination?
     @State private var coreSettingsDestination: CoreSettingsNavigationDestination?
     @State private var settingsResearchTask: Task<Void, Never>?
 
-    init(requestedDestination: Binding<SettingsNavigationDestination?> = .constant(nil)) {
-        self._requestedDestination = requestedDestination
+    init(requestedDestination: SettingsNavigationDestination? = nil) {
+        self.requestedDestination = requestedDestination
     }
     
     var body: some View {
+        if let requestedDestination {
+            requestedPage(requestedDestination)
+        } else {
+            settingsRoot
+        }
+    }
+
+    private var settingsRoot: some View {
         GeometryReader { proxy in
             settingsContent(layout: SettingsCoreGridLayout.resolved(
                 availableSize: proxy.size,
@@ -129,10 +139,6 @@ struct SettingsView: View {
             }
 
             Section(NSLocalizedString("拓展能力", comment: "设置拓展能力分组")) {
-                let speechModelBinding = Binding<RunnableModel?>(
-                    get: { viewModel.selectedSpeechModel },
-                    set: { viewModel.setSelectedSpeechModel($0) }
-                )
                 NavigationLink {
                     ToolCenterView()
                         .environmentObject(viewModel)
@@ -200,16 +206,7 @@ struct SettingsView: View {
                 }
 
                 NavigationLink {
-                    SpeechInputSettingsView(
-                        enableSpeechInput: $viewModel.enableSpeechInput,
-                        selectedSpeechModel: speechModelBinding,
-                        sendSpeechAsAudio: $viewModel.sendSpeechAsAudio,
-                        audioRecordingFormat: Binding(
-                            get: { viewModel.audioRecordingFormat },
-                            set: { viewModel.audioRecordingFormat = $0 }
-                        ),
-                        speechModels: viewModel.speechModels
-                    )
+                    speechPage
                 } label: {
                     SettingsListIconLabel("语音输入", icon: .speechInput)
                 }
@@ -239,7 +236,7 @@ struct SettingsView: View {
                     GuideSettingsView()
                         .environmentObject(viewModel)
                 } label: {
-                    SettingsListIconLabel("页面向导", icon: .guide)
+                    SettingsListIconLabel("使用助手", value: "App Guide", icon: .guide)
                 }
             }
             // MARK: - 公告通知 Section
@@ -307,56 +304,106 @@ struct SettingsView: View {
             }
         }
         .navigationDestination(item: $coreSettingsDestination) { destination in
-            switch destination {
-            case .modelManagement:
-                ProviderListView()
-                    .environmentObject(viewModel)
-            case .conversation:
-                advancedSettingsView(destination: .conversation)
-            case .prompts:
-                advancedSettingsView(destination: .prompts)
-            case .output:
-                advancedSettingsView(destination: .output)
-            case .display:
-                DisplaySettingsView(
-                    enableMarkdown: $viewModel.enableMarkdown,
-                    enableBackground: $viewModel.enableBackground,
-                    backgroundBlur: $viewModel.backgroundBlur,
-                    backgroundOpacity: $viewModel.backgroundOpacity,
-                    enableAutoRotateBackground: $viewModel.enableAutoRotateBackground,
-                    currentBackgroundImage: $viewModel.currentBackgroundImage,
-                    backgroundContentMode: $viewModel.backgroundContentMode,
-                    enableLiquidGlass: $viewModel.enableLiquidGlass,
-                    enableChatTopBlurFade: $viewModel.enableChatTopBlurFade,
-                    enableAdvancedRenderer: $viewModel.enableAdvancedRenderer,
-                    enableAutoReasoningPreview: $viewModel.enableAutoReasoningPreview,
-                    enableNoBubbleUI: $viewModel.enableNoBubbleUI,
-                    allBackgrounds: viewModel.backgroundImages
-                )
-            case .sync:
-                DeviceSyncSettingsView()
-            }
+            corePage(destination)
         }
-        .navigationDestination(item: $requestedDestination) { destination in
-            switch destination {
-            case .modelManagement:
-                ProviderListView()
-                    .environmentObject(viewModel)
-            case .dailyPulse:
-                DailyPulseView()
-                    .environmentObject(viewModel)
-            case .dailyPulseCard(let runID, let cardID):
-                DailyPulseView(initialRunID: runID, initialCardID: cardID)
-                    .environmentObject(viewModel)
-            case .feedbackCenter:
-                FeedbackCenterView()
-            case .feedbackIssue(let issueNumber):
-                FeedbackDetailView(issueNumber: issueNumber)
-            case .achievementJournal:
-                AchievementJournalView()
-            case .updateTimeline:
-                UpdateTimelineView()
-            }
+    }
+
+    @ViewBuilder
+    private func corePage(_ destination: CoreSettingsNavigationDestination) -> some View {
+        switch destination {
+        case .modelManagement:
+            ProviderListView()
+                .environmentObject(viewModel)
+        case .conversation:
+            advancedSettingsView(destination: .conversation)
+        case .prompts:
+            advancedSettingsView(destination: .prompts)
+        case .output:
+            advancedSettingsView(destination: .output)
+        case .display:
+            DisplaySettingsView(
+                enableMarkdown: $viewModel.enableMarkdown,
+                enableBackground: $viewModel.enableBackground,
+                backgroundBlur: $viewModel.backgroundBlur,
+                backgroundOpacity: $viewModel.backgroundOpacity,
+                enableAutoRotateBackground: $viewModel.enableAutoRotateBackground,
+                currentBackgroundImage: $viewModel.currentBackgroundImage,
+                backgroundContentMode: $viewModel.backgroundContentMode,
+                enableLiquidGlass: $viewModel.enableLiquidGlass,
+                enableChatTopBlurFade: $viewModel.enableChatTopBlurFade,
+                enableAdvancedRenderer: $viewModel.enableAdvancedRenderer,
+                enableAutoReasoningPreview: $viewModel.enableAutoReasoningPreview,
+                enableNoBubbleUI: $viewModel.enableNoBubbleUI,
+                allBackgrounds: viewModel.backgroundImages
+            )
+        case .sync:
+            DeviceSyncSettingsView()
+        }
+    }
+
+    @ViewBuilder
+    private func requestedPage(_ destination: SettingsNavigationDestination) -> some View {
+        switch destination {
+        case .guide(let target): guidePage(target)
+        case .modelManagement:
+            ProviderListView()
+                .environmentObject(viewModel)
+        case .dailyPulse:
+            DailyPulseView()
+                .environmentObject(viewModel)
+        case .dailyPulseCard(let runID, let cardID):
+            DailyPulseView(initialRunID: runID, initialCardID: cardID)
+                .environmentObject(viewModel)
+        case .feedbackCenter:
+            FeedbackCenterView()
+        case .feedbackIssue(let issueNumber):
+            FeedbackDetailView(issueNumber: issueNumber)
+        case .achievementJournal:
+            AchievementJournalView()
+        case .updateTimeline:
+            UpdateTimelineView()
+        }
+    }
+
+    private var speechPage: some View {
+        SpeechInputSettingsView(
+            enableSpeechInput: $viewModel.enableSpeechInput,
+            selectedSpeechModel: Binding(get: { viewModel.selectedSpeechModel }, set: { viewModel.setSelectedSpeechModel($0) }),
+            sendSpeechAsAudio: $viewModel.sendSpeechAsAudio,
+            audioRecordingFormat: Binding(
+                get: { viewModel.audioRecordingFormat },
+                set: { viewModel.audioRecordingFormat = $0 }
+            ),
+            speechModels: viewModel.speechModels
+        )
+    }
+
+    @ViewBuilder
+    private func guidePage(_ target: GuideNavigationDestination) -> some View {
+        switch target {
+        case .providerManagement: corePage(.modelManagement)
+        case .conversationSettings: corePage(.conversation)
+        case .promptSettings: corePage(.prompts)
+        case .outputSettings: corePage(.output)
+        case .appearanceSettings: corePage(.display)
+        case .syncAndBackup: corePage(.sync)
+        case .dataImport: ThirdPartyImportView()
+        case .roleplayAndTavern: RoleplaySettingsView()
+        case .worldbook: WorldbookSettingsView()
+        case .memorySystem: LongTermMemoryFeatureView()
+        case .dailyPulse: DailyPulseView()
+        case .toolCenter: ToolCenterView()
+        case .mcpTools: MCPIntegrationView()
+        case .shortcutTools: ShortcutIntegrationView()
+        case .agentSkills: AgentSkillsView()
+        case .speechInput: speechPage
+        case .ttsSettings: TTSSettingsView()
+        case .localLinux: LocalLinuxFeatureView(sessionID: viewModel.currentSession?.id)
+        case .networkProxy: GlobalProxySettingsView()
+        case .connectionExceptions: NetworkConnectionSecuritySettingsView()
+        case .feedbackCenter: FeedbackCenterView()
+        case .feedbackCompose: FeedbackComposeView()
+        case .aboutAndLogs: AboutView()
         }
     }
 
@@ -594,8 +641,8 @@ struct SettingsListIconLabel: View {
     let icon: SettingsListIcon
     @ObservedObject private var appConfig = AppConfigStore.shared
 
-    init(_ titleKey: String, icon: SettingsListIcon) {
-        self.title = NSLocalizedString(titleKey, comment: "设置列表入口标题")
+    init(_ titleKey: String, value: String = "", icon: SettingsListIcon) {
+        self.title = NSLocalizedString(titleKey, value: value, comment: "设置列表入口标题")
         self.icon = icon
     }
 

@@ -54,6 +54,7 @@ private struct WatchGuideEntryModifier: ViewModifier {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button {
                             presentation.present()
+                            WatchGuideSheetNavigation.shared.close = { presentation.isPresented = false }
                         } label: {
                             Image(systemName: "ellipsis")
                         }
@@ -64,6 +65,7 @@ private struct WatchGuideEntryModifier: ViewModifier {
             }
             .sheet(isPresented: $presentation.isPresented, onDismiss: {
                 presentation.didDismiss()
+                WatchGuideSheetNavigation.shared.didDismiss()
             }) {
                 NavigationStack {
                     List {
@@ -87,7 +89,7 @@ private struct WatchGuideEntryModifier: ViewModifier {
                                         presentation.isPresented = false
                                     }
                                 } label: {
-                                    Label(NSLocalizedString("询问当前页面", comment: "手表当前页面向导入口"), systemImage: "questionmark.bubble")
+                                    Label(NSLocalizedString("打开使用助手", value: "Open App Guide", comment: "手表当前页面向导入口"), systemImage: "questionmark.bubble")
                                 }
                                 .accessibilityIdentifier("watchGuideEntry")
                             }
@@ -96,7 +98,7 @@ private struct WatchGuideEntryModifier: ViewModifier {
                     .navigationTitle(NSLocalizedString("watch.page.actions.title", value: "More Actions", comment: "手表页面操作菜单"))
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button(NSLocalizedString("关闭", comment: "关闭手表页面操作菜单")) {
+                            Button(NSLocalizedString("关闭", value: "Close", comment: "关闭手表页面操作菜单")) {
                                 presentation.isPresented = false
                             }
                         }

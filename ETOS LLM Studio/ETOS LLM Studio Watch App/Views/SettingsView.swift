@@ -14,6 +14,7 @@ import ETOSCore
 import WatchKit
 
 enum WatchSettingsNavigationDestination: Hashable, Identifiable {
+    case guide(GuideNavigationDestination)
     case model
     case dailyPulse
     case dailyPulseCard(runID: UUID, cardID: UUID)
@@ -24,6 +25,7 @@ enum WatchSettingsNavigationDestination: Hashable, Identifiable {
 
     var id: String {
         switch self {
+        case .guide(let target): return "guide-\(target.rawValue)"
         case .model:
             return "model"
         case .dailyPulse:
@@ -61,6 +63,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
     @Binding private var requestedDestination: WatchSettingsNavigationDestination?
     @State private var settingsResearchTask: Task<Void, Never>?
+    @State private var path: [WatchSettingsNavigationDestination] = []
     private let embedsInNavigationStack: Bool
 
     init(
@@ -78,12 +81,18 @@ struct SettingsView: View {
     var body: some View {
         Group {
             if embedsInNavigationStack {
-                NavigationStack {
+                NavigationStack(path: $path) {
                     settingsContent
                 }
             } else {
-                settingsContent
+                settingsContent.navigationDestination(item: $requestedDestination, destination: requestedPage)
             }
+        }
+        .environmentObject(viewModel)
+        .onChange(of: requestedDestination, initial: true) { _, target in
+            guard embedsInNavigationStack, let target else { return }
+            path = [target]
+            requestedDestination = nil
         }
         // 后备上下文覆盖整个设置容器；入口由栈内页面提供，避免与子页工具栏重复。
         .guidePageContext(
@@ -119,6 +128,7 @@ struct SettingsView: View {
                         Text(NSLocalizedString("暂无可用模型，请先在“提供商与模型管理”中启用。", comment: "无可用模型提示"))
                             .etFont(.footnote)
                             .foregroundStyle(.secondary)
+                        WatchGuideOnboardingButton()
                         NavigationLink {
                             ProviderListView()
                                 .environmentObject(viewModel)
@@ -265,20 +275,7 @@ struct SettingsView: View {
                         settingsNavigationLabel("拓展功能", icon: .extendedFeatures)
                     }
 
-                    NavigationLink(destination: DisplaySettingsView(
-                        enableMarkdown: $viewModel.enableMarkdown,
-                        enableBackground: $viewModel.enableBackground,
-                        backgroundBlur: $viewModel.backgroundBlur,
-                        backgroundOpacity: $viewModel.backgroundOpacity,
-                        enableAutoRotateBackground: $viewModel.enableAutoRotateBackground,
-                        currentBackgroundImage: $viewModel.currentBackgroundImage,
-                        backgroundContentMode: $viewModel.backgroundContentMode,
-                        enableLiquidGlass: $viewModel.enableLiquidGlass,
-                        enableAdvancedRenderer: $viewModel.enableAdvancedRenderer,
-                        enableAutoReasoningPreview: $viewModel.enableAutoReasoningPreview,
-                        enableNoBubbleUI: $viewModel.enableNoBubbleUI,
-                        allBackgrounds: viewModel.backgroundImages
-                    )) {
+                    NavigationLink(destination: displayPage) {
                         settingsNavigationLabel("显示与外观", icon: .display)
                     }
 
@@ -291,7 +288,7 @@ struct SettingsView: View {
                     NavigationLink {
                         WatchGuideSettingsView()
                     } label: {
-                        settingsNavigationLabel("页面向导", icon: .guide)
+                        settingsNavigationLabel("使用助手", value: "App Guide", icon: .guide)
                     }
                     NavigationLink(destination: AboutView()) {
                         settingsNavigationLabel("关于", icon: .about)
@@ -331,37 +328,58 @@ struct SettingsView: View {
                 ensureSelectedModel(in: viewModel.activatedConversationModels)
             }
             .watchGuideEntry()
-            .navigationDestination(item: $requestedDestination) { destination in
-                switch destination {
-                case .model:
-                    ModelSelectionView(
-                        viewModel: viewModel,
-                        models: viewModel.activatedConversationModels,
-                        providerGroups: viewModel.activatedConversationModelGroups,
-                        modelsByProviderID: viewModel.activatedConversationModelsByProviderID,
-                        layoutsByProviderID: viewModel.activatedConversationModelLayoutsByProviderID,
-                        selectedModel: selectedModelBinding
-                    )
-                case .dailyPulse:
-                    DailyPulseView(viewModel: viewModel)
-                case .dailyPulseCard(let runID, let cardID):
-                    DailyPulseView(
-                        viewModel: viewModel,
-                        initialRunID: runID,
-                        initialCardID: cardID
-                    )
-                case .feedbackCenter:
-                    FeedbackCenterView()
-                case .feedbackIssue(let issueNumber):
-                    WatchFeedbackDetailView(issueNumber: issueNumber)
-                case .achievementJournal:
-                    AchievementJournalView()
-                case .updateTimeline:
-                    WatchUpdateTimelineView()
-                }
-            }
+            .navigationDestination(for: WatchSettingsNavigationDestination.self, destination: requestedPage)
+    }
+
+    @ViewBuilder
+    private func requestedPage(_ destination: WatchSettingsNavigationDestination) -> some View {
+        switch destination {
+        case .guide(let target): guidePage(target)
+        case .model:
+            ModelSelectionView(
+                viewModel: viewModel,
+                models: viewModel.activatedConversationModels,
+                providerGroups: viewModel.activatedConversationModelGroups,
+                modelsByProviderID: viewModel.activatedConversationModelsByProviderID,
+                layoutsByProviderID: viewModel.activatedConversationModelLayoutsByProviderID,
+                selectedModel: selectedModelBinding
+            )
+        case .dailyPulse:
+            DailyPulseView(viewModel: viewModel)
+        case .dailyPulseCard(let runID, let cardID):
+            DailyPulseView(
+                viewModel: viewModel,
+                initialRunID: runID,
+                initialCardID: cardID
+            )
+        case .feedbackCenter:
+            FeedbackCenterView()
+        case .feedbackIssue(let issueNumber):
+            WatchFeedbackDetailView(issueNumber: issueNumber)
+        case .achievementJournal:
+            AchievementJournalView()
+        case .updateTimeline:
+            WatchUpdateTimelineView()
+        }
     }
     
+    var displayPage: some View {
+        DisplaySettingsView(
+            enableMarkdown: $viewModel.enableMarkdown,
+            enableBackground: $viewModel.enableBackground,
+            backgroundBlur: $viewModel.backgroundBlur,
+            backgroundOpacity: $viewModel.backgroundOpacity,
+            enableAutoRotateBackground: $viewModel.enableAutoRotateBackground,
+            currentBackgroundImage: $viewModel.currentBackgroundImage,
+            backgroundContentMode: $viewModel.backgroundContentMode,
+            enableLiquidGlass: $viewModel.enableLiquidGlass,
+            enableAdvancedRenderer: $viewModel.enableAdvancedRenderer,
+            enableAutoReasoningPreview: $viewModel.enableAutoReasoningPreview,
+            enableNoBubbleUI: $viewModel.enableNoBubbleUI,
+            allBackgrounds: viewModel.backgroundImages
+        )
+    }
+
     // MARK: - 辅助方法
 
     private var usesNativeSettingsIcons: Bool {
@@ -369,8 +387,8 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private func settingsNavigationLabel(_ titleKey: String, icon: SettingsListIcon) -> some View {
-        let title = NSLocalizedString(titleKey, comment: "设置列表入口标题")
+    private func settingsNavigationLabel(_ titleKey: String, value: String = "", icon: SettingsListIcon) -> some View {
+        let title = NSLocalizedString(titleKey, value: value, comment: "设置列表入口标题")
         if usesNativeSettingsIcons {
             SettingsListIconLabel(title, icon: icon)
         } else {
@@ -502,7 +520,7 @@ struct SettingsView: View {
         return nil
     }
 
-    private func advancedSettingsView(
+    func advancedSettingsView(
         destination: ModelAdvancedSettingsDestination
     ) -> ModelAdvancedSettingsView {
         ModelAdvancedSettingsView(

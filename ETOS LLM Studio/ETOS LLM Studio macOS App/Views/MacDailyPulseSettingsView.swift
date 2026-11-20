@@ -88,7 +88,6 @@ private struct MacDailyPulseTimeEditor: View {
     @State private var components: (hour: Int, minute: Int)?
     @State private var error: String?
     @State private var visible = false
-    @State private var showsGuide = false
     @State private var confirmsRemoval = false
     private var available: Bool { visible && model.canEdit && !model.isPreparing }
 
@@ -108,11 +107,10 @@ private struct MacDailyPulseTimeEditor: View {
             .disabled(!available)
             .navigationTitle(NSLocalizedString("编辑卡片", comment: ""))
             .toolbar {
-                Button { showsGuide.toggle() } label: { Label(NSLocalizedString("页面向导", comment: ""), systemImage: "sparkles") }
                 Button(NSLocalizedString("取消", comment: "")) { dismiss() }
                 Button(NSLocalizedString("保存", comment: "")) { save() }.disabled(!available || components == nil)
             }
-            .inspector(isPresented: $showsGuide) { MacGuideView().inspectorColumnWidth(min: 300, ideal: 360, max: 500) }
+            .modifier(MacGuideInspector())
             .confirmationDialog(NSLocalizedString("删除卡片", comment: ""), isPresented: $confirmsRemoval, titleVisibility: .visible) {
                 Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                     guard available, model.delivery?.removeCard(id: original.id) == true else { return }

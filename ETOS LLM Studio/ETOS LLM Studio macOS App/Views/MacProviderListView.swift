@@ -71,6 +71,8 @@ private struct MacProviderEditor: View {
     private let original: Provider?
     @State private var draft: Provider
     @StateObject private var keys: ProviderAPIKeyEditorModel
+    @State private var addressReport: GuideURLDiagnostics?
+
     @State private var headers = ""
     @State private var modelToEdit: Model?
     @State private var isBusy = false
@@ -94,6 +96,9 @@ private struct MacProviderEditor: View {
                 Section {
                     TextField(NSLocalizedString("名称", comment: ""), text: $draft.name)
                     TextField(NSLocalizedString("API 地址", comment: ""), text: $draft.baseURL)
+                    if !LocalModelProviderBridge.isLocalProvider(draft) {
+                        GuideProviderAddressRows(baseURL: $draft.baseURL, report: addressReport)
+                    }
                     Picker(NSLocalizedString("API 格式", comment: ""), selection: $draft.apiFormat) {
                         if LocalModelProviderBridge.isLocalProvider(draft) {
                             Text(NSLocalizedString("本地模型", comment: "")).tag(LocalModelProviderBridge.apiFormat)
@@ -152,6 +157,9 @@ private struct MacProviderEditor: View {
                 if let error { Text(error).font(.footnote).foregroundStyle(.red) }
             }
             .formStyle(.grouped)
+            .onChange(of: LocalModelProviderBridge.isLocalProvider(draft) ? "" : draft.baseURL, initial: true) { _, address in
+                addressReport = address.isEmpty ? nil : GuideURLDiagnostics.diagnose(address)
+            }
             .disabled(isBusy || !didPrepare || workspace.isRestoringData)
             .navigationTitle(NSLocalizedString("提供商配置", comment: ""))
             .toolbar {
@@ -188,7 +196,7 @@ private struct MacProviderEditor: View {
                     .readOnly("editing_mode", label: NSLocalizedString("编辑方式", comment: ""), value: { .string("draft_until_save") })
                 ] + (isBusy || !didPrepare || workspace.isRestoringData ? [] : [
                     .string("name", label: NSLocalizedString("名称", comment: ""), get: { draft.name }, set: { draft.name = $0 }),
-                    .string("base_url", label: NSLocalizedString("API 地址", comment: ""), get: { draft.baseURL }, set: { draft.baseURL = $0 }),
+                    guideAddressSetting,
                     .string("api_format", label: NSLocalizedString("API 格式", comment: ""), allowedValues: ProviderAPIFormatOption.allCases.map(\.rawValue), get: { draft.apiFormat }, set: { draft.apiFormat = $0 }),
                     .string("chat_endpoint", label: NSLocalizedString("聊天端点后缀", comment: ""), get: { draft.chatEndpointPath }, set: { draft.chatEndpointPath = $0 }),
                     .bool("multi_key", label: NSLocalizedString("多 Key 模式", comment: ""), get: { keys.draft.multiKeyEnabled }, set: { keys.draft.multiKeyEnabled = $0 }),
@@ -200,6 +208,15 @@ private struct MacProviderEditor: View {
         .frame(minWidth: 560, minHeight: 600)
         .onDisappear { testPreparation?.cancel() }
         .onChange(of: workspace.isRestoringData) { _, restoring in if restoring { testPreparation?.cancel(); dismiss() } }
+    }
+
+    private var guideAddressSetting: GuidePageSetting {
+        if !draft.baseURL.isEmpty && addressReport?.normalizedBaseURL == nil {
+            return .writeOnlyString("base_url", label: NSLocalizedString("替换 API 地址", value: "Replace API Address", comment: "未能安全读取的地址仅允许替换"),
+                isConfigured: { !draft.baseURL.isEmpty }, set: { draft.baseURL = $0 })
+        }
+        return .string("base_url", label: NSLocalizedString("API 地址", value: "API Address", comment: "提供商地址快照字段"),
+            get: { GuideProviderAddressDisclosure.readable(draft.baseURL) ?? GuideSnapshotField.hiddenValue }, set: { draft.baseURL = $0 })
     }
 
     private func prepareTestSource(model: Model?) async throws -> MacModelConnectivitySource {

@@ -615,6 +615,11 @@ extension ChatView {
                         navBarFadeBlurOverlay
                     }
                 }
+                .overlay {
+                    if sessionMessages.isEmpty, continuationContext == nil {
+                        ChatOnboardingCardView()
+                    }
+                }
                 // Telegram 风格：顶部导航栏
                 .safeAreaInset(edge: .top) {
                     if !usesSystemChatToolbar {

@@ -29,7 +29,7 @@ enum MacSettingsDestination: String, Identifiable {
         case .extended: NSLocalizedString("拓展功能", comment: "")
         case .general: NSLocalizedString("通用", comment: "")
         case .security: NSLocalizedString("安全", comment: "")
-        case .guide: NSLocalizedString("页面向导", comment: "")
+        case .guide: NSLocalizedString("使用助手", value: "App Guide", comment: "")
         case .about: NSLocalizedString("关于 ETOS LLM Studio", comment: "")
         }
     }

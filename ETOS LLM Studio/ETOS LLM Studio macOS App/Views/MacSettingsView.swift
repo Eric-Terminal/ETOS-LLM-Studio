@@ -6,6 +6,10 @@ struct MacSettingsView: View {
     @EnvironmentObject private var workspace: MacWorkspaceModel
     @ObservedObject private var configuration = AppConfigStore.shared
     @ObservedObject private var appLock = AppLockManager.shared
+    @Environment(\.openSettings) private var openSettings
+    @ObservedObject private var guideSession = MacGuideSession.shared
+    @State private var detailPath: [GuideNavigationDestination] = []
+    @State private var routeID = UUID()
     @State private var selection: MacSettingsDestination? = .models
     @State private var showsGuide = false
     @State private var visible = false
@@ -33,19 +37,25 @@ struct MacSettingsView: View {
                 if selection == .pulse {
                     MacDailyPulseView(model: workspace.dailyPulse, isEmbeddedInSettings: true)
                 } else {
-                    NavigationStack { destination(selection ?? .models) }
+                    NavigationStack(path: $detailPath) {
+                        destination(selection ?? .models)
+                            .navigationDestination(for: GuideNavigationDestination.self, destination: guideDetail)
+                    }
                 }
             }
             // 切换分类销毁旧导航与草稿上下文，向导不能继续执行上一页的提案。
             .id(selection)
+            .id(routeID)
         }
+        .environment(\.isGuideSettingsWindow, true)
+        .environment(\.feedbackGuidePresentation, $showsGuide)
         .navigationSplitViewStyle(.balanced)
         .disabled(workspace.isRestoringData)
         .frame(minWidth: 820, minHeight: 620)
         .toolbar {
-            if selection != .pulse {
+            if configuration.guideOverlayEnabled || showsGuide {
                 Button { showsGuide.toggle() } label: {
-                    Label(NSLocalizedString("页面向导", comment: ""), systemImage: "sparkles")
+                    Label(NSLocalizedString("使用助手", value: "App Guide", comment: ""), systemImage: "sparkles")
                 }
             }
         }
@@ -55,10 +65,44 @@ struct MacSettingsView: View {
         .overlay { if appLock.state == .locked { AppLockOverlayView() } }
         .networkConnectionApprovalHost(isEnabled: available)
         .modifier(MacSettingsAchievementTriggers())
-        .onAppear { visible = true }
+        .onAppear {
+            visible = true
+            guideSession.attach(openSettings)
+            applyGuideRequest()
+        }
+        .onChange(of: guideSession.pending) { _, _ in if visible { applyGuideRequest() } }
         .onDisappear { visible = false }
-        .onChange(of: selection) { _, _ in showsGuide = false }
+        .onChange(of: selection) { _, section in
+            guideSession.controller.discardPendingProposalForNavigation()
+            if detailPath.first?.macSettingsSection != section { detailPath = [] }
+        }
+        .onChange(of: configuration.guideOverlayEnabled) { _, enabled in
+            if !enabled { showsGuide = false }
+        }
         .onChange(of: configuration.appLanguage) { _, language in AppLanguageRuntime.apply(rawValue: language) }
+    }
+
+    private func applyGuideRequest() {
+        guard let target = guideSession.consume(), let section = target.macSettingsSection else { return }
+        selection = section
+        switch target {
+        case .dataImport, .networkProxy, .connectionExceptions, .feedbackCenter, .feedbackCompose: detailPath = [target]
+        default: detailPath = []
+        }
+        routeID = UUID()
+        showsGuide = true
+    }
+
+    @ViewBuilder
+    private func guideDetail(_ target: GuideNavigationDestination) -> some View {
+        switch target {
+        case .dataImport: MacDataImportView(isActive: available)
+        case .networkProxy: MacGlobalProxyView(model: workspace.globalProxy, isActive: available)
+        case .connectionExceptions: MacConnectionSecurityView(isActive: available, model: workspace.connectionSecurity)
+        case .feedbackCenter: MacFeedbackCenterView(isActive: available)
+        case .feedbackCompose: MacFeedbackComposeView(isActive: available, service: MacAppInformationModel.shared.feedback)
+        default: EmptyView()
+        }
     }
 
     private func rows(_ destinations: [MacSettingsDestination]) -> some View {
@@ -147,11 +191,15 @@ struct MacSettingsView: View {
     }
 
     private var guideSettings: some View {
-        Form { Text(NSLocalizedString("guide.privacy.details", comment: "")).textSelection(.enabled) }
+        Form {
+            Toggle(NSLocalizedString("在设置页面显示使用助手", value: "Show App Guide in Settings", comment: "设置助手入口开关"), isOn: $configuration.guideOverlayEnabled)
+            Text(NSLocalizedString("guide.privacy.details", comment: "")).textSelection(.enabled)
+                .font(.footnote).foregroundStyle(.secondary)
+        }
             .formStyle(.grouped)
-            .navigationTitle(NSLocalizedString("页面向导与隐私", comment: ""))
-            .guideSettingsPageContext(id: "mac-guide-privacy", title: NSLocalizedString("页面向导与隐私", comment: ""),
+            .navigationTitle(NSLocalizedString("使用助手与隐私", value: "App Guide and Privacy", comment: ""))
+            .guideSettingsPageContext(id: "mac-guide-privacy", title: NSLocalizedString("使用助手与隐私", value: "App Guide and Privacy", comment: ""),
                 documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")], isActive: available,
-                settings: [.readOnly("read_only", label: NSLocalizedString("使用说明", comment: ""), value: { .bool(true) })])
+                settings: [.bool("guide_overlay_enabled", label: NSLocalizedString("在设置页面显示使用助手", value: "Show App Guide in Settings", comment: "设置助手入口开关"), get: { configuration.guideOverlayEnabled }, set: { configuration.guideOverlayEnabled = $0 })])
     }
 }

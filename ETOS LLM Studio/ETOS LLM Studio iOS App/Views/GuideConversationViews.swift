@@ -33,64 +33,13 @@ private struct GuideStreamingObservedContent<Content: View>: View {
     }
 }
 
-private struct GuideToolCallRow: View {
-    let call: InternalToolCall
-    let isActive: Bool
-    let isAwaitingConfirmation: Bool
-
-    private var status: (title: String, systemImage: String, color: Color) {
-        switch call.resultDisposition {
-        case .completed:
-            return (NSLocalizedString("已完成", comment: "向导工具调用完成状态"), "checkmark.circle.fill", .green)
-        case .failed:
-            return (NSLocalizedString("失败", comment: "向导工具调用失败状态"), "xmark.circle.fill", .red)
-        case .rejected:
-            return (NSLocalizedString("已拒绝", comment: "向导工具调用拒绝状态"), "hand.raised.circle.fill", .secondary)
-        case nil where isAwaitingConfirmation:
-            return (NSLocalizedString("等待确认", comment: "向导工具调用等待确认状态"), "clock.badge.exclamationmark", .orange)
-        case nil where isActive:
-            return (NSLocalizedString("处理中", comment: "向导工具调用处理状态"), "gearshape.2", .blue)
-        case nil:
-            return (NSLocalizedString("已停止", comment: "向导工具调用停止状态"), "pause.circle.fill", .secondary)
-        }
-    }
-
-    var body: some View {
-        let status = status
-        HStack(spacing: 8) {
-            if isActive && call.resultDisposition == nil && !isAwaitingConfirmation {
-                ProgressView()
-                    .controlSize(.mini)
-                    .tint(status.color)
-            } else {
-                Image(systemName: status.systemImage)
-                    .foregroundStyle(status.color)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(call.toolName)
-                    .font(.caption.monospaced().weight(.semibold))
-                    .lineLimit(2)
-                Text(NSLocalizedString("工具调用", comment: "向导工具调用类型标签"))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 8)
-            Text(status.title)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(status.color)
-        }
-        .padding(8)
-        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .accessibilityElement(children: .combine)
-    }
-}
-
 /// 每条消息独立比较渲染输入，流式增量只允许刷新当前回答，历史 Markdown 不参与重绘。
 private struct GuideMessageBubble: View, Equatable {
     let message: GuideConversationMessage
     let displayedContent: String
     let compact: Bool
     let isStreaming: Bool
+    let tools: GuideMessageTools
     let isToolActive: Bool
     let awaitingToolCallID: String?
     let isLatestError: Bool
@@ -108,6 +57,7 @@ private struct GuideMessageBubble: View, Equatable {
             && lhs.displayedContent == rhs.displayedContent
             && lhs.compact == rhs.compact
             && lhs.isStreaming == rhs.isStreaming
+            && lhs.tools == rhs.tools
             && lhs.isToolActive == rhs.isToolActive
             && lhs.awaitingToolCallID == rhs.awaitingToolCallID
             && lhs.isLatestError == rhs.isLatestError
@@ -118,14 +68,14 @@ private struct GuideMessageBubble: View, Equatable {
     }
 
     var body: some View {
-        if !displayedContent.isEmpty || !message.toolCalls.isEmpty {
+        if !displayedContent.isEmpty || tools.isVisible(active: isToolActive, awaiting: awaitingToolCallID) {
             let isUser = message.role == .user
             let shape = TelegramBubbleShape(isOutgoing: isUser)
             HStack {
                 if isUser { Spacer(minLength: compact ? 28 : 64) }
                 VStack(alignment: .leading, spacing: 6) {
                     if message.role == .tool {
-                        Label(NSLocalizedString("页面操作", comment: "向导工具消息标签"), systemImage: "checkmark.circle")
+                        Label(NSLocalizedString("页面操作", value: "Page Actions", comment: "向导工具消息标签"), systemImage: "checkmark.circle")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -133,18 +83,8 @@ private struct GuideMessageBubble: View, Equatable {
                         messageContent
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    if !message.toolCalls.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            ForEach(message.toolCalls, id: \.id) { call in
-                                GuideToolCallRow(
-                                    call: call,
-                                    isActive: isToolActive,
-                                    isAwaitingConfirmation: awaitingToolCallID == call.id
-                                )
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                    GuideToolStatusLine(tools, active: isToolActive, awaiting: awaitingToolCallID)
+                    GuideDestinationButtons(tools.destinations)
                     if isLatestError {
                         errorRecoveryActions
                     }
@@ -202,7 +142,7 @@ private struct GuideMessageBubble: View, Equatable {
     private var errorRecoveryActions: some View {
         HStack(spacing: 8) {
             Button(action: onRetry) {
-                Label(NSLocalizedString("重试", comment: "向导重试按钮"), systemImage: "arrow.clockwise")
+                Label(NSLocalizedString("重试", value: "Retry", comment: "向导重试按钮"), systemImage: "arrow.clockwise")
             }
             .buttonStyle(.borderless)
             .font(.callout.weight(.semibold))
@@ -212,7 +152,7 @@ private struct GuideMessageBubble: View, Equatable {
                     if canRetryWithBuiltIn {
                         Button(action: onRetryWithBuiltIn) {
                             Label(
-                                NSLocalizedString("使用内置向导重试", comment: "切换内置向导重试按钮"),
+                                NSLocalizedString("使用内置向导重试", value: "Retry with Built-in Guide", comment: "切换内置向导重试按钮"),
                                 systemImage: "sparkles"
                             )
                         }
@@ -220,7 +160,7 @@ private struct GuideMessageBubble: View, Equatable {
                     if canManageModel {
                         Button(action: onManageModel) {
                             Label(
-                                NSLocalizedString("检查模型配置", comment: "向导错误后打开模型管理按钮"),
+                                NSLocalizedString("检查模型配置", value: "Review Model Configuration", comment: "向导错误后打开模型管理按钮"),
                                 systemImage: "slider.horizontal.3"
                             )
                         }
@@ -229,7 +169,7 @@ private struct GuideMessageBubble: View, Equatable {
                     Image(systemName: "ellipsis.circle")
                 }
                 .buttonStyle(.borderless)
-                .accessibilityLabel(NSLocalizedString("更多", comment: "向导错误恢复更多操作"))
+                .accessibilityLabel(NSLocalizedString("更多", value: "More", comment: "向导错误恢复更多操作"))
             }
             Spacer()
         }
@@ -240,7 +180,7 @@ private struct GuideMessageBubble: View, Equatable {
 struct GuideConversationView: View {
     @ObservedObject var controller: GuideConversationController
     @ObservedObject private var router: GuideModelRouter
-    @ObservedObject private var coordinator = GuideContextCoordinator.shared
+    @StateObject private var presentation: GuideMessagePresentation
     @ObservedObject private var appConfig = AppConfigStore.shared
     let compact: Bool
 
@@ -254,6 +194,7 @@ struct GuideConversationView: View {
     init(controller: GuideConversationController, compact: Bool) {
         self.controller = controller
         self.compact = compact
+        _presentation = StateObject(wrappedValue: GuideMessagePresentation(controller: controller))
         _router = ObservedObject(wrappedValue: controller.router)
     }
 
@@ -321,6 +262,7 @@ struct GuideConversationView: View {
                                 displayedContent: isStreaming ? controller.streamingContent : message.content,
                                 compact: compact,
                                 isStreaming: isStreaming,
+                                tools: presentation.tools[message.id] ?? GuideMessageTools(),
                                 isToolActive: controller.isResponding && controller.messages.last?.id == message.id,
                                 awaitingToolCallID: controller.pendingProposal?.toolCallID,
                                 isLatestError: isLatestError(message),
@@ -335,13 +277,13 @@ struct GuideConversationView: View {
                                     routeRevision &+= 1
                                 },
                                 onManageModel: {
-                                    NotificationCenter.default.post(name: .requestGuideModelManagement, object: nil)
+                                    GuideNavigationCoordinator.shared.request(.providerManagement)
                                 }
                             )
                             .equatable()
                             .id(message.id)
                         }
-                        if controller.isResponding || controller.isRestoringHistory {
+                        if controller.isRestoringHistory || presentation.isWaitingForReply(controller) {
                             ProgressView()
                                 .controlSize(.small)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -386,7 +328,7 @@ struct GuideConversationView: View {
                         .buttonBorderShape(.circle)
                         .controlSize(.small)
                         .padding()
-                        .accessibilityLabel(NSLocalizedString("回到最新消息", comment: "向导回到底部按钮"))
+                        .accessibilityLabel(NSLocalizedString("回到最新消息", value: "Jump to Latest Message", comment: "向导回到底部按钮"))
                     }
                 }
             }
@@ -398,23 +340,13 @@ struct GuideConversationView: View {
             Image(systemName: "questionmark.bubble")
                 .font(.title2)
                 .foregroundStyle(.blue)
-            Text(NSLocalizedString("询问当前页面", comment: "向导空状态标题"))
+            Text(NSLocalizedString("使用助手", value: "App Guide", comment: "向导空状态标题"))
                 .font(.headline)
-            Text(emptyStateDetail)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            Text(NSLocalizedString("可以问我怎么配置模型，或让我带你找到需要的设置。", value: "Ask how to set up a model or find a setting.", comment: "助手空状态说明"))
+                .font(.footnote).foregroundStyle(.secondary)
+            GuideSuggestedQuestions(controller: controller)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var emptyStateDetail: String {
-        if let page = coordinator.activePage?.title {
-            return String(
-                format: NSLocalizedString("向导已了解“%@”页面公开的设置与文档。可以直接问它在哪里配置，或让它生成一份待确认的修改。", comment: "向导当前页面空状态说明"),
-                page
-            )
-        }
-        return NSLocalizedString("这个页面还没有声明可供向导读取的上下文。", comment: "向导无页面上下文说明")
     }
 
     private func isLatestError(_ message: GuideConversationMessage) -> Bool {
@@ -425,7 +357,7 @@ struct GuideConversationView: View {
 
     private func proposalPreview(_ proposal: GuideActionProposal) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(NSLocalizedString("等待确认", comment: "向导修改预览状态"), systemImage: "slider.horizontal.3")
+            Label(NSLocalizedString("等待确认", value: "Awaiting Confirmation", comment: "向导修改预览状态"), systemImage: "slider.horizontal.3")
                 .font(.headline)
             Text(proposal.summary)
                 .font(.subheadline)
@@ -441,12 +373,12 @@ struct GuideConversationView: View {
                 .font(.caption)
             }
             HStack {
-                Button(NSLocalizedString("不应用", comment: "拒绝向导修改按钮"), role: .cancel) {
+                Button(NSLocalizedString("不应用", value: "Don’t Apply", comment: "拒绝向导修改按钮"), role: .cancel) {
                     controller.rejectPendingProposal()
                 }
                 .buttonStyle(.bordered)
                 Spacer()
-                Button(NSLocalizedString("确认应用", comment: "确认向导修改按钮")) {
+                Button(NSLocalizedString("确认应用", value: "Apply", comment: "确认向导修改按钮")) {
                     controller.confirmPendingProposal()
                 }
                 .buttonStyle(.borderedProminent)
@@ -459,20 +391,20 @@ struct GuideConversationView: View {
     private var toolContinuationPrompt: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(
-                NSLocalizedString("继续查找？", comment: "向导连续工具调用确认标题"),
+                NSLocalizedString("需要继续查找吗？", value: "Keep looking?", comment: "向导连续工具调用确认标题"),
                 systemImage: "arrow.trianglehead.2.clockwise.rotate.90"
             )
             .font(.headline)
-            Text(NSLocalizedString("向导已连续完成 8 轮工具调用。是否允许它继续读取页面、文档或源码？", comment: "向导连续工具调用确认说明"))
+            Text(NSLocalizedString("这个问题涉及的设置稍微多一点，需要我继续往下排查吗？", value: "There are a few more settings to check. Would you like me to keep looking?", comment: "向导连续工具调用确认说明"))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             HStack {
-                Button(NSLocalizedString("到此为止", comment: "停止向导继续调用工具"), role: .cancel) {
+                Button(NSLocalizedString("不用了", value: "No Thanks", comment: "停止向导继续调用工具"), role: .cancel) {
                     controller.finishToolCalls()
                 }
                 .buttonStyle(.bordered)
                 Spacer()
-                Button(NSLocalizedString("继续调用", comment: "允许向导继续调用工具")) {
+                Button(NSLocalizedString("继续查找", value: "Keep Looking", comment: "允许向导继续调用工具")) {
                     controller.continueToolCalls()
                 }
                 .buttonStyle(.borderedProminent)
@@ -484,7 +416,7 @@ struct GuideConversationView: View {
 
     private var modelBar: some View {
         HStack {
-            Text(NSLocalizedString("回答使用的模型", comment: "向导当前回答模型标签"))
+            Text(NSLocalizedString("回答使用的模型", value: "Model Used for Answers", comment: "向导当前回答模型标签"))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Spacer()
@@ -502,13 +434,13 @@ struct GuideConversationView: View {
                 routeRevision &+= 1
             } label: {
                 routeMenuLabel(
-                    NSLocalizedString("内置免费向导", comment: "内置向导线路名称"),
+                    NSLocalizedString("内置免费向导", value: "Built-in Free Guide", comment: "内置向导线路名称"),
                     selected: router.route == .builtIn
                 )
             }
-            Section(NSLocalizedString("使用我的模型", comment: "用户向导模型分组")) {
+            Section(NSLocalizedString("使用我的模型", value: "Use My Model", comment: "用户向导模型分组")) {
                 if router.availableUserModels.isEmpty {
-                    Text(NSLocalizedString("没有已启用且支持工具调用的云端聊天模型", comment: "无可用用户向导模型"))
+                    Text(NSLocalizedString("没有已启用且支持工具调用的云端聊天模型", value: "No enabled cloud chat model supports tool calling", comment: "无可用用户向导模型"))
                 } else {
                     ForEach(router.availableUserModels, id: \.id) { model in
                         Button {
@@ -535,15 +467,15 @@ struct GuideConversationView: View {
         .id(routeRevision)
         .buttonStyle(.bordered)
         .controlSize(.small)
-        .accessibilityLabel(NSLocalizedString("选择向导模型", comment: "向导线路菜单辅助标签"))
+        .accessibilityLabel(NSLocalizedString("选择向导模型", value: "Choose Guide Model", comment: "向导线路菜单辅助标签"))
     }
 
     private var selectedRouteTitle: String {
         if router.route == .builtIn {
-            return NSLocalizedString("内置免费向导", comment: "内置向导线路名称")
+            return NSLocalizedString("内置免费向导", value: "Built-in Free Guide", comment: "内置向导线路名称")
         }
         guard let model = router.selectedUserModel else {
-            return NSLocalizedString("所选向导模型当前不可用。", comment: "向导所选模型失效提示")
+            return NSLocalizedString("所选向导模型当前不可用。", value: "The selected guide model is currently unavailable.", comment: "向导所选模型失效提示")
         }
         return "\(model.model.displayName) · \(model.provider.name)"
     }
@@ -551,7 +483,7 @@ struct GuideConversationView: View {
     private var composer: some View {
         HStack(alignment: .bottom, spacing: 8) {
             TextField(
-                NSLocalizedString("询问这个页面…", comment: "向导输入框占位"),
+                NSLocalizedString("问问软件怎么用，或让我带你去设置…", value: "Ask how to use the app or find a setting…", comment: "向导输入框占位"),
                 text: $input,
                 axis: .vertical
             )
@@ -567,7 +499,7 @@ struct GuideConversationView: View {
                 } label: {
                     Image(systemName: "stop.fill")
                 }
-                .accessibilityLabel(NSLocalizedString("停止生成", comment: "停止向导生成按钮"))
+                .accessibilityLabel(NSLocalizedString("停止生成", value: "Stop Generating", comment: "停止向导生成按钮"))
             } else {
                 Button(action: send) {
                     Image(systemName: "arrow.up.circle.fill")
@@ -579,7 +511,7 @@ struct GuideConversationView: View {
                         || controller.pendingProposal != nil
                         || controller.isAwaitingToolContinuation
                 )
-                .accessibilityLabel(NSLocalizedString("发送", comment: "发送向导问题按钮"))
+                .accessibilityLabel(NSLocalizedString("发送", value: "Send", comment: "发送向导问题按钮"))
             }
         }
         .padding()
@@ -616,29 +548,29 @@ private struct GuideMessageActionSheet: View {
                 Section {
                     if canEdit {
                         Button(action: onEdit) {
-                            Label(NSLocalizedString("编辑", comment: "编辑向导用户消息"), systemImage: "pencil")
+                            Label(NSLocalizedString("编辑", value: "Edit", comment: "编辑向导用户消息"), systemImage: "pencil")
                         }
                     }
                     if canRetry {
                         Button(action: onRetry) {
-                            Label(NSLocalizedString("重试", comment: "重试向导最近回答"), systemImage: "arrow.clockwise")
+                            Label(NSLocalizedString("重试", value: "Retry", comment: "重试向导最近回答"), systemImage: "arrow.clockwise")
                         }
                     }
                     Button {
                         UIPasteboard.general.string = message.content
                         dismiss()
                     } label: {
-                        Label(NSLocalizedString("复制", comment: "复制向导消息"), systemImage: "doc.on.doc")
+                        Label(NSLocalizedString("复制", value: "Copy", comment: "复制向导消息"), systemImage: "doc.on.doc")
                     }
                 }
             }
             .scrollContentBackground(.hidden)
             .background(Color.clear)
-            .navigationTitle(NSLocalizedString("消息操作", comment: "向导消息操作标题"))
+            .navigationTitle(NSLocalizedString("消息操作", value: "Message Actions", comment: "向导消息操作标题"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(NSLocalizedString("完成", comment: "关闭向导消息操作")) {
+                    Button(NSLocalizedString("完成", value: "Done", comment: "关闭向导消息操作")) {
                         dismiss()
                     }
                 }
@@ -652,7 +584,7 @@ struct GuideFullConversationView: View {
 
     var body: some View {
         GuideConversationView(controller: controller, compact: false)
-            .navigationTitle(NSLocalizedString("页面向导", comment: "向导完整会话标题"))
+            .navigationTitle(NSLocalizedString("使用助手", value: "App Guide", comment: "向导完整会话标题"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
@@ -664,7 +596,7 @@ struct GuideFullConversationView: View {
                     } label: {
                         Image(systemName: "trash")
                     }
-                    .accessibilityLabel(NSLocalizedString("清空向导上下文", comment: "清空向导按钮"))
+                    .accessibilityLabel(NSLocalizedString("清空向导上下文", value: "Clear Guide Context", comment: "清空向导按钮"))
                 }
             }
     }

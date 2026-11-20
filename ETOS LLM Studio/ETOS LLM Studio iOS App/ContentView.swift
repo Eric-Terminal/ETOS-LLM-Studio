@@ -23,6 +23,17 @@ enum GuideOverlayPresentationPolicy {
     }
 }
 
+private enum NativeSettingsRoute: Hashable {
+    case root
+    // 即使目标相同，再次点击也应退出上次留在该目标之上的编辑器。
+    case page(SettingsNavigationDestination, UUID)
+
+    var destination: SettingsNavigationDestination? {
+        if case .page(let destination, _) = self { return destination }
+        return nil
+    }
+}
+
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.sizeCategory) private var sizeCategory
@@ -37,7 +48,10 @@ struct ContentView: View {
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @ObservedObject private var guideCoordinator = GuideContextCoordinator.shared
     @StateObject private var guideController = GuideConversationController(historyStore: .contextualHelp)
-    @State private var settingsDestination: SettingsNavigationDestination?
+    @State private var settingsPath: [NativeSettingsRoute] = []
+    @State private var homeGuide: ChatOnboardingTopic?
+    @State private var fullOverlayPresented = false
+    @State private var pendingGuideDestination: GuideNavigationDestination?
     @State private var dailyPulsePreparationTask: Task<Void, Never>?
     @State private var launchRecoveryNoticeMessage: String?
     @State private var launchRecoveryRequest: Persistence.LaunchRecoveryRequest?
@@ -46,7 +60,7 @@ struct ContentView: View {
     @State private var rootFontPreparationTask: Task<Void, Never>?
     @State private var legacyMigrationErrorMessage: String?
     @State private var isLegacyMigrationErrorPresented: Bool = false
-    @State private var isNativeSettingsPresented: Bool = false
+    private var isNativeSettingsPresented: Bool { !settingsPath.isEmpty }
     @State private var incomingSnapshotRestorePayload: IncomingSnapshotRestorePayload?
     @State private var systemEntryInboxPayload: SystemEntryInboxPayload?
     @State private var systemEntryRoute: SystemEntryRoute?
@@ -240,7 +254,15 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .requestOpenUpdateTimeline)) { _ in
             openUpdateTimelineFromNotification()
         }
+        .onReceive(GuideNavigationCoordinator.shared.navigationRequests) { target in
+            guideController.discardPendingProposalForNavigation()
+            pendingGuideDestination = target
+            if homeGuide != nil { homeGuide = nil }
+            else if fullOverlayPresented { fullOverlayPresented = false }
+            else { finishGuideNavigation() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .requestGuideModelManagement)) { _ in
+            fullOverlayPresented = false
             pushNativeSettings(destination: .modelManagement)
         }
         .onReceive(
@@ -303,18 +325,36 @@ struct ContentView: View {
     }
 
     private var appNavigationContent: some View {
-        NavigationStack {
+        NavigationStack(path: $settingsPath) {
             ChatView()
-                .navigationDestination(isPresented: $isNativeSettingsPresented) {
-                    SettingsView(requestedDestination: $settingsDestination)
+                .environment(\.openChatOnboardingGuide, OpenChatOnboardingGuideAction(router: guideController.router, selection: $homeGuide))
+                .navigationDestination(for: NativeSettingsRoute.self) { route in
+                    SettingsView(requestedDestination: route.destination)
                 }
         }
+        .environmentObject(guideController)
+        .environment(\.feedbackGuidePresentation, $fullOverlayPresented)
+        .sheet(isPresented: $fullOverlayPresented, onDismiss: {
+            guideCoordinator.unpinActivePage()
+            finishGuideNavigation()
+        }) {
+            NavigationStack {
+                GuideFullConversationView(controller: guideController)
+            }
+            .environmentObject(viewModel)
+        }
+        .sheet(item: $homeGuide, onDismiss: finishGuideNavigation) { topic in
+            NavigationStack {
+                GuideFullConversationView(controller: guideController)
+                    .modifier(GuideOnboardingContext(controller: guideController, pageID: "chat-home", prompt: topic.prompt))
+            }
+        }
         .overlay {
-            if GuideOverlayPresentationPolicy.shouldPresent(
+            if homeGuide == nil, guideCoordinator.activePage?.id != "chat-home", GuideOverlayPresentationPolicy.shouldPresent(
                 isEnabled: appConfig.guideOverlayEnabled,
                 activeMode: guideCoordinator.activePage?.mode
             ) {
-                GuideFloatingOverlay(controller: guideController)
+                GuideFloatingOverlay(controller: guideController, isFullConversationPresented: $fullOverlayPresented)
                     .environmentObject(viewModel)
                     .zIndex(100)
             }
@@ -665,17 +705,17 @@ struct ContentView: View {
     }
 
     private func pushNativeSettings(destination: SettingsNavigationDestination?) {
-        settingsDestination = nil
-        isNativeSettingsPresented = true
-        if let destination {
-            DispatchQueue.main.async {
-                settingsDestination = destination
-            }
-        }
+        settingsPath = destination.map { [.root, .page($0, UUID())] } ?? [.root]
+    }
+
+    private func finishGuideNavigation() {
+        guard let target = pendingGuideDestination else { return }
+        pendingGuideDestination = nil
+        pushNativeSettings(destination: .guide(target))
     }
 
     private func pushNativeChatIfNeeded() {
-        isNativeSettingsPresented = false
+        settingsPath.removeAll()
     }
 
     private func updateSettingsGuideContext(isPresented: Bool) {

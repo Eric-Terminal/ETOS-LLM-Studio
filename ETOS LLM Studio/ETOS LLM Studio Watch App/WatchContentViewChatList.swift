@@ -15,8 +15,16 @@ extension ContentView {
         let displayedMessages = viewModel.displayMessages
         let retryableMessageIDs = viewModel.retryableMessageIDs
         return List {
-            if viewModel.messages.isEmpty && continuationContext == nil {
-                Spacer().frame(height: emptyStateSpacerHeight).listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+            if viewModel.messages.isEmpty && viewModel.allMessagesForSession.isEmpty && continuationContext == nil {
+                if let state = setupPresentation.state, state != .ready {
+                    Text(GuideSetupPresentation.hint(for: state)).font(.footnote).foregroundStyle(.secondary)
+                    WatchGuideOnboardingButton()
+                    Button(NSLocalizedString("前往模型管理", value: "Open Model Management", comment: "手表手动配置入口")) {
+                        GuideNavigationCoordinator.shared.request(.providerManagement)
+                    }
+                } else {
+                    Spacer().frame(height: emptyStateSpacerHeight).listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+                }
             }
 
             let remainingCount = viewModel.remainingHistoryCount
