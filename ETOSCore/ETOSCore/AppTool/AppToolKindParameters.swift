@@ -237,9 +237,13 @@ extension AppToolKind {
             return JSONValue.dictionary([
                 "type": .string("object"),
                 "properties": .dictionary([
-                    "memory_id": .dictionary([
+                    "label": .dictionary([
                         "type": .string("string"),
-                        "description": .string(NSLocalizedString("要编辑的记忆 ID，可从 search_memory 的结果里获得。", comment: "Memory edit tool memory id parameter description"))
+                        "description": .string(NSLocalizedString("目标记忆在列表或搜索结果中的完整 label。", comment: "记忆编辑标签参数"))
+                    ]),
+                    "expected_version": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("目标条目上次读取时的 version，必须与 label 来自同一条结果。", comment: "记忆编辑版本参数"))
                     ]),
                     "content": .dictionary([
                         "type": .string("string"),
@@ -280,7 +284,7 @@ extension AppToolKind {
                         "description": .string(NSLocalizedString("设置事实停止生效的 ISO 8601 时间，用于保留已被新事实取代的历史记录。", comment: "Memory edit valid until parameter description"))
                     ])
                 ]),
-                "required": .array([.string("memory_id")])
+                "required": .array([.string("label"), .string("expected_version")])
             ])
         case .submitFeedbackTicket:
             return JSONValue.dictionary([
@@ -535,7 +539,10 @@ extension AppToolKind {
                     ]),
                     "limit": .dictionary([
                         "type": .string("integer"),
-                        "description": .string(NSLocalizedString("返回数量上限，默认 20，最大 200。", comment: "List memories limit parameter description"))
+                        "default": .int(10),
+                        "minimum": .int(1),
+                        "maximum": .int(25),
+                        "description": .string(NSLocalizedString("每页默认 10 条，最多 25 条。用 offset 读取下一页。", comment: "记忆列表分页上限"))
                     ]),
                     "order": .dictionary([
                         "type": .string("string"),

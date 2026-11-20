@@ -9,12 +9,15 @@
 import Foundation
 
 extension AppToolManager {
-    func executeEditMemory(
+    @concurrent
+    nonisolated func executeEditMemory(
         argumentsJSON: String,
+        memoryManager: MemoryManager = .shared,
         context: MemoryMutationContext = MemoryMutationContext(origin: .tool, sourceToolName: "edit_memory")
     ) async throws -> String {
         struct EditMemoryArgs: Decodable {
-            let memory_id: String
+            let label: String
+            let expected_version: String
             let content: String?
             let is_archived: Bool?
             let kind: String?
@@ -28,23 +31,7 @@ extension AppToolManager {
         guard let argsData = argumentsJSON.data(using: .utf8),
               let args = try? JSONDecoder().decode(EditMemoryArgs.self, from: argsData) else {
             throw AppToolExecutionError.invalidArguments(
-                NSLocalizedString("错误：无法解析 edit_memory 的参数，请至少提供 memory_id。", comment: "Memory edit tool invalid arguments")
-            )
-        }
-
-        guard let memoryID = UUID(uuidString: args.memory_id.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-            throw AppToolExecutionError.invalidArguments(
-                NSLocalizedString("错误：edit_memory 的 memory_id 不是合法的 UUID。", comment: "Memory edit tool invalid memory id")
-            )
-        }
-
-        let memories = await MemoryManager.shared.getAllMemories()
-        guard let existing = memories.first(where: { $0.id == memoryID }) else {
-            throw AppToolExecutionError.invalidArguments(
-                String(
-                    format: NSLocalizedString("错误：未找到 ID 为 %@ 的记忆。", comment: "Memory edit tool memory not found"),
-                    args.memory_id
-                )
+                NSLocalizedString("请提供 label 和 expected_version，分别取自同一条查询结果的 label 和 version。", comment: "记忆编辑参数缺失")
             )
         }
 
@@ -65,8 +52,6 @@ extension AppToolManager {
             )
         }
 
-        let embeddingConfigured = MemoryManager.shared.isEmbeddingModelConfigured()
-        let resultPayload: [String: Any]
         let formatter = ISO8601DateFormatter()
 
         if let kind = args.kind, MemoryKind(rawValue: kind) == nil {
@@ -77,53 +62,76 @@ extension AppToolManager {
         let validFrom = try parseMemoryDate(args.valid_from, field: "valid_from", formatter: formatter)
         let validUntil = try parseMemoryDate(args.valid_until, field: "valid_until", formatter: formatter)
 
-        if hasContentUpdate || hasMetadataUpdate {
-            var updated = existing
-            updated.content = trimmedContent ?? existing.content
-            if let isArchived = args.is_archived {
-                updated.isArchived = isArchived
-            }
-            if let kind = args.kind.flatMap(MemoryKind.init(rawValue:)) { updated.kind = kind }
-            if let importance = args.importance { updated.importance = min(max(importance, 0), 1) }
-            if let confidence = args.confidence { updated.confidence = min(max(confidence, 0), 1) }
-            if let entities = args.entities { updated.entities = entities }
-            if args.valid_from != nil { updated.validFrom = validFrom }
-            if args.valid_until != nil { updated.validUntil = validUntil }
-            await MemoryManager.shared.updateMemory(item: updated, context: context)
-            resultPayload = [
-                "memory_id": existing.id.uuidString,
-                "content": updated.content,
-                "isArchived": updated.isArchived,
-                "kind": updated.kind.rawValue,
-                "importance": updated.importance,
-                "confidence": updated.confidence,
-                "entities": updated.entities,
-                "embeddingConfigured": embeddingConfigured,
-                "reembedded": embeddingConfigured && hasContentUpdate
-            ]
-        } else if let isArchived = args.is_archived {
-            if isArchived {
-                await MemoryManager.shared.archiveMemory(existing, context: context)
-            } else {
-                await MemoryManager.shared.unarchiveMemory(existing, context: context)
-            }
-            resultPayload = [
-                "memory_id": existing.id.uuidString,
-                "content": existing.content,
-                "isArchived": isArchived,
-                "embeddingConfigured": embeddingConfigured,
-                "reembedded": false
-            ]
-        } else {
+        let memories = await memoryManager.getAllMemories()
+        var matches = memories.lazy.filter { $0.toolLabel == args.label }.makeIterator()
+        guard let existing = matches.next(), matches.next() == nil else {
             throw AppToolExecutionError.invalidArguments(
-                NSLocalizedString("错误：edit_memory 没有提供任何可更新字段。", comment: "Memory edit tool missing update fields")
+                NSLocalizedString("无法按此标签唯一定位记忆。请重新查询目标条目。", comment: "记忆标签缺失或重名")
             )
         }
+        guard try existing.toolVersion == args.expected_version else {
+            throw Self.memoryVersionConflict(existing)
+        }
 
-        return prettyPrintedJSONString(from: resultPayload)
+        var updated = existing
+        if let trimmedContent { updated.content = trimmedContent }
+        if let isArchived = args.is_archived { updated.isArchived = isArchived }
+        if let kind = args.kind.flatMap(MemoryKind.init(rawValue:)) { updated.kind = kind }
+        if let importance = args.importance { updated.importance = min(max(importance, 0), 1) }
+        if let confidence = args.confidence { updated.confidence = min(max(confidence, 0), 1) }
+        if let entities = args.entities { updated.entities = entities }
+        if args.valid_from != nil { updated.validFrom = validFrom }
+        if args.valid_until != nil { updated.validUntil = validUntil }
+
+        let archiveOnly = !hasContentUpdate && !hasMetadataUpdate
+        let receipt: (memory: MemoryItem, reembedded: Bool)
+        if archiveOnly && existing.isArchived == updated.isArchived {
+            receipt = (existing, false)
+        } else {
+            let operation: MemoryMutationOperation
+            if archiveOnly {
+                operation = updated.isArchived ? .archived : .restored
+            } else {
+                operation = .edited
+            }
+            let snapshot = MemoryVersionSnapshot(memory: existing)
+            guard let saved = await memoryManager.saveMemoryEdit(
+                item: updated, context: context, expectedSnapshot: snapshot, operation: operation
+            ) else {
+                if let current = await memoryManager.getAllMemories().first(where: { $0.id == existing.id }),
+                   try current.toolVersion != args.expected_version {
+                    throw Self.memoryVersionConflict(current)
+                }
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("未能保存记忆。请重新查询并核对目标条目。", comment: "记忆编辑未提交")
+                )
+            }
+            receipt = saved
+        }
+
+        let saved = receipt.memory
+        return prettyPrintedJSONString(from: [
+            "label": saved.toolLabel,
+            "version": try saved.toolVersion,
+            "content": saved.content,
+            "isArchived": saved.isArchived,
+            "kind": saved.kind.rawValue,
+            "importance": saved.importance,
+            "confidence": saved.confidence,
+            "entities": saved.entities,
+            "embeddingConfigured": memoryManager.isEmbeddingModelConfigured(),
+            "reembedded": receipt.reembedded
+        ])
     }
 
-    private func parseMemoryDate(
+    private nonisolated static func memoryVersionConflict(_ current: MemoryItem) -> AppToolExecutionError {
+        .invalidArguments(String(
+            format: NSLocalizedString("记忆版本不匹配，未写入。请重新查询并核对当前内容：%@", comment: "记忆版本冲突及当前摘要"),
+            String(current.content.prefix(160))
+        ))
+    }
+
+    private nonisolated func parseMemoryDate(
         _ value: String?,
         field: String,
         formatter: ISO8601DateFormatter
@@ -247,7 +255,8 @@ extension AppToolManager {
         return prettyPrintedJSONString(from: payload)
     }
 
-    func executeListMemories(argumentsJSON: String) async throws -> String {
+    @concurrent
+    nonisolated func executeListMemories(argumentsJSON: String, memoryManager: MemoryManager = .shared) async throws -> String {
         struct ListMemoriesArgs: Decodable {
             let query: String?
             let include_archived: Bool?
@@ -261,20 +270,21 @@ extension AppToolManager {
 
         let includeArchived = args?.include_archived ?? true
         let offset = max(0, args?.offset ?? 0)
-        let limit = min(max(1, args?.limit ?? 20), 200)
+        let limit = min(max(1, args?.limit ?? 10), 25)
         let keyword = args?.query?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let sortDescending = (args?.order ?? "desc").lowercased() != "asc"
 
-        let allMemories = await MemoryManager.shared.getAllMemories()
+        let allMemories = await memoryManager.getAllMemories()
         let filtered = allMemories.filter { memory in
             guard includeArchived || !memory.isArchived else { return false }
             guard !keyword.isEmpty else { return true }
-            return memory.content.localizedCaseInsensitiveContains(keyword)
+            return memory.content.localizedCaseInsensitiveContains(keyword) || memory.toolLabel == keyword
         }
 
         let sorted = filtered.sorted { lhs, rhs in
             let leftDate = lhs.updatedAt ?? lhs.createdAt
             let rightDate = rhs.updatedAt ?? rhs.createdAt
+            if leftDate == rightDate { return lhs.id.uuidString < rhs.id.uuidString }
             if sortDescending {
                 return leftDate > rightDate
             }
@@ -287,9 +297,10 @@ extension AppToolManager {
             "total": sorted.count,
             "offset": offset,
             "limit": limit,
-            "items": paged.map { item in
+            "items": try paged.map { item in
                 var payload: [String: Any] = [
-                    "memory_id": item.id.uuidString,
+                    "label": item.toolLabel,
+                    "version": try item.toolVersion,
                     "content": item.content,
                     "isArchived": item.isArchived,
                     "kind": item.kind.rawValue,

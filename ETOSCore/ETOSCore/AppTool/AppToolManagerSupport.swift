@@ -166,7 +166,7 @@ extension AppToolManager {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    func prettyPrintedJSONString(from payload: [String: Any]) -> String {
+    nonisolated func prettyPrintedJSONString(from payload: [String: Any]) -> String {
         do {
             let data = try JSONSerialization.data(
                 withJSONObject: payload,

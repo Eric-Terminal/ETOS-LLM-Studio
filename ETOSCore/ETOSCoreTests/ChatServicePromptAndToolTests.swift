@@ -825,7 +825,7 @@ extension ChatServiceTests {
             integer: 1,
             typeHint: AppConfigKey.memorySendUpdateTime.typeHint
         )
-        let resultWithTime = chatService.serializeMemorySearchResult(
+        let resultWithTime = await chatService.serializeMemorySearchResult(
             mode: "keyword",
             query: "Swift",
             requestedCount: 1,
@@ -833,13 +833,17 @@ extension ChatServiceTests {
         )
         #expect(resultWithTime.contains("\"updatedAt\""))
         #expect(!resultWithTime.contains("\"createdAt\""))
+        let version = try memory.toolVersion
+        #expect(resultWithTime.contains(memory.toolLabel))
+        #expect(resultWithTime.contains(version))
+        #expect(!resultWithTime.contains(memory.id.uuidString))
 
         Persistence.writeAppConfig(
             key: AppConfigKey.memorySendUpdateTime.rawValue,
             integer: 0,
             typeHint: AppConfigKey.memorySendUpdateTime.typeHint
         )
-        let resultWithoutTime = chatService.serializeMemorySearchResult(
+        let resultWithoutTime = await chatService.serializeMemorySearchResult(
             mode: "keyword",
             query: "Swift",
             requestedCount: 1,

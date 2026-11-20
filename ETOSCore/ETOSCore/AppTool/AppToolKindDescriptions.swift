@@ -65,7 +65,7 @@ extension AppToolKind {
             )
         case .editMemory:
             return NSLocalizedString(
-                "编辑既有长期记忆。可按 memory_id 修改 content，也可切换归档状态。修改 content 后会自动重新生成这条记忆的嵌入。",
+                "编辑或归档长期记忆。先从列表或搜索中核对目标正文，再使用同一条目的 label 和 version。遇到冲突时重新读取并核对目标。",
                 comment: "Memory edit tool description sent to model"
             )
         case .submitFeedbackTicket:

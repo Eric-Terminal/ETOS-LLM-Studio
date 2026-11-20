@@ -331,6 +331,19 @@ public extension SimilarityIndex {
     }
 }
 
+extension SimilarityIndex {
+    /// 已取得全部新向量后一次替换分块，检索只能看到完整的一组。
+    func replaceItems(where matches: (IndexItem) -> Bool, with items: [IndexItem]) {
+        stateLock.withLock {
+            storedItems.removeAll(where: matches)
+            for item in items {
+                updateDimensionIfNeeded(with: item.embedding.count)
+            }
+            storedItems.append(contentsOf: items)
+        }
+    }
+}
+
 // MARK: - 持久化
 
 public extension SimilarityIndex {

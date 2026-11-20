@@ -68,19 +68,6 @@ extension MemoryManager {
         }
     }
 
-    func persistRawMemories() {
-        let memoriesToPersist = cachedMemories
-        persistenceQueue.async { [weak self] in
-            guard let self else { return }
-            do {
-                try self.rawStore.saveMemories(memoriesToPersist)
-                self.logger.info("原文记忆已保存。")
-            } catch {
-                self.logger.error("保存原文记忆失败: \(error.localizedDescription)")
-            }
-        }
-    }
-
     func scheduleConsistencyCheck(after delay: TimeInterval = 0) {
         let shouldSchedule = autoRetryStateQueue.sync { () -> Bool in
             guard !autoReconcileSuspendedByHardError else { return false }
@@ -219,9 +206,7 @@ extension MemoryManager {
 
         do {
             let embeddings = try await embeddingsWithRetry(for: chunkTexts)
-            await ingest(memory: memory, chunkTexts: chunkTexts, embeddings: embeddings)
-            logger.info("已补齐记忆嵌入：\(memory.id.uuidString)。")
-            return true
+            return ingest(memory: memory, chunkTexts: chunkTexts, embeddings: embeddings)
         } catch {
             logger.error("补写记忆嵌入失败：\(error.localizedDescription)")
             notifyEmbeddingErrorIfNeeded(error)
@@ -467,19 +452,30 @@ extension MemoryManager {
     func recordMemoryAccess(_ memories: [MemoryItem], at date: Date = Date()) {
         guard !memories.isEmpty else { return }
         let ids = Set(memories.map(\.id))
-        var shouldPersist = false
-        for index in cachedMemories.indices where ids.contains(cachedMemories[index].id) {
-            let previousCount = cachedMemories[index].accessCount
-            let previousAccess = cachedMemories[index].lastAccessedAt
-            cachedMemories[index].accessCount += 1
-            cachedMemories[index].lastAccessedAt = date
-            let count = cachedMemories[index].accessCount
-            let reachedPersistenceMilestone = count == 1 || (count & (count - 1)) == 0
-            let crossedDailyBoundary = previousAccess.map { date.timeIntervalSince($0) >= 86_400 } ?? true
-            shouldPersist = shouldPersist || reachedPersistenceMilestone || crossedDailyBoundary || previousCount == 0
-        }
-        if shouldPersist {
-            persistRawMemories()
+        mutationQueue.sync {
+            var current = cachedMemories
+            var shouldPersist = false
+            for index in current.indices where ids.contains(current[index].id) {
+                let previousAccess = current[index].lastAccessedAt
+                current[index].accessCount += 1
+                current[index].lastAccessedAt = date
+                let count = current[index].accessCount
+                let reachedPersistenceMilestone = (count & (count - 1)) == 0
+                let crossedDailyBoundary = previousAccess.map { date.timeIntervalSince($0) >= 86_400 } ?? true
+                shouldPersist = shouldPersist || reachedPersistenceMilestone || crossedDailyBoundary
+            }
+            cachedMemories = current
+            // 与正文事务共用队列，等轮到写盘时才取快照，避免检索将旧正文写回。
+            if shouldPersist {
+                mutationQueue.async { [weak self] in
+                    guard let self else { return }
+                    do {
+                        try self.rawStore.saveMemories(self.cachedMemories)
+                    } catch {
+                        self.logger.error("保存记忆访问记录失败：\(error.localizedDescription)")
+                    }
+                }
+            }
         }
     }
 
@@ -611,38 +607,30 @@ extension MemoryManager {
         }
     }
 
-    func ingest(memory: MemoryItem, chunkTexts: [String], embeddings: [[Float]]) async {
+    @discardableResult
+    func ingest(memory: MemoryItem, chunkTexts: [String], embeddings: [[Float]]) -> Bool {
         guard chunkTexts.count == embeddings.count else {
             logger.error("嵌入数量与分块数量不一致，取消写入。")
-            return
+            return false
         }
-
-        for (index, chunkText) in chunkTexts.enumerated() {
-            let chunkID = UUID().uuidString
-            let metadata = chunkMetadata(for: memory, chunkIndex: index, chunkId: chunkID)
-
-            await similarityIndex.addItem(
-                id: chunkID,
-                text: chunkText,
-                metadata: metadata,
-                embedding: embeddings[index]
-            )
+        // 原文和审计已在请求嵌入前落盘。迟到的向量既不能复活旧正文，也不能替换新索引。
+        let installed = mutationQueue.sync {
+            guard cachedMemories.first(where: { $0.id == memory.id })?.content == memory.content else { return false }
+            let items = chunkTexts.enumerated().map { index, text in
+                let id = UUID().uuidString
+                return IndexItem(
+                    id: id, text: text, embedding: embeddings[index],
+                    metadata: chunkMetadata(for: memory, chunkIndex: index, chunkId: id)
+                )
+            }
+            let parentID = memory.id.uuidString
+            similarityIndex.replaceItems(where: { $0.metadata["parentMemoryId"] == parentID || $0.id == parentID }, with: items)
+            return true
         }
-
-        cacheMemory(memory)
+        guard installed else { return false }
         resetAutoRetryState(for: memory.id)
         saveIndex()
-    }
-
-    func cacheMemory(_ memory: MemoryItem) {
-        if let index = cachedMemories.firstIndex(where: { $0.id == memory.id }) {
-            cachedMemories[index] = memory
-        } else {
-            cachedMemories.append(memory)
-        }
-        cachedMemories.sort(by: { $0.createdAt > $1.createdAt })
-        internalMemoriesPublisher.send(cachedMemories)
-        persistRawMemories()
+        return true
     }
 
     @discardableResult

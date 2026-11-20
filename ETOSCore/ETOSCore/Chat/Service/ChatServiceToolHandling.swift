@@ -212,7 +212,7 @@ extension ChatService {
                 break
             }
 
-            content = serializeMemorySearchResult(
+            content = await serializeMemorySearchResult(
                 mode: mode,
                 query: query,
                 requestedCount: requestedCount,
@@ -551,17 +551,20 @@ extension ChatService {
         )
     }
 
+    @concurrent
     func serializeMemorySearchResult(
         mode: String,
         query: String,
         requestedCount: Int,
         memories: [MemoryItem],
         explanations: [UUID: MemoryRetrievalExplanation] = [:]
-    ) -> String {
+    ) async -> String {
         let formatter = ISO8601DateFormatter()
-        let items: [[String: Any]] = memories.map { memory in
+        let includeUpdateTime = shouldSendMemoryUpdateTime()
+        func searchItem(_ memory: MemoryItem) throws -> [String: Any] {
             var item: [String: Any] = [
-                "id": memory.id.uuidString,
+                "label": memory.toolLabel,
+                "version": try memory.toolVersion,
                 "content": memory.content,
                 "kind": memory.kind.rawValue,
                 "source": memory.source.rawValue,
@@ -576,7 +579,7 @@ extension ChatService {
             if let validUntil = memory.validUntil {
                 item["validUntil"] = formatter.string(from: validUntil)
             }
-            if shouldSendMemoryUpdateTime() {
+            if includeUpdateTime {
                 item["updatedAt"] = formatter.string(from: memory.updatedAt ?? memory.createdAt)
             }
             if let explanation = explanations[memory.id] {
@@ -595,15 +598,14 @@ extension ChatService {
             }
             return item
         }
-        let payload: [String: Any] = [
-            "mode": mode,
-            "query": query,
-            "requestedCount": requestedCount,
-            "returnedCount": memories.count,
-            "items": items
-        ]
-
         do {
+            let payload: [String: Any] = [
+                "mode": mode,
+                "query": query,
+                "requestedCount": requestedCount,
+                "returnedCount": memories.count,
+                "items": try memories.map(searchItem)
+            ]
             let data = try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted])
             return String(data: data, encoding: .utf8) ?? NSLocalizedString("错误：检索结果序列化失败。", comment: "Search memory serialize fallback")
         } catch {

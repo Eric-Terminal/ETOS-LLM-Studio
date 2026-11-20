@@ -192,7 +192,7 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
         case .createCustomWebKitJSTool:
             return NSLocalizedString("保存 AI 可复用的 WebKit bridge 自定义工具。", comment: "Create custom WebKit JS tool summary")
         case .editMemory:
-            return NSLocalizedString("按记忆 ID 编辑既有记忆内容，并在需要时自动重新嵌入。", comment: "Memory edit tool summary")
+            return NSLocalizedString("按标签编辑记忆，保存前核对版本。", comment: "记忆编辑工具摘要")
         case .submitFeedbackTicket:
             return NSLocalizedString("向反馈助手提交问题或建议工单，并返回工单编号与状态。", comment: "Submit feedback ticket tool summary")
         case .listSandboxDirectory:
