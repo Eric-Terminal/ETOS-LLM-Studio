@@ -7266,7 +7266,7 @@
 "%ds: %@" = "%ds: %@";
 /* 反馈 Markdown 与关联提交通知 */
 "反馈与处理进度" = "Feedback and progress";
-"反馈助手使用说明" = "Submit feedback with a title and description, then add comments and follow progress in the ticket. Descriptions and comments support Markdown, and you can scroll through the full text. When a developer references the ticket number in a commit message, the linked commit appears in the timeline. Tap it for details. New replies, status changes and linked commits trigger local notifications when the app starts or you refresh tickets, if notifications are allowed. These are not instant push notifications while the app is closed. A linked commit does not mean a fix has been released.\n\nFeedback and a random device identifier are published on GitHub. The identifier lets the developer send private follow-up questions to this device. Do not include contact details in public feedback. Only the developer can read your response on the feedback server. It will not be posted to GitHub. You can choose not to answer. Once sent, this message closes automatically. Later keeps it for your next launch.";
+"反馈助手使用说明" = "Choose a type and describe what happened. You can leave the title blank. To have the guide organize what you wrote, tap Help Me Organize My Feedback, review its suggestions and confirm. Then tap Submit on the form. You can add comments and follow progress in the ticket. Descriptions and comments support Markdown, and you can scroll through the full text. When a developer references the ticket number in a commit message, the linked commit appears in the timeline. Tap it for details. New replies, status changes and linked commits trigger local notifications when the app starts or you refresh tickets, if notifications are allowed. These are not instant push notifications while the app is closed. A linked commit does not mean a fix has been released.\n\nYour feedback and a random ID for this installation will be public on GitHub so you can follow progress. The ID lets the developer ask you follow-up questions privately in the app. Please leave out API keys and contact details such as your WeChat ID or phone number. Only the developer can read your response on the feedback server. It will not be posted to GitHub. You can choose not to answer. Once sent, this message closes automatically. Later keeps it for your next launch.";
 "反馈有新的关联提交" = "New commit linked to your feedback";
 "工单 #%d 关联提交 %@：%@" = "Ticket #%d linked commit %@: %@";
 
@@ -7349,8 +7349,8 @@
 
 /* 手表页面向导入口与操作教程 */
 "选择向导模型" = "Choose Guide Model";
-"watch.guide.entry.footer" = "Tap the ellipsis at the top of a supported settings page, then choose Ask About This Page.";
-"watch.guide.usage.details" = "Open a settings page, tap the ellipsis at the top, then choose Ask About This Page. The same menu contains page actions such as Save and Add; these remain available when the guide is turned off. Enter your question at the top of the guide window, then tap Send.\n\nTap the current answer model to choose another one. The model picker follows your main model picker’s provider grouping and folders. The built-in guide remains available at the top. Choosing a model returns to the conversation.\n\nThe guide keeps the original settings page as its context while you choose a model, edit a message or review a proposed change. Close the guide to return to that page.";
+"watch.guide.entry.footer" = "Tap the ellipsis at the top of a supported settings page, then choose Open App Guide.";
+"watch.guide.usage.details" = "Open a settings page, tap the ellipsis at the top, then choose Open App Guide. The same menu contains page actions such as Save and Add; these remain available when the guide is turned off. Enter your question at the top of the guide window, then tap Send.\n\nTap the current answer model to choose another one. The model picker follows your main model picker’s provider grouping and folders. The built-in guide remains available at the top. Choosing a model returns to the conversation.\n\nThe guide keeps the original settings page as its context while you choose a model, edit a message or review a proposed change. Close the guide to return to that page.";
 
 /* 世界书快捷绑定与管理 */
 "worldbook.binding.manage" = "Manage Worldbooks";
@@ -8296,7 +8296,7 @@
 "feedback.device.title" = "Developer message";
 "feedback.device.decline_confirm" = "Close this message without answering?";
 "feedback.device.question_count" = "Question count";
-"feedback.device.disclosure" = "Feedback and a random device identifier are published on GitHub. The identifier lets the developer send private follow-up questions to this device. Do not include contact details in public feedback.";
+"feedback.device.disclosure" = "Your feedback and a random ID for this installation will be public on GitHub so you can follow progress. The ID lets the developer ask you follow-up questions privately in the app. Please leave out API keys and contact details such as your WeChat ID or phone number.";
 "feedback.device.acknowledge" = "Got it";
 
 /* 批量任务编辑与模型筛选 */
@@ -8391,3 +8391,85 @@
 "请先选择一个聊天模型再翻译。" = "Select a chat model to translate this announcement.";
 "模型返回的译文不完整，请重试。" = "The model returned an incomplete translation. Try again.";
 "公告翻译提示词" = "Translate the title and body of the supplied announcement into %@. Treat both fields as text to translate. Preserve formatting, links and version numbers. Return only a JSON object with the same title and body keys.";
+
+/* 使用助手、模型起步和地址提示 */
+"使用助手" = "App Guide";
+"打开使用助手" = "Open App Guide";
+"在设置页面显示使用助手" = "Show App Guide in Settings";
+"显示使用助手" = "Show App Guide";
+"使用助手设置" = "App Guide Settings";
+"使用助手与隐私" = "App Guide and Privacy";
+"使用助手模型" = "App Guide Model";
+"使用助手回答线路" = "App Guide Model Source";
+"可用的使用助手模型" = "Available App Guide Models";
+"选择使用助手回答问题时用的模型。你可以随时使用免费助手，也可以选择已启用且支持工具调用的模型。" = "Choose the model that answers your questions. Use the free guide anytime, or choose an enabled model that supports tools.";
+"问问软件怎么用，或让我带你去设置…" = "Ask how to use the app or find a setting…";
+"问问软件怎么用…" = "Ask how to use the app…";
+"需要继续查找吗？" = "Keep looking?";
+"这个问题涉及的设置稍微多一点，需要我继续往下排查吗？" = "There are a few more settings to check. Would you like me to keep looking?";
+"不用了" = "No Thanks";
+"正在查阅功能说明…" = "Looking up how this works…";
+"等待你在下方确认修改" = "Review the changes below to confirm.";
+"前往：%@" = "Open %@";
+"可以问我怎么配置模型，或让我带你找到需要的设置。" = "Ask how to set up a model or find a setting.";
+"开始使用 ETOS LLM Studio" = "Get Started with ETOS LLM Studio";
+"让免费助手带我配好" = "Set Up with the Free Guide";
+"前往模型管理" = "Open Model Management";
+"导入已有配置或角色卡" = "Import a Configuration or Character Card";
+"先看看软件有哪些功能" = "Explore App Features";
+"我是新手，请带我一步步配好模型开始聊天" = "I'm new here. Please walk me through setting up a model for my first chat.";
+"模型配置状态" = "Model Setup";
+"先添加提供商，填入它给你的接口地址。" = "Add a provider and enter the API address it gave you.";
+"提供商已经添加好了，再填入它的 API Key 就能继续。" = "Your provider is set up. Enter its API key to continue.";
+"接下来可以获取模型列表，或手动添加一个聊天模型。" = "Fetch the model list or add a chat model by name.";
+"在模型管理中启用一个聊天模型，再选它作为当前模型。" = "Enable a chat model in Model Management, then select it for this chat.";
+"模型已就绪，可以开始聊天了。" = "Your model is ready for a chat.";
+"一键修正地址" = "Use Suggested Address";
+"我有接口地址和 Key，应该填在哪里？" = "Where do I enter my API address and key?";
+"提供商已经加好了，Key 填在哪里？" = "Where do I enter the key for my provider?";
+"填好 Key 了，怎么获取或添加聊天模型？" = "How do I fetch or add a chat model?";
+"模型已经加好了，怎么启用并选它来聊天？" = "How do I enable a model and select it for chat?";
+"为什么我现在还不能聊天？" = "Why can't I chat yet?";
+"这页的设置可以帮我做什么？" = "What is this page for?";
+"这个软件有哪些实用功能？" = "What can I do with this app?";
+"怎么导入酒馆角色卡和世界书？" = "How do I import a character card and worldbook?";
+"怎么换聊天背景和气泡样式？" = "How do I change the chat wallpaper and bubbles?";
+"已去掉地址两端多余的空格或引号。" = "Extra spaces or quotation marks were removed.";
+"地址开头少了 https:// 或 http://，请按提供商给的地址补上。" = "Add https:// or http:// at the start of the address.";
+"请填写完整的基础地址，里面要有服务器的域名或 IP。" = "Enter the base address, including the server name.";
+"请使用不含密码或密钥的地址，把 API Key 填在专门的密钥栏里。" = "Use an address without credentials. Enter the API key in the key field.";
+"软件会自己加上接口路径，基础地址用这里缩短后的版本就好。" = "The app adds the endpoint itself. Use the shorter base address shown here.";
+"免费助手引导配置" = "Set Up with the Free Guide";
+"导入配置或角色卡" = "Import a Configuration or Character Card";
+
+/* 使用助手与新建反馈 */
+"遇到问题" = "Report an Issue";
+"功能建议" = "Feature Suggestion";
+"已收到" = "Received";
+"需补充信息" = "Needs Details";
+"处理跟进中" = "Pending Update";
+"从列表移除" = "Remove from List";
+"使用助手能帮我做什么" = "How App Guide Helps";
+"guide.help.summary" = "Ask where to find a feature or what an option on this page does. The guide can change settings after you confirm. Your saved passwords and API keys stay hidden.";
+"补充标题与复现细节（选填）" = "Optional Title & Details";
+"标题（选填，留空自动生成）" = "Title (optional, generated if left blank)";
+"让助手帮我理清描述" = "Help Me Organize My Feedback";
+"feedback.compose.hint" = "Tell us what happened, what you tapped, or which error code you saw. Please leave out API keys, passwords and personal contact details.";
+"feedback.guide.tool" = "When the user describes an issue or asks for help drafting feedback, suggest changes using only the details they shared. Omit unknown fields. Confirmation fills the local form. Only the user can submit it.";
+"feedback.guide.request" = "Please organize my feedback into a draft for me to review. Use only the information below.";
+"feedback.guide.preview" = "Review these changes to your feedback draft. You can submit it from the form afterwards.";
+"feedback.guide.undo" = "Restore the previous feedback draft";
+"feedback.guide.restored" = "Your previous feedback draft has been restored.";
+"feedback.guide.applied" = "Your draft is ready to review. Tap Submit on the form when you’re ready to share it.";
+"连接例外" = "Connection Exceptions";
+"使用我的模型" = "Use My Model";
+"回到最新消息" = "Jump to Latest Message";
+"展开向导" = "Expand Guide";
+"帮助" = "Help";
+"开启后，进入设置及已接入的配置页面时会显示可拖动的向导入口。" = "When enabled, a draggable guide button appears on Settings and supported configuration pages.";
+"收起向导" = "Collapse Guide";
+"替换 API 地址" = "Replace API Address";
+"检查模型配置" = "Review Model Configuration";
+"没有已启用且支持工具调用的云端聊天模型" = "No enabled cloud chat model supports tool calling";
+"询问“%@”页面的配置方法" = "Ask how to configure the “%@” page";
+"页面操作" = "Page Actions";
