@@ -39,7 +39,7 @@ struct MacFeedbackCenterView: View {
                         }
                     }
                     .contextMenu {
-                        Button(NSLocalizedString("删除", comment: ""), role: .destructive) { pendingDeletion = ticket }
+                        Button(NSLocalizedString("从列表移除", value: "Remove from List", comment: "移除本机反馈记录"), role: .destructive) { pendingDeletion = ticket }
                             .disabled(service.isRefreshing || service.isSubmitting || information.refreshingFeedbackOnLaunch)
                     }
                 }
@@ -68,7 +68,7 @@ struct MacFeedbackCenterView: View {
         .onChange(of: available) { _, value in if !value { operation?.cancel(); pendingDeletion = nil } }
         .confirmationDialog(NSLocalizedString("删除本地反馈记录？", value: "Delete local feedback record?", comment: ""),
             isPresented: Binding(get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } }), titleVisibility: .visible) {
-            Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
+            Button(NSLocalizedString("从列表移除", value: "Remove from List", comment: "移除本机反馈记录"), role: .destructive) {
                 guard available, !service.isRefreshing, !service.isSubmitting, !information.refreshingFeedbackOnLaunch, let ticket = pendingDeletion else { return }
                 pendingDeletion = nil
                 operation = Task {
@@ -89,94 +89,12 @@ struct MacFeedbackCenterView: View {
 }
 
 @MainActor
-private struct MacFeedbackComposeView: View {
+struct MacFeedbackComposeView: View {
     let isActive: Bool
     @ObservedObject var service: FeedbackService
-    @Environment(\.dismiss) private var dismiss
-    @State private var category: FeedbackCategory = .bug
-    @State private var title = ""
-    @State private var detail = ""
-    @State private var steps = ""
-    @State private var expected = ""
-    @State private var actual = ""
-    @State private var context = ""
-    @State private var environmentSummary = ""
-    @State private var error: String?
-    @State private var submitting = false
-    @State private var operation: Task<Void, Never>?
-    @State private var visible = false
 
     var body: some View {
-        Form {
-            Section {
-                Picker(NSLocalizedString("反馈类型", comment: ""), selection: $category) {
-                    ForEach(FeedbackCategory.allCases) { Text($0.localizedTitle).tag($0) }
-                }
-                TextField(NSLocalizedString("标题", comment: ""), text: $title)
-                TextField(NSLocalizedString("详细描述", comment: ""), text: $detail, axis: .vertical).lineLimit(4...12)
-            }
-            if category == .bug {
-                Section(NSLocalizedString("问题细节（可选）", comment: "")) {
-                    TextField(NSLocalizedString("可复现步骤（可选）", comment: ""), text: $steps, axis: .vertical)
-                    TextField(NSLocalizedString("预期行为（可选）", comment: ""), text: $expected, axis: .vertical)
-                    TextField(NSLocalizedString("实际行为（可选）", comment: ""), text: $actual, axis: .vertical)
-                }
-            }
-            Section {
-                TextField(NSLocalizedString("补充信息（可选）", comment: ""), text: $context, axis: .vertical)
-            } footer: {
-                Text(environmentSummary).font(.footnote).foregroundStyle(.secondary)
-                Text(NSLocalizedString("feedback.device.disclosure", value: "Feedback and a random device identifier are published on GitHub. The identifier lets the developer send private follow-up questions to this device. Do not include contact details in public feedback.", comment: "反馈设备标识披露"))
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-            Section {
-                if let error { Text(error).font(.footnote).foregroundStyle(.red) }
-                Button(NSLocalizedString("提交", comment: "")) { submit() }
-                    .disabled(submitting || title.isEmpty || detail.isEmpty)
-                if submitting { ProgressView(NSLocalizedString("提交中...", comment: "")) }
-            }
-        }
-        .formStyle(.grouped)
-        .navigationTitle(NSLocalizedString("新建反馈", comment: ""))
-        .disabled(!isActive || submitting)
-        .onAppear { visible = true }
-        .onDisappear { visible = false; operation?.cancel() }
-        .onChange(of: isActive) { _, active in if !active { operation?.cancel() } }
-        .task {
-            environmentSummary = await Task.detached(priority: .utility) {
-                let environment = FeedbackEnvironmentCollector.collectSnapshot()
-                return String(format: NSLocalizedString("将自动附带环境信息：%@ %@ (Build %@) · %@ · %@", comment: ""),
-                    environment.platform, environment.appVersion, environment.appBuild,
-                    environment.osVersion, environment.localizedDistributionChannel)
-            }.value
-        }
-        .guideSettingsPageContext(id: "mac-feedback-compose", title: NSLocalizedString("新建反馈", comment: ""),
-            documents: [GuideDocumentReference(id: "feedback-assistant", title: NSLocalizedString("反馈助手", comment: ""))],
-            isActive: isActive && visible, settings: [
-                .readOnly("category", label: NSLocalizedString("反馈类型", comment: ""), value: { .string(category.rawValue) }),
-                .readOnly("title_ready", label: NSLocalizedString("标题", comment: ""), value: { .bool(!title.isEmpty) }),
-                .readOnly("detail_ready", label: NSLocalizedString("详细描述", comment: ""), value: { .bool(!detail.isEmpty) }),
-                .readOnly("steps_ready", label: NSLocalizedString("可复现步骤（可选）", comment: ""), value: { .bool(category == .bug && !steps.isEmpty) }),
-                .readOnly("expected_ready", label: NSLocalizedString("预期行为（可选）", comment: ""), value: { .bool(category == .bug && !expected.isEmpty) }),
-                .readOnly("actual_ready", label: NSLocalizedString("实际行为（可选）", comment: ""), value: { .bool(category == .bug && !actual.isEmpty) }),
-                .readOnly("context_ready", label: NSLocalizedString("补充信息（可选）", comment: ""), value: { .bool(!context.isEmpty) }),
-                .readOnly("submitting", label: NSLocalizedString("提交中...", comment: ""), value: { .bool(submitting) })
-            ])
-    }
-
-    private func submit() {
-        guard isActive, !submitting else { return }
-        let draft = FeedbackDraft(category: category, title: title, detail: detail,
-            reproductionSteps: category == .bug ? steps : nil, expectedBehavior: category == .bug ? expected : nil,
-            actualBehavior: category == .bug ? actual : nil, extraContext: context)
-        submitting = true; error = nil
-        operation = Task {
-            defer { submitting = false }
-            do {
-                _ = try await service.submit(draft: draft)
-                if !Task.isCancelled { dismiss() }
-            } catch is CancellationError {
-            } catch { self.error = error.localizedDescription }
-        }
+        FeedbackComposeForm(pageID: "mac-feedback-compose", isActive: isActive, service: service,
+                            controller: MacGuideSession.shared.controller)
     }
 }

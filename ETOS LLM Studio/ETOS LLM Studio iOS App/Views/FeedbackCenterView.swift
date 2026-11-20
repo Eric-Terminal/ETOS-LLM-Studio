@@ -43,7 +43,7 @@ struct FeedbackCenterView: View {
                             Button(role: .destructive) {
                                 service.deleteTicket(issueNumber: ticket.issueNumber)
                             } label: {
-                                Label(NSLocalizedString("删除本地索引", comment: "Delete local index"), systemImage: "trash")
+                                Label(NSLocalizedString("从列表移除", value: "Remove from List", comment: "移除本机反馈记录"), systemImage: "trash")
                             }
                         }
                     }
@@ -128,153 +128,13 @@ private struct FeedbackTicketRow: View {
     }
 }
 
-private struct FeedbackComposeView: View {
-    @Environment(\.dismiss) private var dismiss
-    @ObservedObject private var service = FeedbackService.shared
-
-    @State private var category: FeedbackCategory = .bug
-    @State private var title: String = ""
-    @State private var detail: String = ""
-    @State private var reproductionSteps: String = ""
-    @State private var expectedBehavior: String = ""
-    @State private var actualBehavior: String = ""
-    @State private var extraContext: String = ""
-    @State private var isSubmitting = false
-    @State private var submitErrorMessage: String?
+struct FeedbackComposeView: View {
+    @EnvironmentObject private var controller: GuideConversationController
 
     var body: some View {
-        Form {
-            Section(NSLocalizedString("反馈类型", comment: "Feedback category section")) {
-                Picker(NSLocalizedString("反馈类型", comment: "Feedback category picker"), selection: $category) {
-                    ForEach(FeedbackCategory.allCases) { category in
-                        Text(category.localizedTitle).tag(category)
-                    }
-                }
-                .pickerStyle(.menu)
-            }
-
-            Section {
-                TextField(NSLocalizedString("标题", comment: "Feedback title field"), text: $title)
-                TextField(NSLocalizedString("详细描述", comment: "Feedback detail field"), text: $detail, axis: .vertical)
-                    .lineLimit(4...8)
-            }
-
-            if category == .bug {
-                Section(NSLocalizedString("问题细节（可选）", comment: "Bug detail optional section")) {
-                    TextField(NSLocalizedString("可复现步骤（可选）", comment: "Reproduction steps"), text: $reproductionSteps, axis: .vertical)
-                        .lineLimit(3...6)
-                    TextField(NSLocalizedString("预期行为（可选）", comment: "Expected behavior"), text: $expectedBehavior, axis: .vertical)
-                        .lineLimit(2...5)
-                    TextField(NSLocalizedString("实际行为（可选）", comment: "Actual behavior"), text: $actualBehavior, axis: .vertical)
-                        .lineLimit(2...5)
-                }
-            }
-
-            Section {
-                TextField(NSLocalizedString("补充信息（可选）", comment: "Extra context"), text: $extraContext, axis: .vertical)
-                    .lineLimit(2...5)
-            }
-
-            Section {
-                Button {
-                    Task {
-                        await submit()
-                    }
-                } label: {
-                    HStack {
-                        Spacer()
-                        if isSubmitting {
-                            ProgressView()
-                                .padding(.trailing, 8)
-                        }
-                        Text(isSubmitting
-                             ? NSLocalizedString("提交中...", comment: "Submitting state")
-                             : NSLocalizedString("提交", comment: "Submit button"))
-                        Spacer()
-                    }
-                }
-                .disabled(isSubmitting || !isDraftValid)
-            } footer: {
-                Text(environmentSummary)
-                Text(NSLocalizedString("feedback.device.disclosure", value: "Feedback and a random device identifier are published on GitHub. The identifier lets the developer send private follow-up questions to this device. Do not include contact details in public feedback.", comment: "反馈设备标识披露"))
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-        }
-        .navigationTitle(NSLocalizedString("新建反馈", comment: "Create feedback title"))
-        .guideSettingsPageContext(
-            id: "feedback-compose",
-            title: NSLocalizedString("新建反馈", comment: ""),
-            documents: [GuideDocumentReference(id: "feedback-assistant", title: NSLocalizedString("反馈助手", comment: ""))],
-            settings: [
-                .readOnly("category", label: NSLocalizedString("反馈类型", comment: ""), value: { .string(category.rawValue) }),
-                .readOnly("title_ready", label: NSLocalizedString("标题", comment: ""), value: { .bool(!title.isEmpty) }),
-                .readOnly("detail_ready", label: NSLocalizedString("详细描述", comment: ""), value: { .bool(!detail.isEmpty) }),
-                .readOnly("steps_ready", label: NSLocalizedString("可复现步骤（可选）", comment: ""), value: { .bool(category == .bug && !reproductionSteps.isEmpty) }),
-                .readOnly("expected_ready", label: NSLocalizedString("预期行为（可选）", comment: ""), value: { .bool(category == .bug && !expectedBehavior.isEmpty) }),
-                .readOnly("actual_ready", label: NSLocalizedString("实际行为（可选）", comment: ""), value: { .bool(category == .bug && !actualBehavior.isEmpty) }),
-                .readOnly("context_ready", label: NSLocalizedString("补充信息（可选）", comment: ""), value: { .bool(!extraContext.isEmpty) }),
-                .readOnly("submitting", label: NSLocalizedString("提交中...", comment: ""), value: { .bool(isSubmitting) })
-            ]
-        )
-        .alert(
-            NSLocalizedString("提交失败", comment: "Submit failed title"),
-            isPresented: Binding(
-                get: { submitErrorMessage != nil },
-                set: { newValue in
-                    if !newValue {
-                        submitErrorMessage = nil
-                    }
-                }
-            )
-        ) {
-            Button(NSLocalizedString("确定", comment: "OK button"), role: .cancel) {}
-        } message: {
-            Text(submitErrorMessage ?? "")
-        }
-    }
-
-    private var isDraftValid: Bool {
-        let draft = FeedbackDraft(category: category, title: title, detail: detail)
-        return draft.isValid
-    }
-
-    private var environmentSummary: String {
-        let snapshot = FeedbackEnvironmentCollector.collectSnapshot()
-        return String(
-            format: NSLocalizedString("将自动附带环境信息：%@ %@ (Build %@) · %@ · %@", comment: "Environment summary"),
-            snapshot.platform,
-            snapshot.appVersion,
-            snapshot.appBuild,
-            snapshot.deviceModel,
-            snapshot.localizedDistributionChannel
-        )
-    }
-
-    private func submit() async {
-        let draft = FeedbackDraft(
-            category: category,
-            title: title,
-            detail: detail,
-            reproductionSteps: reproductionSteps,
-            expectedBehavior: expectedBehavior,
-            actualBehavior: actualBehavior,
-            extraContext: extraContext
-        )
-
-        guard draft.isValid else {
-            submitErrorMessage = NSLocalizedString("请至少填写标题和详细描述。", comment: "Feedback invalid input")
-            return
-        }
-
-        isSubmitting = true
-        defer { isSubmitting = false }
-
-        do {
-            _ = try await service.submit(draft: draft)
-            dismiss()
-        } catch {
-            submitErrorMessage = error.localizedDescription
-        }
+        FeedbackComposeForm(pageID: "feedback-compose", service: .shared, controller: controller, prepareGuide: {
+            GuideContextCoordinator.shared.pinActivePage()
+        })
     }
 }
 
