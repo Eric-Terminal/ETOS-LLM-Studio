@@ -124,6 +124,7 @@ public extension View {
         title: String,
         documents: [GuideDocumentReference] = [],
         isActive: Bool = true,
+        suggestedPrompts: [String] = [],
         settings: [GuidePageSetting]
     ) -> some View {
         let tool = GuideDeclarativeSettingsSupport.toolDefinition(
@@ -138,7 +139,8 @@ public extension View {
                 documents: documents,
                 tools: hasEditableSetting
                     ? [GuidePageTool(definition: tool, access: .proposeChange)]
-                    : []
+                    : [],
+                suggestedPrompts: suggestedPrompts
             ),
             isActive: isActive,
             snapshot: {

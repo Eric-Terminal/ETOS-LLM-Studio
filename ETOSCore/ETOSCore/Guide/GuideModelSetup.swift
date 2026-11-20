@@ -58,24 +58,20 @@ public enum GuideModelSetupStateResolver {
         providers: [Provider],
         selectedModel: RunnableModel?
     ) -> GuideModelSetupState {
-        let nonLocalProviders = providers.filter { !LocalModelProviderBridge.isLocalProvider($0) }
-        let hasEnabledLocalProvider = providers.contains(where: LocalModelProviderBridge.isLocalProvider)
-        guard !nonLocalProviders.isEmpty || hasEnabledLocalProvider else { return .needsProvider }
-
-        let remoteHasCredentials = nonLocalProviders.contains { !$0.apiKeys.isEmpty }
-        if !hasEnabledLocalProvider && !remoteHasCredentials {
-            return .needsCredential
+        guard !providers.isEmpty else { return .needsProvider }
+        let usable = providers.filter { provider in
+            LocalModelProviderBridge.isLocalProvider(provider)
+                || provider.apiKeys.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         }
-
-        let chatModels = providers.flatMap { provider in
-            provider.models.filter(\.isChatModel).map { RunnableModel(provider: provider, model: $0) }
-        }
-        guard !chatModels.isEmpty else { return .needsModel }
-
-        let activated = chatModels.filter { $0.model.isActivated }
-        guard !activated.isEmpty,
-              let selectedModel,
-              activated.contains(where: { $0.id == selectedModel.id }) else {
+        guard !usable.isEmpty else { return .needsCredential }
+        if let selectedModel, providers.contains(where: { $0.id == selectedModel.provider.id }),
+           !usable.contains(where: { $0.id == selectedModel.provider.id }) { return .needsCredential }
+        guard usable.contains(where: { $0.models.contains(where: \.isChatModel) }) else { return .needsModel }
+        guard let selectedModel, usable.contains(where: { provider in
+            provider.id == selectedModel.provider.id && provider.models.contains {
+                $0.id == selectedModel.model.id && $0.isChatModel && $0.isActivated
+            }
+        }) else {
             return .needsActivationOrSelection
         }
         return .ready

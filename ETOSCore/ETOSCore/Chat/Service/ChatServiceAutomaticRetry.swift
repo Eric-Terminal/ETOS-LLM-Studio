@@ -168,6 +168,7 @@ extension ChatService {
                     targetMessage: retryTarget, in: messagesSnapshot(for: sessionID),
                     prefill: !hasGeneratedMedia, restartingCurrentRequest: hasGeneratedMedia
                 ), let rebuilt = hasGeneratedMedia ? currentRequest : rebuildRequest(retryTarget) else {
+                    recordChatFailure(.other, source: currentLogContext.requestSource)
                     addErrorMessage(NSLocalizedString("错误: 无法构建 API 请求。", comment: ""), sessionID: sessionID)
                     emitSessionRequestStatus(.error, sessionID: sessionID)
                     return
@@ -186,6 +187,7 @@ extension ChatService {
                     currentRequest = try await prepareKeyRetryRequest(currentRequest)
                 } catch {
                     guard !Task.isCancelled, !(error is CancellationError) else { return }
+                    recordChatFailure(GuideChatErrorCategory.classify(error), source: currentLogContext.requestSource)
                     addErrorMessage(error.localizedDescription, sessionID: sessionID)
                     emitSessionRequestStatus(.error, sessionID: sessionID)
                     return

@@ -47,7 +47,7 @@ public actor GuideConversationHistoryStore {
                 GuideConversationMessage(
                     id: message.id, role: message.role, content: message.content,
                     toolCalls: message.tools.map { tool in
-                        InternalToolCall(id: tool.id, toolName: tool.name, arguments: "{}", resultDisposition: tool.disposition)
+                        tool.restoredCall
                     }
                 )
             }
@@ -120,13 +120,11 @@ public actor GuideConversationHistoryStore {
                 guard !content.isEmpty || !message.toolCalls.isEmpty else { return nil }
                 return StoredMessage(
                     id: message.id, role: message.role, content: content,
-                    tools: message.toolCalls.map {
-                        StoredTool(id: $0.id, name: $0.toolName, disposition: $0.resultDisposition)
-                    }
+                    tools: message.toolCalls.map(StoredTool.init(call:))
                 )
             }
             // 工具参数可能含用户新提供的密钥，结果可能含整段源码。
-            // 存档仅保留聊天正文和工具状态，绝不序列化原始调用、页面快照或待执行操作。
+            // 续聊只使用可见正文；导航枚举仅供本机渲染，不能重放成新请求里的工具调用。
             var turns = snapshot.requestHistory.compactMap { message -> StoredTurn? in
                 switch message.role {
                 case .user: return StoredTurn(role: .user, content: message.content)
@@ -153,6 +151,35 @@ public actor GuideConversationHistoryStore {
         let id: String
         let name: String
         let disposition: InternalToolCallResultDisposition?
+        let navigationDestinations: [GuideNavigationDestination]?
+
+        init(from decoder: Decoder) throws {
+            let fields = try decoder.container(keyedBy: CodingKeys.self)
+            id = try fields.decode(String.self, forKey: .id)
+            name = try fields.decode(String.self, forKey: .name)
+            disposition = try fields.decodeIfPresent(InternalToolCallResultDisposition.self, forKey: .disposition)
+            // 老存档没有此键；降级打开时，无法识别的按钮也不应连带丢弃对话。
+            navigationDestinations = try? fields.decodeIfPresent([GuideNavigationDestination].self, forKey: .navigationDestinations)
+        }
+
+        init(call: InternalToolCall) {
+            id = call.id
+            name = call.toolName
+            disposition = call.resultDisposition
+            let targets = GuideNavigationSupport.completedDestinations(in: call, platform: GuidePromptBuilder.platformName)
+            navigationDestinations = targets.isEmpty ? nil : targets
+        }
+
+        var restoredCall: InternalToolCall {
+            var arguments = "{}"
+            if name == GuideToolCatalog.suggestSettingsNavigation.name, disposition == .completed,
+               let navigationDestinations {
+                arguments = GuideToolArguments.encodedResult(.dictionary([
+                    "destinations": .array(navigationDestinations.map { .string($0.rawValue) })
+                ]))
+            }
+            return InternalToolCall(id: id, toolName: name, arguments: arguments, resultDisposition: disposition)
+        }
     }
 
     private struct StoredTurn: Codable {

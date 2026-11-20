@@ -42,6 +42,8 @@ public final class GuideContextCoordinator: ObservableObject {
     private var registrations: [Registration] = []
     private var pinnedRegistration: Registration?
 
+    var activeRegistrationToken: RegistrationToken? { currentRegistration?.token }
+
     public init() {}
 
     @discardableResult
@@ -143,7 +145,21 @@ public final class GuideContextCoordinator: ObservableObject {
         try Task.checkCancellation()
         guard currentRegistration?.token == registration.token,
               currentRegistration?.revision == registration.revision else { throw GuideError.pageChanged }
-        let proposal = try await registration.proposalBuilder(call, snapshot)
+        let isProviderSettings = call.toolName == GuideDeclarativeSettingsSupport.toolName
+            && registration.descriptor.documents.contains { $0.id == "provider-model-basics" }
+            && snapshot.fields["base_url"] != nil
+        let preparedCall: InternalToolCall
+        if (call.toolName == GuideToolCatalog.updateProviderConfiguration.name || isProviderSettings),
+           snapshot.fields["api_format"]?.value != .string(LocalModelProviderBridge.apiFormat) {
+            preparedCall = try await Task.detached {
+                try GuideURLDiagnostics.normalizedProposalCall(call)
+            }.value
+            try Task.checkCancellation()
+            guard currentRegistration?.revision == registration.revision else { throw GuideError.pageChanged }
+        } else {
+            preparedCall = call
+        }
+        let proposal = try await registration.proposalBuilder(preparedCall, snapshot)
         try Task.checkCancellation()
         // 参数解析可以离开主线程；返回时仍须属于同一页面声明，不能发布旧协议或旧页面的方案。
         guard currentRegistration?.token == registration.token,

@@ -80,6 +80,13 @@ public class ChatService {
 
     // MARK: - 单例
     public static let shared = ChatService()
+    // 只留本次运行中最近一次主聊天失败的分类，响应正文和地址没有存储位置。
+    let lastChatErrorCategory = CurrentValueSubject<GuideChatErrorCategory?, Never>(nil)
+
+    func recordChatFailure(_ category: GuideChatErrorCategory?, source: UsageRequestSource) {
+        guard source == .chat, let category else { return }
+        lastChatErrorCategory.send(category)
+    }
 
     // MARK: - 用于 UI 订阅的公开 Subjects
     

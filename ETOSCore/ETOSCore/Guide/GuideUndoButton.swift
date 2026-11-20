@@ -26,7 +26,7 @@ public struct GuideUndoButton: View {
                 controller.undoLastChange()
             }
         } message: {
-            Text(NSLocalizedString(
+            Text(controller.feedbackDraftUndoSummary ?? NSLocalizedString(
                 "将恢复向导上次修改前的设置。此操作不会关闭向导。",
                 value: "This restores the settings from before the guide’s last change. It does not close the guide.",
                 comment: "说明撤销会恢复设置，而不是返回或关闭"

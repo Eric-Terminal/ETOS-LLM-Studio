@@ -75,8 +75,14 @@ public final class GuideConversationController: ObservableObject {
     private var toolBatchPage: GuidePageDescriptor?
     private var unavailableReadTools = Set<String>()
     private var undoProposal: GuideActionProposal?
+    var feedbackDraftUndoSummary: String? {
+        guard undoProposal?.toolName == FeedbackDraftGuideSupport.restoreToolName else { return nil }
+        return undoProposal?.summary
+    }
     private var lastActionFeedback: GuideActionFeedback?
     private var latestUserMessageID: UUID?
+    // 草稿提案只接受在这份表单上发出的用户提问，离页后旧请求不能获得新表单的权限。
+    private var questionSource: GuideContextCoordinator.RegistrationToken?
     private var latestUserMessageAllowsEditing = false
     private var latestTurnMessageIDs: Set<UUID> = []
 
@@ -133,6 +139,7 @@ public final class GuideConversationController: ObservableObject {
         lastErrorMessageID = nil
         canRetryWithBuiltIn = false
         let message = GuideConversationMessage(role: .user, content: trimmed)
+        questionSource = contextCoordinator.activeRegistrationToken
         messages.append(message)
         requestHistory.append(ChatMessage(role: .user, content: trimmed))
         latestUserMessageID = message.id
@@ -148,6 +155,7 @@ public final class GuideConversationController: ObservableObject {
         lastErrorMessageID = nil
         canRetryWithBuiltIn = false
         let message = GuideConversationMessage(role: .user, content: displayName)
+        questionSource = nil
         messages.append(message)
         requestHistory.append(ChatMessage(
             role: .user,
@@ -184,6 +192,7 @@ public final class GuideConversationController: ObservableObject {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, canEditMessage(messageID),
               prepareLatestUserTurn(messageID: messageID, replacementContent: trimmed) else { return }
+        questionSource = contextCoordinator.activeRegistrationToken
         startResponseLoop()
     }
 
@@ -231,6 +240,7 @@ public final class GuideConversationController: ObservableObject {
         canRetryWithBuiltIn = false
         isAwaitingToolContinuation = false
         latestUserMessageID = nil
+        questionSource = nil
         latestUserMessageAllowsEditing = false
         latestTurnMessageIDs.removeAll()
         scheduleHistorySave()
@@ -285,6 +295,24 @@ public final class GuideConversationController: ObservableObject {
         startResponseLoop()
     }
 
+    /// 离页时关闭整批旧操作，不请求模型续写，避免排队的下一项又弹出确认。
+    public func discardPendingProposalForNavigation() {
+        guard let call = pendingToolCall, let proposal = pendingProposal else {
+            finishToolCalls()
+            return
+        }
+        let message = NSLocalizedString("用户没有应用这项修改。", value: "This change was not applied.", comment: "离页取消提案")
+        let feedback = GuideActionFeedback(status: .rejected, pageID: proposal.pageID, toolName: call.toolName, message: message)
+        lastActionFeedback = feedback
+        appendToolResult(call: call, content: feedback.encodedResult, disposition: .rejected)
+        for queued in remainingToolCalls {
+            var rejected = queued
+            rejected.resultDisposition = .rejected
+            updateVisibleToolCall(rejected)
+        }
+        cancel()
+    }
+
     public func undoLastChange() {
         guard let undoProposal,
               !isResponding,
@@ -296,13 +324,13 @@ public final class GuideConversationController: ObservableObject {
         currentTask = Task { [weak self] in
             guard let self else { return }
             do {
-                _ = try await contextCoordinator.execute(undoProposal)
+                let execution = try await contextCoordinator.execute(undoProposal)
                 try Task.checkCancellation()
                 guard activeTaskID == taskID else { return }
                 self.undoProposal = nil
                 canUndo = false
                 // 执行器也被正向修改复用，其“已更新”文案无法说明这是撤销。
-                let message = NSLocalizedString(
+                let message = undoProposal.toolName == FeedbackDraftGuideSupport.restoreToolName ? execution.message : NSLocalizedString(
                     "已撤销上次修改，设置已恢复。",
                     value: "Last change undone. The previous settings have been restored.",
                     comment: "向导撤销成功反馈"
@@ -388,13 +416,16 @@ public final class GuideConversationController: ObservableObject {
                     GuideToolCatalog.availableKnowledgeDefinitions(
                         commitSHA: GuideBuildVersion.fullCommitSHA()
                     ) + context.descriptor.tools.map(\.definition)
-                ).filter { !unavailableReadTools.contains($0.name) }
-                let outbound = GuidePromptBuilder.requestMessages(
+                ).filter { !unavailableReadTools.contains($0.name) && allowsProposalFromQuestionSource($0.name) }
+                let outbound = await GuidePromptBuilder.requestMessages(
                     history: requestHistory,
                     context: context,
                     includesClientSystemPrompt: resolved.includesClientSystemPrompt,
-                    lastActionFeedback: lastActionFeedback
+                    lastActionFeedback: lastActionFeedback,
+                    chatService: router.chatService
                 )
+                try Task.checkCancellation()
+                guard activeTaskID == taskID else { return }
                 let placeholderID = UUID()
                 messages.append(GuideConversationMessage(id: placeholderID, role: .assistant, content: ""))
                 latestTurnMessageIDs.insert(placeholderID)
@@ -485,6 +516,7 @@ public final class GuideConversationController: ObservableObject {
                     guard current.descriptor.id == toolBatchPage?.id else { throw GuideError.pageChanged }
                 }
                 if pageTool?.access == .proposeChange {
+                    guard allowsProposalFromQuestionSource(call.toolName) else { throw GuideError.pageChanged }
                     let proposal = try await contextCoordinator.makeProposal(for: call)
                     try Task.checkCancellation()
                     guard activeTaskID == taskID else { return false }
@@ -523,7 +555,19 @@ public final class GuideConversationController: ObservableObject {
         unavailableReadTools.removeAll()
     }
 
+    private func allowsProposalFromQuestionSource(_ name: String) -> Bool {
+        name != FeedbackDraftGuideSupport.toolName || (questionSource != nil && questionSource == contextCoordinator.activeRegistrationToken)
+    }
+
     private func executeReadTool(_ call: InternalToolCall) async throws -> String {
+        if call.toolName == GuideToolCatalog.suggestSettingsNavigation.name {
+            return try await Task.detached {
+                let targets = try GuideNavigationSupport.destinations(in: call.arguments, platform: GuidePromptBuilder.platformName)
+                return GuideToolArguments.encodedResult(.dictionary(["destinations": .array(targets.map {
+                    .dictionary(["id": .string($0.rawValue), "title": .string($0.localizedTitle)])
+                })]))
+            }.value
+        }
         let arguments = try GuideToolArguments.decode(call.arguments)
         switch call.toolName {
         case GuideToolCatalog.currentPageContext.name:

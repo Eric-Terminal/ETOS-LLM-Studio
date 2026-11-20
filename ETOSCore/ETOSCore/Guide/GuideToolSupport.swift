@@ -9,6 +9,21 @@
 import Foundation
 
 public enum GuideToolCatalog {
+    public static let suggestSettingsNavigation: InternalToolDefinition = {
+        let choices = GuideNavigationDestination.allCases.filter { $0.isAvailable(on: GuidePromptBuilder.platformName) }
+        let meanings = choices.map { "\($0.rawValue) = \($0.menu.english)" }.joined(separator: ", ")
+        return InternalToolDefinition(
+            name: "suggest_settings_navigation",
+            description: "Suggest up to four settings pages as buttons. Navigation happens only when the user taps. " + meanings,
+            parameters: objectSchema(properties: [
+                "destinations": .dictionary([
+                    "type": .string("array"), "minItems": .int(1), "maxItems": .int(GuideNavigationSupport.limit),
+                    "items": .dictionary(["type": .string("string"), "enum": .array(choices.map { .string($0.rawValue) })])
+                ])
+            ], required: ["destinations"])
+        )
+    }()
+
     public static let currentPageContext = InternalToolDefinition(
         name: "get_current_page_context",
         description: "读取用户当前所在页面及经过脱敏的最新配置快照。",
@@ -313,6 +328,7 @@ public enum GuideToolCatalog {
     )
 
     public static let knowledgeDefinitions = [
+        suggestSettingsNavigation,
         currentPageContext,
         searchDocuments,
         readDocument,
@@ -324,7 +340,7 @@ public enum GuideToolCatalog {
 
     public static func availableKnowledgeDefinitions(commitSHA: String?) -> [InternalToolDefinition] {
         guard let commitSHA, GuideBuildVersion.isFullSHA(commitSHA) else {
-            return [currentPageContext, searchDocuments, readDocument]
+            return [currentPageContext, searchDocuments, readDocument, suggestSettingsNavigation]
         }
         return knowledgeDefinitions
     }

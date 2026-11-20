@@ -303,8 +303,14 @@ extension ChatService {
         finishedAt: Date,
         recordUsageEvent: Bool = true,
         httpStatusCode: Int? = nil,
-        errorKind: String? = nil
+        errorKind: String? = nil,
+        chatFailureCategory: GuideChatErrorCategory? = nil
     ) {
+        // 中间尝试会单独记用量；只有对用户可见的最终失败才更新向导体检。
+        if status == .failed, errorKind != "api_key_retry", errorKind != "automatic_retry" {
+            recordChatFailure(chatFailureCategory ?? httpStatusCode.map(GuideChatErrorCategory.httpStatus) ?? .other,
+                              source: context.requestSource)
+        }
         let normalizedUsage = tokenUsage?.hasAnyData == true ? tokenUsage : nil
         RequestTransactionLogRegistry.finalize(
             requestID: context.requestID,

@@ -13,6 +13,16 @@ import Testing
 
 @Suite("页面向导基础设施", .serialized)
 struct GuideInfrastructureTests {
+    // 运行时摘要现在会在后台读取配置，固定让出若干次执行权无法代表工作已结束。
+    @MainActor
+    private func waitForGuideState(_ ready: () -> Bool) async {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while !ready(), ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        #expect(ready())
+    }
+
     @Test("向导在协议终止事件后停止读取长连接")
     func streamTerminationFinishesGuideResponse() {
         #expect(!GuideStreamTerminationPolicy.shouldFinish(after: nil))
@@ -443,9 +453,7 @@ struct GuideInfrastructureTests {
         )
 
         controller.send("这个页面有什么？")
-        for _ in 0..<100 where controller.isResponding {
-            await Task.yield()
-        }
+        await waitForGuideState { !controller.isResponding }
 
         #expect(!controller.isResponding)
         #expect(controller.messages.filter { $0.role == .assistant }.isEmpty)
@@ -479,15 +487,11 @@ struct GuideInfrastructureTests {
         )
 
         controller.send("第一轮")
-        for _ in 0..<100 where controller.isResponding {
-            await Task.yield()
-        }
+        await waitForGuideState { !controller.isResponding }
         let firstAssistant = try #require(controller.messages.last(where: { $0.role == .assistant }))
 
         controller.send("第二轮")
-        for _ in 0..<100 where controller.streamingContent.isEmpty {
-            await Task.yield()
-        }
+        await waitForGuideState { !controller.streamingContent.isEmpty }
 
         let streamingID = try #require(controller.streamingMessageID)
         let assistants = controller.messages.filter { $0.role == .assistant }
@@ -525,16 +529,12 @@ struct GuideInfrastructureTests {
         let controller = GuideConversationController(router: router, contextCoordinator: coordinator)
 
         controller.send("第一问")
-        for _ in 0..<100 where controller.streamingContent != "第1个请求" {
-            await Task.yield()
-        }
+        await waitForGuideState { controller.streamingContent == "第1个请求" }
         #expect(controller.streamingContent == "第1个请求")
 
         controller.cancel()
         controller.send("第二问")
-        for _ in 0..<200 where controller.streamingContent != "第2个请求" {
-            await Task.yield()
-        }
+        await waitForGuideState { controller.streamingContent == "第2个请求" }
         for _ in 0..<20 {
             await Task.yield()
         }
@@ -567,18 +567,14 @@ struct GuideInfrastructureTests {
         let controller = GuideConversationController(router: router, contextCoordinator: coordinator)
 
         controller.send("开始流式回答")
-        for _ in 0..<100 where !client.isReady {
-            await Task.yield()
-        }
+        await waitForGuideState { client.isReady }
 
         var controllerChanges = 0
         var streamingChanges = 0
         let controllerObservation = controller.objectWillChange.sink { controllerChanges += 1 }
         let streamingObservation = controller.streamingState.objectWillChange.sink { streamingChanges += 1 }
         client.yield(.contentDelta("只刷新消息区"))
-        for _ in 0..<100 where controller.streamingContent.isEmpty {
-            await Task.yield()
-        }
+        await waitForGuideState { !controller.streamingContent.isEmpty }
 
         #expect(controller.streamingContent == "只刷新消息区")
         #expect(streamingChanges == 1)
@@ -608,13 +604,9 @@ struct GuideInfrastructureTests {
         let controller = GuideConversationController(router: router, contextCoordinator: coordinator)
 
         controller.send("第一问")
-        for _ in 0..<300 where controller.isResponding {
-            await Task.yield()
-        }
+        await waitForGuideState { !controller.isResponding }
         controller.send("第二问")
-        for _ in 0..<300 where controller.isResponding {
-            await Task.yield()
-        }
+        await waitForGuideState { !controller.isResponding }
 
         let secondTurnRequest = try #require(client.messages(forRequest: 3))
         #expect(!secondTurnRequest.contains { $0.role == .tool })
@@ -624,8 +616,8 @@ struct GuideInfrastructureTests {
     }
 
     @MainActor
-    @Test("连续八轮工具调用会请示用户并可继续原会话")
-    func toolLoopLimitRequestsContinuation() async {
+    @Test("连续八轮工具调用可以留在原页续查，离页则收起询问并清理工具历史", arguments: [false, true])
+    func toolLoopLimitRequestsContinuation(navigate: Bool) async {
         let appConfig = AppConfigStore.shared
         let previousRoute = appConfig.guidePreferredRoute
         defer { appConfig.guidePreferredRoute = previousRoute }
@@ -638,10 +630,8 @@ struct GuideInfrastructureTests {
             execute: { _ in throw GuideError.invalidToolArguments }
         )
         defer { coordinator.unregister(token) }
-        let router = GuideModelRouter(
-            appConfig: appConfig,
-            builtInClient: GuideLoopingCompletionClient()
-        )
+        let client = GuideLoopingCompletionClient()
+        let router = GuideModelRouter(appConfig: appConfig, builtInClient: client)
         router.useBuiltIn()
         let controller = GuideConversationController(
             router: router,
@@ -649,9 +639,7 @@ struct GuideInfrastructureTests {
         )
 
         controller.send("继续查清楚这个页面")
-        for _ in 0..<500 where controller.isResponding {
-            await Task.yield()
-        }
+        await waitForGuideState { !controller.isResponding }
         #expect(controller.isAwaitingToolContinuation)
         #expect(controller.lastError == nil)
         let visibleCalls = controller.messages.flatMap(\.toolCalls)
@@ -659,12 +647,26 @@ struct GuideInfrastructureTests {
         #expect(visibleCalls.allSatisfy { $0.resultDisposition == .completed })
         #expect(visibleCalls.allSatisfy { $0.result == nil })
 
-        controller.continueToolCalls()
-        for _ in 0..<200 where controller.isResponding {
-            await Task.yield()
+        if navigate {
+            let visible = controller.messages
+            #expect(controller.pendingProposal == nil)
+            controller.discardPendingProposalForNavigation()
+            #expect(!controller.isAwaitingToolContinuation)
+            #expect(!controller.isResponding)
+            #expect(controller.messages == visible)
+            controller.send("新页面的问题")
+        } else {
+            controller.continueToolCalls()
         }
+        await waitForGuideState { !controller.isResponding }
         #expect(!controller.isAwaitingToolContinuation)
         #expect(controller.messages.last(where: { $0.role == .assistant })?.content == "已查完")
+        let request = client.lastRequest
+        #expect(request.contains { $0.role == .tool } == !navigate)
+        if navigate {
+            #expect(!request.contains { !($0.toolCalls ?? []).isEmpty })
+            #expect(request.last?.content == "新页面的问题")
+        }
     }
 
     @MainActor
@@ -693,26 +695,20 @@ struct GuideInfrastructureTests {
         )
 
         controller.send("这个页面有什吗？")
-        for _ in 0..<100 where controller.isResponding {
-            await Task.yield()
-        }
+        await waitForGuideState { !controller.isResponding }
         let userMessage = try #require(controller.messages.first(where: { $0.role == .user }))
         let firstResponse = try #require(controller.messages.last(where: { $0.role == .assistant }))
         #expect(controller.canEditMessage(userMessage.id))
         #expect(controller.canRetryMessage(firstResponse.id))
 
         controller.editUserMessage(userMessage.id, content: "这个页面有什么？")
-        for _ in 0..<100 where controller.isResponding {
-            await Task.yield()
-        }
+        await waitForGuideState { !controller.isResponding }
         #expect(controller.messages.filter { $0.role == .user }.map(\.content) == ["这个页面有什么？"])
         #expect(controller.messages.filter { $0.role == .assistant }.map(\.content) == ["回答：这个页面有什么？"])
 
         let editedResponse = try #require(controller.messages.last(where: { $0.role == .assistant }))
         controller.retryResponse(for: editedResponse.id)
-        for _ in 0..<100 where controller.isResponding {
-            await Task.yield()
-        }
+        await waitForGuideState { !controller.isResponding }
         #expect(controller.messages.filter { $0.role == .assistant }.map(\.content) == ["回答：这个页面有什么？"])
     }
 
@@ -1172,11 +1168,11 @@ struct GuideInfrastructureTests {
 
         #expect(chinese.contains("ETOS LLM Studio（简称 ELS）"))
         #expect(chinese.contains("开源 AI 聊天客户端"))
-        #expect(chinese.contains("iOS 和 watchOS"))
+        #expect(chinese.contains("iOS、watchOS 和 macOS"))
         #expect(chinese.contains("不是基础模型本身"))
         #expect(chinese.contains("向导只能使用当前请求实际提供的专用工具"))
         #expect(chinese.contains("不要在每次回答时重复介绍"))
-        #expect(english.contains("open-source AI chat client for iOS and watchOS"))
+        #expect(english.contains("open-source AI chat client for iOS, watchOS and macOS"))
         #expect(english.contains("dedicated tools actually supplied in the current request"))
         #expect(english.contains("do not repeat it in every answer"))
         #expect(chinese.contains("不能把自己当作通用聊天"))
@@ -1186,7 +1182,7 @@ struct GuideInfrastructureTests {
         #expect(english.contains("Gemini"))
         #expect(chinese.contains("用户自己选择的模型线路"))
         #expect(chinese.contains("不要声称基础模型固定为 Qwen"))
-        #expect(chinese.contains("guide_prompt_version: 4"))
+        #expect(chinese.contains("guide_prompt_version: \(GuidePromptBuilder.promptVersion)"))
         #expect(chinese.contains("创建、修改或删除配置"))
         #expect(GuidePromptBuilder.systemPrompt(mode: .modelSetup).contains("setup_state"))
         #expect(GuidePromptBuilder.systemPrompt(locale: Locale(identifier: "zh-Hans"), mode: .modelSetup).contains("开源 AI 聊天客户端"))
@@ -1233,8 +1229,9 @@ struct GuideInfrastructureTests {
         #expect(!setupResults.contains { $0.id == "first-model-setup" })
 
         let overview = try #require(await service.document(id: "guide-overview"))
+        #expect(overview.title == "使用助手与隐私边界")
         #expect(!overview.content.contains("首次模型配置"))
-        #expect(overview.content.contains("页面向导只在设置与配置页面工作"))
+        #expect(overview.content.contains("询问整个 App 的功能和操作路径"))
         #expect(overview.content.contains("内置免费向导始终可用"))
         #expect(await service.document(id: "provider-model-basics") != nil)
     }
@@ -1568,14 +1565,17 @@ private final class GuideHistoryRecordingCompletionClient: GuideCompletionClient
 private final class GuideLoopingCompletionClient: GuideCompletionClient, @unchecked Sendable {
     private let lock = NSLock()
     private var requestCount = 0
+    private var latestMessages: [ChatMessage] = []
+    var lastRequest: [ChatMessage] { lock.withLock { latestMessages } }
 
     func events(
-        messages _: [ChatMessage],
+        messages: [ChatMessage],
         tools _: [InternalToolDefinition],
         sessionID _: UUID
     ) -> AsyncThrowingStream<GuideCompletionEvent, Error> {
         let currentRequest = lock.withLock {
             requestCount += 1
+            latestMessages = messages
             return requestCount
         }
         return AsyncThrowingStream { continuation in

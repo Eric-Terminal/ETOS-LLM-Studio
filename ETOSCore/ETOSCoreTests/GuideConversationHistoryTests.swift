@@ -5,10 +5,59 @@
 // ============================================================================
 
 import Foundation
+import Combine
 import Testing
 @testable import ETOSCore
 
 extension GuideInfrastructureTests {
+    @MainActor
+    @Test("导航按钮安全跨重启恢复，旧存档和其他工具都不会重放参数或触发跳转")
+    func historyRestoresOnlyApprovedNavigationIDs() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let name = GuideToolCatalog.suggestSettingsNavigation.name
+        let calls = [
+            InternalToolCall(id: "nav", toolName: name,
+                             arguments: #"{"destinations":["worldbook","secret-in-list","worldbook","feedbackCenter"],"token":"secret-extra"}"#,
+                             result: "secret-result", resultDisposition: .completed),
+            InternalToolCall(id: "unconfirmed", toolName: name, arguments: #"{"destinations":["dataImport"]}"#),
+            InternalToolCall(id: "failed", toolName: name, arguments: #"{"destinations":["toolCenter"]}"#, resultDisposition: .failed),
+            InternalToolCall(id: "ordinary", toolName: "propose_setting", arguments: #"{"api_key":"secret-key"}"#,
+                             result: "secret-body", resultDisposition: .completed)
+        ]
+        let original = GuideConversationMessage(role: .assistant, content: "", toolCalls: calls)
+        let store = GuideConversationHistoryStore(directoryURL: directory)
+        await store.save(GuideConversationHistorySnapshot(
+            messages: [original], requestHistory: [], streamingMessageID: nil, streamingContent: "",
+            latestUserMessageID: nil, latestUserMessageAllowsEditing: false
+        ))
+        let file = directory.appendingPathComponent("contextualHelp.json")
+        let raw = try String(contentsOf: file, encoding: .utf8)
+        for forbidden in ["secret-", "api_key", "arguments", "dataImport", "toolCenter"] {
+            #expect(!raw.contains(forbidden))
+        }
+        let reopened = GuideConversationHistoryStore(directoryURL: directory)
+        var requested = false
+        let observation = GuideNavigationCoordinator.shared.navigationRequests.sink { _ in requested = true }
+        defer { observation.cancel() }
+        let message = try #require(await reopened.load()?.messages.first)
+        #expect(GuideNavigationSupport.suggestedDestinations(in: message) == [.worldbook, .feedbackCenter])
+        #expect(GuideNavigationSupport.suggestedDestinations(in: message) == GuideNavigationSupport.suggestedDestinations(in: original))
+        #expect(message.toolCalls.dropFirst().allSatisfy { $0.arguments == "{}" })
+        #expect(message.toolCalls.allSatisfy { $0.result == nil })
+        #expect(!requested)
+
+        // 使用确切的旧版结构，避免用当前编码器制作的夹具掩盖兼容问题。
+        let legacy = """
+        {"version":1,"messages":[{"id":"\(original.id.uuidString)","role":"assistant","content":"旧记录",
+        "tools":[{"id":"old","name":"\(name)","disposition":"completed"}]}],"turns":[],"latestUserMessageAllowsEditing":false}
+        """
+        try Data(legacy.utf8).write(to: file)
+        let old = try #require(await reopened.load()?.messages.first)
+        #expect(old.content == "旧记录")
+        #expect(GuideNavigationSupport.suggestedDestinations(in: old).isEmpty)
+    }
+
     @Test("向导存档保留正文与工具状态，不保存秘密参数、源码结果或隐藏思考")
     func historyStoresOnlyConversationAndToolSummaries() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

@@ -182,6 +182,39 @@ extension GuideInfrastructureTests {
     }
 
     @MainActor
+    @Test("导航工具返回可显示的目标和标题，全无合法目标时没有按钮", arguments: [true, false])
+    func navigationToolReturnsStaticButtons(valid: Bool) async throws {
+        let coordinator = GuideContextCoordinator()
+        coordinator.register(
+            descriptor: GuidePageDescriptor(id: "source", title: "设置"), snapshot: { .empty },
+            buildProposal: { _, _ in throw GuideError.invalidToolArguments },
+            execute: { _ in throw GuideError.invalidToolArguments }
+        )
+        let call = InternalToolCall(id: "navigation", toolName: GuideToolCatalog.suggestSettingsNavigation.name,
+                                    arguments: valid ? #"{"destinations":["worldbook","bad","worldbook"]}"# : #"{"destinations":["bad"]}"#)
+        let client = GuideBatchRecordingClient(calls: [call])
+        let router = GuideModelRouter(builtInClient: client)
+        let previousRoute = router.route
+        defer { router.route = previousRoute }
+        router.useBuiltIn()
+        let controller = GuideConversationController(router: router, contextCoordinator: coordinator)
+        controller.send("世界书在哪里？")
+        try await waitForGuidePause(controller)
+        let visible = try #require(controller.messages.first { !$0.toolCalls.isEmpty })
+        #expect(visible.toolCalls.first?.result == nil)
+        #expect(visible.toolCalls.first?.resultDisposition == (valid ? .completed : .failed))
+        #expect(GuideNavigationSupport.suggestedDestinations(in: visible) == (valid ? [.worldbook] : []))
+        #expect(controller.pendingProposal == nil)
+        if valid {
+            let response = try #require(client.requests.last?.last { $0.role == .tool })
+            let fields = try GuideToolArguments.decode(response.content)
+            #expect(fields["destinations"] == .array([.dictionary([
+                "id": .string("worldbook"), "title": .string(GuideNavigationDestination.worldbook.localizedTitle)
+            ])]))
+        }
+    }
+
+    @MainActor
     @Test("页面变化时剩余提案不能写到新页面，失败结果仍配对返回")
     func queuedToolsStayOnTheirOriginalPage() async throws {
         let coordinator = GuideContextCoordinator()
@@ -218,8 +251,39 @@ extension GuideInfrastructureTests {
     }
 
     @MainActor
-    @Test("清空待确认批次后新问题不会继续执行旧工具")
-    func clearingDropsQueuedProposals() async throws {
+    @Test("在反馈页提问才可创建本页草稿提案，重开同名页面不会继承授权", arguments: [true, false])
+    func feedbackQuestionBelongsToComposeForm(reopen: Bool) async throws {
+        let coordinator = GuideContextCoordinator()
+        let descriptor = FeedbackDraftGuideSupport.descriptor(pageID: "feedback-compose")
+        let draft = FeedbackDraft(category: .bug, title: "", detail: "用户未分享的草稿")
+        let version = UUID()
+        @MainActor func registerForm() -> GuideContextCoordinator.RegistrationToken {
+            coordinator.register(descriptor: descriptor, snapshot: { FeedbackDraftGuideSupport.snapshot(draft, submitting: false) },
+                buildProposal: { call, _ in
+                    try FeedbackDraftGuideSupport.proposal(for: call, draft: draft, pageID: descriptor.id, revision: version)
+                }, execute: { _ in Issue.record("只有原生确认才能写入草稿"); throw GuideError.invalidToolArguments })
+        }
+        let source = registerForm()
+        let call = InternalToolCall(id: "draft", toolName: FeedbackDraftGuideSupport.toolName, arguments: #"{"title":"点发送没反应"}"#)
+        let client = GuideBatchRecordingClient(calls: [call])
+        let router = GuideModelRouter(builtInClient: client)
+        let previousRoute = router.route
+        defer { router.route = previousRoute }
+        router.useBuiltIn()
+        let controller = GuideConversationController(router: router, contextCoordinator: coordinator)
+        controller.send("我点了发送没反应，帮我写一份反馈。")
+        if reopen {
+            coordinator.unregister(source)
+            _ = registerForm()
+        }
+        try await waitForGuidePause(controller)
+        #expect((controller.pendingProposal != nil) == !reopen)
+        #expect(!client.requests.flatMap { $0 }.contains { $0.content.contains(draft.detail) })
+    }
+
+    @MainActor
+    @Test("清空或跨页离开待确认批次后新问题不会继续执行旧工具", arguments: [true, false])
+    func clearingDropsQueuedProposals(navigating: Bool) async throws {
         let coordinator = GuideContextCoordinator()
         coordinator.register(
             descriptor: GuidePageDescriptor(id: "settings", title: "设置", tools: [
@@ -241,7 +305,14 @@ extension GuideInfrastructureTests {
         controller.send("旧问题")
         try await waitForGuidePause(controller)
         #expect(controller.pendingProposal != nil)
-        controller.clear()
+        if navigating {
+            controller.discardPendingProposalForNavigation()
+            #expect(controller.messages.first?.content == "旧问题")
+            #expect(controller.messages.last?.toolCalls.map(\.resultDisposition) == [.rejected, .rejected])
+            #expect(client.requests.count == 1)
+        } else {
+            controller.clear()
+        }
         controller.confirmPendingProposal()
         controller.send("新问题")
         try await waitForGuidePause(controller)

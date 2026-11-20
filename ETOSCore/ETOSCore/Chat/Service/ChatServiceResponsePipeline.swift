@@ -434,7 +434,8 @@ extension ChatService {
                     status: .failed,
                     tokenUsage: latestTokenUsage,
                     finishedAt: Date(),
-                    errorKind: terminationFailure.errorKind
+                    errorKind: terminationFailure.errorKind,
+                    chatFailureCategory: GuideChatErrorCategory.classify(retryError)
                 )
                 return
             }
@@ -667,6 +668,7 @@ extension ChatService {
             )
         } catch {
             if isCancellationError(error) {
+                recordChatFailure(GuideChatErrorCategory.classify(error), source: requestLogContext.requestSource)
                 logger.info("流式请求在处理中被取消 (URLError)。")
                 logCapturedStreamingResponse(isPartial: true)
                 messages = flushPendingStreamingMessages(
@@ -744,7 +746,8 @@ extension ChatService {
                         status: .failed,
                         tokenUsage: latestTokenUsage,
                         finishedAt: Date(),
-                        errorKind: "streaming_error"
+                        errorKind: "streaming_error",
+                        chatFailureCategory: GuideChatErrorCategory.classify(error)
                     )
                 }
             }

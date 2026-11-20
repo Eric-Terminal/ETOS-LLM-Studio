@@ -355,6 +355,7 @@ extension ChatService {
             )
         } catch {
             if isCancellationError(error) {
+                recordChatFailure(GuideChatErrorCategory.classify(error), source: requestLogContext.requestSource)
                 logger.info("请求在拉取数据时被取消 (URLError)。")
                 persistRequestLog(
                     context: requestLogContext,
@@ -375,7 +376,8 @@ extension ChatService {
                     status: .failed,
                     tokenUsage: nil,
                     finishedAt: Date(),
-                    errorKind: "network_error"
+                    errorKind: "network_error",
+                    chatFailureCategory: GuideChatErrorCategory.classify(error)
                 )
             }
         }

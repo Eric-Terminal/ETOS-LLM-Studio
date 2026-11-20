@@ -38,7 +38,7 @@ public struct GuideModelOptions {
 @MainActor
 public final class GuideModelRouter: ObservableObject {
     private let appConfig: AppConfigStore
-    private let chatService: ChatService
+    let chatService: ChatService
     private let builtInClient: any GuideCompletionClient
     private var cancellables = Set<AnyCancellable>()
 

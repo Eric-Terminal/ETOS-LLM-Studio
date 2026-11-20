@@ -146,19 +146,32 @@ public struct GuidePageDescriptor: Codable, Hashable, Sendable {
     public let mode: GuideMode
     public let documents: [GuideDocumentReference]
     public let tools: [GuidePageTool]
+    public let suggestedPrompts: [String]
 
     public init(
         id: GuidePageID,
         title: String,
         mode: GuideMode = .contextualHelp,
         documents: [GuideDocumentReference] = [],
-        tools: [GuidePageTool] = []
+        tools: [GuidePageTool] = [],
+        suggestedPrompts: [String] = []
     ) {
         self.id = id
         self.title = title
         self.mode = mode
         self.documents = documents
         self.tools = tools
+        self.suggestedPrompts = suggestedPrompts
+    }
+
+    public init(from decoder: Decoder) throws {
+        let fields = try decoder.container(keyedBy: CodingKeys.self)
+        id = try fields.decode(GuidePageID.self, forKey: .id)
+        title = try fields.decode(String.self, forKey: .title)
+        mode = try fields.decode(GuideMode.self, forKey: .mode)
+        documents = try fields.decode([GuideDocumentReference].self, forKey: .documents)
+        tools = try fields.decode([GuidePageTool].self, forKey: .tools)
+        suggestedPrompts = try fields.decodeIfPresent([String].self, forKey: .suggestedPrompts) ?? []
     }
 }
 

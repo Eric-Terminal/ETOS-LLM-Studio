@@ -187,7 +187,7 @@ extension GuideInfrastructureTests {
 
     @MainActor
     @Test("只有模型相关编辑页自动携带详细控制知识，两条模型线路一致", arguments: [true, false])
-    func requestControlGuidanceFollowsDeclaredPage(includesSystem: Bool) throws {
+    func requestControlGuidanceFollowsDeclaredPage(includesSystem: Bool) async throws {
         let root = GuidePageDescriptor(id: "settings-root", title: "设置")
         let editor = GuidePageDescriptor(id: "model-configuration", title: "模型信息", documents: [
             GuideDocumentReference(id: "model-request-body", title: "请求体")
@@ -199,12 +199,15 @@ extension GuideInfrastructureTests {
         #expect(!brief.contains("reasoning_effort"))
         #expect(!brief.contains("propose_model_request_body_controls"))
         for page in [root, editor] {
-            let messages = GuidePromptBuilder.requestMessages(
+            let messages = await GuidePromptBuilder.requestMessages(
                 history: [ChatMessage(role: .user, content: "怎么改参数")],
                 context: GuidePageContext(descriptor: page, snapshot: .empty),
                 includesClientSystemPrompt: includesSystem
             )
             let context = try #require(messages.first { $0.content.contains("<guide_runtime_context") })
+            for field in ["app_feature_map", "global_health", "response_style_guidance", "suggest_settings_navigation"] {
+                #expect(context.content.contains(field))
+            }
             #expect(context.content.contains("current_option_id") == (page.id == editor.id))
             #expect(messages.contains { $0.role == .system } == includesSystem)
         }
