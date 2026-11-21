@@ -602,22 +602,40 @@ extension ChatView {
                         scheduleImmediateBottomSnap()
                     }
                 }
-                .overlay {
-                    if isComposerRequestControlsExpanded {
-                        Color.clear
-                            .contentShape(Rectangle())
-                            .onTapGesture(perform: dismissComposerInput)
-                            .accessibilityHidden(true)
-                    }
-                }
                 .overlay(alignment: .top) {
                     if viewModel.enableChatTopBlurFade && !usesSystemChatToolbar {
                         navBarFadeBlurOverlay
                     }
                 }
                 .overlay {
-                    if sessionMessages.isEmpty, continuationContext == nil {
-                        ChatOnboardingCardView()
+                    let shouldShowOnboardingCard = sessionMessages.isEmpty && continuationContext == nil
+                    ZStack {
+                        if shouldShowOnboardingCard {
+                            ChatOnboardingCardView(isLiquidGlassEnabled: isLiquidGlassEnabled)
+                                .opacity(isComposerRequestControlsExpanded ? 0.55 : 1)
+                                .allowsHitTesting(!isComposerRequestControlsExpanded)
+                        }
+                    }
+                    .animation(
+                        accessibilityReduceMotion
+                            ? .easeInOut(duration: 0.18)
+                            : .spring(response: 0.36, dampingFraction: 1.0),
+                        value: shouldShowOnboardingCard
+                    )
+                    .animation(
+                        accessibilityReduceMotion
+                            ? .easeInOut(duration: 0.18)
+                            : .spring(response: 0.3, dampingFraction: 1.0),
+                        value: isComposerRequestControlsExpanded
+                    )
+                }
+                // 请求控制抽屉展开时，遮罩必须置于起步卡之上，使轻点空白或卡片区域都能优先收起输入抽屉。
+                .overlay {
+                    if isComposerRequestControlsExpanded {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture(perform: dismissComposerInput)
+                            .accessibilityHidden(true)
                     }
                 }
                 // Telegram 风格：顶部导航栏

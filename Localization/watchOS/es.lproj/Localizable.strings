@@ -8549,3 +8549,22 @@ Por favor Generar a short, concise Título for este conversation based encendido
 "没有已启用且支持工具调用的云端聊天模型" = "No enabled cloud chat model supports tool calling";
 "询问“%@”页面的配置方法" = "Ask how to configure the “%@” page";
 "页面操作" = "Page Actions";
+
+/* Tarjeta de bienvenida inicial */
+"欢迎使用 ETOS LLM Studio" = "Te damos la bienvenida a ETOS LLM Studio";
+"待填写密钥" = "Falta la clave API";
+"待添加模型" = "Añadir modelo";
+"待启用并选中" = "Elegir modelo";
+"进度 %d/%d · %@" = "Paso %d/%d · %@";
+"连接模型提供商或本地模型即可开始对话。不知从何下手？点下方按钮，内置免费助手会一步步带你配好。" = "Conecta un proveedor o un modelo local para empezar a chatear. ¿No sabes por dónde empezar? La guía gratuita integrada te acompaña paso a paso.";
+"提供商已添加好，接下来只需填入对应的 API Key 就能继续。" = "El proveedor ya está guardado; introduce su clave API para continuar.";
+"连接信息已备好，拉取模型列表或手动添加一个聊天模型即可。" = "La conexión está lista. Obtén la lista de modelos o añade un modelo de chat.";
+"只差最后一步：去模型管理启用一个聊天模型，并将它选为当前对话模型。" = "Último paso: activa un modelo de chat en Gestión de modelos y selecciónalo para esta conversación.";
+"连接提供商即可开聊，也可让免费助手一步步带你配好。" = "Conecta un proveedor para chatear o configúralo con la guía gratuita.";
+"启用已添加的模型并设为当前对话模型" = "Activar un modelo añadido y elegirlo para el chat";
+"手动添加提供商、接口地址与模型" = "Añadir proveedores, direcciones API y modelos manualmente";
+"自己去模型管理配置" = "Configurar en Gestión de modelos";
+"导入配置包或角色卡" = "Importar configuración o tarjeta de personaje";
+"恢复已有备份，或导入酒馆角色卡与世界书" = "Restaurar copias, tarjetas de personaje o libros de mundo";
+"先逛逛软件有哪些功能" = "Explorar primero las funciones de la app";
+"了解角色扮演、记忆系统、工具调用与语音能力" = "Conoce el rol, la memoria, las herramientas y la voz";

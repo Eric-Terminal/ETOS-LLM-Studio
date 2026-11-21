@@ -22,13 +22,13 @@ struct MacWorkspaceView: View {
         } detail: {
             MacChatView(showSessions: {
                 workspace.sessionLibrary.scope = .all; workspace.sessionLibrary.query = ""; columnVisibility = .all
-            }, showsSessionAnalytics: sessionToAnalyze != nil, startGuide: {
+            }, showsSessionAnalytics: sessionToAnalyze != nil, startGuide: { topic in
                 let controller = MacGuideSession.shared.controller
                 controller.router.useBuiltIn()
                 showsGuide = true
                 Task {
                     await controller.restoreHistory()
-                    if controller.messages.isEmpty { controller.send(GuideSetupPresentation.setupPrompt) }
+                    if controller.messages.isEmpty { controller.send(topic.prompt) }
                 }
             })
                 .navigationTitle(workspace.currentSession?.name ?? NSLocalizedString("新的对话", comment: ""))

@@ -17,11 +17,10 @@ extension ContentView {
         return List {
             if viewModel.messages.isEmpty && viewModel.allMessagesForSession.isEmpty && continuationContext == nil {
                 if let state = setupPresentation.state, state != .ready {
-                    Text(GuideSetupPresentation.hint(for: state)).font(.footnote).foregroundStyle(.secondary)
-                    WatchGuideOnboardingButton()
-                    Button(NSLocalizedString("前往模型管理", value: "Open Model Management", comment: "手表手动配置入口")) {
-                        GuideNavigationCoordinator.shared.request(.providerManagement)
-                    }
+                    WatchChatOnboardingStatusRow(state: state, isLiquidGlassEnabled: isLiquidGlassEnabled)
+                    WatchGuideOnboardingButton(style: .primaryChatAction)
+                    WatchChatOnboardingModelManagementRow(state: state)
+                    WatchGuideOnboardingButton(style: .secondaryTourAction)
                 } else {
                     Spacer().frame(height: emptyStateSpacerHeight).listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
                 }

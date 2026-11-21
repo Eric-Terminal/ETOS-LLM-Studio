@@ -8654,3 +8654,22 @@
 "正在回答…" = "Answering…";
 "确认修改" = "Confirm Changes";
 "问题" = "Question";
+
+/* 零配置起步欢迎卡 */
+"欢迎使用 ETOS LLM Studio" = "Welcome to ETOS LLM Studio";
+"待填写密钥" = "API Key Needed";
+"待添加模型" = "Add a Model";
+"待启用并选中" = "Select a Model";
+"进度 %d/%d · %@" = "Step %d/%d · %@";
+"连接模型提供商或本地模型即可开始对话。不知从何下手？点下方按钮，内置免费助手会一步步带你配好。" = "Connect a provider or local model to start chatting. Not sure where to begin? The free built-in guide can walk you through every step.";
+"提供商已添加好，接下来只需填入对应的 API Key 就能继续。" = "Your provider is saved—just enter its API key to continue.";
+"连接信息已备好，拉取模型列表或手动添加一个聊天模型即可。" = "Connection details are set. Fetch the model list or add a chat model next.";
+"只差最后一步：去模型管理启用一个聊天模型，并将它选为当前对话模型。" = "Almost ready—enable a chat model in Model Management and select it for this chat.";
+"连接提供商即可开聊，也可让免费助手一步步带你配好。" = "Connect a provider to chat, or let the free guide set it up with you.";
+"启用已添加的模型并设为当前对话模型" = "Enable an added model and select it for chat";
+"手动添加提供商、接口地址与模型" = "Add providers, API addresses, and models yourself";
+"自己去模型管理配置" = "Configure in Model Management";
+"导入配置包或角色卡" = "Import Config or Character Card";
+"恢复已有备份，或导入酒馆角色卡与世界书" = "Restore backups, character cards, or worldbooks";
+"先逛逛软件有哪些功能" = "Explore App Features First";
+"了解角色扮演、记忆系统、工具调用与语音能力" = "Learn about roleplay, memory, tools, and voice";

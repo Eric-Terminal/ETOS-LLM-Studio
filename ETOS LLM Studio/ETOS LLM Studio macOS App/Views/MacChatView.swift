@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 struct MacChatView: View {
     let showSessions: () -> Void
     let showsSessionAnalytics: Bool
-    let startGuide: () -> Void
+    let startGuide: (GuideOnboardingTopic) -> Void
     @ObservedObject private var setup = GuideSetupPresentation.shared
     @State private var viewportHeight: CGFloat = 0
     @State private var viewportBounds = CGRect.zero
@@ -38,16 +38,8 @@ struct MacChatView: View {
     @ViewBuilder
     private var emptyChat: some View {
         if let state = setup.state, state != .ready {
-            ContentUnavailableView {
-                Label(NSLocalizedString("开始使用 ETOS LLM Studio", value: "Get Started with ETOS LLM Studio", comment: "起步卡标题"), systemImage: "sparkles")
-            } description: {
-                Text(GuideSetupPresentation.hint(for: state)).font(.footnote).foregroundStyle(.secondary)
-            } actions: {
-                Button(NSLocalizedString("让免费助手带我配好", value: "Set Up with the Free Guide", comment: "助手配置入口"), action: startGuide)
-                    .buttonStyle(.borderedProminent)
-                Button(NSLocalizedString("前往模型管理", value: "Open Model Management", comment: "手动配置入口")) { GuideNavigationCoordinator.shared.request(.providerManagement) }
-                Button(NSLocalizedString("导入配置或角色卡", value: "Import a Configuration or Character Card", comment: "配置导入入口")) { GuideNavigationCoordinator.shared.request(.dataImport) }
-            }
+            MacChatOnboardingCardView(state: state, startGuide: startGuide)
+                .frame(maxWidth: .infinity)
         } else {
             ContentUnavailableView {
                 Label(NSLocalizedString("新的对话", value: "New Chat", comment: "聊天空状态"), systemImage: "bubble.left.and.bubble.right")
@@ -714,5 +706,230 @@ private struct MacMessageEditor: View {
         .modifier(MacGuideInspector())
         .interactiveDismissDisabled(isSaving)
         .frame(minWidth: 500, minHeight: 350)
+    }
+}
+
+/// macOS 桌面零配置欢迎引导卡：居中呈现玻璃材质卡片、阶段进度、免费向导主按钮及支持悬停高亮的次级分组导航行。
+private struct MacChatOnboardingCardView: View {
+    let state: GuideModelSetupState
+    let startGuide: (GuideOnboardingTopic) -> Void
+
+    @ObservedObject private var configuration = AppConfigStore.shared
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    private let cardShape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+    private let groupShape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+
+    var body: some View {
+        let isReadyToActivate = state == .needsActivationOrSelection
+
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .center, spacing: 13) {
+                    GuideOnboardingHeroBadge(size: 42, iconSize: 19, cornerRadius: 12)
+                    VStack(alignment: .leading, spacing: 4) {
+                        if GuideSetupPresentation.hasPartialProgress(for: state) {
+                            GuideSetupProgressBadge(state: state)
+                        }
+                        Text(GuideSetupPresentation.welcomeTitle)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                Text(GuideSetupPresentation.welcomeSubtitle(for: state))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Button {
+                startGuide(.setup)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .font(.body.weight(.semibold))
+                    Text(NSLocalizedString("让免费助手带我配好", value: "Set Up with the Free Guide", comment: "助手配置入口"))
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+
+            VStack(spacing: 0) {
+                MacOnboardingSecondaryRow(
+                    icon: isReadyToActivate ? "checkmark.circle.fill" : "slider.horizontal.3",
+                    tint: isReadyToActivate ? .green : .blue,
+                    title: NSLocalizedString("自己去模型管理配置", value: "Configure in Model Management", comment: "起步卡手动配置标题"),
+                    subtitle: GuideSetupPresentation.manualSetupSubtitle(for: state)
+                ) {
+                    GuideNavigationCoordinator.shared.request(.providerManagement)
+                }
+
+                Divider()
+                    .padding(.leading, 54)
+
+                MacOnboardingSecondaryRow(
+                    icon: "square.and.arrow.down",
+                    tint: .indigo,
+                    title: NSLocalizedString("导入配置包或角色卡", value: "Import Config or Character Card", comment: "起步卡导入配置标题"),
+                    subtitle: NSLocalizedString("恢复已有备份，或导入酒馆角色卡与世界书", value: "Restore backups, character cards, or worldbooks", comment: "起步卡导入配置副标题")
+                ) {
+                    GuideNavigationCoordinator.shared.request(.dataImport)
+                }
+
+                Divider()
+                    .padding(.leading, 54)
+
+                MacOnboardingSecondaryRow(
+                    icon: "compass.drawing",
+                    tint: .teal,
+                    title: NSLocalizedString("先逛逛软件有哪些功能", value: "Explore App Features First", comment: "起步卡功能导览标题"),
+                    subtitle: NSLocalizedString("了解角色扮演、记忆系统、工具调用与语音能力", value: "Learn about roleplay, memory, tools, and voice", comment: "起步卡功能导览副标题")
+                ) {
+                    startGuide(.tour)
+                }
+            }
+            .clipShape(groupShape)
+            .background {
+                if reduceTransparency {
+                    groupShape.fill(Color(nsColor: .underPageBackgroundColor).opacity(0.6))
+                } else {
+                    groupShape.fill(colorScheme == .dark ? Color.white.opacity(0.055) : Color.black.opacity(0.035))
+                }
+            }
+            .overlay {
+                groupShape.strokeBorder(
+                    Color.primary.opacity(reduceTransparency ? 0.16 : (colorScheme == .dark ? 0.10 : 0.06)),
+                    lineWidth: 0.5
+                )
+            }
+        }
+        .padding(22)
+        .frame(maxWidth: 420)
+        .clipShape(cardShape)
+        .background(cardSurface)
+        .shadow(
+            color: .black.opacity(colorScheme == .dark ? 0.28 : 0.08),
+            radius: 18,
+            x: 0,
+            y: 8
+        )
+        .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.97)))
+        .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 1.0), value: state)
+    }
+
+    private var cardSurface: some View {
+        Group {
+            if reduceTransparency {
+                cardShape.fill(Color(nsColor: .controlBackgroundColor))
+            } else if #available(macOS 26.0, *), configuration.enableLiquidGlass {
+                cardShape
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(configuration.liquidGlassTintOpacity))
+                    .glassEffect(.regular, in: cardShape)
+            } else {
+                cardShape.fill(.regularMaterial)
+            }
+        }
+        .overlay {
+            cardShape.strokeBorder(
+                LinearGradient(
+                    colors: reduceTransparency
+                        ? [Color.primary.opacity(0.18), Color.primary.opacity(0.14)]
+                        : (colorScheme == .dark
+                            ? [Color.white.opacity(0.28), Color.white.opacity(0.08)]
+                            : [Color.white.opacity(0.75), Color.black.opacity(0.08)]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 0.5
+            )
+        }
+    }
+}
+
+private struct MacOnboardingSecondaryRow: View {
+    let icon: String
+    let tint: Color
+    let title: String
+    let subtitle: String
+    let action: () -> Void
+
+    @State private var isHovered = false
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .center, spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(tint.opacity(isHovered ? 0.20 : 0.14))
+                    Image(systemName: icon)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(tint)
+                }
+                .frame(width: 28, height: 28)
+                .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(isHovered ? .secondary : .tertiary)
+                    .offset(x: isHovered && !reduceMotion ? 1.5 : 0)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MacOnboardingGroupedRowButtonStyle(isHovered: isHovered, colorScheme: colorScheme, reduceMotion: reduceMotion))
+        .onHover { hovering in
+            if reduceMotion {
+                isHovered = hovering
+            } else {
+                withAnimation(.spring(response: 0.2, dampingFraction: 1.0)) {
+                    isHovered = hovering
+                }
+            }
+        }
+    }
+}
+
+private struct MacOnboardingGroupedRowButtonStyle: ButtonStyle {
+    let isHovered: Bool
+    let colorScheme: ColorScheme
+    let reduceMotion: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        let backgroundOpacity: Double = if configuration.isPressed {
+            colorScheme == .dark ? 0.12 : 0.08
+        } else if isHovered {
+            colorScheme == .dark ? 0.07 : 0.045
+        } else {
+            0
+        }
+
+        configuration.label
+            .background(Color.primary.opacity(backgroundOpacity))
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.992 : 1.0)
+            .animation(reduceMotion ? nil : .spring(response: 0.18, dampingFraction: 1.0), value: configuration.isPressed)
     }
 }
