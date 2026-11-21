@@ -99,6 +99,9 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         let selectedDayKey = self.selectedDayKey
         let displayedMonthAnchor = self.displayedMonthAnchor
         let calendar = self.calendar
+        let locale = Locale(
+            identifier: AppLanguagePreference.resolved(rawValue: AppConfigStore.shared.appLanguage).localeIdentifier
+        )
 
         state.isLoading = true
 
@@ -107,7 +110,8 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                 selectedScope: selectedScope,
                 selectedDayKey: selectedDayKey,
                 displayedMonthAnchor: displayedMonthAnchor,
-                calendar: calendar
+                calendar: calendar,
+                locale: locale
             )
             guard !Task.isCancelled, let self else { return }
             self.state = nextState
@@ -119,7 +123,8 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         selectedScope: UsageAnalyticsDetailScope,
         selectedDayKey: String,
         displayedMonthAnchor: Date,
-        calendar: Calendar
+        calendar: Calendar,
+        locale: Locale
     ) async -> UsageAnalyticsDashboardState {
         await Task.detached(priority: .userInitiated) {
             let dailyTotals = Persistence.loadUsageDailyTotals()
@@ -147,6 +152,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                 displayedMonthAnchor: displayedMonthAnchor,
                 providers: providers,
                 calendar: calendar,
+                locale: locale,
                 sessionCount: sessionCount,
                 messageCount: messageCount
             )
@@ -162,6 +168,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         displayedMonthAnchor: Date,
         providers: [Provider],
         calendar: Calendar,
+        locale: Locale,
         sessionCount: Int,
         messageCount: Int
     ) -> UsageAnalyticsDashboardState {
@@ -199,11 +206,13 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         let detail = makeDetail(
             selectedScope: selectedScope,
             selectedDayKey: effectiveSelectedDayKey,
+            referenceDate: today,
             dailyTotals: dailyTotals,
             selectedDayEvents: selectedDayEvents,
             modelTotalsByDayKey: modelTotalsByDayKey,
             pricingByModelKey: pricingByModelKey,
-            calendar: calendar
+            calendar: calendar,
+            locale: locale
         )
 
         let summaryStats = makeSummaryStats(
@@ -369,13 +378,15 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
     private nonisolated static func makeDetail(
         selectedScope: UsageAnalyticsDetailScope,
         selectedDayKey: String,
+        referenceDate: Date,
         dailyTotals: [UsageDailyTotal],
         selectedDayEvents: [UsageAnalyticsEvent],
         modelTotalsByDayKey: [String: [UsageDailyModelTotal]],
         pricingByModelKey: [String: ModelPricing],
-        calendar: Calendar
+        calendar: Calendar,
+        locale: Locale
     ) -> UsageAnalyticsDetailSnapshot {
-        let anchorDate = UsageAnalyticsRuntimeContext.date(for: selectedDayKey, calendar: calendar) ?? Date()
+        let anchorDate = UsageAnalyticsRuntimeContext.date(for: selectedDayKey, calendar: calendar) ?? referenceDate
         let title: String
         let subtitle: String
         let orderedDayKeys: [String]
@@ -415,7 +426,29 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         }
         tokenTotals.totalTokens = inferredTotalTokens(tokenTotals)
 
-        return UsageAnalyticsDetailSnapshot(
+        let cost = costSummary(for: scopedModels, pricingByModelKey: pricingByModelKey)
+        let topModels = aggregateModels(scopedModels, pricingByModelKey: pricingByModelKey)
+        let sourceBreakdown = aggregateSources(scopedModels, pricingByModelKey: pricingByModelKey)
+        let providerBreakdown = aggregateProviders(scopedModels, pricingByModelKey: pricingByModelKey)
+        let cacheHitRate = UsageAnalyticsCacheMetrics.hitRate(for: scopedModels) ?? UsageAnalyticsCacheMetrics.hitRate(for: tokenTotals)
+        let tokenTrend = selectedScope == .day
+            ? makeHourlyTokenTrend(events: selectedDayEvents, anchorDate: anchorDate, pricingByModelKey: pricingByModelKey, calendar: calendar)
+            : makeDailyTokenTrend(
+                orderedDayKeys: orderedDayKeys,
+                totalsByDayKey: totalsByDayKey,
+                scopedModels: scopedModels,
+                pricingByModelKey: pricingByModelKey,
+                calendar: calendar
+            )
+
+        let nonCachedTokens = UsageAnalyticsTokenBreakdown.nonCachedTokens(for: tokenTotals)
+        let totalDayCount = max(1, orderedDayKeys.count)
+        let activeDayCount = scopedTotals.filter { $0.requestCount > 0 || inferredTotalTokens($0.tokenTotals) > 0 }.count
+        let dailyAverageTokens = tokenTotals.totalTokens > 0
+            ? Int((Double(tokenTotals.totalTokens) / Double(totalDayCount)).rounded())
+            : 0
+
+        var snapshot = UsageAnalyticsDetailSnapshot(
             title: title,
             subtitle: subtitle,
             requestCount: requestCount,
@@ -423,20 +456,28 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             failedCount: failedCount,
             cancelledCount: cancelledCount,
             tokenTotals: tokenTotals,
-            costSummary: costSummary(for: scopedModels, pricingByModelKey: pricingByModelKey),
-            topModels: aggregateModels(scopedModels, pricingByModelKey: pricingByModelKey),
-            sourceBreakdown: aggregateSources(scopedModels, pricingByModelKey: pricingByModelKey),
-            cacheHitRate: UsageAnalyticsCacheMetrics.hitRate(for: scopedModels) ?? UsageAnalyticsCacheMetrics.hitRate(for: tokenTotals),
-            tokenTrend: selectedScope == .day
-                ? makeHourlyTokenTrend(events: selectedDayEvents, anchorDate: anchorDate, pricingByModelKey: pricingByModelKey, calendar: calendar)
-                : makeDailyTokenTrend(
-                    orderedDayKeys: orderedDayKeys,
-                    totalsByDayKey: totalsByDayKey,
-                    scopedModels: scopedModels,
-                    pricingByModelKey: pricingByModelKey,
-                    calendar: calendar
-                )
+            costSummary: cost,
+            topModels: topModels,
+            sourceBreakdown: sourceBreakdown,
+            cacheHitRate: cacheHitRate,
+            tokenTrend: tokenTrend,
+            providerBreakdown: providerBreakdown,
+            nonCachedTokens: nonCachedTokens,
+            dailyAverageTokens: dailyAverageTokens,
+            activeDayCount: activeDayCount,
+            totalDayCount: totalDayCount
         )
+
+        let todayDayKey = UsageAnalyticsRuntimeContext.dayKey(for: referenceDate, calendar: calendar)
+        snapshot.dashboardCard = UsageCompactFormatter.makeDashboardCardSnapshot(
+            scope: selectedScope,
+            selectedDayKey: selectedDayKey,
+            todayDayKey: todayDayKey,
+            selectedDayShortTitle: compactDayTitle(for: anchorDate, calendar: calendar),
+            detail: snapshot,
+            locale: locale
+        )
+        return snapshot
     }
 
     private nonisolated static func makeSummaryStats(
@@ -823,6 +864,82 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                     errorCount: $0.errorCount,
                     tokenTotals: $0.tokenTotals,
                     cacheHitRate: UsageAnalyticsCacheMetrics.hitRate(for: $0.items),
+                    tokenShare: share
+                )
+            }
+            .sorted(by: rankComparator)
+    }
+
+    private nonisolated static func aggregateProviders(
+        _ items: [UsageDailyModelTotal],
+        pricingByModelKey: [String: ModelPricing]
+    ) -> [UsageAnalyticsRankItem] {
+        struct Bucket {
+            var providerName: String
+            var modelIDs: Set<String>
+            var requestCount: Int
+            var errorCount: Int
+            var tokenTotals: RequestLogTokenTotals
+            var costSummary: UsageAnalyticsCostSummary
+            var items: [UsageDailyModelTotal]
+        }
+
+        var buckets: [String: Bucket] = [:]
+        for item in items {
+            let trimmed = item.providerName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let displayProvider = trimmed.isEmpty
+                ? NSLocalizedString("usage_dashboard.provider.unknown", value: "Unknown Provider", comment: "Fallback provider name")
+                : trimmed
+            let key = displayProvider.lowercased()
+            var bucket = buckets[key] ?? Bucket(
+                providerName: displayProvider,
+                modelIDs: [],
+                requestCount: 0,
+                errorCount: 0,
+                tokenTotals: .init(),
+                costSummary: .init(),
+                items: []
+            )
+            if !item.modelID.isEmpty {
+                bucket.modelIDs.insert(item.modelID)
+            }
+            bucket.requestCount += item.requestCount
+            bucket.errorCount += item.failedCount
+            mergeTokenTotals(item.tokenTotals, into: &bucket.tokenTotals)
+            bucket.costSummary = bucket.costSummary.merging(costSummary(for: item, pricingByModelKey: pricingByModelKey))
+            bucket.items.append(item)
+            buckets[key] = bucket
+        }
+
+        let totalTokens = buckets.values.reduce(0) { $0 + inferredTotalTokens($1.tokenTotals) }
+
+        return buckets
+            .map { key, value in
+                let bucketTotalTokens = inferredTotalTokens(value.tokenTotals)
+                let share = totalTokens > 0 ? Double(bucketTotalTokens) / Double(totalTokens) : 0
+                let subtitle: String
+                if value.modelIDs.count > 1 {
+                    subtitle = String(
+                        format: NSLocalizedString(
+                            "usage_dashboard.provider.model_count",
+                            value: "%d models",
+                            comment: "Provider active model count subtitle"
+                        ),
+                        value.modelIDs.count
+                    )
+                } else {
+                    subtitle = value.modelIDs.first ?? ""
+                }
+                return UsageAnalyticsRankItem(
+                    id: key,
+                    title: value.providerName,
+                    subtitle: subtitle,
+                    requestCount: value.requestCount,
+                    totalTokens: bucketTotalTokens,
+                    costSummary: value.costSummary,
+                    errorCount: value.errorCount,
+                    tokenTotals: value.tokenTotals,
+                    cacheHitRate: UsageAnalyticsCacheMetrics.hitRate(for: value.items),
                     tokenShare: share
                 )
             }

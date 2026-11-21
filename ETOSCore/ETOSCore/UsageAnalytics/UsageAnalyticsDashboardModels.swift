@@ -264,6 +264,12 @@ public struct UsageAnalyticsDetailSnapshot: Hashable, Sendable {
     public var sourceBreakdown: [UsageAnalyticsRankItem]
     public var cacheHitRate: Double?
     public var tokenTrend: UsageAnalyticsTokenTrendSnapshot
+    public var providerBreakdown: [UsageAnalyticsRankItem]
+    public var nonCachedTokens: Int
+    public var dailyAverageTokens: Int
+    public var activeDayCount: Int
+    public var totalDayCount: Int
+    public var dashboardCard: UsageDashboardCardSnapshot
 
     public init(
         title: String = "",
@@ -277,7 +283,13 @@ public struct UsageAnalyticsDetailSnapshot: Hashable, Sendable {
         topModels: [UsageAnalyticsRankItem] = [],
         sourceBreakdown: [UsageAnalyticsRankItem] = [],
         cacheHitRate: Double? = nil,
-        tokenTrend: UsageAnalyticsTokenTrendSnapshot = .init()
+        tokenTrend: UsageAnalyticsTokenTrendSnapshot = .init(),
+        providerBreakdown: [UsageAnalyticsRankItem] = [],
+        nonCachedTokens: Int = 0,
+        dailyAverageTokens: Int = 0,
+        activeDayCount: Int = 0,
+        totalDayCount: Int = 1,
+        dashboardCard: UsageDashboardCardSnapshot = .init()
     ) {
         self.title = title
         self.subtitle = subtitle
@@ -291,6 +303,12 @@ public struct UsageAnalyticsDetailSnapshot: Hashable, Sendable {
         self.sourceBreakdown = sourceBreakdown
         self.cacheHitRate = cacheHitRate
         self.tokenTrend = tokenTrend
+        self.providerBreakdown = providerBreakdown
+        self.nonCachedTokens = nonCachedTokens
+        self.dailyAverageTokens = dailyAverageTokens
+        self.activeDayCount = activeDayCount
+        self.totalDayCount = max(1, totalDayCount)
+        self.dashboardCard = dashboardCard
     }
 }
 

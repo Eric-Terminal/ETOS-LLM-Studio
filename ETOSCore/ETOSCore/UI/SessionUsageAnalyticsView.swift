@@ -20,9 +20,17 @@ public struct SessionUsageAnalyticsView: View {
     private var available: Bool { isActive && appLock.state != .locked }
     private var locale: Locale { Locale(identifier: AppLanguagePreference.resolved(rawValue: configuration.appLanguage).localeIdentifier) }
 
+    private var isCompactWatchLayout: Bool {
+        #if os(watchOS)
+        return true
+        #else
+        return false
+        #endif
+    }
+
     public var body: some View {
         Group {
-            if available { analyticsList }
+            if available { analyticsContent }
             else { Color.clear }
         }
         .navigationTitle(NSLocalizedString("session_usage.title", value: "Conversation Analytics", comment: "会话分析统计标题"))
@@ -55,67 +63,219 @@ public struct SessionUsageAnalyticsView: View {
         #endif
     }
 
-    private var analyticsList: some View {
+    @ViewBuilder
+    private var analyticsContent: some View {
+        #if os(watchOS)
+        watchAnalyticsList
+        #else
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                introBannerCard
+
+                if let presentation = viewModel.presentation {
+                    if presentation.isEmpty {
+                        emptyBannerCard
+                    }
+
+                    UsageHeroSummaryCard(
+                        presentation: presentation.heroCard,
+                        badgeText: presentation.heroCard.exactTotalText,
+                        compactLayout: false
+                    )
+
+                    requestBreakdownCard(presentation: presentation)
+
+                    notesAndFootnotesSection(presentation: presentation)
+                } else {
+                    HStack {
+                        Spacer()
+                        ProgressView(NSLocalizedString("正在加载", comment: ""))
+                            .padding(.vertical, 32)
+                        Spacer()
+                    }
+                }
+            }
+            .padding(18)
+            .frame(maxWidth: 680, alignment: .leading)
+            .frame(maxWidth: .infinity)
+        }
+        .background(sessionPageBackground)
+        #endif
+    }
+
+    #if os(watchOS)
+    private var watchAnalyticsList: some View {
         List {
-            settingsIntroCard
+            Section {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(sessionName, systemImage: "chart.bar.xaxis")
+                        .font(.footnote.weight(.semibold))
+                    Text(NSLocalizedString("session_usage.intro", value: "Counts recorded requests for this conversation, including retries and related tasks such as title generation. Copied history is not charged again; deleting messages does not erase recorded usage. Requests predating usage tracking are unavailable.", comment: "会话统计介绍"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             if let presentation = viewModel.presentation {
                 if presentation.isEmpty {
-                    Text(NSLocalizedString("session_usage.empty", value: "No recorded requests for this conversation yet.", comment: "会话统计空状态"))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                Section {
-                    ForEach(presentation.overview) { metric($0.title, value: $0.value) }
-                    if let note = presentation.missingCostNote {
-                        Text(note)
-                            .font(.footnote)
+                    Section {
+                        Text(NSLocalizedString("session_usage.empty", value: "No recorded requests for this conversation yet.", comment: "会话统计空状态"))
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
-                } header: {
-                    Text(NSLocalizedString("用量总览", comment: ""))
-                } footer: {
-                    Text(NSLocalizedString("session_usage.cost_note", value: "Estimates use current model prices and each request's time. Missing usage or prices are excluded. Amounts use the unit configured in model pricing and are not a provider bill.", comment: "会话费用统计口径"))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                 }
+
                 Section {
-                    ForEach(presentation.tokens) { metric($0.title, value: $0.value) }
-                    if let note = presentation.missingUsageNote {
-                        Text(note)
-                            .font(.footnote)
+                    UsageHeroSummaryCard(
+                        presentation: presentation.heroCard,
+                        badgeText: nil,
+                        compactLayout: true
+                    )
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                    .listRowBackground(Color.clear)
+                }
+
+                Section(NSLocalizedString("session_usage.request_count", value: "Requests", comment: "会话请求总数")) {
+                    ForEach(presentation.requests) { item in
+                        LabeledContent {
+                            Text(item.value).monospacedDigit()
+                        } label: {
+                            Text(item.title)
+                        }
+                    }
+                }
+
+                Section {
+                    if let missingCost = presentation.missingCostNote {
+                        Text(missingCost)
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
-                } footer: {
+                    if let missingUsage = presentation.missingUsageNote {
+                        Text(missingUsage)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                     Text(NSLocalizedString("session_usage.token_note", value: "Thinking and cache details may already be included in input or output tokens and are not added to the total again.", comment: "会话 Token 明细口径"))
-                        .font(.footnote)
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
-                }
-                Section {
-                    ForEach(presentation.requests) { metric($0.title, value: $0.value) }
+                    Text(NSLocalizedString("session_usage.cost_note", value: "Estimates use current model prices and each request's time. Missing usage or prices are excluded. Amounts use the unit configured in model pricing and are not a provider bill.", comment: "会话费用统计口径"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             } else {
                 ProgressView(NSLocalizedString("正在加载", comment: ""))
             }
         }
     }
+    #endif
 
-    private var settingsIntroCard: some View {
-        Section {
-            VStack(alignment: .leading) {
-                Label(sessionName, systemImage: "chart.bar.xaxis")
-                    .font(.headline)
-                Text(NSLocalizedString("session_usage.intro", value: "Counts recorded requests for this conversation, including retries and related tasks such as title generation. Copied history is not charged again; deleting messages does not erase recorded usage. Requests predating usage tracking are unavailable.", comment: "会话统计介绍"))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+    private var introBannerCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(sessionName, systemImage: "chart.bar.xaxis")
+                .font(.headline)
+                .foregroundStyle(.primary)
+
+            Text(NSLocalizedString("session_usage.intro", value: "Counts recorded requests for this conversation, including retries and related tasks such as title generation. Copied history is not charged again; deleting messages does not erase recorded usage. Requests predating usage tracking are unavailable.", comment: "会话统计介绍"))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .usageCardSurface(cornerRadius: 20)
     }
 
-    private func metric(_ title: String, value: String) -> some View {
-        LabeledContent {
-            Text(value).monospacedDigit()
-        } label: {
-            Text(title)
+    private var emptyBannerCard: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "tray")
+                .foregroundStyle(.secondary)
+            Text(NSLocalizedString("session_usage.empty", value: "No recorded requests for this conversation yet.", comment: "会话统计空状态"))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .usageCardSurface(cornerRadius: 18)
+    }
+
+    private func requestBreakdownCard(presentation: SessionUsageAnalyticsPresentation) -> some View {
+        let columns = [
+            GridItem(.flexible(), spacing: 12),
+            GridItem(.flexible(), spacing: 12),
+            GridItem(.flexible(), spacing: 12),
+            GridItem(.flexible(), spacing: 12)
+        ]
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text(NSLocalizedString("session_usage.request_count", value: "Requests", comment: "会话请求总数"))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                if let costMetric = presentation.overview.last {
+                    Text("\(costMetric.title) · \(costMetric.value)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            LazyVGrid(columns: columns, spacing: 12) {
+                ForEach(presentation.requests) { item in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.title)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Text(item.value)
+                            .font(.title3.weight(.bold).monospacedDigit())
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color.primary.opacity(0.04))
+                    )
+                }
+            }
+        }
+        .padding(20)
+        .usageCardSurface(cornerRadius: 24)
+    }
+
+    private func notesAndFootnotesSection(presentation: SessionUsageAnalyticsPresentation) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let note = presentation.missingCostNote {
+                Text(note)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let note = presentation.missingUsageNote {
+                Text(note)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text(NSLocalizedString("session_usage.token_note", value: "Thinking and cache details may already be included in input or output tokens and are not added to the total again.", comment: "会话 Token 明细口径"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(NSLocalizedString("session_usage.cost_note", value: "Estimates use current model prices and each request's time. Missing usage or prices are excluded. Amounts use the unit configured in model pricing and are not a provider bill.", comment: "会话费用统计口径"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 6)
+    }
+
+    private var sessionPageBackground: Color {
+        #if os(iOS)
+        return Color(.systemGroupedBackground)
+        #elseif os(macOS)
+        return Color(nsColor: .windowBackgroundColor)
+        #else
+        return Color.clear
+        #endif
     }
 }

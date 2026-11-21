@@ -12,6 +12,7 @@ struct SessionUsageAnalyticsPresentation: Sendable {
     let overview: [Metric]
     let tokens: [Metric]
     let requests: [Metric]
+    let heroCard: UsageHeroCardPresentation
     let missingCostNote: String?
     let missingUsageNote: String?
     let guideSnapshot: JSONValue
@@ -25,13 +26,19 @@ struct SessionUsageAnalyticsPresentation: Sendable {
             Metric(id: id, title: title, value: number.string(from: NSNumber(value: value)) ?? String(value))
         }
         let costText: String
+        let heroCostText: String?
         if summary.pricedRequestCount == 0 {
             costText = NSLocalizedString("session_usage.unavailable", value: "Unavailable", comment: "无法估算会话费用")
+            heroCostText = nil
         } else if summary.estimatedCost > 0 && summary.estimatedCost < 0.000001 {
-            costText = String(format: NSLocalizedString("session_usage.below_cost", value: "< %@", comment: "费用低于显示精度"),
+            let formattedTiny = String(format: NSLocalizedString("session_usage.below_cost", value: "< %@", comment: "费用低于显示精度"),
                 cost.string(from: NSNumber(value: 0.000001)) ?? "0.000001")
+            costText = formattedTiny
+            heroCostText = formattedTiny
         } else {
-            costText = cost.string(from: NSNumber(value: summary.estimatedCost)) ?? String(summary.estimatedCost)
+            let formatted = cost.string(from: NSNumber(value: summary.estimatedCost)) ?? String(summary.estimatedCost)
+            costText = formatted
+            heroCostText = formatted
         }
         overview = [metric("total_tokens", NSLocalizedString("总 Token", comment: ""), summary.totalTokens),
                     Metric(id: "estimated_cost", title: NSLocalizedString("估算费用", comment: ""), value: costText)]
@@ -48,6 +55,27 @@ struct SessionUsageAnalyticsPresentation: Sendable {
             metric("failed_count", NSLocalizedString("失败", comment: ""), summary.failedCount),
             metric("cancelled_count", NSLocalizedString("已取消", comment: ""), summary.cancelledCount)
         ]
+        let sessionTotals = RequestLogTokenTotals(
+            sentTokens: summary.inputTokens,
+            receivedTokens: summary.outputTokens,
+            thinkingTokens: summary.thinkingTokens,
+            cacheWriteTokens: summary.cacheWriteTokens,
+            cacheReadTokens: summary.cacheReadTokens,
+            totalTokens: summary.totalTokens
+        )
+        heroCard = UsageCompactFormatter.makeHeroPresentation(
+            tokenTotals: sessionTotals,
+            nonCachedTokens: UsageAnalyticsTokenBreakdown.nonCachedTokens(for: sessionTotals),
+            costText: heroCostText,
+            cacheHitRate: UsageAnalyticsCacheMetrics.hitRate(for: sessionTotals),
+            dailyAverageTokens: nil,
+            activeDayCount: nil,
+            totalDayCount: nil,
+            requestCount: summary.requestCount,
+            failedCount: summary.failedCount,
+            cancelledCount: summary.cancelledCount,
+            locale: locale
+        )
         missingCostNote = summary.pricedRequestCount < summary.requestCount
             ? String(format: NSLocalizedString("session_usage.missing_cost", value: "%d requests could not be priced.", comment: "会话费用数据缺失提示"), summary.requestCount - summary.pricedRequestCount) : nil
         missingUsageNote = summary.usageReportedRequestCount < summary.requestCount
