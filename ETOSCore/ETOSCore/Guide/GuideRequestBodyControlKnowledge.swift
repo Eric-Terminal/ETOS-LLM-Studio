@@ -6,47 +6,53 @@ public enum GuideRequestBodyControlKnowledge {
         // 详细知识跟随编辑页主动声明的文档，不在普通设置页面增加参数规则和示例。
         guard page.documents.contains(where: { $0.id == "model-request-body" }) else {
             return locale.language.languageCode?.identifier == "zh"
-                ? "ELS 提供名为“结构化控制”的能力，可以帮助用户自定义请求 Body；需要配置时，引导用户进入模型编辑页面。"
-                : "ELS provides Structured Controls to help users customize request bodies. Guide users to the model editor when they need to configure them."
+                ? "ELS 提供名为“结构化控制”的能力，可以帮助用户把自定义请求 Body 参数做成快捷开关、档位或滑块；需要配置时，请引导用户进入对应模型的编辑页面。"
+                : "ELS provides Structured Controls so users can turn custom request body parameters into quick switches, presets or sliders. Guide users to the model editor when they want to configure them."
         }
         if page.id.rawValue.hasPrefix("mac-request-preview") {
             return locale.language.languageCode?.identifier == "zh" ? """
-            当前是只读的聊天请求体示例。它使用模型编辑草稿、控制默认值和 <message> 示例消息，由实际协议适配器构造；不包含当前对话、附件、应用全局采样配置或已启用工具。显式自定义参数和适配器默认字段仍会保留。示例不发送请求，不读取提供商密钥，不改变聊天选择或请求日志。界面按已知敏感字段脱敏，但向导不能读取正文或复制到历史，也不能发送、执行或修改示例。调整参数需返回参数或控制编辑页；保存仍需逐级完成并保存提供商。这不是实际待发送请求，也不证明上游接受参数。
+            当前页面是只读的“聊天请求体示例”。它根据当前模型草稿、控制项默认值和一条 <message> 占位消息，按所选接口协议展示组装后的参数样式；不会联网发送请求，不会读取真实 API Key，也不会包含当前聊天记录、附件、全局采样设置或已启用的工具。已知敏感字段在界面上会自动脱敏，且向导不能读取正文、不能复制或修改示例，也不能用它代表上游服务一定支持某个参数。如需调整，请引导用户返回参数或控制编辑页修改，完成后记得逐级点“完成”并保存提供商。
             """ : """
-            This is a read-only sample chat request body. Actual protocol adapters use the model draft, control defaults and a <message> sample. It excludes the current conversation, attachments, global sampling configuration and enabled tools; explicit custom parameters and adapter defaults remain. It sends no request, reads no provider credentials, and changes neither chat selections nor request logs. The UI redacts known sensitive fields, but the guide cannot read the body, copy it into history, send it, execute it or edit it. Return to parameter/control editors to make changes, then finish parent drafts and save the provider. This is not the actual pending request or proof of upstream parameter support.
+            This page is a read-only sample chat request body built from the current model draft, control defaults and a <message> placeholder. It sends no network request, reads no real provider credentials and omits your active conversation, attachments, global sampling settings and enabled tools. Sensitive fields are redacted on screen, and the guide cannot read the body, copy it, send it or edit it—nor does this preview prove upstream API support. Guide the user back to the parameter or control editor to make changes, then finish parent drafts and save the provider.
             """
         }
         if page.id.rawValue.hasPrefix("mac-request-runtime") {
             return locale.language.languageCode?.identifier == "zh" ? """
-            Mac 聊天控制位于输入区的“聊天控制”按钮，作用于当前会话实际使用的模型。propose_mac_runtime_control 接受 control_id 及且仅及 active、option_id、position 中的一项；active 仅用于开关，option_id 为已声明的选项 ID，空字符串清除当前覆盖并跟随默认，position 为启用滑块的 0–1 有限位置，核心会吸附离散档位或邻近锚点。用户原生确认后直接保存为后续请求的运行态，不修改模型配置默认值。参数正文与预览不向向导公开。切换模型/会话、修改选择或恢复数据使旧提案失效。Mac 原生滑块按位置使用已保存端点配色，最高档开启彩虹时数值显示流动颜色；减弱动态效果时静止，窗口非活跃时暂停。思考扫光来自每次请求的消息快照，不随之后调整档位改变。当前页面只能修改已声明的选择，不可调用配置编辑工具或外部工具。关闭控制只跳过叠加，不发送 false。
+            当前是聊天输入区打开的 Mac“聊天控制”面板，专门调整当前会话所用模型的实时档位，不会改动模型配置里的默认值。使用 propose_mac_runtime_control 时，每次传入 control_id 以及 active、option_id、position 三者中的唯一一项：active 用于开关；option_id 填已定义的选项 ID（传空字符串 "" 表示恢复跟随默认）；position 用于已开启滑块的控制项（0–1 之间的小数，会自动吸附有效档位）。经用户原生确认后直接生效，用于后续聊天请求；把开关关掉只是不再叠加该组参数，不会向服务端发送 false。参数具体内容对向导隐藏，切换模型或会话后旧提案自动失效。滑块若开启了最高档彩虹效果，拉满时数值和该次请求的思考提示会显示彩色流动效果（开启减弱动态效果或窗口失焦时保持静止）。
             """ : """
-            Mac Chat Controls opens from the composer and targets the model used by this conversation. propose_mac_runtime_control accepts control_id and exactly one of active, option_id or position. active is for switches; option_id must be declared, and an empty string clears the override to follow defaults. position is a finite 0–1 value for an enabled slider; Core snaps discrete values and nearby anchors. Native confirmation saves runtime choices for future requests without changing model configuration defaults. Parameter payloads and the preview are hidden from the guide. Model/session changes, changed selections or data restoration invalidate old proposals. Mac native sliders use saved endpoint colors along their position; the value flows with rainbow colors at maximum when enabled. Reduce Motion makes it static and inactive windows pause animation. Thinking sweeps use the per-request message snapshot, not later control changes. Change only this page's declared selections, without configuration-editor or external tools. Disabling a switch skips its overlay without sending false.
+            This is Mac Chat Controls opened from the message composer. It adjusts live control choices for the current conversation's model without changing the model's saved defaults. propose_mac_runtime_control takes control_id plus exactly one of active, option_id or position: active toggles a switch; option_id selects a declared option (an empty string "" clears the override back to defaults); position sets an enabled slider between 0 and 1. Native confirmation applies the choice immediately for future requests—turning a switch off simply skips its parameters rather than sending false. Parameter payloads stay hidden from the guide, and switching models or sessions invalidates older proposals. When Rainbow at Maximum is enabled on a slider, reaching the top endpoint gives the value and that request's thinking indicator a flowing rainbow tint (paused in inactive windows or with Reduce Motion).
             """
         }
         if page.id.rawValue.hasPrefix("mac-") {
             return locale.language.languageCode?.identifier == "zh" ? """
-            空选项可沿用前一选项的参数结构，但不会复制标量值。suggestion_visible 表示参数页仍显示未编辑建议，suggestion_available 表示选项页仍可使用建议，均为只读。未编辑完成或仅切换方式不保存建议；键值表中未改的建议行也不保存。编辑 JSON 后保留的 null 会作为实际参数保存。参数或选项页取消会丢弃该层修改；已消费的建议清空后不会恢复。不要将建议模板说成已生效的参数。
-            Mac 入口为模型管理 → 提供商 → 模型配置 → 自定义 Body。根页是只读目录，新增、复制、导入、排序和拆分通过原生按钮完成；控制、选项和参数编辑器各自声明字段。参数页的 propose_mac_request_parameters 可替换用户提供的 parameters 对象，或设置 edit_mode 为 keyValue、expression、rawJSON；已有参数只写不可读，不得凭空补写未知秘密。该工具只改草稿，不发送请求。完成子页后仍需完成模型并保存提供商。当前有效参数预览使用控制默认值，不是包含消息和工具的完整请求，也不改变数据库中的当前聊天选择。实际可用工具和字段以当前页面声明为准；更改默认值不等于清除运行状态。上游参数仍需确认协议支持，关闭控制仅跳过叠加，不发送 false。
+            Mac 自定义请求参数路径：模型管理 → 提供商 → 模型配置 → 自定义 Body。主页目录对向导只读，新增、复制、导入、排序或拆分控制项请由用户在界面上点击；点进具体控制、选项或参数子页后，向导可协助修改当前页声明的草稿字段。
+            • 参数编辑页可用 propose_mac_request_parameters 完整替换用户给出的 parameters 对象，或将 edit_mode 切换为 keyValue（键值对）、expression（表达式）、rawJSON（原始 JSON）；已有参数值对向导只写不可读，切勿编造未知凭据。
+            • 空白选项支持沿用上一选项的字段结构作为填写建议（suggestion_visible 与 suggestion_available 为只读提示）：没改动过的建议行不会保存成实际参数，只有真正编辑过的内容（包括在 JSON 里显式保留的 null）才会进入草稿。
+            • 所有子页点“完成”只会回到上一级草稿，最终必须完成模型编辑并点击提供商的“保存”才会正式生效；修改默认值不会清空聊天里已选的实时档位，关闭控制也只是跳过叠加而非发送 false。
             """ : """
-            Empty options can reuse the preceding option's parameter structure without copying scalar values. Read-only suggestion_visible indicates an untouched template in the parameter editor; suggestion_available indicates one is available to the option editor. Finishing without edits or only switching modes saves no suggested parameters; untouched suggested key/value rows are omitted too. After editing JSON, retained nulls are actual values. Cancelling a parameter or option editor discards that level's changes. Clearing a consumed suggestion does not restore it. Templates are not active parameters.
-            On Mac, open Model Management → Provider → Model Configuration → Custom Body. The root is a read-only catalog for the guide; use native actions to create, copy, import, reorder or split controls. Control, option and parameter editors declare their own fields. propose_mac_request_parameters replaces a user-supplied parameters object or sets edit_mode to keyValue, expression or rawJSON. Existing parameters are write-only; never invent unknown credentials. It only changes a draft and sends no request. Finish child and model editors, then save the provider. The effective-parameter preview uses defaults, excludes messages/tools and does not change saved chat selections. Use only this page's declared tools and fields. Changing defaults does not clear runtime state. Check upstream support; disabling a control only skips its overlay and does not send false.
+            On Mac, open Model Management → Provider → Model Configuration → Custom Body. The root catalog is read-only to the guide—use native buttons to create, duplicate, import, reorder or split controls—while individual control, option and parameter editors expose their own draft fields.
+            • In a parameter editor, propose_mac_request_parameters can replace the parameters object with one supplied by the user or switch edit_mode between keyValue, expression and rawJSON; existing parameter values are write-only, so never invent credentials.
+            • Empty options may show a structure template based on the preceding option (read-only suggestion_visible and suggestion_available): untouched template rows are omitted on save, whereas explicitly edited JSON values (including retained nulls) are kept.
+            • Clicking Done in a child editor only updates its parent draft—finish the model editor and click Save on the provider to persist changes. Updating defaults does not clear live chat overrides, and turning a control off only skips its overlay without sending false.
             """
         }
         if locale.language.languageCode?.identifier == "zh" {
             return """
-            当用户问“调整/关闭思考、推理强度、预算、温度、联网搜索、响应格式或其他 API 请求参数”，先区分模型请求参数与显示设置。请求参数的可复用开关、档位和滑块属于“结构化控制”，入口为模型管理 → 提供商 → 模型信息 → 结构化控制。不要臆造独立的“思考开关”。先读 model-request-body；模型信息页可用 propose_model_request_body_controls 新增和修改，控制详情页则使用当前声明的字段工具。以本次工具列表为准，不在对应页面时引导用户进入，不要声称所有页面都能写。
-            例：用户要“关闭思考”→确认当前提供商与 effective_api_format、该上游确实支持的关闭参数，再提交具有明确关闭 payload 的选项；关闭一个控制只是不再叠加它，并不发送 false。
-            例：用户要“低/中/高随时切换”→创建 optionGroup，每个选项写完整参数；default_option_id 是默认值，current_option_id 才修改已有当前选择。
-            例：用户要“别显示思考过程”→应查显示设置，不能擅自改模型的推理参数。
-            上游参数名和可用值不能仅凭模型名字猜测；App 的映射、合并和滑块行为不清楚时，使用 search_source_code 定位 ModelRequestBodyControlCompiler 或 ModelRequestBodyControlSliderDescriptor，再用 read_source_file 按行读取当前构建源码。源码能说明客户端行为，不代表上游接受该参数。
+            当用户询问“怎么调节或关闭思考、推理强度、思考预算、温度、联网搜索、JSON 输出格式或其他 API 请求参数”时，请先帮用户分清“向模型发送的请求参数”和“本地界面显示设置”：
+            • 想做在聊天时随时切换的开关、多档选项或滑块 → 属于“结构化控制”（路径：模型管理 → 提供商 → 模型信息 → 结构化控制），请先查阅 model-request-body 文档，不要凭空编造根本不存在的“思考开关”。在模型信息页可用 propose_model_request_body_controls 新增或修改，在单个控制详情页则使用当前页面提供的字段工具；不在对应页面时请先引导用户打开。
+            • 例 1（彻底关闭模型思考）：先确认当前提供商、effective_api_format 以及该服务商接口文档真正支持的关闭字段，再创建带明确关闭 payload 的选项；单纯把一个控制开关关掉只是不再附加参数，并不会发送 false。
+            • 例 2（低 / 中 / 高随时切换）：创建 optionGroup，每个选项写清完整参数；default_option_id 只改默认档位，想把当前正在用的档位一并改掉需同时指定 current_option_id。
+            • 例 3（只是不想在聊天气泡里看到长串思考过程）：去改“显示设置”里的思考预览即可，不要乱动模型的推理参数。
+            切勿仅凭模型名字猜测服务商支持什么字段；若不确定 App 本身的合并或滑块插值规则，可用 search_source_code 查找 ModelRequestBodyControlCompiler 或 ModelRequestBodyControlSliderDescriptor，再用 read_source_file 按行读取当前版本源码（客户端源码仅说明 App 行为，不代表远端接口一定接受该参数）。
             """
         }
         return """
-        When users ask about reasoning effort/budget, disabling thinking, temperature, web search, response formats or other API request parameters, distinguish model parameters from display preferences. Reusable switches, presets and sliders are Structured Controls: Model Management → Provider → Model Information → Structured Controls. Do not invent a separate thinking switch. Read model-request-body first. The model page exposes propose_model_request_body_controls; a control editor exposes its own field tool. Use only the current tool list; otherwise guide the user to the correct page.
-        Example: “disable thinking” → check provider, effective_api_format and a documented upstream disabling value, then propose an option with an explicit disabling payload. Turning a control off only stops its overlay; it does not send false.
-        Example: “switch low/medium/high easily” → create an optionGroup with complete payloads per option. default_option_id changes a default; current_option_id changes an existing current selection.
-        Example: “hide the thinking text” → use display settings, not reasoning request parameters.
-        Do not guess upstream parameters from model names. For unclear app behavior, search_source_code for ModelRequestBodyControlCompiler or ModelRequestBodyControlSliderDescriptor, then read_source_file in line ranges at this build’s commit. Client source does not prove upstream API support.
+        When users ask how to adjust or disable thinking, reasoning effort/budget, temperature, web search, response format or other API request parameters, first distinguish upstream request parameters from local display settings:
+        • Reusable chat switches, presets and sliders belong to Structured Controls (Model Management → Provider → Model Information → Structured Controls). Read model-request-body first and never invent a nonexistent thinking toggle. Use propose_model_request_body_controls on the model page or the declared field tool inside a control editor; if the user is elsewhere, guide them to the right page first.
+        • Example 1 (“turn off model thinking”): verify the provider, effective_api_format and the upstream API's actual disabling payload, then propose an option carrying that explicit payload. Turning a control switch off merely stops overlaying its payload—it never sends false.
+        • Example 2 (“switch low / medium / high easily”): create an optionGroup with complete payloads for each option; default_option_id sets the default, while current_option_id updates the active selection right now.
+        • Example 3 (“just hide the thinking text on screen”): point the user to Display Settings instead of altering model reasoning parameters.
+        Never guess upstream parameter names from a model's name alone. If client-side merging or slider behavior is unclear, use search_source_code for ModelRequestBodyControlCompiler or ModelRequestBodyControlSliderDescriptor and read_source_file by line range (client code explains app behavior only, not upstream API support).
         """
     }
 
@@ -67,74 +73,74 @@ public enum GuideRequestBodyControlKnowledge {
     public static let customExample = #"{"controls":[{"title":"自定义请求预设","kind":"toggle","default_active":true,"payload":{"vendor_config":{"search":{"enabled":true},"response":{"format":"json"}}}}]}"#
 
     private static let chineseDocument = """
-    Interactions 续聊必须原样回传模型步骤及签名，通用“思考回传”设置不会删除这些步骤；隐藏思考摘要应设置 generation_config.thinking_summaries=none。
+    什么是“自定义请求体”与“结构化控制”：
+    许多大模型接口支持在请求里附带额外 JSON 参数（例如调整思考强度、推理预算、温度、联网搜索、JSON 输出格式等）。
+    • 基础自定义 Body（支持“键值对”、“表达式”、“原始 JSON”三种编辑方式）：用来填写该模型每次请求固定带上的基础参数。
+    • 结构化控制（入口：模型管理 → 提供商 → 模型信息 → 结构化控制；Mac 位于模型配置的“自定义 Body”中）：不局限于思考参数，它可以把任意自定义 JSON 包装成聊天时随手可点的**开关（toggle）、多档选项组（optionGroup）或连续滑块**，不用每次跑回设置里手改代码。
 
-    Gemini Interactions（gemini-interactions）使用 generation_config.thinking_level 与 thinking_summaries，不使用旧 Gemini 的 generationConfig.thinkingConfig。思考档位为 minimal、low、medium、high；minimal 不表示完全关闭。新建首个开关默认示例为 generation_config.max_output_tokens=8192；当前协议不接受 temperature、top_p、top_k，不要直接套用下文的温度示例。原有 Gemini 控制不会自动迁移，切换协议后需要按新字段修改。
+    参数生效顺序与常见误区：
+    1. 覆盖优先级：全局默认参数 → 模型基础自定义 Body → 按列表从上到下叠加已启用的结构化控制（同名嵌套对象会自动合并，标量和数组由排在后面的控制项覆盖前面的）。页面快照中的 effective_request_body_overrides 展示的是合成后的覆盖参数，不包含聊天消息和工具列表。
+    2. 关闭控制 ≠ 发送 false：开关（toggle）处于关闭状态时，只是本次请求不再附带它的 payload，既不会发送 false，也不会删掉基础 Body 里的同名字段。如果服务商要求必须传明确参数才能关闭思考（如 thinking.type=disabled），请创建一个包含“关闭 / 开启”两档的选项组（optionGroup），在各自 payload 里写明完整参数。
+    3. 区分显示、回传与停止推理：“隐藏思考过程”是本地界面显示设置，“回传思考内容”是多轮历史传输设置，两者都不会让云端模型停止推理。注意：Gemini Interactions（gemini-interactions）多轮对话必须原样保留模型步骤与签名，不受通用回传开关裁剪；该协议使用 generation_config.thinking_level（可选 minimal、low、medium、high，其中 minimal 并非彻底关闭）和 generation_config.thinking_summaries=none（隐藏摘要），不支持旧版 generationConfig.thinkingConfig，也不接受 temperature、top_p、top_k（新建开关默认示例为 generation_config.max_output_tokens=8192，切换协议后需手动更新旧参数）。
 
-    结构化控制不是仅用于思考的特殊功能，而是把任意 API 请求 JSON 包装成聊天时可快速切换的开关、选项组或滑块。路径：模型管理 → 提供商 → 模型信息 → 结构化控制。不要把“键值对/表达式/原始 JSON”三种自定义 Body 编辑方式与结构化控制混为一谈；它们是基础参数的编辑方式，控制项则在发送时叠加到基础参数上。
+    选项组、滑块与最高档彩虹效果：
+    • 选项组（optionGroup）：每个选项包含 id、title 和 payload。default_option_id 是默认档位，而聊天中已选的实时档位优先级更高——因此想“现在立刻切到某档”时，需同时设置 current_option_id（开关同理用 current_active）。将 current_option_id 设为空字符串 "" 会清除实时覆盖、恢复跟随默认档位，而不是禁用整组。
+    • 滑块模式（slider_enabled）：至少需要两个选项锚点。若各选项修改的是同一个数值字段，滑块会按 slider_granularity（步进粒度）在 0–1 的 current_slider_position 上平滑计算数值；若是复杂组合参数则按档位切换。请勿在同一提案里同时传 current_option_id 和 current_slider_position。
+    • 最高档彩虹效果（rainbow_at_maximum）：开启后，只有当已启用的滑块真正拉到最后一档端点时（接近但未到端点仍为单色；重排选项后以最新末尾项为准），滑块数值以及该次请求流式思考时的标题扫光才会呈现彩色流动效果。开启系统“减弱动态效果”或窗口处于后台时会自动停止动画。
 
-    Mac 的“聊天请求体示例”是独立只读页，后台将当前草稿与控制默认值送入实际协议适配器，使用 <message> 示例消息，不发送网络、不读取真实提供商密钥、不写运行态或请求日志。它不含当前聊天、附件、全局采样配置和已启用工具；显式自定义参数及适配器默认字段仍会保留，因此不能用它承诺真实请求的完整内容或上游兼容性。已知敏感字段脱敏；向导不能读取正文，也没有发送、执行或修改工具。仅远程聊天模型显示此入口。
+    Mac 端编辑、预览与实时控制说明：
+    • 草稿与保存边界：在 Mac“自定义 Body”下编辑参数、控制或选项时，点子页“完成”只会更新上一级草稿，最终必须完成模型编辑并点击提供商的“保存”才会正式保存。参数页工具 propose_mac_request_parameters 支持完整替换用户提供的 parameters 对象或切换 edit_mode（keyValue / expression / rawJSON）；已有参数与凭据只写不可读。空白新选项会贴心提示上一选项的字段骨架（未改动的模板行不会写入，编辑 JSON 后显式保留的 null 会按实际值保存）。
+    • 聊天请求体示例页：仅远程聊天模型提供，使用当前草稿、控制默认值和 <message> 占位消息在本地生成只读示例，不联网、不读真实密钥，向导也不可读取其正文。
+    • 输入框“聊天控制”：点击输入框旁的按钮即可直接切换当前对话模型的实时开关、档位或滑块（工具为 propose_mac_runtime_control，经原生确认后立即生效，不会改动模型默认配置）。
 
-    Mac 的空选项可建议沿用前一项的字段结构，标量清空，JSON 模板以 null 表示待填位置。未编辑建议或仅切换编辑方式不生成参数；键值表里仍与建议相同的行，即使其他行已修改，也不会保存。编辑 JSON 后留下的 null 按实际值保存。完成接受当前草稿，取消参数页或选项页丢弃该层修改。已消费的建议清空后不再出现。向导只看到只读的建议状态，不能读取原值。
-
-    Mac 在模型配置的“自定义 Body”中编辑基础参数及控制定义。参数、控制、选项、导入目录和说明页各有向导上下文，所有完成按钮仅返回父级草稿，最终保存提供商才持久化。参数页的 propose_mac_request_parameters 只接受 parameters 对象和/或 edit_mode（keyValue、expression、rawJSON）；替换对象是完整替换，不是补丁。已有参数不可读，新提案预览脱敏，手动修改使旧版本提案失效。切换编辑方式先验证原稿，不能通过切换丢弃无效输入；表单不能表示的外部键会保留为 JSON。控制列表支持原生新增、复制、导入、上下移动和删除，详情可编辑默认值、选项、滑块粒度、端点颜色及最高档效果，可按数值排序或按嵌套路径拆分。导入与复制重新分配控制/选项 ID；拆分保留核心合并语义。Mac 默认参数预览不是完整请求，不读取消息、不调用网络、不写聊天运行状态。输入区的“聊天控制”使用另一个独立页面，直接保存当前运行态；propose_mac_runtime_control 每次修改一个已有控制，参数与秘密不可读。选项 ID 为空表示跟随默认，滑块范围为 0–1。界面与向导共享来源版本检查，切换模型或会话会使旧操作失效。发送、重试、重写、HTML 发送及工具补充消息等待已接受的写入；备份、恢复和退出也等待该队列。Mac 滑块使用共享配色并保留系统操作，最高档数值使用彩虹；思考/等待/重试提示使用当前真实请求 ID 和每次请求的样式快照，历史及结束消息不播放活动动画。减弱动态效果与非活跃窗口会停止动态效果。
-
-    优先级：全局默认参数 → 模型自定义 Body → 按列表顺序启用的结构化控制。同名对象递归合并，数组和标量由后者替换；后面的控制覆盖前面的同名参数。这里的 effective_request_body_overrides 是自定义 Body 与当前控制合成的覆盖参数，不是包括消息、工具等字段的整个 HTTP 请求。pending 的编辑草稿不一定等于已保存参数。
-
-    toggle 的 enabled 决定控制是否参与处理，default_active 是无当前选择时的默认开关值。开关为关时只是跳过 payload，不会发送 false，也不会删除基础 Body 中的同名参数。若上游需要明确的禁用值，使用“开启/关闭”两个选项，各自写实际 payload。隐藏思考过程是显示设置；回传思考是历史传输设置；它们都不等同于让上游停止推理。
-
-    optionGroup 的每个选项包含 id、title 和 payload。default_option_id 是默认档位，已有运行态选择优先；想“现在改成高”需提交 current_option_id，想“现在开启开关”需 current_active。current_option_id 空字符串清除当前覆盖、回到默认，并非禁用该组。default_option_id 为空且没有当前选择时普通组选项不叠加；滑块则回退到首个锚点。slider_enabled 要求至少两个选项：兼容的单个数值路径会插值，其他 JSON 组合只切换离散档位；slider_granularity 控制数值粒度，current_slider_position 为 0–1 的位置。选档位会清除旧滑块位置，两种 current 选择不要同时提交。
-
-    模型页工具 propose_model_request_body_controls 的 controls 是增量列表：新增控制省略 id，更新沿用快照 ID；未提及的控制保持不变，新项追加在列表末尾。省略字段保留原值；提交 payload 会替换该字段，提交 options 会替换完整选项列表，修改或保留选项要沿用原 ID。已有隐藏认证字段省略或回传 <hidden> 时会保留；用户主动给出新秘密可以覆写，预览脱敏。remove_control_ids 必须显式列出要删除的控制。类型转换请明确删除旧控制并新增新类型，不要顺便改其他控制。用户确认后模型页保存配置及当前选择；控制详情页仍是模型编辑草稿，按该页 requires_save 说明完成保存。
-
-    “最高档彩虹效果”（rainbow_at_maximum）只在启用的滑块控制到达当前最后一档时生效。普通思考提示使用单色扫光；若发起请求时至少一个控制满足上述条件且已开启彩虹，该次请求的思考提示使用彩虹扫光。判断以滑块实际端点为准，接近最高档但未到达时仍是单色；新增或重排选项后，最高档跟随最后一项。请求中的样式不随之后切换模型或档位而改变，也不写入聊天历史。系统“减弱动态效果”开启时不播放扫光。
-
-    少样本（必须先确认真实上游协议；以下参数不保证适用于所有提供商或所有同名模型）：
-    1. 用户：“我想低中高切换思考强度。”已确认此服务的 OpenAI 兼容接口支持 reasoning_effort 的 low/medium/high → 可提交：
+    向导提案规则与常用配置示例（提交前务必确认服务商接口文档实际支持该字段，切勿对所有模型生搬硬套）：
+    • 在移动端或模型信息页使用 propose_model_request_body_controls 时，controls 为增量更新列表：新建控制省略 id（追加到末尾），修改已有控制沿用快照中的 id（未提到的控制和省略的字段保持原样；传入 payload 或 options 会整体替换对应字段，保留的选项请沿用原 id）。已有敏感字段省略或回传 <hidden> 会安全保留原秘密；删除控制必须在 remove_control_ids 中显式列出。模型信息页经用户原生确认后直接保存，单个控制详情页则按页面 requires_save 提示保存上级草稿。
+    1. 用户想“低 / 中 / 高切换思考强度”（已确认当前 OpenAI 兼容服务支持 reasoning_effort）：
     \(reasoningExample)
-    2. 用户：“彻底关闭模型思考，不是隐藏文字。”已确认此接口支持 thinking.type=disabled，以及 enabled + budget_tokens → 可提交：
+    2. 用户想“彻底关闭模型思考，而不是只隐藏文字”（已确认接口支持 thinking.type=disabled 与 enabled + budget_tokens）：
     \(thinkingOffExample)
-    3. 用户：“温度做一个 0 到 1 的滑块，当前先用 0.5。”已确认此模型支持该范围的 temperature → 可提交：
+    3. 用户想“做一个 0 到 1 的温度滑块，当前先停在 0.5”（已确认当前模型协议支持 temperature）：
     \(sliderExample)
-    4. 用户提供自定义接口文档，确认 vendor_config 中搜索和响应格式的结构 → 可以创建任意嵌套预设，不限于思考参数；下例 vendor_config 是演示字段，不能套用到未声明支持它的服务：
+    4. 用户给出了服务商文档，想把嵌套的搜索与输出格式做成一键预设开关（vendor_config 仅为演示占位名）：
     \(customExample)
 
-    不确定 App 怎么合并或生成请求时，先 search_source_code 查询 ModelRequestBodyControlCompiler、ModelRequestBodyControlSliderDescriptor 或适配器，再 read_source_file(path,start_line,end_line) 分段读取；单次最多 240 行，按返回总行数继续。源码工具只在存在当前构建完整 SHA 时提供，若未提供应说明当前版本无法定位源码，不要假装已读。客户端源码用于理解 ELS，不足以证明某个远程服务当前支持什么参数。
+    查阅当前版本客户端源码说明：
+    如果向导不确定 App 内部如何合并控制参数或插值滑块，可先调用 search_source_code 搜索 ModelRequestBodyControlCompiler、ModelRequestBodyControlSliderDescriptor 或对应协议适配器，再用 read_source_file(path,start_line,end_line) 按行分段读取（单次最多读取 240 行，可根据返回总行数继续往下读）。源码工具仅在正式构建包含完整提交号时可用；若当前环境未提供该工具，请如实说明，不要假装读过源码。客户端源码只能解释 App 自身行为，不能证明某个远端服务商一定支持某项参数。
     """
 
     private static let englishDocument = """
-    Interactions conversation history must preserve model steps and signatures unchanged, regardless of the general reasoning echo setting. To hide thought summaries, set generation_config.thinking_summaries=none.
+    What Custom Body and Structured Controls do:
+    Many model APIs accept extra JSON fields in requests—such as reasoning effort, thinking token budgets, temperature, web search or JSON output formats.
+    • Base Custom Body (editable via Key/Value, Expression or Raw JSON): sets baseline parameters sent every time you use that model.
+    • Structured Controls (Model Management → Provider → Model Information → Structured Controls, or under Model Configuration → Custom Body on Mac): turns any custom JSON—not just thinking parameters—into one-tap chat toggles, multi-option presets (optionGroup) or smooth sliders, so you can adjust behavior mid-chat without editing JSON by hand.
 
-    Gemini Interactions (gemini-interactions) uses generation_config.thinking_level and thinking_summaries, not Gemini generateContent's generationConfig.thinkingConfig. Levels are minimal, low, medium and high; minimal does not disable reasoning. The first new toggle defaults to generation_config.max_output_tokens=8192. The current protocol does not accept temperature, top_p or top_k, so the temperature examples below do not apply. Existing Gemini controls are not migrated automatically; update their fields after switching protocols.
+    Merge order and common pitfalls:
+    1. Precedence: global defaults → model base Custom Body → enabled Structured Controls from top to bottom (nested objects merge recursively, while later scalars and arrays override earlier ones). effective_request_body_overrides shows the merged parameter overrides rather than the full HTTP payload with messages and tools.
+    2. Turning a toggle off ≠ sending false: an inactive switch simply skips overlaying its payload; it sends no false and removes nothing from the base Custom Body. When an upstream API needs an explicit payload to turn off reasoning (for example thinking.type=disabled), build an optionGroup with explicit On and Off options instead.
+    3. Display vs. history echo vs. upstream reasoning: hiding thinking text on screen is a Display Setting, and echoing reasoning in multi-turn history is a transport setting—neither tells the remote model to stop reasoning. Note that Gemini Interactions (gemini-interactions) always preserves model steps and signatures intact for continuations, uses generation_config.thinking_level (minimal, low, medium, high—minimal does not disable reasoning) plus generation_config.thinking_summaries=none, and rejects legacy generationConfig.thinkingConfig as well as temperature, top_p and top_k (new toggles illustrate generation_config.max_output_tokens=8192; update fields manually after switching protocols).
 
-    Structured Controls wrap arbitrary API request JSON into reusable chat switches, option groups or sliders, not just reasoning settings. Path: Model Management → Provider → Model Information → Structured Controls. Key/value, expression and raw JSON are three editors for the base custom Body, not structured controls themselves.
+    Option groups, sliders and Rainbow at Maximum:
+    • optionGroup: each option defines id, title and payload. Live chat selections take priority over default_option_id—pass current_option_id (or current_active for a toggle) when the user wants to switch the active setting right now. Passing an empty current_option_id ("") clears the live override back to defaults rather than disabling the group.
+    • Sliders (slider_enabled): require at least two options. Compatible single numeric paths interpolate smoothly across current_slider_position (0 to 1) using slider_granularity, while complex payloads snap between discrete options. Never submit current_option_id and current_slider_position in the same update.
+    • Rainbow at Maximum (rainbow_at_maximum): takes effect only when an enabled slider sits right at its last option endpoint (reordering options updates which endpoint is highest). When active at request start, both the slider readout and that reply's streaming thinking shimmer use a flowing rainbow sweep; Reduce Motion and inactive windows keep visuals static.
 
-    Mac Sample Chat Request Body is a separate read-only page. In the background, actual protocol adapters use the current draft, control defaults and a <message> sample. It sends no network request, reads no real provider credentials, and writes no runtime state or request log. Current chat, attachments, global sampling configuration and enabled tools are excluded; explicit custom parameters and adapter defaults remain. Do not present it as the complete actual request or proof of upstream compatibility. Known sensitive fields are redacted. The guide cannot read the body or send, execute or edit it. Only remote chat models offer this entry.
+    Mac editors, sample preview and live Chat Controls:
+    • Drafts vs. saving: inside Mac Custom Body editors, clicking Done returns changes to the parent draft—finish the model editor and click Save on the provider to persist everything. propose_mac_request_parameters replaces the full parameters object supplied by the user or switches edit_mode (keyValue, expression, rawJSON), keeping existing values write-only. Blank options offer the preceding option's structure as a starter template (untouched rows are omitted, while explicit nulls kept in edited JSON are saved).
+    • Sample Chat Request Body: available on remote chat models as a read-only local preview built with a <message> placeholder; it makes no network calls, reads no real API keys and hides its body from the guide.
+    • Composer Chat Controls: opens right beside the Mac input box to save live switch, preset or slider choices immediately via propose_mac_runtime_control after native confirmation, leaving saved model defaults untouched.
 
-    Mac empty options can suggest the preceding option's field structure, with scalar values removed and JSON placeholders represented as null. Untouched templates, including mode-only changes, do not become parameters. Key/value rows still matching their suggested structure are omitted even when another row is edited; edited JSON retains explicit nulls. Done accepts the current draft; cancelling a parameter or option editor discards that editor's changes. Consumed suggestions do not reappear after clearing. The guide sees only read-only availability flags, never the original values.
-
-    On Mac, Model Configuration → Custom Body edits base parameters and control definitions. Parameters, controls, options, import catalogs and introduction pages have separate guide contexts. Done returns to the parent draft; saving the provider persists changes. propose_mac_request_parameters accepts a parameters object and/or edit_mode (keyValue, expression, rawJSON). Object replacement is complete, not a patch. Existing parameters are unreadable, new proposal previews are redacted, and manual changes invalidate stale proposals. Switching modes validates the draft first; unsupported form keys retain their JSON representation. Native actions create, copy, import, move and delete controls. Details edit defaults, options, slider granularity, endpoint colors and maximum effects; numeric sorting and nested-path splitting reuse core behavior. Copy/import regenerate control and option IDs. The default-parameter preview excludes messages and performs no network or runtime-state writes. The composer has a separate Chat Controls page that saves runtime selections directly. propose_mac_runtime_control changes one existing control at a time; payloads and secrets are hidden. An empty option ID follows defaults, and slider positions range from 0 to 1. Native and guide actions check their source revision; switching model or session invalidates old actions. Sending, retrying, rewriting, HTML sends and tool supplements wait for accepted writes, as do backup, restore and termination. Mac sliders use shared colors with native interaction and rainbow values at maximum. Thinking, waiting and retry indicators use the actual active request ID and per-request appearance; history and completed messages do not animate. Reduce Motion and inactive windows stop motion.
-
-    Precedence: global defaults → model custom Body → enabled controls in list order. Objects merge recursively; later arrays/scalars replace earlier values. effective_request_body_overrides combines the saved custom Body and current control state, not the entire HTTP request with messages/tools. Unsaved editor drafts may differ.
-
-    A toggle overlays its payload only when enabled and currently active (otherwise default_active applies). Switching it off merely skips that overlay: it sends no false and removes no base parameter. To explicitly disable upstream thinking, use separate On/Off options with documented payloads. Hiding reasoning text is a display preference; sending reasoning history is a transport preference. Neither disables upstream reasoning.
-
-    optionGroup options contain id, title and payload. Existing runtime choices override default_option_id. Use current_option_id or current_active to change the current selection as well. An empty current_option_id clears the override and returns to defaults, rather than disabling the group; it also clears the old slider position. Ordinary groups without a current/default option contribute nothing. Sliders with no selection use the first anchor. slider_enabled requires two options: compatible single numeric paths interpolate, while other payloads use discrete presets. slider_granularity is the numeric step, and current_slider_position is a position from 0 to 1. Do not send current_option_id and current_slider_position together.
-
-    propose_model_request_body_controls accepts an incremental controls list. Omit id when creating a control; use snapshot IDs to update existing ones. Untargeted controls remain unchanged; new ones append. Omitted fields remain unchanged; supplied payload replaces that field, and options replaces the complete option list (retain stable IDs). Omitted or <hidden> existing credential values are preserved. User-supplied new credentials can be written but previews are redacted. Delete only explicit remove_control_ids. Change kind by explicitly deleting and creating. After native confirmation the model page saves controls and current choices. Individual control editors update a model draft: follow requires_save to finish saving.
-
-    Rainbow at Maximum (rainbow_at_maximum) applies only when an enabled slider control reaches its current last option. Thinking indicators normally use a monochrome sweep. A request uses a rainbow sweep if at least one enabled slider has this effect enabled and is at its actual maximum endpoint when the request starts. Being near the last option is insufficient; adding or reordering options changes which option is highest. Later model or level changes do not alter an ongoing request's appearance, and the appearance is not saved in chat history. Reduce Motion disables the sweep animation.
-
-    Few-shot examples, ONLY after checking the actual upstream API. These parameters are not universal:
-    1. “Let me switch reasoning low/medium/high.” The selected OpenAI-compatible service explicitly supports these reasoning_effort values:
+    Guide proposal rules and practical examples (always verify upstream API support first—these fields are not universal):
+    • propose_model_request_body_controls takes an incremental controls array: omit id to append a new control, or pass an existing snapshot id to update only the supplied fields (supplying payload or options replaces that field as a whole; keep stable option IDs). Omitted or <hidden> secrets stay intact, and deletions require explicit remove_control_ids. Confirming on the model page saves immediately, whereas standalone control detail pages update a draft according to requires_save.
+    1. “Let me switch reasoning effort between low, medium and high” (for an OpenAI-compatible service that supports reasoning_effort):
     \(reasoningExample)
-    2. “Disable model thinking, not just its display.” The selected API explicitly supports thinking.type=disabled and enabled with budget_tokens:
+    2. “Turn off model thinking completely, not just the UI text” (for an API supporting thinking.type=disabled and enabled + budget_tokens):
     \(thinkingOffExample)
-    3. “Give me a temperature slider from 0 to 1, currently at 0.5.” The selected model supports this range:
+    3. “Give me a temperature slider from 0 to 1, set to 0.5 right now” (when supported by the model protocol):
     \(sliderExample)
-    4. A user supplies API documentation defining nested search/response settings. Arbitrary JSON presets are supported; vendor_config below is an illustrative field, not a real universal API:
+    4. Turning user-provided nested vendor documentation into a reusable toggle preset (vendor_config is illustrative only):
     \(customExample)
 
-    If ELS merging/request behavior is unclear, search_source_code for ModelRequestBodyControlCompiler, ModelRequestBodyControlSliderDescriptor or the adapter, then read_source_file(path,start_line,end_line), at most 240 lines per call. Continue using returned line counts. Source tools exist only when this build has a complete commit SHA; if absent, explain that limitation and do not pretend to have read source. Client implementation does not prove current upstream parameter support.
+    Inspecting exact-version client source code:
+    When client-side merging or slider interpolation is unclear, call search_source_code for ModelRequestBodyControlCompiler, ModelRequestBodyControlSliderDescriptor or the protocol adapter, then read_source_file(path,start_line,end_line) in chunks of at most 240 lines per call using the returned line count to continue. Source tools are available only when the build embeds a full commit SHA—if unavailable, say so plainly and never pretend to have read source. Client source explains how ELS builds requests, not what a remote provider accepts.
     """
 }

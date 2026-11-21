@@ -4,24 +4,37 @@ public enum BatchGuideSupport {
     public static let documents = [GuideDocumentReference(id: "batch-tasks", title: "Batch Tasks")]
 
     public static func document() -> GuideDocument {
-        GuideDocument(id: "batch-tasks", title: "批量任务", keywords: ["Batch", "批量", "JSONL", "异步", "取消", "重试", "多模型", "模型筛选", "多行请求", "按行添加"], content: """
-        设置→拓展功能→批量任务提供 OpenAI 兼容 Batch API。iOS、watchOS 和 macOS 的设置首页不再单列批量任务，需先打开拓展功能。提供商必须支持 /files 与 /batches；普通聊天可用不代表 Batch 可用。候选模型仅表示已启用且接口格式兼容 OpenAI Chat Completions 或 Responses，未验证提供商的实际 Batch 权限。每个选中的模型创建一个独立远端任务。请求不携带聊天历史、附件、MCP 或快捷指令，也不执行返回的工具调用。模型参数及当前全局温度、top-p 会在提交时固定；流式和跨请求会话续接被关闭。
+        GuideDocument(
+            id: "batch-tasks",
+            title: "批量任务",
+            keywords: ["Batch", "批量", "JSONL", "异步", "取消", "重试", "多模型", "模型筛选", "多行请求", "按行添加"],
+            content: """
+            批量任务适合把一批互不关联的问题一次性提交给支持 OpenAI Batch 接口的服务商在后台集中处理。在 iOS、watchOS 和 macOS 上，统一从设置→拓展功能→批量任务进入。请注意：普通聊天能用的服务商不一定开通了批量接口（需支持 /files 与 /batches），候选列表仅代表模型已启用且协议格式兼容 OpenAI Chat Completions 或 Responses。每条批量请求都是独立提问，不会附带聊天历史、文件附件、MCP 工具或快捷指令；提交时会固定当时的模型参数与全局温度、top-p，并自动关闭流式输出。
 
-        三端新建页都以请求条目为单位；添加或点开条目进入独立编辑器，整段内容是一条请求，正文换行会保留，空白内容不能保存。只有用户选择“按行添加多条”时，才会把每个非空行作为一条请求，并在保存前显示条数。编辑器保存只加入内存草稿；取消不改已有条目。主页面支持移除条目，名称可留空。
+            怎么添加请求与选择模型：
+            1. 单条添加与按行导入：新建任务时默认按条管理请求。点开单条编辑器输入的内容视为完整的一条提问，正文换行会保留，空白内容不能保存。只有点击“按行添加多条”时，才会把每一行非空文字拆分成一条独立请求，并在保存前提示拆分后的条数。单条编辑点保存后才会加入当前任务草稿，点取消不会改动已有条目；任务名称可以留空。
+            2. 多选模型：点“选择模型”可按显示名称、模型 ID 或服务商名称搜索，也支持按服务商筛选或“仅看已选”。点击“全选”或“取消全选”只作用于当前筛选出来的列表，不会误改其他已勾选的模型。
+            3. 核对与提交：核对页会清楚列出目标模型、请求条数与总处理次数——每个选中的模型都会创建一个独立的远端任务，例如 5 条请求 × 2 个模型会产生 2 个远端任务，共 10 次处理。核对无误后必须手动点击“提交”。若多个模型中有个别提交失败，已成功的任务仍会保留在任务列表里，只需点开失败项单独处理，不必整批重发。
 
-        “选择模型”打开独立多选页，可按显示名、模型 ID 或提供商名称搜索，按提供商筛选，也可只看已选。选择使用勾选；全选或取消仅作用于当前显示的筛选结果，不影响其他已选模型。主页面只显示已选摘要。核对页列出全部目标模型、请求数和总次数：5 条请求 × 2 个模型会产生 2 个远端任务，共 10 次处理。必须手动点击提交；部分失败仍会返回已保存任务列表，显示成功及待处理数量，应打开失败任务处理而不是整批重发。
+            进度刷新、通知与结果管理：
+            • 批量任务由服务商在云端异步处理，通常在 24 小时内完成，并不比普通对话更快；具体价格与额度以服务商规则为准。
+            • App 在前台打开期间会自动刷新任务状态并下载已完成的结果，切到后台或关闭应用后不会持续联网轮询；下次打开 App 或手动刷新时会接着下载。开启系统通知后，一旦检测到任务结束且结果已保存到本机，会发送一条不含正文的完成提醒。
+            • 成功回复与报错信息都会按原提问顺序一一对应展示；即使任务取消或过期，已完成的部分结果也会保留。你可以选择“仅重试失败项”（会创建新的计费任务，原有成功结果保留）。若提交瞬间网络中断，恢复机制会先向服务端核对任务信息，绝不会盲目重复创建任务。
+            • 查询或管理远端任务需要保持原服务商地址、请求头以及同一把 API Key（任务记录本身不保存密钥明文）。删除任务只会移除本机记录，不会删除服务商云端文件；正在运行或尚未确认提交结果的任务不可删除。
 
-        向导页面分别是 batch-editor（名称可写，请求数量和已选模型只读）、batch-request-editor-请求ID（当前单条正文可写）、batch-request-import（按行导入文本可写）、batch-model-picker（搜索、提供商筛选、仅看已选及当前筛选结果的模型勾选可写）、batch-review（提交摘要只读）。请求编辑器和导入页的提案仅修改当前输入，需用户手动保存才加入主草稿。模型勾选直接改变内存草稿；不产生网络请求。所有写入经原生确认，离开页面后旧提案失效。向导不能保存输入、提交、取消、重试、删除、导出或授予通知权限。任务列表、详情、结果和介绍页只读；这些只读页面的快照不包含 API Key、请求正文或结果正文。
+            多设备同步与导出：
+            • iOS、watchOS 与 macOS 共用同一套任务记录，保存在本地聊天数据库中。手机与手表可通过现有的聊天同步功能传递任务（接收端需配好对应的服务商与凭据），备份快照也会一并包含这些记录。
+            • iOS 与 macOS 支持将结果导出为 JSONL 文件（手表可先同步到手机再导出）。导出文件包含模型的原始返回内容，分享给他人前请先自行检查。
 
-        Batch 在服务端异步处理，通常允许 24 小时完成，不能保证比普通聊天更快。支持范围、价格与额度由提供商决定。App 在前台恢复及活动期间低频刷新，失败后退避；系统挂起或退出后不会持续轮询。下次打开 App 或手动刷新时继续下载，不能保证关机期间及时通知。允许通知后，发现任务结束且结果保存成功时发送不含正文的本地通知。
+            页面向导说明与安全边界：
+            • 各页面的向导标识分别为：batch-editor（可改任务名称；请求条数与已选模型只读）、batch-request-editor-请求ID（可改当前单条请求草稿）、batch-request-import（可改按行导入草稿）、batch-model-picker（可改搜索词、服务商筛选、仅看已选开关及当前筛选结果的模型勾选）、batch-review（提交前核对页，只读）。
+            • 向导提出的所有修改都必须经过你的原生确认；其中单条编辑与按行导入改完后，仍需你手动点“保存”才会合入主草稿，勾选模型则只更新当前页面草稿，不会直接联网发请求。离开当前页面后旧的修改建议自动失效。
+            • 任务列表、详情、结果查看与说明页对向导均为只读，不包含你的 API Key、提问正文或回复正文；向导不能替你保存输入、提交任务、取消、重试、删除、导出或开启通知权限。
 
-        结果按 custom_id 对应原输入，成功与错误文件都保存；取消或过期也保留部分结果。只重试失败项会创建新的计费任务，原结果保留。下载中断可重新刷新；创建响应丢失时使用恢复提交查询服务端，绝不自动重复创建，未找到时需到提供商控制台核实。管理任务要求原地址、请求头及同一 API Key；任务不保存密钥明文。删除仅删除本地记录，不删除服务端文件；活动或尚未确认提交结果的任务不可删除。
+            Open Settings → Extensions → Batch Tasks on iOS, watchOS and macOS to submit independent prompts in bulk to OpenAI-compatible Batch services (/files and /batches). Line breaks stay inside each single request; only Add Multiple Lines splits nonempty lines and previews the count before Save. Filter models by name, model ID, provider or current selection—Select All applies only to the currently filtered results. Each selected model creates its own remote job, so review the multiplied total before manually clicking Submit. Partial submission failures still keep the jobs that succeeded so you never have to resend everything.
 
-        iOS、watchOS、macOS 共用任务格式与聊天数据库。手机／手表使用现有聊天库同步功能传递任务，需同时具备对应提供商和凭据；覆盖同步仍遵守原同步页面的确认和冲突规则。快照备份包含这些数据。iOS/macOS 可导出 JSONL，手表可同步到手机后导出。导出包含模型原始响应，分享前自行检查内容。
-
-        Open Settings → Extensions → Batch Tasks on iOS, watchOS and macOS. Add and edit independent request entries; line breaks remain inside each request. Only Add Multiple Lines splits nonempty lines, with a count before Save. Search models by display name, model ID or provider, filter by provider or selected models, and select or deselect only the shown results. A compatible API format does not verify Batch availability. Review all selected models and the multiplied request count before submitting; each selected model creates a separate remote job. Partial submission failures return to the saved tasks so successful jobs are not duplicated.
-
-        Guide contexts are declared separately for the editor, single-request editor, line import, model picker and read-only review. Confirmed request-text changes still require Save; model selections affect only the in-memory draft. The guide cannot save input, submit tasks or operate external tools. Polling runs only while the application is active; completion notifications follow a successful refresh and local save. Results, including partial failures, are retained in the chat database. Recovery checks remote metadata before retrying an uncertain submission.
-        """)
+            Batch jobs run asynchronously on the provider's server (typically within 24 hours). The app refreshes progress while active in the foreground and sends a body-free local notification once results are saved locally. Recovery checks remote metadata before retrying an uncertain submission so jobs are not duplicated. Tasks live in the local chat database for backup and sync across devices, without storing plaintext API keys; iOS and macOS can export results as JSONL. Across batch-editor, single-request editors, batch-request-import, batch-model-picker and read-only batch-review, every guide change requires native confirmation, request edits still need manual Save, and the guide never reads your API keys, prompt text or results—nor can it submit, cancel, retry, delete or export jobs.
+            """
+        )
     }
 }

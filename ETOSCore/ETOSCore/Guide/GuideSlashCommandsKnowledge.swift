@@ -3,28 +3,47 @@ import Foundation
 public enum GuideSlashCommandsKnowledge {
     public static func document(locale: Locale = .current) -> GuideDocument {
         let chinese = locale.language.languageCode?.identifier == "zh"
-        return GuideDocument(id: "slash-commands", title: chinese ? "快速指令与页面跳转" : "Quick Commands and Navigation",
+        return GuideDocument(
+            id: "slash-commands",
+            title: chinese ? "快速指令与页面跳转" : "Quick Commands and Navigation",
             keywords: ["快速指令", "斜杠", "别名", "提示词", "slash commands", "custom prompt", "Mac"],
             content: chinese ? """
-            快速指令默认关闭，开关沿用 chat.slashCommands.enabled，自定义列表沿用 chat.slashCommands.custom 的 JSON；Mac 与 iOS/watchOS 共用数据库格式和 Core 解析器。内建顺序固定为 /new、/model、/sessions、/settings、/tools、/daily、/usage、/memory、/mcp、/skills、/shortcuts、/roleplay、/worldbook、/features、/temporary、/compact、/retry、/stop、/clear，共 19 项。别名包括 history、tool、pulse、stats、skill、extensions、temp、compress，只参与完整识别；建议只按规范名称匹配。内建名称、别名和目标只读。
+            “快速指令”让你在聊天输入框里敲一个斜杠 `/`，就能双手不离键盘快速新建对话、切换模型、打开常用管理页，或者把一段常用的长提示词一键填入输入框。iOS、watchOS 和 Mac 共用同一套指令配置。
 
-            只识别以 / 开头、完整且不带参数的命令，大小写不敏感，完整识别允许结尾空白。未知命令、文件路径、带参数的文本和前置空白保持普通消息语义。Mac 输入 / 显示建议，可点击选择、用 ↑↓ 移动、Tab 补全，再用 ⌘Return 提交。自定义命令先把完整提示词填入输入框，下一次提交才发送；即使提示词本身是 /stop 也按文字发送，不递归执行。输入改变、会话切换、关闭开关、锁定及数据恢复会淘汰旧建议，提交重新解析当前草稿。
+            怎么开启与在聊天中使用：
+            • 开启位置：该功能默认关闭，前往“设置 → 拓展功能 → 快速指令”打开总开关即可立即生效。
+            • 输入与补全：在 Mac 聊天输入框输入 `/` 会自动弹出候选指令列表，支持鼠标点击、`↑` / `↓` 方向键移动、`Tab` 键补全，再按 `⌘Return`（或发送按钮）执行。
+            • 防误触规则：只有以 `/` 开头、单独完整输入且后面不带额外参数的指令才会被触发（不区分大小写，末尾允许空格）。如果你输入的是电脑文件路径（如 `/Users/...`）、未定义的词、前面有空格或后面跟了补充文字，都会原封不动当作普通聊天消息发出去，不会误触发。
 
-            Mac /model 打开全局模型选择页，当前会话首选模型仍优先；/sessions 展开历史列并清除旧筛选；/settings 打开原生设置窗口，其他管理命令打开已有的独立页面。/compact 只打开压缩选项，仍需原生确认生成；/retry 按 Core 的最新可重试回复规则执行，/stop 停止当前生成。/temporary 沿用 Core 首次开启、两秒内切换记忆模式、随后关闭并保存有内容临时会话的行为，普通会话已经开始后不能开启。/clear 清空输入及附件并使迟到的附件提取失效。
+            内置指令与自定义提示词指令的区别：
+            • 内置指令固定共 19 项（名称、别名与跳转目标为系统固定，不可改名）：
+              /new（新建会话）、/model（打开全局模型选择页，若当前会话设了专属首选模型仍以其优先）、/sessions（展开会话列表并清空筛选）、/settings（打开设置窗口）、/tools（工具中心）、/daily（每日脉冲）、/usage（用量统计）、/memory（记忆）、/mcp、/skills、/shortcuts（快捷指令）、/roleplay（角色扮演）、/worldbook（世界书）、/features（拓展功能）、/temporary（开启/切换临时对话；普通对话已有消息后不可开启）、/compact（打开压缩续聊选项页，仍需你手动确认创建）、/retry（重新生成最新一条可重试回复）、/stop（停止当前生成）、/clear（清空输入框文字与待发附件）。
+              此外还支持输入完整别名触发，例如 history、tool、pulse、stats、skill、extensions、temp、compress（候选列表按标准名称提示）。
+            • 自定义提示词指令：触发自定义指令时，系统只会把预设好的整段提示词填进输入框草稿，等你检查或补充后再手动发送；哪怕你的预设文字本身就是 `/stop` 这类以 `/` 开头的内容，下一次点发送时也会当作普通文字发出，绝不会循环套娃执行。
 
-            Mac 从拓展功能→快速指令配置。开关立即保存；自定义编辑器须点击保存，触发词可省略开头的 /，保存时规范为小写，允许字母、数字、短横线和下划线，不能使用内建名称或别名，也不能重名或保存空提示词。正文保留缩进和换行。删除需要原生确认。编辑与整表替换在后台比较读取时的原始 JSON 并写入同一事务，外部修改后要求重新打开，失败不覆盖原件；旧数据加载沿用无效项过滤，并避免重复标识造成列表身份冲突。
-
-            页面向导可在根页经原生提案确认修改开关，以及批量创建、编辑、删除和排序自定义命令，确认后立即保存。单条编辑器只改 trigger/prompt 草稿，仍须原生保存；模型选择页可确认修改全局模型。介绍与删除确认各自只读。根页提供已经准备的列表与内建目录，不扫描聊天草稿；向导不能执行命令、发送消息、生成回复、切换临时会话或调用 MCP/快捷指令。离页、切标签、语言与配置改变、锁定和恢复使旧提案失效。Mac 保存、解析与准备在后台完成，备份/恢复/退出等待已接受写入与命令操作；当前源码仍需目标接入和完整工具链下的键盘、窗口焦点及真实行为验证。
+            怎么管理自定义指令与向导边界：
+            • 在“快速指令”设置页可以新增、编辑、排序或删除自定义指令。单条编辑窗口修改的是草稿，填好触发词（可省去开头的 `/`，保存时自动转为小写，支持字母、数字、短横线 `-` 与下划线 `_`，不可与内置指令或别名重名）和提示词正文（完整保留缩进与换行，不可为空）后，需点击“保存”才会生效；删除需手动确认。
+            • 在快速指令主页，页面向导经你原生确认后可以帮你开关总控，或批量新增、修改、删除和重排自定义指令（主页确认后立即保存；若在单条编辑窗口内，向导只改草稿，仍需你手动点保存）。在 `/model` 打开的模型选择页，向导也可协助提议切换全局模型。
+            • 向导不会读取你正在聊天框里写的草稿，向导不能执行命令、不能替你发送消息、停止生成、切换临时对话，也不能运行任何 MCP 或快捷指令。
             """ : """
-            Quick commands are off by default. They use chat.slashCommands.enabled and the existing JSON list at chat.slashCommands.custom. Mac, iOS and watchOS share the format and Core parser. The 19 built-ins remain in this order: /new, /model, /sessions, /settings, /tools, /daily, /usage, /memory, /mcp, /skills, /shortcuts, /roleplay, /worldbook, /features, /temporary, /compact, /retry, /stop, /clear. Aliases include history, tool, pulse, stats, skill, extensions, temp and compress. Aliases match complete commands only; suggestions match canonical names. Built-in names, aliases and destinations are read-only.
+            Quick Commands let you type a slash (`/`) right in the chat box to start a new chat, switch models, jump straight to settings pages or drop a favorite prompt template into your composer without leaving the keyboard. Mac, iOS and watchOS share the same command setup.
 
-            Recognition requires an initial slash and a complete command without arguments. It is case-insensitive and permits trailing whitespace. Unknown commands, paths, arguments and leading whitespace remain ordinary messages. On Mac, typing / shows suggestions. Click to choose, use Up/Down to move, Tab to complete, and Command-Return to submit. Custom commands fill the full prompt first and send only on a later submission. A prompt containing /stop is still sent literally, never recursively executed. Input/session changes, disabling, locking and restoration discard old suggestions. Submission reparses the current draft.
+            How to enable and use Quick Commands:
+            • Where to enable: Quick Commands are off by default. Turn them on in Settings → Extended Features → Quick Commands; the main switch saves immediately.
+            • Typing and completion: on Mac, typing `/` brings up matching suggestions—click an item, use the Up/Down arrow keys to highlight, press Tab to complete and press Command-Return to trigger.
+            • Safe matching rules: only a standalone, complete command starting with `/` (case-insensitive, with no extra arguments or leading spaces) triggers an action. File paths like `/Users/...`, unknown words or commands followed by extra text are treated as ordinary chat messages so you never trigger actions by accident.
 
-            On Mac, /model opens global model selection while a session preference still takes priority. /sessions reveals history and resets filters. /settings opens the native Settings window, and other management commands open their existing pages. /compact opens options and still requires native generation confirmation. /retry uses Core eligibility for the latest response; /stop stops the current request. /temporary keeps Core behavior: enable on first use, switch memory mode within two seconds, then disable and save a nonempty temporary chat. It cannot start after a regular conversation has begun. /clear removes the draft and attachments and invalidates late attachment extraction.
+            Built-in navigation vs. custom prompt templates:
+            • Nineteen built-in commands are available in a fixed order (their names, aliases and targets are read-only):
+              /new, /model (opens global model selection while keeping any session-preferred model priority), /sessions (opens your chat list and clears active filters), /settings, /tools, /daily, /usage, /memory, /mcp, /skills, /shortcuts, /roleplay, /worldbook, /features, /temporary (starts or switches Temporary Chat before messages begin), /compact (opens compression options—manual creation confirmation is still required), /retry (regenerates the latest eligible reply), /stop (stops active generation) and /clear (clears your draft text and pending attachments).
+              Complete aliases such as history, tool, pulse, stats, skill, extensions, temp and compress are also recognized when typed in full.
+            • Custom prompt commands: triggering a custom command only fills its prompt text into your composer draft so you can review or edit before sending. Even if a custom prompt itself starts with `/` (such as `/stop`), your next send treats it as plain text—it is never recursively executed as a command.
 
-            Configure commands in Extended Features → Quick Commands. The switch saves immediately; a custom editor requires Save. Triggers may start with /, normalize to lowercase and accept letters, digits, hyphens and underscores. Built-ins, aliases, duplicate triggers and empty prompts are rejected. Prompt indentation and newlines are preserved. Deletion requires native confirmation. Background writes compare the original JSON and update it in one transaction. External changes require reopening; failures retain the original. Loading preserves legacy invalid-item filtering and rejects duplicate identities.
-
-            After native proposal confirmation, the root page guide can change the switch or replace the custom list, including creation, editing, deletion and reordering; these changes save immediately. The single editor changes trigger/prompt drafts only and still needs Save. The model picker supports confirmed global model changes. Introduction and deletion confirmation are independently read-only. The root exposes a prepared catalog and does not inspect chat drafts. The guide cannot execute commands, send messages, generate responses, toggle temporary chat or run MCP/Shortcuts. Leaving, tab/language/configuration changes, locking and restoration invalidate old proposals. Mac parsing, preparation and persistence run in the background; backup, restoration and termination drain accepted writes and command operations. Target integration and keyboard, focus and real behavior still need a complete toolchain.
-            """)
+            Managing custom commands and guide boundaries:
+            • Add, edit, reorder or delete custom commands on the Quick Commands settings page. Editing an individual command updates a draft until you click Save: triggers normalize to lowercase letters, digits, hyphens and underscores (the leading `/` is optional, and built-in names, aliases, duplicates and empty prompts are rejected), while prompt bodies preserve all indentation and line breaks. Deleting a command requires native confirmation.
+            • On the Quick Commands root page, the guide can toggle the main switch or propose creating, editing, reordering and deleting custom commands—saving immediately once you confirm the native prompt (inside the single-command editor, guide proposals edit the draft only and still require Save). The `/model` picker also supports confirmed global model proposals.
+            • The guide never inspects your chat composer draft, and it cannot execute commands, send messages, generate replies, toggle Temporary Chat or invoke MCP tools or Shortcuts.
+            """
+        )
     }
 }

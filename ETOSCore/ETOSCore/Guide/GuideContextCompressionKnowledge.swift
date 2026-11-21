@@ -3,37 +3,57 @@ import Foundation
 public enum GuideContextCompressionKnowledge {
     public static func document(locale: Locale = .current) -> GuideDocument {
         let chinese = locale.language.languageCode?.identifier == "zh"
-        return GuideDocument(id: "context-compression",
+        return GuideDocument(
+            id: "context-compression",
             title: chinese ? "上下文压缩与续聊" : "Context Compression and Continuations",
             keywords: ["压缩", "续聊", "摘要", "Token", "保留原文", "Mac", "compression", "continuation", "summary"],
             content: chinese ? """
-            上下文压缩从完整当前分支与已有续聊交接中生成独立的新会话，不删除或改写原会话。最近轮次保留原文，其余内容一次生成摘要；音频、图片、视频和文件沿用 Core 的转写、视觉与内容提取能力，无法完整读取时应报错，不假装已处理。新会话的交接上下文独立保存并由 Core 注入后续请求，不受普通历史消息上限裁剪，备份与同步继续使用原数据库格式。
+            当一段对话越聊越长、响应变慢或消耗过多 Token 时，“上下文压缩（压缩为续聊）”可以帮你在不删改原对话的前提下，把早期的聊天记录提炼成一份精简摘要，同时完整保留最近几轮原话，生成一个新的续聊会话继续聊。新会话后续提问时会自动带上这份背景摘要和保留原话，不受普通历史消息条数截断的影响，也会随正常备份和同步一起保存。
 
-            三端摘要请求都严格使用手动选中的提供商和模型；选择失效或模型停用时明确报错，不自动改用其他账户。只有“自动选择”才依次尝试来源会话的首选模型、全局主聊天模型、第一个可用聊天模型。iPhone 与 Apple Watch 返回模型选择器或向导时保留已修改的选择，手表同时显示模型名与提供商以区分同名模型。开始压缩后选项锁定，避免显示的选择与正在执行的请求不一致。附件识别仍可能使用独立的视觉、语音或视频模型，其请求不等于最终摘要模型。
+            怎么使用“压缩为续聊”：
+            • 入口位置：Mac 在聊天输入框旁点击“压缩为续聊”，iPhone 和 Apple Watch 从聊天快捷菜单点开（临时对话、空白新会话或模型正在回复时无法发起压缩）。
+            • 三个可调选项：
+              1. 保留最近轮次（可选 0、2、4、6、10 轮）：这些最近消息会原封不动带入新对话，更早的消息则合并提炼为一段摘要。
+              2. 压缩模型：可设为“自动选择”（依次尝试来源会话的首选模型 → 全局主聊天模型 → 第一个可用聊天模型），也可手动指定某个已启用的聊天模型。注意：只要你手动选定了模型，请求就会严格发给该模型；如果它停用或失效会直接报错提醒，不自动改用其他账户。iPhone 和 Apple Watch 从模型列表或向导返回时会保留你刚改好的选择，手表同时显示模型名与提供商，方便区分同名模型。
+              3. 额外侧重点（可留空）：告诉模型在总结时特别保留哪些关键细节（例如代码约束、角色设定或待办结论）。
+            • 附件处理说明：如果历史消息里包含语音、图片、视频或文档，系统会先提取其中的可读内容再一起总结；此时附件识别仍可能使用独立的视觉、语音或视频模型，不一定等同于最终写摘要的聊天模型。若遇到无法读取的附件会明确提示，不会悄悄忽略。
 
-            iPhone 与 Apple Watch 的压缩选项页也独立接入向导，提供保留轮次、压缩模型和额外侧重点三个草稿字段，以及只读的来源会话、可用模型和选择规则。向导不能读取 API Key、开始压缩或代替用户创建会话；确认仅修改草稿，仍需手动创建。进入请求状态或离开页面后旧提案失效，手表向导保留来源上下文。
+            原对话与续聊会话之间的跳转管理：
+            • 创建成功后，原对话会在压缩分界处显示跳往续聊的入口（若分界消息已被删改，入口会移到对话顶部）；续聊会话顶部则可以一键跳回来源对话，并随时点开查看摘要全文、保留的原话以及工具调用参数与结果。
+            • 如果其中一侧的会话已经被删除，无法再跳转时可以手动确认移除该跳转条——移除只隐藏当前方向的入口，不会删除你的聊天会话，也不会清掉续聊里的背景摘要。
 
-            Mac 从聊天输入区的“压缩为续聊”打开选项。临时会话、空白且没有交接的会话、生成或修改历史期间不能开始。保留轮次可选 0、2、4、6、10，模型可自动选择或使用已激活聊天模型，侧重点可留空。向导只能经原生确认修改这三个草稿字段，不能开始压缩、停止请求、保存会话、跳转或移除入口；仍需用户手动点击“创建续聊会话”。离页、切换会话、锁定或数据恢复使旧提案失效。介绍页独立声明只读上下文。
+            长度提醒与通知设置：
+            • 在“设置 → 上下文（或会话） → 上下文压缩”中可以开启压缩提醒，并设置 Token 提醒阈值（范围 1,000–2,000,000，修改立即保存）。
+            • 这里的字数统计是针对当前对话分支的本地估算值（并非服务商精确账单）。当一轮回复结束且估算长度达到阈值时，每次运行期间会温和提醒一次；刚建好且还没有发新消息的续聊不会立刻重复提醒。
+            • 开启系统通知后，点击提醒通知只会帮你打开压缩选项页，绝不会在后台自动扣费开始压缩。
 
-            原会话在压缩边界显示续聊入口，边界消息不再可见时入口移到顶部；续聊会话顶部可返回来源并查看摘要、保留原文和工具调用参数/结果。目标已删除时不能跳转，但可经原生确认移除入口。移除只隐藏当前方向的入口，不删除会话或交接；数据库仅更新一个标记，不覆盖同步来的正文和另一侧标记。详情和移除确认页的向导只读，不提供消息正文或执行工具的权限。
-
-            Mac 的设置→上下文→上下文压缩控制提醒，沿用 contextCompression.reminder.enabled 和 contextCompression.reminder.tokenThreshold，修改立即保存；阈值规范到 1000–2000000。估算在后台针对完整分支和交接计算，不是服务端精确计费数。请求结束且达到阈值时，按会话、交接与阈值在本次运行中去重；刚创建且没有新消息的续聊不重复提醒。系统通知需要授权；点击只打开选项，不自动生成。冷启动先暂存通知目标，解锁后定位；目标删除后不会替换为别的会话。
-
-            压缩和移除入口期间阻止并发修改历史。锁定与退出取消尚未提交的生成，已接受的数据库保存仍须收尾；取消或来源已变更后不自动导航。备份与恢复不得跨越正在写入的压缩任务，退出等待任务结束，恢复后丢弃旧通知和展示快照。磁盘读取、Token 估算与正文排版在后台执行，流式分片不反复读取关系。Mac 的工程接入、模型请求、通知与窗口行为仍须实际构建和运行验证。
+            页面向导说明与安全边界：
+            • 在 iPhone、Apple Watch 和 Mac 的压缩选项页，向导经你原生确认后只能帮你修改“保留轮次”、“压缩模型”和“额外侧重点”这三个草稿项；改好后仍需你亲自点击“创建续聊会话”才会真正发起请求。一旦开始压缩、切换会话或离开页面，未确认的旧提案就会自动失效。
+            • 向导看不到你的 API Key 和聊天消息正文，不能开始压缩、不能停止请求、不能替你创建会话或移除跳转入口；续聊详情页、移除确认页与功能说明页对向导均为只读。
             """ : """
-            Compression creates an independent continuation from the complete current branch and any inherited handoff. It does not delete or rewrite the source. Recent rounds retain their original content; earlier history receives one summary. Core extracts readable audio, image, video and file content and reports unsupported attachments instead of silently omitting them. The handoff uses the existing database, backup and sync format and is injected into later requests independently of the ordinary history limit.
+            When a conversation grows long and starts using too many tokens, Context Compression (Compress to Continue) lets you carry the discussion forward in a fresh continuation session—without deleting or altering your original chat. Your most recent turns are kept word-for-word, earlier turns are condensed into a clean summary, and future replies in the new chat automatically include that handoff context regardless of your ordinary history limit.
 
-            On all three platforms, summary requests use the manually selected provider and model. A missing or disabled selection fails explicitly and never switches accounts. Only Automatic tries the source conversation's preferred model, then the main chat model, then the first available chat model. iPhone and Apple Watch preserve edits when returning from a picker or guide; Watch labels include the provider to distinguish identical model names. Options are locked during compression so they continue to describe the running request. Attachment recognition may still use separate vision, speech or video models rather than the final summary model.
+            How to set up a continuation:
+            • Where to start: click Compress to Continue beside the composer on Mac, or open it from the chat quick actions menu on iPhone and Apple Watch (unavailable in Temporary Chats, empty chats or while a reply is actively streaming).
+            • Three options you can customize:
+              1. Retained rounds (0, 2, 4, 6 or 10): keeps those latest exchanges verbatim while summarizing older history.
+              2. Compression model: choose Automatic (tries the source chat's preferred model → global main chat model → first available chat model) or pick a specific enabled model. Manual choices are strict—if the selected model is disabled or unavailable, compression reports an error and never switches accounts behind your back. iPhone and Apple Watch preserve edits when returning from the model picker or guide, and Apple Watch labels show both model and provider names so identical model names stay clear.
+              3. Optional focus: tell the model what details matter most to preserve, such as code decisions, constraints or character state.
+            • Attachments in history: readable audio, images, video and files are extracted before summarizing, reporting an error if an attachment cannot be read instead of silently dropping it. Attachment recognition may still use separate vision, speech or video models rather than the final summary model.
 
-            iPhone and Apple Watch options also declare their own guide context with retained rounds, compression model and focus as draft fields, plus read-only source session, available models and routing rules. The guide cannot read API keys, start compression or create a conversation. Confirmation changes the draft only; manual creation is still required. Starting a request or leaving invalidates old proposals. The Watch guide retains the source context.
+            Navigating between source and continuation chats:
+            • The original chat shows a jump link right at the compression point (or at the top if that message is no longer visible), while the continuation chat lets you jump back to the source and inspect the summary, retained messages and literal tool call records anytime.
+            • If the linked conversation was deleted, you can remove the broken banner after native confirmation; removing it hides only that direction's link without deleting any chat or handoff summary.
 
-            On Mac, open Compress to Continue beside the composer. Temporary chats, empty chats without a handoff, and conversations with active generation or history changes cannot start. Choose 0, 2, 4, 6 or 10 retained rounds, automatic or an activated chat model, and an optional focus. The guide can update only these three draft fields after native confirmation. It cannot generate, stop, save, navigate or remove links. Manual Create Continuation is required. Leaving the page, changing sessions, locking or restoring invalidates old proposals. The introduction has its own read-only context.
+            Length reminders and notifications:
+            • Open Settings → Context (or Conversation) → Context Compression to toggle reminders and set a token threshold (1,000–2,000,000; changes save immediately).
+            • Token counts are local estimates rather than exact provider billing numbers. When a reply finishes past your threshold, the app reminds you once per session state during the current run, and a brand-new continuation waits until you send new messages before reminding again.
+            • Clicking a system notification opens options only—it never starts model generation automatically.
 
-            The source displays a link at the compression boundary, or at the top if that message is no longer visible. The child offers the source link and a read-only handoff with summary, retained text and tool arguments/results. A deleted target cannot be opened, but its link can still be removed after native confirmation. Removal hides only that direction; it does not delete a session or handoff. The database updates one flag without overwriting synced text or the other flag. Detail and removal guides are read-only and do not expose message content or execute tools.
-
-            Settings → Context → Context Compression uses contextCompression.reminder.enabled and contextCompression.reminder.tokenThreshold, saved immediately. Thresholds normalize to 1000–2000000. Background estimates cover the complete branch and handoff and are not exact billed counts. After generation ends, reminders deduplicate by session, handoff and threshold for this app run. A fresh continuation without new messages does not immediately remind again. System notifications require permission. A click opens options only; it never starts generation. Cold launches defer the target until unlock, and missing targets never redirect to another conversation.
-
-            Compression and link removal exclude concurrent history mutations. Locking and termination cancel uncommitted generation; accepted database saves finish, but cancellation or a changed source prevents automatic navigation. Backup and restore cannot overlap these writes; termination waits for completion. Restore discards old notification intents and presentation state. Reads, token estimates and rich text preparation run in the background; streaming chunks do not repeatedly read relationships. Mac target integration, model requests, notifications and window behavior still require build and runtime verification.
-            """)
+            Guide support and manual boundaries:
+            • On the compression options page across iPhone, Apple Watch and Mac, the guide can update only the three draft fields (retained rounds, model and focus) after native confirmation. Manual Create Continuation is still required to actually run the summary request, and leaving the page or switching chats invalidates stale proposals.
+            • The guide never reads your API keys or conversation text, and cannot start or stop compression, navigate between chats or remove links; handoff detail, removal confirmation and introduction pages are strictly read-only.
+            """
+        )
     }
 }

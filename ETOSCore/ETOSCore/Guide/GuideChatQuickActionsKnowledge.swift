@@ -3,29 +3,47 @@ import Foundation
 public enum GuideChatQuickActionsKnowledge {
     public static func document(locale: Locale = .current) -> GuideDocument {
         let chinese = locale.language.languageCode?.identifier == "zh"
-        return GuideDocument(id: "chat-quick-actions",
+        return GuideDocument(
+            id: "chat-quick-actions",
             title: chinese ? "聊天快捷功能" : "Chat Quick Actions",
             keywords: ["快捷功能", "菜单", "入口", "Mac", "临时对话", "quick actions", "menu", "navigation"],
             content: chinese ? """
-            iOS 与 Mac 使用相同的 ui.chatQuickActionIDs 数据库配置和 16 个稳定标识：temporaryChat、modelPicker、contextCompression、settings、toolCenter、dailyPulse、usageAnalytics、memory、mcp、agentSkills、shortcuts、roleplay、worldbook、extendedFeatures、browser、localTerminal。显示和保存保留用户顺序，重复值保留第一次出现，未知值忽略；空值或全部未知时回到全部功能。ui.chatToolbarActionIDs 保存优先显示在工具栏的集合，默认 temporaryChat、modelPicker，允许为空；它只对已启用的功能生效，排列仍由 actions 决定。未启用的是隐藏项，已启用但未优先显示的进入更多。旧配置仅在数据库升级时加入原本固定的模型入口，此后允许隐藏。watchOS 仍使用独立的输入快捷配置，没有改写其设置。
+            “聊天快捷功能”让你自己决定聊天界面周围摆哪些常用入口、哪些收进“更多”菜单、哪些干脆隐藏，让界面既顺手又不拥挤。iOS 与 Mac 共享同一套快捷入口配置（Apple Watch 保留独立的输入快捷设置），共包含 16 个功能项：
+            temporaryChat（临时对话）、modelPicker（选择模型）、contextCompression（压缩续聊）、settings（设置）、toolCenter（工具中心）、dailyPulse（每日脉冲）、usageAnalytics（用量统计）、memory（记忆）、mcp、agentSkills（Skills 技能）、shortcuts（快捷指令）、roleplay（角色扮演）、worldbook（世界书）、extendedFeatures（拓展功能）、browser（会话浏览器）、localTerminal（本地终端）。
 
-            iOS 在设置→显示设置→聊天快捷功能选择每项的工具栏、更多或隐藏位置，用编辑拖动已启用项排序，至少保留一项，修改立即保存。iPhone Duo 和 iPad 在 iOS 27.1 及以后使用系统 ToolbarItem 和 ToolbarOverflowMenu：Duo 内外屏自动切换横向、侧向工具栏，优先项空间不足仍可能进入更多，不保证强制常驻。会话列表入口独立保留。普通 iPhone 无论系统版本都保留原来的顶部导航和快捷菜单，旧版 iOS 也沿用原导航；这些界面遵循启用项顺序，但不区分工具栏和更多位置。工具栏位置偏好仍会保存并同步给支持的设备。眼睛是临时对话，CPU 是原生工具栏中的选择模型，用量统计使用 chart.bar 图标。
+            去哪里调整、在不同设备上怎么显示：
+            • iOS / iPadOS：打开“设置 → 显示设置 → 聊天快捷功能”，为每个入口选择“工具栏”、“更多”或“隐藏”，点右上角“编辑”可拖动调整显示顺序（至少保留开启一项），修改立即保存。
+              - 在运行 iOS 27.1 及更高版本的 iPhone Duo 和 iPad 上，标记为“工具栏”的优先项会直接展示在系统工具栏上（iPhone Duo 在内外屏会自动切换横向或侧边工具栏；当窗口较窄放不下时，多余按钮仍会自动收进“更多”）。左侧会话列表按钮始终独立保留。
+              - 普通 iPhone 无论系统版本都保留原来的顶部导航和快捷菜单，运行旧版 iOS 的设备也沿用原有导航；它们会按你排好的顺序展示已启用功能，同时把你的工具栏偏好同步给 iPad 或 Mac。图标对应关系：眼睛代表临时对话，芯片（CPU）代表选择模型，柱状图（chart.bar）代表用量统计。
+            • Mac：打开“设置 → 通用 → 显示设置 → 聊天快捷功能”（或从“背景与视觉”进入），使用上下箭头调整顺序，修改立即保存。设为优先的功能直接摆在输入框下方的快捷栏，其余已启用项收进“更多”（窗口过窄时会自动收拢为一个菜单）。
+              - 点“临时对话”会弹出记忆模式子菜单（允许记忆、隔离记忆或手动保存为正式会话）；点“选择模型”、“每日脉冲”、“压缩续聊”会打开各自面板；点“设置”会打开系统设置窗口；其余入口打开对应的功能管理面板，不会因为点开面板就自动发消息或跑工具。会话浏览器跟随打开时的对话，切换对话后自动关闭；本地终端需先在工具中心或拓展功能中开启本机 Shell（iOS 上为本地 Linux）。
 
-            Mac 在设置→通用→显示设置→聊天快捷功能修改相同配置，用上下箭头排序；同步或其他窗口的更改会重新准备目录。优先项在输入区快捷栏直接显示，其余进入更多，窗口过窄时整体收成菜单。临时对话保留原生子菜单，可选择允许记忆、隔离记忆或手动保存；模型选择复用现有模型工作表，设置使用系统 Settings 窗口，脉冲和续聊使用各自工作表。其余入口打开独立导航工作表，不因打开配置而发送消息、执行工具或开始压缩。Linux 终端仅在本地 Linux 已启用时可进入，可先从工具中心或拓展功能配置运行时。浏览器固定打开时的会话与临时状态，切换来源会话后关闭。
+            相关功能延伸导览：
+            • 记忆面板：可开关记忆总控、写入权限和跨对话记忆，或进入记忆库与画像管理（关闭总开关不会清空你已经存好的记忆）。
+            • 拓展功能面板：集中收录了批量任务、快速指令（详见 slash-commands）、本地模型、本机 Shell / 本地 Linux、快照备份、数据导入（详见 data-import）、存储管理（详见 storage-management）、iCloud 同步、应用锁与连接例外（详见 network-connection-exceptions）等进阶入口。
 
-            页面向导只能经原生确认修改有序 actions 和 toolbar_actions 数组；两者必须无重复且全部来自目录，actions 不可为空，toolbar_actions 允许为空（全部放入更多），未启用项的工具栏偏好不使其自动启用。确认后立即保存，不需要额外保存按钮。不能通过向导触发快捷功能、改变临时模式、创建压缩会话、打开终端或执行 MCP/快捷指令。Mac 介绍页独立只读，iOS 说明内嵌于当前设置页；离页、锁定、配置或语言变化使旧提案失效，提交前核对当前原始配置，拒绝覆盖外部修改。目录、标签和向导值在后台准备，不在 SwiftUI 渲染中解码 CSV。
-
-            记忆系统入口包含启用记忆、允许写入、异步跨对话记忆，以及记忆库和画像管理。总开关关闭后原偏好与已有记忆保留，页面向导只确认修改开关，具体记录到管理页处理。Mac 拓展功能目前连接快速指令、本地模型、本地 Linux、快照备份、数据导入、存储管理、iCloud 同步、应用锁和连接例外，各目的页保留自身向导与原生确认；根页只声明导航入口，不能代替子页执行配置。快速指令详见 slash-commands；七来源导入详见 data-import；目录、文件/SQLite 预览、主库保护及清理的实际影响详见 storage-management；信任开关与地址撤销详见 network-connection-exceptions。反馈、图片相册、远程文件访问仍须继续补齐 Mac 源码，不应把这个导航根页视为完整功能对齐。
+            页面向导说明与安全边界：
+            • 在聊天快捷功能设置页，向导可以帮你草拟有序的已启用列表（actions，不可为空、不可重复）与优先放在工具栏的列表（toolbar_actions，仅对已启用项生效，可留空表示全部放进“更多”）。经你原生确认后立即生效，不需要再点保存按钮；离开页面或外部配置更新后，未确认的旧建议会自动作废。
+            • 不能通过向导触发快捷功能，向导也不能替你切换临时对话模式、创建压缩续聊、打开终端或执行任何 MCP 服务与快捷指令。
             """ : """
-            iOS and Mac share ui.chatQuickActionIDs and these 16 stable identifiers: temporaryChat, modelPicker, contextCompression, settings, toolCenter, dailyPulse, usageAnalytics, memory, mcp, agentSkills, shortcuts, roleplay, worldbook, extendedFeatures, browser, localTerminal. Display and serialization retain user order and the first occurrence of duplicates, ignoring unknown identifiers. Empty or entirely unknown values select all actions. ui.chatToolbarActionIDs stores preferred toolbar membership, initially temporaryChat and modelPicker; it may be empty. Preferences apply only to enabled actions, with order determined by actions. Disabled actions are hidden; enabled actions without toolbar preference enter More. A one-time database migration adds the formerly fixed model entry to existing selections, after which it can be hidden. watchOS keeps its separate input shortcut configuration.
+            Chat Quick Actions lets you customize which shortcuts stay within one-tap reach around the chat view, which move into the More menu and which stay hidden. iOS and Mac share the same configuration and sync your order across devices (watchOS keeps its own compact input shortcut settings). Sixteen built-in entries are available:
+            temporaryChat, modelPicker, contextCompression, settings, toolCenter, dailyPulse, usageAnalytics, memory, mcp, agentSkills, shortcuts, roleplay, worldbook, extendedFeatures, browser and localTerminal.
 
-            On iOS, open Settings → Display → Chat Quick Actions to choose toolbar, More or hidden placement. Use Edit to reorder enabled entries; keep at least one enabled. Changes save immediately. On iPhone Duo and iPad running iOS 27.1 and later, ToolbarItem and ToolbarOverflowMenu provide native toolbars; Duo switches between horizontal and vertical bars on both displays. Preferred items may still overflow when space is limited; they are not guaranteed to remain visible. The session list entry stays separate. Other iPhones keep the original top navigation and shortcut menu regardless of iOS version, as do devices running earlier iOS versions. Those interfaces follow enabled-item order without distinguishing toolbar and More placement. Toolbar preferences are still saved and synced to supported devices. The eye is Temporary Chat, CPU is Choose Model in the native toolbar, and chart.bar represents usage statistics.
+            Where to configure and how each device displays them:
+            • iOS and iPadOS: open Settings → Display → Chat Quick Actions to assign each item to Toolbar, More or Hidden, and tap Edit to drag enabled items into your preferred order (keep at least one item enabled). Changes save immediately.
+              - On iPhone Duo and iPad running iOS 27.1 and later, Toolbar items appear directly in the native toolbar—iPhone Duo adapts between horizontal and side toolbars across both displays, and items gracefully overflow into More when window space is tight. The conversation list button always stays separate.
+              - Other iPhones keep the original top navigation and shortcut menu regardless of iOS version, as do devices on earlier iOS versions; they follow your enabled list order while still syncing your toolbar preferences to iPad and Mac. For icons: the eye is Temporary Chat, the CPU chip is Choose Model and chart.bar is Usage Analytics.
+            • Mac: open Settings → General → Display → Chat Quick Actions (also linked under Background & Appearance) and use the up/down arrows to reorder items. Changes save immediately. Preferred items sit right beside the composer while the rest stay in More, collapsing into a single menu in narrow windows.
+              - Temporary Chat keeps its submenu for memory modes and manual saving; Choose Model, Daily Pulse and Context Compression open their dedicated sheets; Settings opens the Mac Settings window; and other entries open their management sheets without sending messages or running tools. Browser sheets stay tied to the conversation where you opened them, and Local Terminal requires enabling Local Shell (or Local Linux on iOS) first.
 
-            On Mac, edit the same configuration in Settings → General → Display → Chat Quick Actions and reorder using the arrows. External configuration changes refresh the catalog. Preferred actions appear beside the composer, with other actions in More; narrow windows collect all actions in a menu. Temporary Chat keeps its submenu for memory mode and manual saving. Choose Model reuses the model sheet. Settings opens the system Settings window; Daily Pulse and compression use their existing sheets. Other entries open navigation sheets without sending messages, executing tools or starting compression just to open configuration. Linux Terminal requires enabled local Linux; configure it in Tool Center or Extended Features first. Browser navigation retains the original session and temporary state and closes when that source session changes.
+            Related features reachable from Quick Actions:
+            • Memory System: toggle memory, write access and cross-conversation memory, or manage your saved memories and profile (turning off the main switch safely keeps existing memories).
+            • Extended Features: jump to Batch Tasks, Quick Commands (see slash-commands), Local Models, Local Shell / Local Linux, Snapshot Backups, Data Import (see data-import), Storage Management (see storage-management), iCloud Sync, App Lock and Connection Exceptions (see network-connection-exceptions).
 
-            The page guide can propose ordered actions and toolbar_actions arrays after native confirmation. Both must be unique and contain catalog identifiers only. actions must be nonempty; toolbar_actions may be empty to put everything in More. Toolbar preferences do not enable hidden actions. Confirmation saves immediately; there is no extra Save button. The guide cannot launch an action, change temporary mode, create a continuation, open a terminal or execute MCP or Shortcuts. The Mac introduction is independently read-only; iOS embeds instructions in the settings page. Leaving, locking, configuration changes and language changes invalidate old proposals. Submission checks the original configuration to reject overwriting external changes. CSV decoding, labels and guide values are prepared outside SwiftUI rendering.
-
-            Memory System provides enable, write permission and asynchronous cross-conversation memory switches, plus library and profile management. Disabling the main switch retains preferences and stored memories. The guide changes switches only after confirmation; records belong to their management pages. Mac Extended Features links quick commands, local models, local Linux, snapshot backups, data import, storage management, iCloud sync, app lock and connection exceptions. Each destination retains its own guide and native confirmation; the root exposes navigation only. See slash-commands for commands, data-import for the seven sources, storage-management for directory/file/SQLite previews, active database protection and actual cleanup effects, and network-connection-exceptions for trust switches and address revocation. Feedback, image gallery and remote file access still require Mac source work. This root does not prove full feature parity.
-            """)
+            Guide support and safety boundaries:
+            • On the Chat Quick Actions settings page, the guide can propose ordered actions (must include at least one valid, non-duplicate item) and toolbar_actions (may be empty to place everything under More; applies only to enabled items). Changes save immediately once you confirm the native prompt, and stale proposals expire if you leave the page.
+            • The guide cannot launch an action, switch temporary chat modes, start compression, open a terminal or run MCP tools or Shortcuts on your behalf.
+            """
+        )
     }
 }

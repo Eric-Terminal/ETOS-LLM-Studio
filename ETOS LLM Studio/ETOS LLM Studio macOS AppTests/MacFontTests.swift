@@ -71,8 +71,8 @@ struct MacFontTests {
     func guideExplainsDraftAndFileBoundaries() {
         let chinese = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "zh_CN")).content
         let english = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "en_US")).content
-        #expect(chinese.contains("规则窗口的完成只返回父草稿") && chinese.contains("不承诺跨文件崩溃原子性"))
-        #expect(english.contains("Done returns a rule to the parent draft") && english.contains("drain accepted file writes"))
+        #expect(chinese.contains("规则窗口的完成只返回父草稿") && chinese.contains("不能导入或删除字体文件"))
+        #expect(english.contains("Done returns a rule to the parent draft") && english.contains("cannot import or delete font files"))
     }
 
     private func asset(_ name: String) -> FontAssetRecord {

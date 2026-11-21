@@ -11,7 +11,7 @@ struct GuideMacProxyKnowledgeTests {
         #expect(chinese.contains("密码变化也会拒绝旧草稿覆盖"))
         #expect(chinese.contains("独立代理返回提供商编辑器统一保存"))
         let english = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "en")).content
-        #expect(english.contains("subsequent calls through the shared ChatService request path"))
+        #expect(english.contains("subsequent chat requests use the new proxy settings"))
         #expect(english.contains("resuming never saves automatically"))
         #expect(english.contains("The guide cannot save, reload or test connections"))
     }

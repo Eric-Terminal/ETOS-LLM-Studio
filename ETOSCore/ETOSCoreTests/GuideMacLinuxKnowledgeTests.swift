@@ -35,7 +35,7 @@ struct GuideMacLinuxKnowledgeTests {
         #expect(chinese.content.contains("列表顺序只决定同类命中的先后"))
         #expect(chinese.content.contains("配置不会向终端发送按键"))
         let english = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "en"))
-        #expect(english.content.contains("complete original encoding"))
+        #expect(english.content.contains("configuration never sends keys to the terminal"))
         #expect(english.content.contains("Modifier-only combinations cannot be saved"))
     }
 
@@ -53,7 +53,7 @@ struct GuideMacLinuxKnowledgeTests {
         let english = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "en"))
         #expect(english.content.contains("stdio uses a native Process with stdin/stdout"))
         #expect(english.content.contains("no input, environment values or output"))
-        #expect(english.content.contains("Stop failure prevents database replacement"))
+        #expect(english.content.contains("commands are never replayed after unlock or restore"))
         let chinese = GuideMacWorkspaceKnowledge.document(locale: Locale(identifier: "zh-Hans"))
         #expect(chinese.content.contains("解锁或恢复不重放命令"))
         #expect(chinese.content.contains("打开空页面不会自动创建进程"))

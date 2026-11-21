@@ -74,7 +74,7 @@ struct MacChatQuickActionsTests {
         let chinese = GuideChatQuickActionsKnowledge.document(locale: Locale(identifier: "zh_CN")).content
         let english = GuideChatQuickActionsKnowledge.document(locale: Locale(identifier: "en_US")).content
         #expect(chinese.contains("修改立即保存") && chinese.contains("不能通过向导触发快捷功能"))
-        #expect(english.contains("cannot launch an action") && english.contains("still require Mac source work"))
+        #expect(english.contains("cannot launch an action") && english.contains("Changes save immediately"))
         #expect(GuideDocumentCatalog.documents.contains { $0.id == "chat-quick-actions" })
     }
 }

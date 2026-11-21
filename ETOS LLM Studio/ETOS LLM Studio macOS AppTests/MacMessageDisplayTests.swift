@@ -109,6 +109,6 @@ struct MacMessageDisplayTests {
         #expect(chinese.contains("显示设置") && chinese.contains("完整原文"))
         #expect(english.contains("Display Settings") && english.contains("native confirmation"))
         #expect(chinese.contains("所有配色和时间段编辑都是草稿") && chinese.contains("不能保存、新增、排序、删除"))
-        #expect(english.contains("they cannot save, add, reorder, delete") && english.contains("drain accepted writes"))
+        #expect(english.contains("they cannot save, add, reorder, delete") && english.contains("color and schedule edits remain drafts"))
     }
 }

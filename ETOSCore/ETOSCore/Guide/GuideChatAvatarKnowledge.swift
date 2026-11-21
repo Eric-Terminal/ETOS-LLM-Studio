@@ -3,39 +3,47 @@ import Foundation
 public enum GuideChatAvatarKnowledge {
     public static func document(locale: Locale = .current) -> GuideDocument {
         let chinese = locale.language.languageCode?.identifier == "zh"
-        return GuideDocument(id: "chat-avatars", title: chinese ? "聊天头像" : "Chat Avatars",
-            keywords: ["头像", "间距", "气泡上方", "时间", "提示词", "角色卡", "酒馆", "用户身份", "avatar", "persona", "spacing"], content: chinese ? """
-            iOS、watchOS 和 macOS 从设置→提示词→聊天头像进入。显示 AI 头像与显示用户头像是两个独立开关，默认关闭，立即保存到数据库，对所有会话生效。AI 头像在消息左侧，本人头像在右侧；无图片时显示系统符号。头像只用于显示，不加入模型请求。
+        return GuideDocument(
+            id: "chat-avatars",
+            title: chinese ? "聊天头像" : "Chat Avatars",
+            keywords: ["头像", "间距", "气泡上方", "时间", "提示词", "角色卡", "酒馆", "用户身份", "avatar", "persona", "spacing"],
+            content: chinese ? """
+            想让对话界面更有陪伴感或更容易区分不同助手身份，可以在 iOS、watchOS 和 macOS 上打开“设置 → 提示词 → 聊天头像”。“显示 AI 头像”与“显示用户头像”是两个彼此独立的开关，默认关闭，切换后立即对所有对话生效（无需额外点保存）。AI 头像显示在消息左侧，你的头像显示在右侧；还没上传图片时会显示简洁的系统默认图标。所有头像仅用于界面展示，不会发送给大模型。
 
-            头像位置可选气泡侧边（side，默认）或气泡上方（above）。侧边布局与消息顶部对齐；上方布局把头像与名称放在气泡外，不再占用正文横向宽度。左右留白与头像消息间距均为 0–24 点，默认 6 点，仅影响开启头像的消息；间距在侧边布局为横向，在上方布局为纵向。Mac 的留白相对于居中的消息阅读区域。
+            布局位置、间距与名称时间：
+            • 头像位置：支持“气泡侧边”（side，默认，与消息顶部对齐）和“气泡上方”（above，把头像与名称放到消息气泡上方，不再挤占正文的横向阅读宽度）。
+            • 边距与间距：左右边缘留白和头像与消息之间的距离都可以在 0–24 点之间自由调节（默认 6 点，仅对开启了头像的一侧生效；Mac 上的边缘留白以居中阅读区为基准）。
+            • 多轮工具调用合并展示：多轮工具调用按整轮回复显示一个头像。选“气泡侧边”时，头像固定在这一轮回复开头，后续工具结果和续写正文保持整齐缩进；选“气泡上方”时，整轮回复只在开头显示一次头像、名称和可选时间，不会每次调用工具都重复刷出一行头像。
+            • 名称与时间（仅“气泡上方”生效）：普通对话中 AI 显示当前选中的全局提示词标题，你显示“我”；角色扮演（酒馆）对话中则分别显示首个有效角色卡名称与绑定的用户身份名称。“名称下方显示时间”默认关闭，开启后会展示该条消息的日期和时间（不影响消息底部操作栏里的时间项）。
 
-            多轮工具调用按整轮回复显示一个头像。侧边头像固定在这一轮顶部，后续工具结果与助手续写保留相同缩进；上方布局只在轮首显示一组头像、名称和可选时间，不在每次工具续写时重复。时间使用轮首显示消息的时间，工具详情中的执行时间不变。分组沿用回复组与重试版本边界，新用户消息开始新一轮；旧历史沿用连续助手消息的分组规则。分页或截取导出从半轮开始时，在首条可见消息恢复标题。
+            怎么设置专属头像及显示优先级：
+            • 默认头像：直接在“聊天头像”页面分别上传通用 AI 头像和通用用户头像。
+            • 提示词专属头像：在“全局系统提示词”列表中，对任意提示词点“设置头像”（iOS / watchOS 支持左滑，iOS / Mac 也支持菜单操作），切换提示词时聊天里的 AI 头像就会自动跟着切换，复制提示词时也会保留头像。
+            • 酒馆角色与身份头像：在角色卡详情页点“设置头像”更换角色头像，在“用户身份”页更换酒馆玩家头像（Apple Watch 点击已有身份即可更换）。iPhone 和 Mac 支持从系统相册或本地文件选图，Apple Watch 支持输入 HTTP/HTTPS 图片链接。选好或清除图片都是立即保存生效（若同时在编辑用户身份的文字资料，文字草稿本身仍需点保存）。清除角色的自定义头像不会删掉角色卡内置的原始图片素材。
+            • 覆盖优先级：如果当前会话绑定了有效的酒馆角色卡，AI 头像优先显示首个有效角色卡头像 → 没有则看当前全局提示词头像 → 最后回退到通用 AI 头像；用户头像优先显示绑定的酒馆用户身份头像 → 没有则回退到通用用户头像。这套原生头像完全独立于角色 HTML 渲染与助手脚本，无需在卡片代码里手写头像标签。
 
-            上方布局的 AI 名称使用当前全局提示词名称，酒馆使用首个有效角色卡名称；用户名称普通聊天显示“我”，酒馆使用绑定用户身份名称。名称与图片回退互不影响。名称下方时间默认关闭，仅在上方布局生效；打开后显示消息日期和时间，没有记录时间的旧消息不显示。此开关不改变消息操作栏中的时间。
-
-            通用 AI 头像与用户头像在聊天头像页分别设置。全局提示词列表的“设置头像”进入独立编辑页，iOS/watchOS 可左滑，iOS 和 Mac 也提供菜单操作；选中另一条提示词会切换 AI 头像，复制提示词时保留头像。已有历史消息也跟随当前选择。
-
-            头像优先级：酒馆会话的首个有效角色卡头像优先于当前全局提示词头像，再回退通用 AI 头像。酒馆会话绑定的用户身份头像优先于通用用户头像。只有会话绑定了有效角色卡才启用酒馆覆盖；缺少头像按上述顺序回退。头像显示独立于 HTML 渲染与助手脚本，角色作者无需在内联内容中引用头像。
-
-            角色卡详情→设置头像可以替换角色图片；用户身份中设置酒馆用户头像，手表点击已有身份可更换头像。iPhone 和 Mac 支持照片与文件选择，手表支持 HTTP/HTTPS 图片链接。图片选择和清除立即保存，身份草稿原有的保存按钮仍需手动确认。照片选择器与文件选择器是系统页面，不提供应用向导。清除角色头像不会删除角色卡内的资源文件。
-
-            聊天头像设置、各头像编辑页、全局提示词列表、角色详情与说明页分别声明向导上下文。向导可以提案修改两个显示开关、avatar_position、avatar_edge_inset、avatar_message_spacing 与 avatar_header_timestamp，必须通过原生确认；更改立即保存，不是草稿。头像编辑页只公开是否已有图片和保存状态，不公开图片、路径或下载链接，不能让向导下载、更换或清除图片。切页后旧提案失效，向导不获得普通聊天工具、MCP 或快捷指令权限。
+            向导使用与隐私边界：
+            • 在聊天头像设置页，页面向导可以帮你生成修改两个显示开关以及 avatar_position（位置）、avatar_edge_inset（边缘留白）、avatar_message_spacing（头像消息间距）、avatar_header_timestamp（名称下方时间）的提案，经你原生确认后立即生效。
+            • 头像上传页只向向导说明当前是否已设置图片，不公开图片、路径或下载链接；向导不能替你下载、更换或清除图片，系统相册和文件选择器内也不提供向导操作。离开当前页面后，未确认的旧提案会自动失效。
             """ : """
-            On iOS, watchOS and macOS, open Settings → Prompts → Chat Avatars. Show AI Avatar and Show User Avatar are independent switches, off by default, saved immediately to the database for all conversations. AI avatars appear on the left and your avatar on the right. A system symbol is used without an image. Avatars are display-only and are not sent to the model.
+            To personalize your conversations or tell different assistants apart at a glance, open Settings → Prompts → Chat Avatars on iOS, watchOS and macOS. Show AI Avatar and Show User Avatar are independent switches, off by default, and take effect immediately across all conversations as soon as you toggle them. AI avatars appear on the left and yours on the right, falling back to a clean system symbol until you pick an image. Avatars are purely visual and are never sent to the model.
 
-            Avatar Position supports Beside Bubble (side, default) and Above Bubble (above). Side avatars align with the message top. Above-bubble headers place the avatar and name outside the bubble, freeing horizontal space for content. Side margins and the avatar–message gap each range from 0 to 24 points, defaulting to 6, and affect only messages with visible avatars. The gap is horizontal beside the bubble and vertical above it. On Mac, margins are relative to the centered reading area.
+            Placement, spacing, names and timestamps:
+            • Avatar Position: choose Beside Bubble (side, the default, aligned with the top of the message) or Above Bubble (above, placing the avatar and name above the bubble so the message keeps full horizontal width).
+            • Margins and spacing: both edge margins and the avatar-to-message gap adjust from 0 to 24 points (6 by default) for whichever side has avatars enabled. On Mac, margins are measured from the centered reading column.
+            • Clean tool-call grouping: Multiple tool calls within one reply share one avatar. Beside the bubble, the avatar stays anchored at the start of the reply while tool results and follow-up text keep a matching indent; above the bubble, the avatar, name and optional timestamp appear once at the top of the turn instead of repeating after every tool step.
+            • Names and timestamps (Above Bubble only): AI names follow the active global prompt, or the first valid character in a roleplay chat; your name shows as Me in regular chats or your bound persona name in roleplay. Show Time Below Name is off by default and displays the message date and time independently of the bottom message action bar.
 
-            Multiple tool calls within one reply share one avatar. Beside the bubble, the avatar stays at the top of the turn while tool results and assistant continuations keep the same inset. Above the bubble, the avatar, name and optional time appear once at the turn's start. The time comes from the first displayed message; tool execution times in tool details are unchanged. Grouping follows response groups and retry attempts, with new user messages starting a new turn. Legacy history follows consecutive assistant-turn grouping. A page or partial image export starting mid-turn restores the header at its first visible message.
+            Customizing avatars and fallback priority:
+            • Default avatars: set your general AI and user images right on the Chat Avatars page.
+            • Per-prompt AI avatars: choose Set Avatar on any entry in Global System Prompts (swipe on iOS/watchOS or use the menu on iOS/Mac). Switching prompts switches the AI avatar automatically, and duplicating a prompt keeps its avatar.
+            • Roleplay character and persona avatars: update character portraits from Character Details and player portraits from User Personas (on Apple Watch, tap an existing persona to change its avatar). iPhone and Mac pick from Photos or image files, while watchOS accepts HTTP/HTTPS image links. Choosing or clearing an image saves right away, though text edits inside a persona editor still need manual Save. Clearing a custom character avatar never deletes assets bundled inside the card.
+            • Priority order: in an active roleplay chat, AI avatars prefer the first valid character card → active global prompt → default AI avatar; user avatars prefer the bound persona → default user avatar. Missing images fall back smoothly, and native avatars work independently of HTML cards and helper scripts.
 
-            Above-bubble AI names follow the selected global prompt or the first valid roleplay character. User names are Me in ordinary chats and the bound persona name in roleplay. Image fallback does not change the name. Show Time Below Name defaults to off and applies only above the bubble. It adds the message date and time; messages without recorded times omit it. The message action bar's time is independent.
-
-            Set default AI and user images here. Set Avatar in the global prompt list opens a separate editor; swipe on iOS/watchOS or use the iOS/Mac menu. Selecting a prompt also changes its AI avatar, including for existing messages. Prompt copies retain their avatar.
-
-            Priority: the first valid character card in an active roleplay conversation, then the selected global prompt, then the default AI avatar. The bound roleplay persona overrides the default user avatar. Roleplay overrides require a valid bound character; missing images fall back. Native avatars work independently of HTML and helper scripts, without author-provided avatar markup.
-
-            Change character images from character details and user images from User Personas. On Apple Watch, select an existing persona to change its avatar. iPhone and Mac support Photos and image files; Apple Watch accepts HTTP/HTTPS image URLs. Image changes and clearing save immediately; existing persona draft editors still require Save. System photo/file pickers do not expose an app guide. Clearing a character avatar preserves embedded assets.
-
-            Settings, image editors, prompt lists, character details and help each declare separate guide contexts. The two visibility switches, avatar_position, avatar_edge_inset, avatar_message_spacing and avatar_header_timestamp accept guide proposals with native confirmation. Changes save immediately, rather than editing a draft. Image editors expose presence and saving status, never image data, paths or download URLs. The guide cannot download, replace or clear images, and gains no chat, MCP or shortcut tools. Navigation invalidates old proposals.
-            """)
+            Guide support and privacy:
+            • On the Chat Avatars settings page, the guide can propose updates to the two visibility switches, avatar_position, avatar_edge_inset, avatar_message_spacing and avatar_header_timestamp; changes save immediately after native confirmation.
+            • Image editors only tell the guide whether an image is set—never image data, local paths or download URLs. The guide cannot download, replace or clear images, and old proposals expire when you leave the page.
+            """
+        )
     }
 }

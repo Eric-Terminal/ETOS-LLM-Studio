@@ -109,6 +109,6 @@ struct MacDailyPulseTests {
         #expect(chinese.contains("只填入草稿，不自动发送"))
         #expect(chinese.contains("不能生成、归档、继续聊、反馈、删除"))
         #expect(english.contains("requires manual Save"))
-        #expect(english.contains("Cold-start notification clicks queue intent"))
+        #expect(english.contains("fills a draft without sending"))
     }
 }
