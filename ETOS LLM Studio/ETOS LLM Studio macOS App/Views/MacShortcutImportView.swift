@@ -25,7 +25,7 @@ struct MacShortcutImportView: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "shortcut-import", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "shortcut-import", title: NSLocalizedString("快捷指令工具", comment: ""),
                                          details: NSLocalizedString("Mac 快捷指令导入使用说明", comment: ""), documentID: "shortcut-tools", isActive: active)
                     Button(NSLocalizedString("从剪贴板导入清单", comment: "")) {
                         guard let text = NSPasteboard.general.string(forType: .string) else {

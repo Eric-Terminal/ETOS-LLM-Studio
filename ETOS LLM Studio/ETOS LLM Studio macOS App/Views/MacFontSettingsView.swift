@@ -23,7 +23,7 @@ struct MacFontSettingsView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "fonts", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "fonts", title: NSLocalizedString("字体设置", comment: ""),
                     details: NSLocalizedString("Mac 字体设置使用说明", comment: ""), documentID: "settings-display", isActive: available)
                 Toggle(NSLocalizedString("启用自定义字体", comment: ""), isOn: $config.fontUseCustomFonts)
                 Picker(NSLocalizedString("字体回退范围", comment: ""), selection: $config.fontFallbackScope) {

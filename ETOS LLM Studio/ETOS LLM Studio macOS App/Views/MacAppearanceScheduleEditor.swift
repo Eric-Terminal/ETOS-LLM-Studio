@@ -16,7 +16,7 @@ struct MacAppearanceScheduleEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "appearance-schedule", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "appearance-schedule", title: NSLocalizedString("自动切换", comment: ""),
                         details: NSLocalizedString("Mac 聊天配色使用说明", comment: ""), documentID: "settings-display", isActive: available)
                     Picker(NSLocalizedString("颜色配置", comment: ""), selection: $rule.profileID) {
                         ForEach(catalog.profiles) { Text($0.title).tag($0.id) }

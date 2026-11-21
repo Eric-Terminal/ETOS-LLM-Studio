@@ -20,7 +20,7 @@ struct MacBrowserSettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "browser", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "browser", title: NSLocalizedString("浏览器设置", comment: ""),
                         details: NSLocalizedString("Mac 浏览器使用说明", comment: "") + "\n\n" + NSLocalizedString("本地网页使用说明", comment: "本地网页介绍卡详情"), documentID: "browser-agent", isActive: active)
                     Toggle(NSLocalizedString("保留网站登录状态", comment: ""), isOn: Binding(
                         get: { model.profile == .persistentShared }, set: { value in

@@ -28,7 +28,7 @@ struct MacMCPListView: View {
                         }
                     }
                 ))
-                MacSettingsIntroCard(id: "mcp", title: NSLocalizedString("使用说明", comment: ""), details: NSLocalizedString("Mac 的 stdio 服务器直接运行本机程序，需先自行安装依赖。配置保存后不会立即运行；连接时读取工具目录，加入聊天后由工具审批控制调用。", comment: ""), documentID: "macos-workspace")
+                MacSettingsIntroCard(id: "mcp", title: NSLocalizedString("MCP 工具", comment: ""), details: NSLocalizedString("Mac 的 stdio 服务器直接运行本机程序，需先自行安装依赖。配置保存后不会立即运行；连接时读取工具目录，加入聊天后由工具审批控制调用。", comment: ""), documentID: "macos-workspace")
                 if let error { Text(error).font(.footnote).foregroundStyle(.red) }
             }
             ForEach(manager.servers) { server in

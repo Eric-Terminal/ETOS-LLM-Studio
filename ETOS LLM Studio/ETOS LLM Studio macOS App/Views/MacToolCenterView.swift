@@ -8,7 +8,7 @@ struct MacToolCenterView: View {
     var body: some View {
         List {
             Section {
-                MacSettingsIntroCard(id: "tool-center", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "tool-center", title: NSLocalizedString("工具中心", comment: ""),
                                      details: NSLocalizedString("Mac 工具中心使用说明", comment: ""),
                                      documentID: "settings-tools", isActive: isActive)
             }

@@ -37,7 +37,7 @@ struct MacSkillEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "skill-editor-\(target.id)", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "skill-editor-\(target.id)", title: NSLocalizedString("Agent Skills", comment: ""),
                                          details: NSLocalizedString("Mac Skills 使用说明", comment: ""), documentID: "agent-skills", isActive: isActive && epoch == model.epoch)
                     if target.isManifest {
                         TextField(NSLocalizedString("未声明 name 时使用的名称", comment: ""), text: $name)

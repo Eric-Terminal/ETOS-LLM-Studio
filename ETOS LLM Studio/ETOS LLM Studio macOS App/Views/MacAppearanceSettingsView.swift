@@ -17,7 +17,7 @@ struct MacAppearanceSettingsView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "appearance", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "appearance", title: NSLocalizedString("颜色配置", comment: ""),
                     details: NSLocalizedString("Mac 聊天配色使用说明", comment: ""), documentID: "settings-display", isActive: available)
                 if let catalog = model.catalog {
                     LabeledContent(NSLocalizedString("当前生效配置", comment: ""), value: catalog.activeTitle)

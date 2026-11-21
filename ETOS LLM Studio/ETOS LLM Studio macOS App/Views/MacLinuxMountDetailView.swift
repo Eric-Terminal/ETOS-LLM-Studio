@@ -30,7 +30,7 @@ struct MacLinuxMountDetailView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "linux-mount-detail", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "linux-mount-detail", title: NSLocalizedString("挂载", comment: ""),
                     details: NSLocalizedString("Mac Linux 挂载使用说明", comment: ""), documentID: "macos-workspace",
                     isActive: allowed && !choosingDirectory && removing == nil)
                 Button(NSLocalizedString("重新载入草稿", comment: "")) {

@@ -21,7 +21,7 @@ struct MacAppearanceProfileEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "appearance-profile", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "appearance-profile", title: NSLocalizedString("颜色配置", comment: ""),
                         details: NSLocalizedString("Mac 聊天配色使用说明", comment: ""), documentID: "settings-display", isActive: available)
                     TextField(NSLocalizedString("名称", comment: ""), text: Binding(
                         get: { MacAppearanceCatalog.title(draft.profile) }, set: { draft.profile.name = $0 }))

@@ -12,7 +12,7 @@ struct MacBackgroundSettingsView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "backgrounds", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "backgrounds", title: NSLocalizedString("沉浸背景", comment: ""),
                     details: NSLocalizedString("Mac 背景使用说明", comment: ""), documentID: "settings-display", isActive: available)
                 Toggle(NSLocalizedString("显示背景", comment: ""), isOn: $configuration.enableBackground)
                 NavigationLink(NSLocalizedString("选择背景", comment: "")) { MacBackgroundLibraryView(model: model, isActive: available) }

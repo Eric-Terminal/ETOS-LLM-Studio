@@ -23,7 +23,7 @@ struct MacProviderProxyView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "provider-proxy-\(providerID)", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "provider-proxy-\(providerID)", title: NSLocalizedString("独立代理", comment: ""),
                     details: NSLocalizedString("Mac 代理设置使用说明", comment: ""), documentID: "network-proxy", isActive: available)
                 Toggle(NSLocalizedString("独立代理", comment: ""), isOn: enabledOverride)
             } footer: {

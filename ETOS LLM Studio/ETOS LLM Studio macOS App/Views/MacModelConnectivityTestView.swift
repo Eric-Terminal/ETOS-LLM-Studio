@@ -28,7 +28,7 @@ struct MacModelConnectivityTestView: View {
                     if model.isRunning {
                         ProgressView(model.isCancelling ? NSLocalizedString("正在取消测试…", comment: "") : NSLocalizedString("测试中", comment: ""))
                     }
-                    MacSettingsIntroCard(id: "model-test-\(model.source.id)", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "model-test-\(model.source.id)", title: NSLocalizedString("模型测试", comment: ""),
                         details: NSLocalizedString("Mac 模型连通性检查使用说明", comment: ""), documentID: "provider-model-basics")
                 } footer: {
                     Text(NSLocalizedString("测试会使用当前草稿发送真实请求，可能产生费用；配置不会自动保存。", comment: "")).font(.footnote).foregroundStyle(.secondary)

@@ -16,7 +16,7 @@ struct MacLinuxRecipesView: View {
     var body: some View {
         List {
             Section(NSLocalizedString("推荐下载源", comment: "")) {
-                MacSettingsIntroCard(id: "linux-recipes", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "linux-recipes", title: NSLocalizedString("安装常用环境", comment: ""),
                     details: NSLocalizedString("Mac Linux 常用环境使用说明", comment: ""), documentID: "macos-workspace",
                     isActive: allowed && confirmation == nil && model.terminal == nil)
                 if model.isProbing { ProgressView(NSLocalizedString("正在测试下载源…", comment: "")) }

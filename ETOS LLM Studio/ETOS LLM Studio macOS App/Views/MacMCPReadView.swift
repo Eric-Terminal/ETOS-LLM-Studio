@@ -32,7 +32,7 @@ struct MacMCPReadView: View {
                 if !model.target.description.isEmpty {
                     Text(model.target.description).font(.footnote).foregroundStyle(.secondary)
                 }
-                MacSettingsIntroCard(id: "mcp-reading", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "mcp-reading", title: NSLocalizedString("MCP 读取", comment: ""),
                                      details: NSLocalizedString("Mac MCP 读取说明", comment: ""), documentID: "mcp-tools")
             }
             if model.target.isTemplate {

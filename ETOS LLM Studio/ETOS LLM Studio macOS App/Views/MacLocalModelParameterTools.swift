@@ -16,7 +16,7 @@ struct MacLocalCLIEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "local-cli", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "local-cli", title: NSLocalizedString("参数导入", comment: ""),
                                          details: NSLocalizedString("Mac 本地模型管理使用说明", comment: ""), documentID: "local-models")
                     TextEditor(text: $input).font(.system(.body, design: .monospaced)).frame(minHeight: 130)
                     Button(NSLocalizedString("解析预览", comment: "")) { parse() }
@@ -107,7 +107,7 @@ struct MacLocalSamplerEditor: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "local-samplers", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "local-samplers", title: NSLocalizedString("采样器链实验室", comment: ""),
                                      details: NSLocalizedString("Mac 本地模型管理使用说明", comment: ""), documentID: "local-models")
                 TextField(NSLocalizedString("等价字符串", comment: ""), text: $text)
                 Button(NSLocalizedString("解析预览", comment: "")) { applyText(finish: false) }

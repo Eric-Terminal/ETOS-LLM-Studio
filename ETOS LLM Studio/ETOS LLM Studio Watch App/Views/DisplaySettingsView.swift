@@ -233,7 +233,7 @@ struct DisplaySettingsView: View {
             title: NSLocalizedString("长用户消息", value: "Long user messages", comment: "长用户消息介绍卡标题"),
             summary: NSLocalizedString("仅影响气泡显示；折叠后可点按气泡下方查看完整内容。", value: "Only affects bubble display. Tap below a collapsed bubble to view the full content.", comment: "长用户消息介绍卡摘要")
         ) {
-            SettingsHelpText(String(format: NSLocalizedString("超过设定字符数的用户消息会在气泡中截断，不限制行数。修改后会更新当前会话的预览，保存、发送给模型、复制和导出仍使用完整内容。默认值为 %ld 字符，可填写 1–100000。", value: "User messages longer than the character limit are truncated in chat bubbles, with no line limit. Changes refresh previews in the current conversation. Saving, sending to the model, copying, and exporting still use the full content. The default is %ld characters; enter a value from 1 to 100000.", comment: "长用户消息预览教程"), ChatUserMessagePreview.defaultCharacterLimit))
+            SettingsHelpText(String(format: NSLocalizedString("超过设定字符数的用户消息会在气泡中截断，不限制行数。修改后会更新当前会话的预览，保存、发送给模型、复制和导出仍使用完整内容。默认值为 %ld 字符，可填写 1–100000。", value: "Folds your longer messages in chat bubbles once they pass this character limit—tap below the bubble anytime to read the rest. Full text is always kept when saving, sending to the AI, copying, or exporting. Default is %ld characters (1–100000).", comment: "长用户消息预览教程"), ChatUserMessagePreview.defaultCharacterLimit))
                 .guideSettingsPageContext(
                     id: "user-message-preview-introduction",
                     title: NSLocalizedString("长用户消息", value: "Long user messages", comment: "长用户消息介绍页标题"),

@@ -16,7 +16,7 @@ struct MacLinuxJobsView: View {
     var body: some View {
         List {
             Section {
-                MacSettingsIntroCard(id: "linux-jobs", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "linux-jobs", title: NSLocalizedString("任务与终端", comment: ""),
                     details: NSLocalizedString("mac.shell.jobs.help", comment: ""), documentID: "macos-workspace",
                     isActive: isActive && workspace.canManageLocalModels && !runtime.isSuspended && cancellation == nil)
                 LabeledContent(NSLocalizedString("范围", comment: ""), value: sessionID == nil

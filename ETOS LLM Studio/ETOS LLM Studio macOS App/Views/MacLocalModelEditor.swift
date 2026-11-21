@@ -34,7 +34,7 @@ struct MacLocalModelEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "local-model-\(source.id)", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "local-model-\(source.id)", title: NSLocalizedString("本地模型", comment: ""),
                                          details: NSLocalizedString("Mac 本地模型管理使用说明", comment: ""), documentID: "local-models")
                     TextField(NSLocalizedString("名称", comment: ""), text: $draft.record.displayName)
                     if !source.row.record.isSpeechAuxiliaryModel {

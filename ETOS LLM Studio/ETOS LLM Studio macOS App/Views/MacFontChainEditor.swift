@@ -20,7 +20,7 @@ struct MacFontChainEditor: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "font-chain-\(id)", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "font-chain-\(id)", title: NSLocalizedString("字体优先级", comment: ""),
                     details: NSLocalizedString("Mac 字体优先级使用说明", comment: ""), documentID: "settings-display", isActive: isActive)
                 if chain.selected.isEmpty {
                     Text(NSLocalizedString("当前槽位没有可用字体，将使用系统默认字体。", comment: "")).font(.footnote).foregroundStyle(.secondary)

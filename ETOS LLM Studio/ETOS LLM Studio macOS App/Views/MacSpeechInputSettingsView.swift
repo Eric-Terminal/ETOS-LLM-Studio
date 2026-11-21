@@ -12,7 +12,7 @@ struct MacSpeechInputSettingsView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "speech-input", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "speech-input", title: NSLocalizedString("语音输入", comment: ""),
                     details: NSLocalizedString("Mac 语音输入使用说明", comment: ""), documentID: "speech-input", isActive: available)
             }
             Section {

@@ -28,7 +28,7 @@ struct MacAgentPromptEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "agent-prompt-editor-\(target.id)", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "agent-prompt-editor-\(target.id)", title: NSLocalizedString("Agent 提示词", comment: ""),
                         details: NSLocalizedString("Mac Agent 提示词使用说明", comment: ""), documentID: "local-linux",
                         isActive: isActive && epoch == model.epoch && !model.isSuspended && !resetting)
                     TextField(NSLocalizedString("提示词名称", comment: ""), text: $draft.title)

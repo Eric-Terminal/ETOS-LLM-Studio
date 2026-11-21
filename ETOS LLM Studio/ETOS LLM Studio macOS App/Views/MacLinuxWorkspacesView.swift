@@ -14,7 +14,7 @@ struct MacLinuxWorkspacesView: View {
     var body: some View {
         List {
             Section {
-                MacSettingsIntroCard(id: "linux-workspaces", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "linux-workspaces", title: NSLocalizedString("工作区", comment: ""),
                     details: NSLocalizedString("mac.shell.workspaces.help", comment: ""), documentID: "macos-workspace", isActive: allowed)
                 Picker(NSLocalizedString("会话删除后的工作区", comment: ""), selection: $configuration.localLinuxWorkspaceCleanupPolicy) {
                     Text(NSLocalizedString("保留并手动清理", comment: "")).tag("manual")
@@ -94,7 +94,7 @@ struct MacLinuxWorkspaceDetailView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "linux-workspace-detail", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "linux-workspace-detail", title: NSLocalizedString("工作区详情", comment: ""),
                     details: NSLocalizedString("mac.shell.workspaces.help", comment: ""), documentID: "macos-workspace", isActive: allowed && deleting == nil)
                 Button(NSLocalizedString("刷新", comment: "")) { model.error = nil; model.reload() }.disabled(model.isLoading || model.isWorking)
             }
@@ -133,7 +133,7 @@ struct MacLinuxWorkspaceDetailView: View {
         ), titleVisibility: .visible, presenting: deleting) { target in
             Button(NSLocalizedString("停止相关任务并删除", comment: ""), role: .destructive) { remove(target) }
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) { deleting = nil }
-        } message: { _ in Text(NSLocalizedString("mac.shell.workspace.delete", value: "The workspace files and saved output will be deleted. Files outside this workspace are unaffected.", comment: "Mac 工作区删除确认")) }
+        } message: { _ in Text(NSLocalizedString("mac.shell.workspace.delete", value: "Deletes the files and saved output inside this workspace without affecting any other folders on your Mac.", comment: "Mac 工作区删除确认")) }
         .guideSettingsPageContext(
             id: GuidePageID(rawValue: "mac-linux-workspace-\(workspaceID)-\(model.lease)-\(runtime.epoch)"), title: NSLocalizedString("工作区详情", comment: ""),
             documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],

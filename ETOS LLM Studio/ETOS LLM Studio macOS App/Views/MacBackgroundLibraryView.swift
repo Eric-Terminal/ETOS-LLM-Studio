@@ -17,7 +17,7 @@ struct MacBackgroundLibraryView: View {
     var body: some View {
         List {
             Section {
-                MacSettingsIntroCard(id: "background-library", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "background-library", title: NSLocalizedString("选择背景", comment: ""),
                     details: NSLocalizedString("Mac 背景使用说明", comment: ""), documentID: "settings-display", isActive: available)
                 Button { model.openImportPanel() } label: { Label(NSLocalizedString("导入背景", comment: ""), systemImage: "plus") }
                     .disabled(!model.canEdit)

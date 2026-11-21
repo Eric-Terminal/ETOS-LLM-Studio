@@ -44,7 +44,7 @@ struct MacRoleplayCharacterDetail: View {
                         NavigationLink(NSLocalizedString("内嵌世界书", comment: "")) { MacWorldbookDetailView(model: workspace.worldbookModel, bookID: id) }
                     }
                 }
-                MacSettingsIntroCard(id: "roleplay-character", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "roleplay-character", title: NSLocalizedString("角色卡资料", comment: ""),
                                      details: NSLocalizedString("Mac 角色资料使用说明", comment: ""), documentID: "roleplay")
             } else {
                 Text(NSLocalizedString("角色卡不存在或已被删除。", comment: "")).font(.footnote).foregroundStyle(.secondary)

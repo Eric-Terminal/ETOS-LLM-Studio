@@ -16,7 +16,7 @@ struct MacUsageAnalyticsView: View {
             if available, let snapshot = model.presentation {
                 ScrollView {
                     VStack(alignment: .leading) {
-                        MacSettingsIntroCard(id: "usage-analytics", title: NSLocalizedString("使用说明", comment: ""),
+                        MacSettingsIntroCard(id: "usage-analytics", title: NSLocalizedString("用量统计", comment: ""),
                             details: NSLocalizedString("Mac 用量统计使用说明", comment: ""), documentID: "usage-analytics", isActive: available)
                         if snapshot.isEmpty {
                             Text(NSLocalizedString("当前还没有可展示的统计数据。用量会从升级到此版本后开始累计。", comment: ""))

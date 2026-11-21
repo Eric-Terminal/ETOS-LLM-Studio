@@ -10,7 +10,7 @@ struct MacProviderListView: View {
     var body: some View {
         List {
             Section {
-                MacSettingsIntroCard(id: "providers", title: NSLocalizedString("使用说明", comment: ""), details: NSLocalizedString("添加提供商地址和 API Key 后，获取模型列表或手动添加模型。启用的聊天模型会出现在聊天窗口的模型选择器中。", comment: ""), documentID: "provider-model-basics")
+                MacSettingsIntroCard(id: "providers", title: NSLocalizedString("模型管理", comment: ""), details: NSLocalizedString("添加提供商地址和 API Key 后，获取模型列表或手动添加模型。启用的聊天模型会出现在聊天窗口的模型选择器中。", comment: ""), documentID: "provider-model-basics")
                 NavigationLink {
                     MacLocalModelLibraryView(isActive: isActive, library: workspace.localModels)
                 } label: {

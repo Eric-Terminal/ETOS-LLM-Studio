@@ -14,7 +14,7 @@ struct MacLinuxSettingsView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "linux-settings", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "linux-settings", title: NSLocalizedString("mac.shell.title", value: "Local Shell", comment: ""),
                     details: NSLocalizedString("mac.shell.help", comment: ""), documentID: "macos-workspace",
                     isActive: isActive && workspace.canManageLocalModels && !model.isSuspended)
                 Picker(NSLocalizedString("默认终端 Shell", comment: ""), selection: $configuration.localLinuxDefaultShellPath) {

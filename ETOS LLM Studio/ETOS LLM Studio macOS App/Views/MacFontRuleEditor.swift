@@ -18,7 +18,7 @@ struct MacFontRuleEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "font-rule-\(draft.rule.id)", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "font-rule-\(draft.rule.id)", title: NSLocalizedString("字体规则", comment: ""),
                         details: NSLocalizedString("Mac 字体优先级使用说明", comment: ""), documentID: "settings-display", isActive: isActive)
                     Toggle(NSLocalizedString("启用", comment: ""), isOn: $draft.rule.isEnabled)
                     Picker(NSLocalizedString("匹配方式", comment: ""), selection: $draft.rule.kind) {

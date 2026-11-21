@@ -38,8 +38,8 @@ struct MacTranscriptExportView: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "transcript-export", title: NSLocalizedString("使用说明", comment: ""),
-                        details: NSLocalizedString("Mac 对话导出使用说明", value: "Export the whole conversation, the history up to a message, or selected messages. Choose PDF, Markdown, TXT, or a PNG image. Export uses a snapshot; the saved file may contain private messages and attachments. PNG excludes system prompts. Select a destination to save the file.", comment: ""),
+                    MacSettingsIntroCard(id: "transcript-export", title: NSLocalizedString("导出对话", comment: ""),
+                        details: NSLocalizedString("Mac 对话导出使用说明", value: "Export the entire conversation, messages up to a specific point, or a custom selection as PDF, Markdown, TXT, or a PNG image.\n\nChoose whether to include reasoning steps and system prompts (PNG exports always omit system prompts), then pick a destination folder to save the file.", comment: ""),
                         documentID: "macos-workspace", isActive: available)
                     Picker(NSLocalizedString("格式", comment: ""), selection: $format) {
                         ForEach(ChatTranscriptExportFormat.allCases, id: \.self) { Text($0.displayName).tag($0) }

@@ -11,7 +11,7 @@ struct MacDisplaySettingsView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "display", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "display", title: NSLocalizedString("显示设置", comment: ""),
                     details: NSLocalizedString("Mac 消息显示使用说明", comment: ""), documentID: "settings-display", isActive: available)
                 NavigationLink(NSLocalizedString("沉浸背景", comment: "")) { MacBackgroundSettingsView(model: workspace.backgrounds, isActive: available) }
                 NavigationLink(NSLocalizedString("颜色配置", comment: "")) { MacAppearanceSettingsView(model: workspace.appearance, isActive: available) }

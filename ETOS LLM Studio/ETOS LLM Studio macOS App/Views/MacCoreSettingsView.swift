@@ -20,7 +20,7 @@ struct MacCoreSettingsView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "core-\(page.rawValue)", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "core-\(page.rawValue)", title: title,
                     details: introduction, documentID: "macos-workspace", isActive: isActive)
             }
             switch page {
@@ -84,9 +84,9 @@ struct MacCoreSettingsView: View {
 
     private var introduction: String {
         switch page {
-        case .conversation: NSLocalizedString("mac.settings.conversation.help", value: "Automatic naming, history limits and memory switches apply to conversation requests. These settings save immediately. Open Context Compression to configure reminders; starting a continuation still requires your confirmation.", comment: "Mac 会话设置说明")
-        case .prompts: NSLocalizedString("mac.settings.prompts.help", value: "The system prompt provides instructions for future requests. Conversation-specific prompts can override it. The time switch adds the current time to the prompt. Agent prompts have their own editor. Changes here save immediately and do not send a message.", comment: "Mac 提示词设置说明")
-        case .output: NSLocalizedString("mac.settings.output.help", value: "Streaming displays a reply as it arrives. Temperature and Top P are sent only when their switches are enabled; supported ranges depend on the model. Changes save immediately and apply to future requests.", comment: "Mac 输出设置说明")
+        case .conversation: NSLocalizedString("mac.settings.conversation.help", value: "Configure automatic conversation titles, the history message limit sent with each request, and long-term memory switches. Changes save immediately; open Context Compression to set token reminder thresholds.", comment: "Mac 会话设置说明")
+        case .prompts: NSLocalizedString("mac.settings.prompts.help", value: "Manage chat avatars, global prompt presets, the default system prompt (with optional current time injection), tool descriptions, and Agent prompts. Direct changes on this page save immediately for future requests, while session-specific prompts take precedence when set.", comment: "Mac 提示词设置说明")
+        case .output: NSLocalizedString("mac.settings.output.help", value: "Streaming displays replies live as tokens arrive. Temperature and Top P are sent only when their switches are enabled (higher temperature increases variety; lower values keep output focused). Changes save immediately.", comment: "Mac 输出设置说明")
         }
     }
 

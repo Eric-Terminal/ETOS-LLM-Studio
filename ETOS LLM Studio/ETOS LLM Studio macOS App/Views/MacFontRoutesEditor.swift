@@ -22,7 +22,7 @@ struct MacFontRoutesEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "font-routes", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "font-routes", title: NSLocalizedString("字体样式优先级", comment: ""),
                         details: NSLocalizedString("Mac 字体优先级使用说明", comment: ""), documentID: "settings-display", isActive: available)
                     ForEach(FontSemanticRole.allCases) { role in
                         NavigationLink(role.title) {

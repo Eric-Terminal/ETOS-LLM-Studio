@@ -19,7 +19,7 @@ struct MacBackgroundCropEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "background-crop", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "background-crop", title: NSLocalizedString("裁切背景", comment: ""),
                         details: NSLocalizedString("Mac 背景裁切使用说明", comment: ""), documentID: "settings-display", isActive: available)
                 }
                 if draft.isPreparing { ProgressView(NSLocalizedString("正在加载…", comment: "")) }

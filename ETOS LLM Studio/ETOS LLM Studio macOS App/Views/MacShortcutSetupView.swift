@@ -13,7 +13,7 @@ struct MacShortcutSetupView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "shortcut-setup", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "shortcut-setup", title: NSLocalizedString("导入与执行设置", comment: ""),
                                      details: NSLocalizedString("Mac 快捷指令导入使用说明", comment: ""), documentID: "shortcut-tools", isActive: isActive && !model.isSuspended)
                 TextField(NSLocalizedString("导入快捷指令名称", comment: ""), text: $configuration.shortcutOfficialImportShortcutName)
                 Button(NSLocalizedString("下载官方导入快捷指令", comment: "")) {

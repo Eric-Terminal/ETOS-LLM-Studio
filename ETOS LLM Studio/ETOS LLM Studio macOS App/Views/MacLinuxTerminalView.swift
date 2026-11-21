@@ -27,20 +27,20 @@ struct MacLinuxTerminalView: View {
                 Spacer()
                 NavigationLink {
                     Form {
-                        Text(NSLocalizedString("mac.shell.terminal.help", value: "Create or select a native macOS terminal. Input runs in the system Shell. Closing this page keeps the task running; End Terminal stops it. The guide cannot type commands.", comment: "")).textSelection(.enabled)
+                        Text(NSLocalizedString("mac.shell.terminal.help", value: "Create or switch between native macOS terminals and press Return to run commands in your system shell. Leaving this page keeps the terminal running in the background; click End Terminal when you want to close it.", comment: "")).textSelection(.enabled)
                     }.formStyle(.grouped)
-                        .navigationTitle(NSLocalizedString("使用说明", comment: ""))
-                        .guideSettingsPageContext(id: "mac-linux-terminal-introduction", title: NSLocalizedString("使用说明", comment: ""),
+                        .navigationTitle(NSLocalizedString("mac.shell.title", value: "Local Shell", comment: ""))
+                        .guideSettingsPageContext(id: "mac-linux-terminal-introduction", title: NSLocalizedString("mac.shell.title", value: "Local Shell", comment: ""),
                             documents: [GuideDocumentReference(id: "macos-workspace", title: "macOS Workspace")],
                             isActive: isActive && workspace.canManageLocalModels && !runtime.isSuspended,
                             settings: [.readOnly("read_only", label: NSLocalizedString("使用说明", comment: ""), value: { .bool(true) })])
-                } label: { Label(NSLocalizedString("使用说明", comment: ""), systemImage: "info.circle") }
+                } label: { Label(NSLocalizedString("mac.shell.title", value: "Local Shell", comment: ""), systemImage: "info.circle") }
             }.padding().buttonStyle(.borderless)
             GeometryReader { proxy in
                 ScrollView([.vertical, .horizontal]) {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if model.output.isEmpty {
-                            Text(NSLocalizedString("mac.shell.terminal.empty", value: "Create or select a terminal to use the macOS Shell.", comment: "")).foregroundStyle(.secondary)
+                            Text(NSLocalizedString("mac.shell.terminal.empty", value: "Select an existing terminal above or click New Terminal to open a native macOS shell.", comment: "")).foregroundStyle(.secondary)
                         }
                         ForEach(model.output) { line in Text(line.displayText).frame(maxWidth: .infinity, alignment: .leading) }
                     }

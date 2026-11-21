@@ -24,7 +24,7 @@ struct MacRoleplayLibraryView: View {
             }.pickerStyle(.segmented).padding(.horizontal)
             List {
                 Section {
-                    MacSettingsIntroCard(id: "roleplay-library", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "roleplay-library", title: NSLocalizedString("角色扮演与酒馆兼容", comment: ""),
                                          details: NSLocalizedString("Mac 角色资料使用说明", comment: ""), documentID: "roleplay")
                 }
                 if library == .characters {

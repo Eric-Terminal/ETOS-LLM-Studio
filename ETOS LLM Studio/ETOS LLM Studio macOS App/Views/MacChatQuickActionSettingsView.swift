@@ -13,7 +13,7 @@ struct MacChatQuickActionSettingsView: View {
         Form {
             Section {
                 MacSettingsIntroCard(id: "chat-quick-actions", title: NSLocalizedString("聊天快捷功能", comment: ""),
-                    details: NSLocalizedString("chat.quickActions.macIntroduction", value: "Choose Prefer Toolbar, More Menu, or Hidden for each action, including Choose Model. Use the arrows to reorder enabled actions. Narrow windows collect actions in a menu. Changes save immediately and sync with iPhone. On iPhone Duo, the system adapts toolbar orientation and moves items into More when space is limited. The guide can propose configuration changes but cannot launch actions.", comment: "Mac 聊天快捷功能介绍"), documentID: "chat-quick-actions", isActive: available)
+                    details: NSLocalizedString("chat.quickActions.macIntroduction", value: "Customize which shortcuts appear in the chat window toolbar (including the model picker): set each item to Prefer Toolbar, More Menu, or Hidden, and use the arrows to arrange their order. Narrow windows automatically tuck overflow items into a menu.\n\nChanges save immediately and sync with iPhone.", comment: "Mac 聊天快捷功能介绍"), documentID: "chat-quick-actions", isActive: available)
             }
             Section {
                 if let state = model.presentation {
@@ -41,7 +41,7 @@ struct MacChatQuickActionSettingsView: View {
                     }
                 } else { ProgressView(NSLocalizedString("正在加载…", comment: "")) }
             } footer: {
-                Text(NSLocalizedString("chat.quickActions.macOrderFooter", value: "Use the arrows to reorder. Keep at least one action enabled. Changes save immediately.", comment: ""))
+                Text(NSLocalizedString("chat.quickActions.macOrderFooter", value: "Use the up and down arrows to reorder items, keeping at least one action visible. Changes save immediately.", comment: ""))
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }

@@ -43,7 +43,7 @@ struct MacRoleplayPersonaEditor: View {
                     TextEditor(text: $persona.description).frame(minHeight: 180).accessibilityLabel(NSLocalizedString("角色扮演资料", comment: ""))
                 }
                 Section {
-                    MacSettingsIntroCard(id: "roleplay-persona", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "roleplay-persona", title: NSLocalizedString("用户身份", comment: ""),
                                          details: NSLocalizedString("Mac 角色资料使用说明", comment: ""), documentID: "roleplay")
                 } footer: { Text(NSLocalizedString("修改保留为草稿，点击保存后生效。", comment: "")).font(.footnote).foregroundStyle(.secondary) }
                 if let error { Text(error).font(.footnote).foregroundStyle(.red) }

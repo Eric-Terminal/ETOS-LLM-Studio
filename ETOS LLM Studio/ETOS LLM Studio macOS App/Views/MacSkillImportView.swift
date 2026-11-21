@@ -25,7 +25,7 @@ struct MacSkillImportView: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "skill-import", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "skill-import", title: NSLocalizedString("Agent Skills", comment: ""),
                                          details: NSLocalizedString("Mac Skills 使用说明", comment: ""), documentID: "agent-skills", isActive: active)
                     Picker(NSLocalizedString("来源", comment: ""), selection: $source) {
                         Text(NSLocalizedString("从本地技能包导入", comment: "")).tag("local")

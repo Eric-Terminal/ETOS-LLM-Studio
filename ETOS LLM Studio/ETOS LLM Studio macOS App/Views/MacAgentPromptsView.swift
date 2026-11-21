@@ -21,7 +21,7 @@ struct MacAgentPromptsView: View {
     var body: some View {
         List {
             Section {
-                MacSettingsIntroCard(id: "agent-prompts", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "agent-prompts", title: NSLocalizedString("Agent 提示词", comment: ""),
                     details: NSLocalizedString("Mac Agent 提示词使用说明", comment: ""), documentID: "local-linux",
                     isActive: isActive && workspace.canManageLocalModels && !model.isSuspended && editor == nil && deleting == nil)
                 Button(NSLocalizedString("新增提示词", comment: "")) { editor = MacAgentPromptEditorTarget(original: nil) }.disabled(!model.canWrite)
@@ -53,7 +53,7 @@ struct MacAgentPromptsView: View {
                 if model.isLoading || model.isWorking { ProgressView(NSLocalizedString("处理中", comment: "")) }
                 if let error = model.error { Text(error).font(.footnote).foregroundStyle(.secondary) }
             } header: { Text(NSLocalizedString("提示词列表", comment: "")) }
-            footer: { Text(NSLocalizedString("mac.shell.prompts.footer", value: "Instructions for Agent operations; they do not replace the conversation prompt.", comment: "")).font(.footnote).foregroundStyle(.secondary) }
+            footer: { Text(NSLocalizedString("mac.shell.prompts.footer", value: "Provides additional operating instructions for Agent tasks without replacing your conversation system prompt.", comment: "")).font(.footnote).foregroundStyle(.secondary) }
         }
         .navigationTitle(NSLocalizedString("Agent 提示词", comment: ""))
         .disabled(!active)

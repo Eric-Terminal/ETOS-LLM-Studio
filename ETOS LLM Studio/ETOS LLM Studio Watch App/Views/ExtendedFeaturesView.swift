@@ -25,7 +25,7 @@ public struct ExtendedFeaturesView: View {
                     title: NSLocalizedString("拓展功能", comment: "Extended features intro title"),
                     summary: NSLocalizedString("集中管理工具集成、语音能力与系统维护入口。", comment: "Watch extended features intro summary"),
                     details: NSLocalizedString("拓展功能说明正文", comment: "Extended features intro details")
-                        + "\n\n" + NSLocalizedString("batch.entry.description", value: "Open Batch Tasks to send independent requests together and retrieve results later. The provider must support the Batch API.", comment: "批量任务入口说明"),
+                        + "\n\n" + NSLocalizedString("batch.entry.description", value: "Need to process many standalone prompts at once? Open Batch Tasks to submit them together and pick up the results later (requires provider Batch API support).", comment: "批量任务入口说明"),
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -65,7 +65,7 @@ public struct ExtendedFeaturesView: View {
                 }
                 .accessibilityIdentifier("batch.tasks.entry")
             } footer: {
-                Text(NSLocalizedString("batch.help.summary", value: "Send independent requests together and collect their results later.", comment: "批量介绍摘要"))
+                Text(NSLocalizedString("batch.help.summary", value: "Submit multiple standalone requests together for background server processing and collect the results later.", comment: "批量介绍摘要"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }

@@ -15,7 +15,7 @@ struct MacImageGalleryView: View {
         ScrollView {
             VStack(alignment: .leading) {
                 MacSettingsIntroCard(id: "image-gallery", title: NSLocalizedString("图片相册", comment: ""),
-                    details: NSLocalizedString("Mac 图片相册使用说明", value: "Browse images returned by the assistant in the current conversation. Select an image to preview it or save the original file to a folder. Deletion requires confirmation and removes its message attachment; files still referenced by other messages are retained.", comment: ""),
+                    details: NSLocalizedString("Mac 图片相册使用说明", value: "Browse all images generated or saved by the assistant in the current conversation. Click any thumbnail to preview the full image and prompt, export the original file to a folder, or delete unwanted attachments (files still used by other messages stay intact).", comment: ""),
                     documentID: "mac-image-gallery", isActive: available)
                 if model.items.isEmpty {
                     Text(NSLocalizedString("当前会话暂无助手返回的图片。", comment: ""))

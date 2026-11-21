@@ -21,7 +21,7 @@ struct MacChatRequestBodyPreviewView: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "request-preview-\(model.id)", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "request-preview-\(model.id)", title: NSLocalizedString("聊天请求体示例", comment: ""),
                         details: NSLocalizedString("Mac 聊天请求体示例使用说明", comment: ""), documentID: "model-request-body")
                     if busy { ProgressView(NSLocalizedString("正在加载…", comment: "")) }
                     else if let error { Text(error).font(.footnote).foregroundStyle(.red) }

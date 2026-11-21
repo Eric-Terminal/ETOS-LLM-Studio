@@ -23,7 +23,7 @@ struct MacShortcutToolsView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "shortcuts", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "shortcuts", title: NSLocalizedString("快捷指令工具", comment: ""),
                                      details: NSLocalizedString("Mac 快捷指令工具使用说明", comment: ""), documentID: "shortcut-tools", isActive: isActive && !model.isSuspended)
                 Toggle(NSLocalizedString("向模型暴露快捷指令工具", comment: ""), isOn: Binding(
                     get: { model.chatToolsEnabled }, set: { value in
@@ -149,7 +149,7 @@ struct MacShortcutToolEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "shortcut-detail", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "shortcut-detail", title: NSLocalizedString("快捷指令工具", comment: ""),
                                          details: NSLocalizedString("Mac 快捷指令工具使用说明", comment: ""), documentID: "shortcut-tools", isActive: isActive && epoch == model.epoch && !model.isSuspended)
                     LabeledContent(NSLocalizedString("快捷指令名称", comment: ""), value: row.tool.name)
                     Toggle(NSLocalizedString("启用", comment: ""), isOn: $enabled)

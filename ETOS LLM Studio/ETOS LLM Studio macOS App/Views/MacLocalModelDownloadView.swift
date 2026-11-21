@@ -27,7 +27,7 @@ struct MacLocalModelDownloadView: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "mac-local-download", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "mac-local-download", title: NSLocalizedString("下载权重", comment: ""),
                                          details: NSLocalizedString("Mac 本地模型下载使用说明", comment: ""), documentID: "local-models")
                     TextField(NSLocalizedString("模型文件链接", comment: ""), text: $urlText)
                     TextField(NSLocalizedString("名称", comment: ""), text: $displayName)

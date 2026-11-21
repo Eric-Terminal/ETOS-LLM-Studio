@@ -55,7 +55,7 @@ struct MacRequestRuntimeView: View {
                     }
                 }
                 Section {
-                    MacSettingsIntroCard(id: "mac-request-runtime", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "mac-request-runtime", title: NSLocalizedString("聊天控制", comment: ""),
                         details: NSLocalizedString("Mac 聊天控制使用说明", comment: ""), documentID: "model-request-body")
                 }
             }

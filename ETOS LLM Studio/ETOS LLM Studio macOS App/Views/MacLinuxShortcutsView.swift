@@ -16,7 +16,7 @@ struct MacLinuxShortcutsView: View {
     var body: some View {
         List {
             Section {
-                MacSettingsIntroCard(id: "linux-shortcuts", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "linux-shortcuts", title: NSLocalizedString("终端快捷键", comment: ""),
                     details: NSLocalizedString("Mac Linux 快捷键使用说明", comment: ""), documentID: "macos-workspace",
                     isActive: allowed && editor == nil && confirmation == nil)
                 Button(NSLocalizedString("添加快捷键", comment: "")) { edit(nil) }.disabled(model.catalog == nil || model.isWorking)
@@ -131,7 +131,7 @@ private struct MacLinuxShortcutEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "linux-shortcut-editor", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "linux-shortcut-editor", title: NSLocalizedString("终端快捷键", comment: ""),
                         details: NSLocalizedString("Mac Linux 快捷键使用说明", comment: ""), documentID: "macos-workspace", isActive: isActive)
                     LabeledContent(NSLocalizedString("快捷键组合", comment: ""), value: draft.title.isEmpty ? NSLocalizedString("未选择按键", comment: "") : draft.title)
                 }

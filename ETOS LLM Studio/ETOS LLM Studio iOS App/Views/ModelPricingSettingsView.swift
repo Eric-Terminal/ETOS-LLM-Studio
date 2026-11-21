@@ -552,7 +552,7 @@ private struct ModelPricingTimeOverrideSettingsView: View {
             Section(
                 header: Text(NSLocalizedString("峰谷时间段", comment: "Peak valley pricing time range section")),
                 footer: VStack(alignment: .leading) {
-                    Text(NSLocalizedString("pricing.time.help", value: "Enter a 24-hour time, such as 12:30 (00:00–23:59).", comment: "峰谷时间输入说明"))
+                    Text(NSLocalizedString("pricing.time.help", value: "Use 24-hour time, such as 00:30 or 23:59.", comment: "峰谷时间输入说明"))
                     Text(NSLocalizedString("开始和结束时间相同时表示全天；跨午夜时间段会从所选重复日自动延续到次日。", comment: "Peak valley pricing time range footer"))
                 }
                 .font(.footnote)

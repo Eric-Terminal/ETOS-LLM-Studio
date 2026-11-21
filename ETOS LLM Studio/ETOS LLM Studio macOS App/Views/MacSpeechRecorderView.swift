@@ -18,7 +18,7 @@ struct MacSpeechRecorderView: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "speech-recorder-\(source.id)", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "speech-recorder-\(source.id)", title: NSLocalizedString("语音输入", comment: ""),
                         details: NSLocalizedString("Mac 语音输入使用说明", comment: ""), documentID: "speech-input", isActive: available)
                     Text(source.sendsAudio ? NSLocalizedString("录制语音", comment: "") : NSLocalizedString("语音转文字", comment: ""))
                     if let speechModel = source.model { Text(speechModel.model.displayName).font(.caption).foregroundStyle(.secondary) }

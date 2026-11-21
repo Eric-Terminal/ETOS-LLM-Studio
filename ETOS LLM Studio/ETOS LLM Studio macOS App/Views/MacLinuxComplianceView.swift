@@ -13,7 +13,7 @@ struct MacLinuxComplianceView: View {
     var body: some View {
         List {
             Section(NSLocalizedString("内置系统", comment: "")) {
-                MacSettingsIntroCard(id: "linux-compliance", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "linux-compliance", title: NSLocalizedString("许可与源码", comment: ""),
                     details: NSLocalizedString("Mac Linux 许可与源码使用说明", comment: ""), documentID: "macos-workspace", isActive: allowed)
                 Text(model.content).font(.footnote).foregroundStyle(.secondary).textSelection(.enabled)
                 Button(NSLocalizedString("刷新", comment: "")) { model.reload() }.disabled(model.isLoading)
@@ -57,7 +57,7 @@ private struct MacLinuxComplianceDocumentView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading) {
-                MacSettingsIntroCard(id: "linux-compliance-\(document.id)", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "linux-compliance-\(document.id)", title: NSLocalizedString("许可与源码", comment: ""),
                     details: NSLocalizedString("Mac Linux 许可与源码使用说明", comment: ""), documentID: "macos-workspace", isActive: isActive)
                 if model.isLoading { ProgressView(NSLocalizedString("正在读取…", comment: "")) }
                 if let error = model.error { Text(error).font(.footnote).foregroundStyle(.secondary) }

@@ -38,7 +38,7 @@ struct MacMCPServerEditor: View {
                     Toggle(NSLocalizedString("用于聊天", comment: ""), isOn: $draft.isSelectedForChat)
                 }
                 Section {
-                    MacSettingsIntroCard(id: "mcp-configuration", title: NSLocalizedString("配置说明", comment: ""), details: NSLocalizedString("stdio 使用 command、args、env 和 cwd；远程连接使用 endpoint。高级字段保留原有格式。已有环境变量引用保持不变，新增 env 值会在保存时转为数据库记录。", comment: ""), documentID: "macos-workspace")
+                    MacSettingsIntroCard(id: "mcp-configuration", title: NSLocalizedString("MCP 服务器配置", comment: ""), details: NSLocalizedString("stdio 使用 command、args、env 和 cwd；远程连接使用 endpoint。高级字段保留原有格式。已有环境变量引用保持不变，新增 env 值会在保存时转为数据库记录。", comment: ""), documentID: "macos-workspace")
                     Menu(NSLocalizedString("连接类型", comment: "")) {
                         Button(NSLocalizedString("本机 stdio", comment: "")) {
                             replaceTransport(.localStdio(configuration: .init(command: "")))

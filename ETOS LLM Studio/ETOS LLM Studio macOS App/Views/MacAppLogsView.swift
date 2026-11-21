@@ -14,8 +14,8 @@ struct MacAppLogsView: View {
     var body: some View {
         List {
             Section {
-                MacSettingsIntroCard(id: "app-logs", title: NSLocalizedString("使用说明", comment: ""),
-                    details: NSLocalizedString("Mac 应用日志使用说明", value: "Browse logs by date and launch. Filter the user or developer channel and copy individual entries. Request bodies are recorded only when explicitly enabled. Deleting local logs cannot be undone; the page guide cannot read log contents.", comment: ""),
+                MacSettingsIntroCard(id: "app-logs", title: NSLocalizedString("应用日志", comment: ""),
+                    details: NSLocalizedString("Mac 应用日志使用说明", value: "Browse local diagnostic logs organized by date and app launch. Filter by channel, severity level, or keyword, and open any entry to copy its full text for troubleshooting.\n\nFor privacy, raw request bodies are logged only when explicitly enabled, and deleting local logs cannot be undone.", comment: ""),
                     documentID: "mac-app-information", isActive: available)
                 Toggle(NSLocalizedString("启用 API 请求日志", comment: ""), isOn: $configuration.requestLogEnabled)
                 Toggle(NSLocalizedString("记录请求明文消息", comment: ""), isOn: $configuration.requestLogPlainMessageEnabled)

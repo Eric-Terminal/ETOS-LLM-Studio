@@ -22,7 +22,7 @@ struct MacSkillsView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "skills", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "skills", title: NSLocalizedString("Agent Skills", comment: ""),
                                      details: NSLocalizedString("Mac Skills 使用说明", comment: ""), documentID: "agent-skills", isActive: isActive && !model.isSuspended)
                 Toggle(NSLocalizedString("向模型暴露 Agent Skills（use_skill）", comment: ""), isOn: Binding(
                     get: { model.chatToolsEnabled }, set: { update(.groupEnabled($0)) }

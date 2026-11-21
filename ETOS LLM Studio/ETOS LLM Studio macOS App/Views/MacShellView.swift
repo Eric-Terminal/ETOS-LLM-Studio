@@ -14,8 +14,8 @@ struct MacShellView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "native-shell", title: NSLocalizedString("使用说明", comment: ""),
-                    details: NSLocalizedString("mac.shell.help", value: "Run commands and terminals directly on macOS using the system Shell and file permissions. No Linux system needs to be installed. Environment variables, command rules and output settings apply to new tasks. Interactive terminal input is manual.", comment: "本机 Shell 教程"),
+                MacSettingsIntroCard(id: "native-shell", title: title,
+                    details: NSLocalizedString("mac.shell.help", value: "Enable Local Shell so Agent can run commands using native macOS shells (such as zsh or sh) and local developer tools under your approval rules—no virtual machine or Linux subsystem needed.\n\nFrom here you can open an interactive terminal, inspect active or past tasks, or open Configuration to set the default shell, timeouts, environment variables, command safety rules, shortcut keys, and live chat previews. Switches and settings save immediately.", comment: "本机 Shell 教程"),
                     documentID: "macos-workspace", isActive: active)
                 Toggle(NSLocalizedString("mac.shell.enabled", value: "Enable Local Shell", comment: "本机 Shell 开关"), isOn: $configuration.localLinuxEnabled)
                     .disabled(!model.canOperate)

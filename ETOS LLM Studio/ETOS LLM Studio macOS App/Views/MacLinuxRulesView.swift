@@ -15,7 +15,7 @@ struct MacLinuxRulesView: View {
     var body: some View {
         List {
             Section {
-                MacSettingsIntroCard(id: "linux-rules", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "linux-rules", title: NSLocalizedString("命令规则", comment: ""),
                     details: NSLocalizedString("Mac Linux 命令规则使用说明", comment: ""), documentID: "macos-workspace", isActive: allowed && editor == nil)
                 Toggle(NSLocalizedString("启用命令安全策略", comment: ""), isOn: $configuration.localLinuxCommandSafetyEnabled)
                 Button(NSLocalizedString("添加规则", comment: "")) { editor = MacLinuxRuleEditorTarget(original: nil) }.disabled(model.isWorking)
@@ -89,7 +89,7 @@ private struct MacLinuxRuleEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "linux-rule-editor", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "linux-rule-editor", title: NSLocalizedString("命令规则", comment: ""),
                         details: NSLocalizedString("Mac Linux 命令规则使用说明", comment: ""), documentID: "macos-workspace", isActive: isActive && !deleting)
                     TextField(NSLocalizedString("规则名称", comment: ""), text: $draft.name)
                     TextField(NSLocalizedString("匹配内容", comment: ""), text: $draft.pattern, axis: .vertical).lineLimit(1...6).autocorrectionDisabled()

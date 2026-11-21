@@ -17,7 +17,7 @@ struct MacLinuxMountsView: View {
     var body: some View {
         List {
             Section {
-                MacSettingsIntroCard(id: "linux-mounts", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "linux-mounts", title: NSLocalizedString("工作区与挂载", comment: ""),
                     details: NSLocalizedString("Mac Linux 挂载使用说明", comment: ""), documentID: "macos-workspace", isActive: allowed && !choosingDirectory)
                 NavigationLink {
                     MacLinuxWorkspacesView(isActive: isActive, runtime: runtime)

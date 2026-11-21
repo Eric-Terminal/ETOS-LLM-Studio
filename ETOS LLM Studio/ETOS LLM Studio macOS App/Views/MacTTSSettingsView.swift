@@ -17,7 +17,7 @@ struct MacTTSSettingsView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "tts", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "tts", title: NSLocalizedString("语音输出", comment: ""),
                     details: NSLocalizedString("Mac 朗读使用说明", comment: ""), documentID: "tts", isActive: available)
             }
             if model.isLoaded {

@@ -55,7 +55,7 @@ struct MacRequestParameterEditor: View {
                 }
                 if let error = model.error { Text(error).font(.footnote).foregroundStyle(.red) }
                 Section {
-                    MacSettingsIntroCard(id: pageID.rawValue, title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: pageID.rawValue, title: NSLocalizedString("请求体参数", comment: ""),
                                          details: NSLocalizedString("Mac 请求参数草稿使用说明", comment: ""), documentID: "model-request-body")
                 }
             }

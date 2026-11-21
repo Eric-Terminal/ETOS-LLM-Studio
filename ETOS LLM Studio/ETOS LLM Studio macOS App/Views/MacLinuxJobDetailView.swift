@@ -16,7 +16,7 @@ struct MacLinuxJobDetailView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "linux-job-detail", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "linux-job-detail", title: NSLocalizedString("任务详情", comment: ""),
                     details: NSLocalizedString("mac.shell.jobs.help", comment: ""), documentID: "macos-workspace",
                     isActive: isActive && workspace.canManageLocalModels && !runtime.isSuspended && cancellation == nil)
                 Button(NSLocalizedString("刷新", comment: "")) { model.reload() }.disabled(model.isLoading)
@@ -112,7 +112,7 @@ struct MacLinuxDiagnosticView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "linux-diagnostic", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "linux-diagnostic", title: NSLocalizedString("诊断详情", comment: ""),
                     details: NSLocalizedString("mac.shell.jobs.help", comment: ""), documentID: "macos-workspace",
                     isActive: isActive && workspace.canManageLocalModels && !runtime.isSuspended)
                 Button(NSLocalizedString("刷新", comment: "")) { model.reload() }.disabled(model.isLoading)

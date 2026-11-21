@@ -105,7 +105,7 @@ struct MacDailyPulseView: View {
     private func cards(_ snapshot: MacDailyPulsePresentation) -> some View {
         List {
             Section {
-                MacSettingsIntroCard(id: "daily-pulse", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "daily-pulse", title: NSLocalizedString("每日脉冲", comment: ""),
                     details: NSLocalizedString("Mac 每日脉冲使用说明", comment: ""), documentID: "daily-pulse",
                     isActive: workspace.canManageLocalModels && appLock.state != .locked)
             }

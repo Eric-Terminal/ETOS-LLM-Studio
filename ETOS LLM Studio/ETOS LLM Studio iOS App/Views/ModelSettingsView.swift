@@ -92,7 +92,7 @@ struct ModelSettingsView: View {
             } header: {
                 Text(NSLocalizedString("model.prompt.title", value: "Model prompt", comment: "模型专属提示词"))
             } footer: {
-                Text(NSLocalizedString("model.prompt.footer", value: "Use {{model_prompt}} in a prompt to insert this model's text. Empty values insert nothing.", comment: "模型提示词宏简要说明"))
+                Text(NSLocalizedString("model.prompt.footer", value: "Place {{model_prompt}} in any prompt to insert these instructions when sending. Leave blank to insert nothing.", comment: "模型提示词宏简要说明"))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

@@ -12,7 +12,7 @@ struct MacChatAnimationSettingsView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "chat-animation", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "chat-animation", title: NSLocalizedString("聊天动画", comment: ""),
                     details: NSLocalizedString("Mac 聊天动画使用说明", comment: ""), documentID: "settings-display", isActive: available)
             }
             Section {

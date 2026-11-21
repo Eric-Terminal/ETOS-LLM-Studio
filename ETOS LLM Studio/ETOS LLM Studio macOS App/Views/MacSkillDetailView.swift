@@ -27,7 +27,7 @@ struct MacSkillDetailView: View {
             Form {
                 if let detail {
                     Section {
-                        MacSettingsIntroCard(id: "skill-detail-\(name)", title: NSLocalizedString("使用说明", comment: ""),
+                        MacSettingsIntroCard(id: "skill-detail-\(name)", title: NSLocalizedString("Agent Skills", comment: ""),
                                              details: NSLocalizedString("Mac Skills 使用说明", comment: ""), documentID: "agent-skills", isActive: isActive && !model.isSuspended)
                         Toggle(NSLocalizedString("在聊天中启用该技能", comment: ""), isOn: Binding(
                             get: { model.enabledNames.contains(name) }, set: { update(.skillEnabled(name: name, enabled: $0)) }

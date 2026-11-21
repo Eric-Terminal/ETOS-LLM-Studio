@@ -45,7 +45,7 @@ struct MacRoleplayRegexEditor: View {
                     }
                 }
                 Section {
-                    MacSettingsIntroCard(id: "roleplay-regex-editor", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "roleplay-regex-editor", title: NSLocalizedString("角色正则", comment: ""),
                                          details: NSLocalizedString("Mac 角色正则与脚本使用说明", comment: ""), documentID: "roleplay")
                 } footer: { Text(NSLocalizedString("修改保留为草稿，点击保存后生效。", comment: "")).font(.footnote).foregroundStyle(.secondary) }
                 if let error { Text(error).font(.footnote).foregroundStyle(.red) }

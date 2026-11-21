@@ -20,7 +20,7 @@ struct MacToolApprovalSettingsView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "tool-approval", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "tool-approval", title: NSLocalizedString("审批自动化", comment: ""),
                                      details: NSLocalizedString("Mac 工具审批使用说明", comment: ""), documentID: "settings-tools", isActive: active)
                 Toggle(NSLocalizedString("启用倒计时自动批准", comment: ""), isOn: Binding(get: { model.enabled }, set: { update(.enabled($0)) }))
                 Stepper(value: Binding(get: { model.countdown }, set: { update(.countdown($0)) }), in: 1...30) {

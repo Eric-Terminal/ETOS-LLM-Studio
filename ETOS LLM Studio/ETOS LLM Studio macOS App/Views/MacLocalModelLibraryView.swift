@@ -19,7 +19,7 @@ struct MacLocalModelLibraryView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "local-models", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "local-models", title: NSLocalizedString("本地模型", comment: ""),
                                      details: NSLocalizedString("Mac 本地模型管理使用说明", comment: ""), documentID: "local-models")
                 Toggle(NSLocalizedString("启用本地模型提供商", comment: ""), isOn: setting(.localModelsEnabled, value: configuration.localModelsEnabled))
             } footer: {

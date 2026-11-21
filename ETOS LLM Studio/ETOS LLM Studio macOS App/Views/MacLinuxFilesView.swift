@@ -15,7 +15,7 @@ struct MacLinuxFilesView: View {
     var body: some View {
         List {
             Section {
-                MacSettingsIntroCard(id: "linux-files", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "linux-files", title: NSLocalizedString("Linux 文件", comment: ""),
                     details: NSLocalizedString("Mac Linux 文件浏览使用说明", comment: ""), documentID: "macos-workspace",
                     isActive: allowed && model.editor == nil && deletion == nil)
                 if let directory = model.directory {
@@ -111,7 +111,7 @@ private struct MacLinuxFileEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "linux-file-editor", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "linux-file-editor", title: NSLocalizedString("Linux 文件", comment: ""),
                         details: NSLocalizedString("Mac Linux 文件浏览使用说明", comment: ""), documentID: "macos-workspace", isActive: isActive)
                     Text(target.preview.node.path).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
                     LabeledContent(NSLocalizedString("大小", comment: ""), value: target.size)

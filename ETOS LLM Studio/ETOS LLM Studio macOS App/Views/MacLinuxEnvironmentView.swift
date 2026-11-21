@@ -15,7 +15,7 @@ struct MacLinuxEnvironmentView: View {
     var body: some View {
         List {
             Section {
-                MacSettingsIntroCard(id: "linux-environment", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "linux-environment", title: NSLocalizedString("环境变量", comment: ""),
                     details: NSLocalizedString("Mac Linux 环境变量使用说明", comment: ""), documentID: "macos-workspace", isActive: allowed && editor == nil)
                 Button(NSLocalizedString("添加环境变量", comment: "")) { editor = MacLinuxVariableEditorTarget(original: nil) }.disabled(model.isWorking)
                 Button(NSLocalizedString("刷新", comment: "")) { model.error = nil; model.reload() }.disabled(model.isLoading || model.isWorking)
@@ -73,7 +73,7 @@ private struct MacLinuxEnvironmentEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    MacSettingsIntroCard(id: "linux-variable-editor", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "linux-variable-editor", title: NSLocalizedString("环境变量", comment: ""),
                         details: NSLocalizedString("Mac Linux 环境变量使用说明", comment: ""), documentID: "macos-workspace", isActive: isActive && !deleting)
                     TextField(NSLocalizedString("名称", comment: ""), text: $draft.name).autocorrectionDisabled()
                     if showValue { TextField(NSLocalizedString("值", comment: ""), text: $draft.value, axis: .vertical).lineLimit(1...6).autocorrectionDisabled() }

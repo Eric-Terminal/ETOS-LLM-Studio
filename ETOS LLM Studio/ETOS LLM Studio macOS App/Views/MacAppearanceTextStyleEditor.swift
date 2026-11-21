@@ -16,7 +16,7 @@ struct MacAppearanceTextStyleEditor: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "appearance-text-\(group.id)", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "appearance-text-\(group.id)", title: NSLocalizedString("着色规则", comment: ""),
                     details: NSLocalizedString("Mac 文字着色使用说明", comment: ""), documentID: "settings-display", isActive: isActive)
             }
             Section { MacAppearanceColorField(slot: bodySlot) } header: { Text(NSLocalizedString("正文", comment: "")) }
@@ -98,7 +98,7 @@ private struct MacAppearanceRuleEditor: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "appearance-rule", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "appearance-rule", title: NSLocalizedString("着色规则", comment: ""),
                     details: NSLocalizedString("Mac 文字着色使用说明", comment: ""), documentID: "settings-display", isActive: isActive)
                 Toggle(NSLocalizedString("启用", comment: ""), isOn: $rule.isEnabled)
                 Picker(NSLocalizedString("匹配方式", comment: ""), selection: $rule.kind) {

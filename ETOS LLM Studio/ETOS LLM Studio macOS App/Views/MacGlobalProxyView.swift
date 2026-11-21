@@ -15,7 +15,7 @@ struct MacGlobalProxyView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "global-proxy", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "global-proxy", title: NSLocalizedString("全局代理设置", comment: ""),
                     details: NSLocalizedString("Mac 代理设置使用说明", comment: ""), documentID: "network-proxy", isActive: available)
             }
             if model.isLoaded {

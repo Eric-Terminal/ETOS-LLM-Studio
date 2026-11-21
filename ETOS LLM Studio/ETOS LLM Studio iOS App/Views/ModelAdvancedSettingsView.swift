@@ -457,7 +457,7 @@ struct ModelAdvancedSettingsView: View {
             } footer: {
                 Text(NSLocalizedString(
                     "提示词宏时间注入说明",
-                    value: "System time can be added at the beginning or end, or inserted anywhere using prompt macros. Changing time may reduce cache reuse from that position onward.",
+                    value: "Attach the current time at the start or end, or place it anywhere with a macro. Putting a changing timestamp at the end rather than the start helps keep provider prompt caching effective.",
                     comment: "时间注入位置选择与缓存效果"
                 ))
                 .font(.footnote)

@@ -9,7 +9,7 @@ struct MacRoleplayDataView: View {
         Form {
             Section {
                 LabeledContent(NSLocalizedString("当前会话", comment: ""), value: session.name)
-                MacSettingsIntroCard(id: "roleplay-data", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "roleplay-data", title: NSLocalizedString("宏与变量", comment: ""),
                                      details: NSLocalizedString("Mac 宏与变量使用说明", comment: ""), documentID: "roleplay")
             }
             Section {
@@ -93,7 +93,7 @@ private struct MacRoleplayDataEditor: View {
                 } footer: { Text(NSLocalizedString("修改保留为草稿，点击保存后生效。", comment: "")).font(.footnote).foregroundStyle(.secondary) }
             }
             Section {
-                MacSettingsIntroCard(id: "roleplay-data-\(model.section.id)", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "roleplay-data-\(model.section.id)", title: NSLocalizedString("宏与变量", comment: ""),
                                      details: NSLocalizedString("Mac 宏与变量使用说明", comment: ""), documentID: "roleplay")
             }
             if let error = model.error { Text(error).font(.footnote).foregroundStyle(.red) }

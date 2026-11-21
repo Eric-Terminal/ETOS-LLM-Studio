@@ -22,7 +22,7 @@ struct MacMessageActionBarSettingsView: View {
     var body: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "message-action-bar", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "message-action-bar", title: NSLocalizedString("功能栏自定义", comment: ""),
                     details: NSLocalizedString("Mac 消息功能栏使用说明", comment: ""), documentID: "settings-display", isActive: available)
                 Picker(NSLocalizedString("消息类型", comment: ""), selection: $role) {
                     Text(NSLocalizedString("助手气泡", comment: "")).tag(MessageActionBarRole.assistant)

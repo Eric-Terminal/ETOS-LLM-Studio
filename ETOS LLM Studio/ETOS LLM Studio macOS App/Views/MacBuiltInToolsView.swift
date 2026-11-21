@@ -10,7 +10,7 @@ struct MacBuiltInToolsView: View {
     var body: some View {
         List {
             Section {
-                MacSettingsIntroCard(id: "built-in-tools", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "built-in-tools", title: NSLocalizedString("内置工具", comment: ""),
                                      details: NSLocalizedString("Mac 内置工具使用说明", comment: ""), documentID: "settings-tools", isActive: active)
                 Toggle(NSLocalizedString("仅显示已启用", comment: ""), isOn: $model.enabledOnly)
                 if !model.isLoaded || model.isWorking { ProgressView(NSLocalizedString("处理中", comment: "")) }
@@ -112,7 +112,7 @@ private struct MacBuiltInToolDetail: View {
     private var form: some View {
         Form {
             Section {
-                MacSettingsIntroCard(id: "built-in-\(kind.rawValue)", title: NSLocalizedString("使用说明", comment: ""),
+                MacSettingsIntroCard(id: "built-in-\(kind.rawValue)", title: NSLocalizedString("内置工具", comment: ""),
                                      details: NSLocalizedString("Mac 内置工具使用说明", comment: ""), documentID: "settings-tools", isActive: isActive && !model.isSuspended)
                 if let row {
                     Text(row.description).font(.footnote).foregroundStyle(.secondary)

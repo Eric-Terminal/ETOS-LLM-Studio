@@ -22,7 +22,7 @@ struct MacRoleplayContentList: View {
             if let row = model.snapshot.charactersByID[characterID] {
                 Section {
                     LabeledContent(NSLocalizedString("角色卡", comment: ""), value: row.character.name)
-                    MacSettingsIntroCard(id: "roleplay-content-\(kind.rawValue)", title: NSLocalizedString("使用说明", comment: ""),
+                    MacSettingsIntroCard(id: "roleplay-content-\(kind.rawValue)", title: kind.title,
                                          details: NSLocalizedString("Mac 角色正则与脚本使用说明", comment: ""), documentID: "roleplay")
                 }
                 if kind == .regex {
