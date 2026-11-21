@@ -76,6 +76,7 @@ struct MacUsageAnalyticsPresentation: Sendable {
     let trendModels: [Rank]
     let points: [TrendPoint]
     let modelPoints: [ModelPoint]
+    let dashboardCard: UsageDashboardCardSnapshot
     let guideSummary: JSONValue
     let guideDetail: JSONValue
 
@@ -163,6 +164,18 @@ struct MacUsageAnalyticsPresentation: Sendable {
                     detail: String(format: NSLocalizedString("%@ · %@ Token", comment: ""), point.dayKey, number(point.totalTokens)))
             }
         }
+        let cal = UsageAnalyticsRuntimeContext.calendar()
+        let todayKey = UsageAnalyticsRuntimeContext.dayKey(for: Date(), calendar: cal)
+        let shortDayTitle = UsageAnalyticsRuntimeContext.date(for: state.selectedDayKey, calendar: cal)?
+            .formatted(.dateTime.month(.defaultDigits).day(.defaultDigits).locale(locale)) ?? state.selectedDayKey
+        dashboardCard = UsageCompactFormatter.makeDashboardCardSnapshot(
+            scope: state.selectedScope,
+            selectedDayKey: state.selectedDayKey,
+            todayDayKey: todayKey,
+            selectedDayShortTitle: shortDayTitle,
+            detail: selected,
+            locale: locale
+        )
         guideSummary = .dictionary([
             "total_tokens": .int(stats.totalTokens), "session_count": .int(stats.sessionCount),
             "message_count": .int(stats.messageCount), "active_days": .int(stats.activeDays),

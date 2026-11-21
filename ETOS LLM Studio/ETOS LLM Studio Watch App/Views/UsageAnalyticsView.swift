@@ -2,7 +2,10 @@ import SwiftUI
 import ETOSCore
 
 struct UsageAnalyticsView: View {
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @StateObject private var viewModel = UsageAnalyticsDashboardViewModel()
+    @State private var isShowingDetailDashboard = false
+
     private static let calendarCellSide: CGFloat = 20
     private static let calendarHeaderHeight: CGFloat = 14
     private static let calendarCellSpacing: CGFloat = 3
@@ -77,7 +80,7 @@ struct UsageAnalyticsView: View {
                             .foregroundStyle(.secondary)
                         ForEach(0..<5, id: \.self) { level in
                             RoundedRectangle(cornerRadius: 2, style: .continuous)
-                                .fill(legendHeatColor(level: level))
+                                .fill(heatColor(level: level))
                                 .frame(width: heatmapCellSide, height: heatmapCellSide)
                         }
                         Text(NSLocalizedString("多", comment: ""))
@@ -113,185 +116,35 @@ struct UsageAnalyticsView: View {
                 calendarGrid
             }
 
-            Section(NSLocalizedString("统计范围", comment: "")) {
-                scopeSwitcher
-            }
-
-            Section(NSLocalizedString("概览", comment: "")) {
-                if let card = viewModel.state.activeOverviewCard {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(card.title)
-                            .etFont(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-
-                        HStack(alignment: .lastTextBaseline, spacing: 6) {
-                            Text("\(card.requestCount)")
-                                .etFont(.title2.monospaced().weight(.bold))
-                            Text(NSLocalizedString("次请求", comment: ""))
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Text(String(format: NSLocalizedString("Token %d · 错误 %d", comment: ""), card.totalTokens, card.errorCount))
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                        if let costText = costSummaryText(card.costSummary) {
-                            Text(String(format: NSLocalizedString("费用 %@", comment: "Usage estimated cost"), costText))
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                        HStack(spacing: 3) {
-                            Text(String(format: NSLocalizedString("常用模型：%@", comment: ""), ""))
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                            MarqueeText(
-                                content: card.topModelName,
-                                uiFont: .preferredFont(forTextStyle: .caption2),
-                                speed: 26,
-                                spacing: 28
-                            )
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                            .allowsHitTesting(false)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
+            Section(
+                NSLocalizedString(
+                    "usage_dashboard.preview.section_title",
+                    value: "Token Breakdown",
+                    comment: "Section header for usage dashboard preview card"
+                )
+            ) {
+                UsageSummaryPreviewCard(
+                    snapshot: viewModel.state.detail.dashboardCard,
+                    compactLayout: true
+                ) {
+                    isShowingDetailDashboard = true
                 }
-            }
-
-            Section(NSLocalizedString("Token 趋势", comment: "Usage analytics token trend section")) {
-                let trend = viewModel.state.detail.tokenTrend
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(trend.rangeTitle.isEmpty ? viewModel.state.detail.subtitle : trend.rangeTitle)
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
-
-                    if trend.dailyPoints.contains(where: { $0.totalTokens > 0 }) {
-                        WatchUsageAnalyticsTokenTrendChart(
-                            trend: trend,
-                            modelColors: trendModelColors
-                        )
-                        .frame(height: 78)
-
-                        Text(String(format: NSLocalizedString("总 Token %@ · %@ %@", comment: "Watch usage token trend summary"), formattedNumber(trend.totalTokens), tokenTrendPeakTitle(for: trend), formattedNumber(trend.maxDailyTokens)))
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-
-                        ForEach(Array(trend.modelSeries.enumerated()), id: \.element.id) { index, series in
-                            HStack(alignment: .top, spacing: 6) {
-                                Circle()
-                                    .fill(trendModelColors[index % trendModelColors.count])
-                                    .frame(width: 6, height: 6)
-                                    .padding(.top, 4)
-                                MarqueeText(
-                                    content: series.title,
-                                    uiFont: .preferredFont(forTextStyle: .caption2),
-                                    speed: 26,
-                                    spacing: 28
-                                )
-                                .etFont(.caption2.weight(.semibold))
-                                .allowsHitTesting(false)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                Text(percentageText(series.tokenShare))
-                                    .etFont(.caption2.monospaced())
-                                    .foregroundStyle(.secondary)
-                            }
-                            if let costText = costSummaryText(series.costSummary) {
-                                Text(String(format: NSLocalizedString("Token %@ · 费用 %@", comment: "Watch model token and cost"), formattedNumber(series.totalTokens), costText))
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                Text(String(format: NSLocalizedString("Token %@", comment: "Watch model token count"), formattedNumber(series.totalTokens)))
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    } else {
-                        Text(NSLocalizedString("当前范围内还没有 Token 趋势数据。", comment: "Usage analytics empty token trend"))
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            Section(NSLocalizedString("详情", comment: "")) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(viewModel.state.detail.title)
-                        .etFont(.headline)
-                    Text(viewModel.state.detail.subtitle)
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text(String(format: NSLocalizedString("请求 %d · 成功 %d · 错误 %d", comment: ""), viewModel.state.detail.requestCount, viewModel.state.detail.successCount, viewModel.state.detail.failedCount))
-                        .etFont(.caption2)
-                    Text(String(format: NSLocalizedString("Token %d · 取消 %d", comment: ""), viewModel.state.detail.tokenTotals.totalTokens, viewModel.state.detail.cancelledCount))
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
-                    if let costText = costSummaryText(viewModel.state.detail.costSummary) {
-                        Text(String(format: NSLocalizedString("费用 %@", comment: "Usage estimated cost"), costText))
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(String(
-                        format: NSLocalizedString("缓存读取 %d · 缓存写入 %d · 命中 %@", comment: "Cache token totals summary"),
-                        viewModel.state.detail.tokenTotals.cacheReadTokens,
-                        viewModel.state.detail.tokenTotals.cacheWriteTokens,
-                        cacheHitRateText(viewModel.state.detail.cacheHitRate)
-                    ))
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Section {
-                if viewModel.state.detail.topModels.isEmpty {
-                    Text(NSLocalizedString("当前范围内还没有模型请求。", comment: ""))
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(Array(viewModel.state.detail.topModels.enumerated()), id: \.element.id) { index, model in
-                        WatchUsageAnalyticsRankRow(
-                            rank: index + 1,
-                            item: model,
-                            showsTokenDetails: true,
-                            titleAllowsMarquee: true,
-                            tokenShareText: percentageText(model.tokenShare),
-                            costSummaryText: costSummaryText(model.costSummary),
-                            cacheHitRateText: cacheHitRateText(model.cacheHitRate)
-                        )
-                    }
-                }
-            } header: {
-                HStack {
-                    Text(NSLocalizedString("模型 Top", comment: ""))
-                    Spacer()
-                    Text(String(format: NSLocalizedString("共 %d 项", comment: "用量统计榜单数量"), viewModel.state.detail.topModels.count))
-                }
-            }
-
-            Section(NSLocalizedString("来源 Top", comment: "")) {
-                if viewModel.state.detail.sourceBreakdown.isEmpty {
-                    Text(NSLocalizedString("当前范围内还没有来源数据。", comment: "Usage analytics empty source breakdown"))
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(Array(viewModel.state.detail.sourceBreakdown.enumerated()), id: \.element.id) { index, source in
-                        WatchUsageAnalyticsRankRow(
-                            rank: index + 1,
-                            item: source,
-                            showsTokenDetails: false,
-                            titleAllowsMarquee: false,
-                            tokenShareText: percentageText(source.tokenShare),
-                            cacheHitRateText: cacheHitRateText(source.cacheHitRate)
-                        )
-                    }
-                }
+                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                .listRowBackground(Color.clear)
             }
         }
         .navigationTitle(NSLocalizedString("用量统计", comment: ""))
+        .navigationDestination(isPresented: $isShowingDetailDashboard) {
+            WatchUsageAnalyticsDetailView(viewModel: viewModel)
+        }
+        .onChange(of: appConfig.appLanguage) { _, _ in
+            viewModel.refresh()
+        }
         .guideSettingsPageContext(
             id: "watch-usage-analytics",
             title: NSLocalizedString("用量统计", comment: "手表用量统计向导上下文标题"),
             documents: [GuideDocumentReference(id: "usage-analytics", title: "Usage Analytics")],
+            isActive: !isShowingDetailDashboard,
             settings: usageGuideSettings
         )
         .watchGuideEntry()
@@ -341,7 +194,8 @@ struct UsageAnalyticsView: View {
                         "success_count": .int(detail.successCount),
                         "failed_count": .int(detail.failedCount),
                         "cancelled_count": .int(detail.cancelledCount),
-                        "total_tokens": .int(detail.tokenTotals.totalTokens)
+                        "total_tokens": .int(detail.tokenTotals.totalTokens),
+                        "non_cached_tokens": .int(detail.nonCachedTokens)
                     ])
                 }
             )
@@ -362,7 +216,7 @@ struct UsageAnalyticsView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
-                Text(watchCompactNumber(stats.totalTokens))
+                Text(UsageCompactFormatter.tokens(stats.totalTokens))
                     .etFont(.title3.weight(.bold).monospacedDigit())
             }
 
@@ -426,16 +280,17 @@ struct UsageAnalyticsView: View {
                     .etFont(.footnote.weight(.bold))
                     .allowsHitTesting(false)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    Text(String(format: NSLocalizedString("占比 %@", comment: ""), percentageText(stats.mostUsedModelShare)))
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
+                    Text(
+                        String(
+                            format: NSLocalizedString("占比 %@", comment: ""),
+                            UsageCompactFormatter.percentage(stats.mostUsedModelShare)
+                        )
+                    )
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
                 }
             }
         }
-    }
-
-    private func watchCompactNumber(_ value: Int) -> String {
-        value.formatted(.number.notation(.compactName).locale(Locale(identifier: "en_US")))
     }
 
     private var visibleHeatmapWeeks: [UsageAnalyticsHeatmapWeek] {
@@ -456,7 +311,7 @@ struct UsageAnalyticsView: View {
                 segments.append(
                     HeatmapMonthSegment(
                         id: id,
-                        title: heatmapMonthTitle(month: month),
+                        title: String(format: NSLocalizedString("%d月", comment: ""), month),
                         weekCount: 1
                     )
                 )
@@ -513,9 +368,16 @@ struct UsageAnalyticsView: View {
         return viewModel.state.monthDays[index]
     }
 
+    private func selectDayAndFocus(_ dayKey: String) {
+        if viewModel.state.selectedScope != .day {
+            viewModel.selectScope(.day)
+        }
+        viewModel.selectDay(dayKey: dayKey)
+    }
+
     private func calendarDayButton(_ day: UsageAnalyticsCalendarDay) -> some View {
         Button {
-            viewModel.selectDay(dayKey: day.dayKey)
+            selectDayAndFocus(day.dayKey)
         } label: {
             Text(day.dayNumberText)
                 .etFont(.caption2.weight(.semibold))
@@ -528,21 +390,9 @@ struct UsageAnalyticsView: View {
         .buttonStyle(.plain)
     }
 
-    private var scopeSwitcher: some View {
-        Picker(NSLocalizedString("统计范围", comment: ""), selection: Binding(
-            get: { viewModel.state.selectedScope },
-            set: { viewModel.selectScope($0) }
-        )) {
-            ForEach(UsageAnalyticsDetailScope.allCases, id: \.self) { scope in
-                Text(scopeButtonTitle(scope))
-                    .tag(scope)
-            }
-        }
-    }
-
     private func heatCell(day: UsageAnalyticsCalendarDay, side: CGFloat) -> some View {
         Button {
-            viewModel.selectDay(dayKey: day.dayKey)
+            selectDayAndFocus(day.dayKey)
         } label: {
             RoundedRectangle(cornerRadius: 3, style: .continuous)
                 .fill(heatColor(level: day.intensity))
@@ -575,50 +425,6 @@ struct UsageAnalyticsView: View {
         week.days.first(where: { calendar.component(.weekday, from: $0.date) == calendar.firstWeekday })?.date ?? week.days.first?.date
     }
 
-    private func heatmapMonthTitle(month: Int) -> String {
-        return String(format: NSLocalizedString("%d月", comment: ""), month)
-    }
-
-    private func cacheHitRateText(_ rate: Double?) -> String {
-        guard let rate else {
-            return NSLocalizedString("暂无", comment: "No usage analytics metric value")
-        }
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .percent
-        formatter.minimumFractionDigits = 1
-        formatter.maximumFractionDigits = 1
-        return formatter.string(from: NSNumber(value: rate)) ?? String(format: "%.1f%%", rate * 100)
-    }
-
-    private func percentageText(_ value: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .percent
-        formatter.minimumFractionDigits = 1
-        formatter.maximumFractionDigits = 1
-        return formatter.string(from: NSNumber(value: value)) ?? String(format: "%.1f%%", value * 100)
-    }
-
-    private func formattedNumber(_ value: Int) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
-    }
-
-    private func costSummaryText(_ summary: UsageAnalyticsCostSummary) -> String? {
-        guard !summary.totals.isEmpty else {
-            return nil
-        }
-        return MessageCostFormatter.formatTotal(summary.totals.reduce(0) { $0 + $1.totalCost })
-    }
-
-    private var trendModelColors: [Color] {
-        [.accentColor, .green, .orange]
-    }
-
-    private func legendHeatColor(level: Int) -> Color {
-        heatColor(level: level)
-    }
-
     private func heatColor(level: Int) -> Color {
         switch level {
         case 1:
@@ -633,28 +439,6 @@ struct UsageAnalyticsView: View {
             return Color.gray.opacity(0.25)
         }
     }
-
-    private func scopeButtonTitle(_ scope: UsageAnalyticsDetailScope) -> String {
-        switch scope {
-        case .day:
-            return NSLocalizedString("今日", comment: "")
-        case .week:
-            return NSLocalizedString("近 7 天", comment: "")
-        case .month:
-            return NSLocalizedString("近 30 天", comment: "")
-        case .allTime:
-            return NSLocalizedString("全部", comment: "")
-        }
-    }
-
-    private func tokenTrendPeakTitle(for trend: UsageAnalyticsTokenTrendSnapshot) -> String {
-        switch trend.granularity {
-        case .hour:
-            return NSLocalizedString("峰值小时", comment: "Hourly usage trend peak metric")
-        case .day:
-            return NSLocalizedString("峰值日", comment: "Daily usage trend peak metric")
-        }
-    }
 }
 
 private struct HeatmapMonthSegment: Identifiable {
@@ -663,193 +447,81 @@ private struct HeatmapMonthSegment: Identifiable {
     var weekCount: Int
 }
 
-private struct WatchUsageAnalyticsTokenTrendChart: View {
-    let trend: UsageAnalyticsTokenTrendSnapshot
-    let modelColors: [Color]
+// MARK: - watchOS 独立弹出用量看板页
+
+private struct WatchUsageAnalyticsDetailView: View {
+    @ObservedObject var viewModel: UsageAnalyticsDashboardViewModel
 
     var body: some View {
-        GeometryReader { proxy in
-            let rect = CGRect(
-                x: 2,
-                y: 6,
-                width: max(1, proxy.size.width - 4),
-                height: max(1, proxy.size.height - 18)
+        ScrollView {
+            UsageDashboardDetailContentView(
+                selectedScope: viewModel.state.selectedScope,
+                snapshot: viewModel.state.detail.dashboardCard,
+                compactLayout: true
+            ) { scope in
+                viewModel.selectScope(scope)
+            }
+            .padding(.horizontal, 4)
+            .padding(.bottom, 8)
+        }
+        .navigationTitle(
+            NSLocalizedString(
+                "usage_dashboard.detail.nav_title",
+                value: "Usage",
+                comment: "Navigation title for detailed usage dashboard"
             )
-
-            ZStack(alignment: .bottomLeading) {
-                Path { path in
-                    for step in 0...2 {
-                        let y = rect.minY + rect.height * CGFloat(step) / 2
-                        path.move(to: CGPoint(x: rect.minX, y: y))
-                        path.addLine(to: CGPoint(x: rect.maxX, y: y))
-                    }
-                }
-                .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
-
-                watchBarContent(in: rect)
-
-                HStack {
-                    if let first = trend.dailyPoints.first {
-                        Text(first.dayLabel)
-                    }
-                    Spacer()
-                    if let last = trend.dailyPoints.last, last.dayKey != trend.dailyPoints.first?.dayKey {
-                        Text(last.dayLabel)
-                    }
-                }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .frame(width: rect.width)
-                .position(x: rect.midX, y: rect.maxY + 10)
-            }
-        }
+        )
+        .guideSettingsPageContext(
+            id: "watch-usage-analytics-detail",
+            title: NSLocalizedString(
+                "usage_dashboard.detail.guide_title",
+                value: "Usage Details",
+                comment: "Guide context title for watchOS detailed usage dashboard"
+            ),
+            documents: [GuideDocumentReference(id: "usage-analytics", title: "Usage Analytics")],
+            settings: detailGuideSettings
+        )
+        .watchGuideEntry()
     }
 
-    @ViewBuilder
-    private func watchBarContent(in rect: CGRect) -> some View {
-        let count = trend.dailyPoints.count
-        let maxTokens = max(trend.maxDailyTokens, 1)
-
-        if count > 0 {
-            let barStep = rect.width / CGFloat(count)
-            let barWidth = max(1.5, barStep * (count > 15 ? 0.72 : 0.62))
-            let barGap = (barStep - barWidth) / 2
-            let cr = min(barWidth / 2, 2)
-
-            Path { path in
-                for (i, point) in trend.dailyPoints.enumerated() {
-                    guard point.totalTokens > 0 else { continue }
-                    let topModelTokens = trend.modelSeries.reduce(0) { sum, series in
-                        i < series.points.count ? sum + series.points[i].totalTokens : sum
-                    }
-                    let otherTokens = max(0, point.totalTokens - topModelTokens)
-                    guard otherTokens > 0 else { continue }
-                    let x = rect.minX + CGFloat(i) * barStep + barGap
-                    let totalH = CGFloat(point.totalTokens) / CGFloat(maxTokens) * rect.height
-                    let modelH = CGFloat(topModelTokens) / CGFloat(maxTokens) * rect.height
-                    let otherH = totalH - modelH
-                    path.addRoundedRect(
-                        in: CGRect(x: x, y: rect.maxY - totalH, width: barWidth, height: otherH),
-                        cornerSize: CGSize(width: cr, height: cr)
-                    )
+    private var detailGuideSettings: [GuidePageSetting] {
+        [
+            .readOnly(
+                "scope",
+                label: NSLocalizedString("统计范围", comment: "手表用量看板向导统计范围"),
+                value: { .string(viewModel.state.selectedScope.rawValue) }
+            ),
+            .readOnly(
+                "selected_day",
+                label: NSLocalizedString("日期", comment: "手表用量看板向导选定日期"),
+                value: { .string(viewModel.state.selectedDayKey) }
+            ),
+            .readOnly(
+                "detail_summary",
+                label: NSLocalizedString("当前详情", comment: "手表用量看板向导详情摘要"),
+                value: {
+                    let detail = viewModel.state.detail
+                    return .dictionary([
+                        "title": .string(detail.title),
+                        "subtitle": .string(detail.subtitle),
+                        "request_count": .int(detail.requestCount),
+                        "success_count": .int(detail.successCount),
+                        "failed_count": .int(detail.failedCount),
+                        "cancelled_count": .int(detail.cancelledCount),
+                        "total_tokens": .int(detail.tokenTotals.totalTokens),
+                        "non_cached_tokens": .int(detail.nonCachedTokens),
+                        "input_tokens": .int(detail.tokenTotals.sentTokens),
+                        "output_tokens": .int(detail.tokenTotals.receivedTokens),
+                        "thinking_tokens": .int(detail.tokenTotals.thinkingTokens),
+                        "cache_write_tokens": .int(detail.tokenTotals.cacheWriteTokens),
+                        "cache_read_tokens": .int(detail.tokenTotals.cacheReadTokens),
+                        "cache_hit_rate": detail.cacheHitRate.map(JSONValue.double) ?? .null,
+                        "provider_count": .int(detail.providerBreakdown.count),
+                        "model_count": .int(detail.topModels.count),
+                        "source_count": .int(detail.sourceBreakdown.count)
+                    ])
                 }
-            }
-            .fill(Color.secondary.opacity(0.22))
-
-            ForEach(Array(trend.modelSeries.enumerated()), id: \.element.id) { modelIndex, series in
-                Path { path in
-                    for dayIndex in trend.dailyPoints.indices {
-                        let tokens = dayIndex < series.points.count ? series.points[dayIndex].totalTokens : 0
-                        guard tokens > 0 else { continue }
-                        let x = rect.minX + CGFloat(dayIndex) * barStep + barGap
-
-                        var belowHeight: CGFloat = 0
-                        for j in 0..<modelIndex {
-                            if dayIndex < trend.modelSeries[j].points.count {
-                                belowHeight += CGFloat(trend.modelSeries[j].points[dayIndex].totalTokens) / CGFloat(maxTokens) * rect.height
-                            }
-                        }
-
-                        let h = CGFloat(tokens) / CGFloat(maxTokens) * rect.height
-                        let y = rect.maxY - belowHeight - h
-                        path.addRoundedRect(
-                            in: CGRect(x: x, y: y, width: barWidth, height: h),
-                            cornerSize: CGSize(width: cr, height: cr)
-                        )
-                    }
-                }
-                .fill(modelColors[modelIndex % modelColors.count])
-            }
-        }
-    }
-}
-
-private struct WatchUsageAnalyticsRankRow: View {
-    let rank: Int
-    let item: UsageAnalyticsRankItem
-    let showsTokenDetails: Bool
-    let titleAllowsMarquee: Bool
-    let tokenShareText: String
-    var costSummaryText: String? = nil
-    let cacheHitRateText: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                Text(String(format: NSLocalizedString("第 %d 名", comment: "用量统计榜单名次"), rank))
-                    .etFont(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 4)
-                Text(tokenShareText)
-                    .etFont(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-            }
-
-            rankTitle
-
-            if !item.subtitle.isEmpty {
-                Text(item.subtitle)
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Text(String(format: NSLocalizedString("%d 次 · Token %d", comment: ""), item.requestCount, item.totalTokens))
-                .etFont(.caption2)
-                .foregroundStyle(.secondary)
-
-            Text(String(format: NSLocalizedString("占比 %@ · 错误 %d", comment: "Usage rank token share and errors"), tokenShareText, item.errorCount))
-                .etFont(.caption2)
-                .foregroundStyle(.secondary)
-
-            if showsTokenDetails {
-                if let costSummaryText {
-                    Text(String(format: NSLocalizedString("费用 %@", comment: "Usage rank estimated cost"), costSummaryText))
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                Text(
-                    String(
-                        format: NSLocalizedString("输入 %d · 输出 %d", comment: "Usage rank input and output tokens"),
-                        item.tokenTotals.sentTokens,
-                        item.tokenTotals.receivedTokens
-                    )
-                )
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-
-                Text(
-                    String(
-                        format: NSLocalizedString("缓存读 %d · 写 %d · 命中 %@", comment: "Usage rank cache metrics"),
-                        item.tokenTotals.cacheReadTokens,
-                        item.tokenTotals.cacheWriteTokens,
-                        cacheHitRateText
-                    )
-                )
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 2)
-    }
-
-    @ViewBuilder
-    private var rankTitle: some View {
-        if titleAllowsMarquee {
-            MarqueeText(
-                content: item.title,
-                uiFont: .preferredFont(forTextStyle: .footnote),
-                speed: 28,
-                spacing: 28
             )
-            .etFont(.footnote.weight(.semibold))
-            .allowsHitTesting(false)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            Text(item.title)
-                .etFont(.footnote.weight(.semibold))
-                .lineLimit(1)
-        }
+        ]
     }
 }
